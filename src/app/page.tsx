@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   getJournalStreak,
@@ -13,13 +14,21 @@ import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
 import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
+import { MoodSpendingInsight } from "@/components/dashboard/MoodSpendingInsight";
+import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import Link from "next/link";
 import { ChevronLeft, BookMarked, Wallet, BookOpen } from "lucide-react";
 
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, runRecurring } = useAppStore();
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  // Auto-generate due recurring transactions on app open
+  useEffect(() => {
+    runRecurring();
+  }, [runRecurring]);
 
   const todayStr = today();
   const journalStreak = getJournalStreak(journalEntries);
@@ -108,9 +117,9 @@ export default function Dashboard() {
       <Card>
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-gray-700">سلسلة يومية — الأيام الثلاثة</span>
-          <span className="text-xs text-gray-400">{completionDates.length} يوم</span>
+          <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
         </div>
-        <StreakCalendar markedDates={completionDates} color="#f97316" />
+        <StreakCalendar markedDates={completionDates} color="#f97316" onDayClick={setSelectedDay} />
       </Card>
 
       {recentEntry && (
@@ -152,6 +161,10 @@ export default function Dashboard() {
           </Link>
         </Card>
       )}
+
+      <MoodSpendingInsight journalEntries={journalEntries} transactions={transactions} />
+
+      <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
     </div>
   );
 }

@@ -67,12 +67,33 @@ export interface Habit {
   logs: string[]; // dates YYYY-MM-DD
 }
 
+export type RecurringFrequency = "شهري" | "أسبوعي" | "سنوي";
+
+export interface RecurringTransaction {
+  id: string;
+  amount: number;
+  type: FinanceType;
+  category: FinanceCategory;
+  note: string;
+  frequency: RecurringFrequency;
+  dayOfMonth: number; // 1-31 for monthly, day index for weekly
+  active: boolean;
+  lastGenerated?: string; // YYYY-MM-DD of last auto-created instance
+}
+
+export interface Budget {
+  category: FinanceCategory;
+  limit: number; // monthly cap in SAR
+}
+
 export interface AppData {
   transactions: Transaction[];
   books: Book[];
   readingLogs: ReadingLog[];
   journalEntries: JournalEntry[];
   habits: Habit[];
+  recurring: RecurringTransaction[];
+  budgets: Budget[];
   lastUpdated: string;
 }
 

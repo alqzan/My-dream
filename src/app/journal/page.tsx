@@ -6,6 +6,7 @@ import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
 import { JournalForm } from "@/components/journal/JournalForm";
 import { DayOneImport } from "@/components/journal/DayOneImport";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
+import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +20,7 @@ export default function JournalPage() {
   const [editEntry, setEditEntry] = useState<JournalEntry | undefined>();
   const [search, setSearch] = useState("");
   const [viewEntry, setViewEntry] = useState<JournalEntry | undefined>();
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const streak = getJournalStreak(journalEntries);
   const markedDates = journalEntries.map((e) => e.date);
@@ -60,7 +62,7 @@ export default function JournalPage() {
       </div>
 
       <Card>
-        <StreakCalendar markedDates={markedDates} color="#7c6fcd" />
+        <StreakCalendar markedDates={markedDates} color="#7c6fcd" onDayClick={setSelectedDay} />
       </Card>
 
       <div className="relative">
@@ -146,6 +148,8 @@ export default function JournalPage() {
           </div>
         )}
       </Modal>
+
+      <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
     </div>
   );
 }

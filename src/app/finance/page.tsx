@@ -1,25 +1,32 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
 import { FinanceHealthScore } from "@/components/finance/FinanceHealthScore";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
+import { RecurringManager } from "@/components/finance/RecurringManager";
+import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone } from "lucide-react";
+import { Plus, Smartphone, Repeat } from "lucide-react";
 
 type FilterType = "الكل" | "دخل" | "مصروف";
 
 export default function FinancePage() {
-  const { transactions, deleteTransaction } = useAppStore();
+  const { transactions, deleteTransaction, runRecurring } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showRecurring, setShowRecurring] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [filter, setFilter] = useState<FilterType>("الكل");
+
+  useEffect(() => {
+    runRecurring();
+  }, [runRecurring]);
   const [monthFilter, setMonthFilter] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -86,6 +93,18 @@ export default function FinancePage() {
 
       <FinanceHealthScore transactions={transactions} />
 
+      <Card>
+        <BudgetTracker monthPrefix={monthFilter} />
+      </Card>
+
+      <button
+        onClick={() => setShowRecurring(true)}
+        className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors"
+      >
+        <Repeat size={16} className="text-finance" />
+        المعاملات المتكررة التلقائية
+      </button>
+
       <div className="flex gap-2">
         {(["الكل", "مصروف", "دخل"] as FilterType[]).map((f) => (
           <button
@@ -133,6 +152,14 @@ export default function FinancePage() {
         title="استيراد بنكي تلقائي 🤖"
       >
         <BankImport onClose={() => setShowImport(false)} />
+      </Modal>
+
+      <Modal
+        open={showRecurring}
+        onClose={() => setShowRecurring(false)}
+        title="المعاملات المتكررة 🔁"
+      >
+        <RecurringManager onClose={() => setShowRecurring(false)} />
       </Modal>
     </div>
   );

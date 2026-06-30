@@ -6,11 +6,12 @@ import { ChevronRight, ChevronLeft } from "lucide-react";
 interface StreakCalendarProps {
   markedDates: string[];
   color?: string;
+  onDayClick?: (date: string) => void;
 }
 
 const DAYS_AR = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
 
-export function StreakCalendar({ markedDates, color = "#7c6fcd" }: StreakCalendarProps) {
+export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: StreakCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -54,9 +55,13 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd" }: StreakCalenda
           const isMarked = marked.has(date);
           const isToday = date === todayStr;
           return (
-            <div
+            <button
               key={date}
-              className="aspect-square flex items-center justify-center rounded-full text-xs font-medium transition-colors"
+              onClick={() => onDayClick?.(date)}
+              disabled={!onDayClick}
+              className={`aspect-square flex items-center justify-center rounded-full text-xs font-medium transition-colors ${
+                onDayClick ? "hover:ring-2 hover:ring-offset-1 cursor-pointer" : ""
+              }`}
               style={
                 isMarked
                   ? { backgroundColor: color, color: "#fff" }
@@ -66,7 +71,7 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd" }: StreakCalenda
               }
             >
               {new Date(date).getDate()}
-            </div>
+            </button>
           );
         })}
       </div>
