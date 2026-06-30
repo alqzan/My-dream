@@ -16,9 +16,13 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
 
   return (
     <div
-      className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2 hover:shadow-sm transition-shadow cursor-pointer"
+      className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-sm transition-shadow cursor-pointer"
       onClick={onClick}
     >
+      {entry.photo && (
+        <img src={entry.photo} alt="صورة اليوم" className="w-full h-36 object-cover" />
+      )}
+      <div className="p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           {mood && <span className="text-lg">{mood.icon}</span>}
@@ -55,6 +59,7 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

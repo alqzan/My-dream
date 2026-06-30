@@ -5,6 +5,7 @@ import { getReadingStreak } from "@/lib/utils";
 import { BookCard } from "@/components/reading/BookCard";
 import { BookForm } from "@/components/reading/BookForm";
 import { ReadingLogForm } from "@/components/reading/ReadingLogForm";
+import { ReadingPace } from "@/components/reading/ReadingPace";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -27,6 +28,7 @@ export default function ReadingPage() {
   const totalPagesRead = readingLogs.reduce((s, l) => s + l.pagesRead, 0);
   const totalMinutes = readingLogs.reduce((s, l) => s + (l.minutesRead ?? 0), 0);
   const booksFinished = books.filter((b) => b.status === "أنهيت").length;
+  const currentBook = books.find((b) => b.status === "أقرأ");
 
   const filtered =
     filter === "الكل" ? books : books.filter((b) => b.status === filter);
@@ -90,6 +92,10 @@ export default function ReadingPage() {
       <Card>
         <StreakCalendar markedDates={logDates} color="#e07b39" />
       </Card>
+
+      {currentBook && (
+        <ReadingPace book={currentBook} logs={readingLogs} />
+      )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
         {(["الكل", "أقرأ", "أنهيت", "أريد_قراءة"] as FilterStatus[]).map((f) => (

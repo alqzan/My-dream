@@ -52,6 +52,7 @@ export interface JournalEntry {
   content: string;
   mood?: "ممتاز" | "جيد" | "محايد" | "سيء" | "سيء_جداً";
   tags?: string[];
+  photo?: string; // base64 WebP compressed
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";

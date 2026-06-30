@@ -12,6 +12,7 @@ import {
 import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
 import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
+import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { Card } from "@/components/ui/Card";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import Link from "next/link";
@@ -67,6 +68,13 @@ export default function Dashboard() {
       <Card>
         <HabitTracker />
       </Card>
+
+      <WeeklyWrap
+        transactions={transactions}
+        journalEntries={journalEntries}
+        readingLogs={readingLogs}
+        books={books}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <QuickLink

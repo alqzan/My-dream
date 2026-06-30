@@ -2,19 +2,22 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
+import { FinanceHealthScore } from "@/components/finance/FinanceHealthScore";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
+import { BankImport } from "@/components/finance/BankImport";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
-import { Plus, Filter } from "lucide-react";
+import { Plus, Smartphone } from "lucide-react";
 
 type FilterType = "الكل" | "دخل" | "مصروف";
 
 export default function FinancePage() {
   const { transactions, deleteTransaction } = useAppStore();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [filter, setFilter] = useState<FilterType>("الكل");
   const [monthFilter, setMonthFilter] = useState(() => {
@@ -40,6 +43,15 @@ export default function FinancePage() {
           <h1 className="text-2xl font-bold text-gray-900">الأموال</h1>
           <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
         </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setShowImport(true)}
+          className="gap-1.5"
+        >
+          <Smartphone size={14} />
+          SMS / CSV
+        </Button>
         <Button
           size="sm"
           onClick={() => setShowForm(true)}
@@ -71,6 +83,8 @@ export default function FinancePage() {
       <Card>
         <FinanceSummary transactions={byMonth} />
       </Card>
+
+      <FinanceHealthScore transactions={transactions} />
 
       <div className="flex gap-2">
         {(["الكل", "مصروف", "دخل"] as FilterType[]).map((f) => (
@@ -111,6 +125,14 @@ export default function FinancePage() {
           onClose={() => { setShowForm(false); setEditTx(undefined); }}
           initial={editTx}
         />
+      </Modal>
+
+      <Modal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        title="استيراد بنكي تلقائي 🤖"
+      >
+        <BankImport onClose={() => setShowImport(false)} />
       </Modal>
     </div>
   );
