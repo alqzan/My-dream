@@ -1,7 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/Sidebar";
+
+// Prefix for static assets so icons/manifest resolve under the GitHub Pages
+// subpath (/My-dream) while staying root-relative for Firebase/local.
+const bp = process.env.BASE_PATH || "";
 
 // Load Thamaniah via next/font so the URL respects basePath/assetPrefix
 // (a hand-written /fonts/ url in CSS would 404 under the /My-dream/ subpath).
@@ -17,11 +21,32 @@ const thamaniah = localFont({
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { ClientOnly } from "@/components/layout/ClientOnly";
+import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
   title: "حلمي — تتبّع يومي",
   description: "مذكرات، أموال، قراءة — كل شيء في مكان واحد",
+  manifest: `${bp}/manifest.webmanifest`,
+  icons: {
+    icon: [
+      { url: `${bp}/favicon-32.png`, sizes: "32x32", type: "image/png" },
+      { url: `${bp}/icon.svg`, type: "image/svg+xml" },
+    ],
+    apple: [{ url: `${bp}/apple-touch-icon.png`, sizes: "180x180" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "حلمي",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eef0f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
+  ],
 };
 
 export default function RootLayout({
@@ -33,6 +58,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className={thamaniah.variable}>
       <body>
         <ClientOnly>
+          <ThemeApplier />
           <AuthProvider>
             <div className="min-h-screen flex">
               <Sidebar />

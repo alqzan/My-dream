@@ -73,8 +73,43 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
     type: isCredit ? "دخل" : "مصروف",
     category: isCredit ? "راتب" : category,
     note: merchant || text.slice(0, 60),
-    date,
+    date: extractSmsDate(text) ?? date,
   };
+}
+
+// Pull a Gregorian date out of a message if present (dd/mm/yyyy, yyyy-mm-dd,
+// dd-mm-yyyy). Hijri/unknown formats fall back to the caller's default.
+function extractSmsDate(text: string): string | null {
+  const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return null;
+}
+
+// Parse a blob containing many bank SMS pasted together. Splits into
+// individual messages and parses each, so the user copies everything at
+// once instead of one message at a time.
+export function parseBankSmsBulk(blob: string, defaultDate: string): SmsParseResult[] {
+  const text = blob.trim();
+  if (!text) return [];
+
+  // First try splitting on blank lines (typical when copying several SMS).
+  let chunks = text.split(/\n\s*\n+/).map((c) => c.trim()).filter(Boolean);
+  // If that didn't separate them, fall back to one message per line.
+  if (chunks.length <= 1) {
+    chunks = text.split(/\r?\n/).map((c) => c.trim()).filter(Boolean);
+  }
+
+  const results: SmsParseResult[] = [];
+  for (const chunk of chunks) {
+    const parsed = parseBankSms(chunk, defaultDate);
+    if (parsed) results.push(parsed);
+  }
+  return results;
 }
 
 // ========== CSV Bank Statement Parser ==========

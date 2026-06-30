@@ -43,6 +43,10 @@ interface AppStore extends AppData {
   // Cloud sync
   hydrate: (data: Partial<AppData>) => void;
   snapshot: () => AppData;
+
+  // Theme (device-local)
+  theme: "light" | "dark";
+  toggleTheme: () => void;
 }
 
 // Compute the most recent date this recurring item was/is due, on or before `now`.
@@ -86,7 +90,11 @@ export const useAppStore = create<AppStore>()(
       ],
       recurring: [],
       budgets: [],
+      theme: "light",
       lastUpdated: new Date().toISOString(),
+
+      toggleTheme: () =>
+        set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
 
       addJournalEntry: (entry) =>
         set((s) => ({ journalEntries: [entry, ...s.journalEntries] })),

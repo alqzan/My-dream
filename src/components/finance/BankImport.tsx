@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { parseBankSms, parseBankCsv } from "@/lib/bankParser";
+import { parseBankSmsBulk, parseBankCsv } from "@/lib/bankParser";
 import { today } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { CATEGORY_LABELS } from "@/lib/types";
@@ -21,13 +21,16 @@ export function BankImport({ onClose }: { onClose: () => void }) {
 
   function handleSmsPreview() {
     setError("");
-    const result = parseBankSms(smsText, date);
-    if (!result) {
-      setError("لم أستطع قراءة المبلغ من الرسالة. حاول تعديلها أو أدخل المعاملة يدوياً.");
+    const results = parseBankSmsBulk(smsText, date);
+    if (!results.length) {
+      setError("لم أستطع قراءة أي مبلغ. الصق رسائل البنك (تقدر تلصق عدة رسائل مرة وحدة).");
       return;
     }
-    const tx: Transaction = { id: Math.random().toString(36).slice(2), ...result };
-    setPreview([tx]);
+    const txs: Transaction[] = results.map((r) => ({
+      id: Math.random().toString(36).slice(2),
+      ...r,
+    }));
+    setPreview(txs);
   }
 
   function handleCsvFile(file: File) {
@@ -86,26 +89,27 @@ export function BankImport({ onClose }: { onClose: () => void }) {
       {mode === "sms" && (
         <>
           <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 leading-relaxed">
-            <strong>الطريقة:</strong> انسخ رسالة SMS من البنك (الراجحي، SNB، الرياض...) والصقها هنا وسأستخرج المبلغ والتصنيف تلقائياً.
+            <strong>الصق كل الرسائل دفعة وحدة 👇</strong><br />
+            من تطبيق الرسائل، حدّد رسائل البنك وانسخها كلها مرة وحدة والصقها هنا — التطبيق يفصلها ويسجّلها كلها تلقائياً (المبلغ + التصنيف + التاريخ).
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">نص الرسالة</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">رسائل البنك (واحدة أو أكثر)</label>
             <textarea
               value={smsText}
               onChange={(e) => setSmsText(e.target.value)}
-              rows={4}
-              placeholder='مثال: "شراء بقيمة 150.00 ريال من ماكدونالدز في 30/06/2026"'
+              rows={7}
+              placeholder={'الصق رسائلك هنا، مثال:\n\nشراء بقيمة 150.00 ريال من ماكدونالدز 30/06/2026\n\nشراء بقيمة 95.00 ريال من محطة وقود 29/06/2026\n\nإيداع راتب 12000 ريال'}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40 resize-none"
               dir="auto"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">التاريخ</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ افتراضي (للرسائل بدون تاريخ)</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40" />
           </div>
           <Button onClick={handleSmsPreview} className="w-full bg-finance hover:bg-finance/90" disabled={!smsText.trim()}>
-            استخراج تلقائي 🤖
+            استخراج الكل تلقائياً 🤖
           </Button>
         </>
       )}

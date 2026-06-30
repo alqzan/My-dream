@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { BookOpen, Wallet, BookMarked, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/auth/SyncButton";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "الرئيسية", color: "text-gray-700" },
@@ -41,8 +42,9 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-3 border-t border-gray-100">
+      <div className="p-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between gap-2">
         <SyncButton />
+        <ThemeToggle />
       </div>
     </aside>
   );
