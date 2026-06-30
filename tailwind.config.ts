@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        arabic: ["Thamaniah", "Tajawal", "sans-serif"],
+        arabic: ["var(--font-thamaniah)", "Tajawal", "sans-serif"],
       },
       colors: {
         brand: {

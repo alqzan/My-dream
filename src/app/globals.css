@@ -2,30 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: "Thamaniah";
-  src: url("/fonts/thmanyahserifdisplay-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thamaniah";
-  src: url("/fonts/thmanyahserifdisplay-Black.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thamaniah";
-  src: url("/fonts/thmanyahserifdisplay-Black.woff2") format("woff2");
-  font-weight: 900;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --color-journal: #7c6fcd;
   --color-finance: #3d9640;
@@ -41,7 +17,7 @@ html {
 }
 
 body {
-  font-family: "Thamaniah", "Tajawal", sans-serif;
+  font-family: var(--font-thamaniah), "Tajawal", sans-serif;
   background-color: #f7f7f8;
   color: #1a1a2e;
   -webkit-font-smoothing: antialiased;
