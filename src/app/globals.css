@@ -18,9 +18,20 @@ html {
 
 body {
   font-family: var(--font-thamaniah), "Tajawal", sans-serif;
-  background-color: #f7f7f8;
   color: #1a1a2e;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  /* Soft three-colour mesh tying the app's sections together:
+     journal purple, reading orange, finance green — kept faint so the
+     white cards stay crisp on top. */
+  background-color: #eef0f8;
+  background-image:
+    radial-gradient(at 10% 5%, rgba(124, 111, 205, 0.22) 0px, transparent 45%),
+    radial-gradient(at 92% 10%, rgba(224, 123, 57, 0.20) 0px, transparent 42%),
+    radial-gradient(at 82% 85%, rgba(61, 150, 64, 0.20) 0px, transparent 45%),
+    radial-gradient(at 15% 95%, rgba(74, 159, 189, 0.16) 0px, transparent 42%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 .pb-safe {
