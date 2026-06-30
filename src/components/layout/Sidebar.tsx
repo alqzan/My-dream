@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, Wallet, BookMarked, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SyncButton } from "@/components/auth/SyncButton";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "الرئيسية", color: "text-gray-700" },
@@ -40,6 +41,9 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <div className="p-3 border-t border-gray-100">
+        <SyncButton />
+      </div>
     </aside>
   );
 }

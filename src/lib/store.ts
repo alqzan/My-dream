@@ -39,6 +39,10 @@ interface AppStore extends AppData {
   addHabit: (habit: Habit) => void;
   toggleHabitLog: (habitId: string, date: string) => void;
   deleteHabit: (id: string) => void;
+
+  // Cloud sync
+  hydrate: (data: Partial<AppData>) => void;
+  snapshot: () => AppData;
 }
 
 // Compute the most recent date this recurring item was/is due, on or before `now`.
@@ -70,7 +74,7 @@ function mostRecentDueDate(r: RecurringTransaction, now: Date): Date | null {
 
 export const useAppStore = create<AppStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       transactions: [],
       books: [],
       readingLogs: [],
@@ -221,6 +225,32 @@ export const useAppStore = create<AppStore>()(
 
       deleteHabit: (id) =>
         set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
+
+      hydrate: (data) =>
+        set(() => ({
+          transactions: data.transactions ?? [],
+          books: data.books ?? [],
+          readingLogs: data.readingLogs ?? [],
+          journalEntries: data.journalEntries ?? [],
+          habits: data.habits ?? [],
+          recurring: data.recurring ?? [],
+          budgets: data.budgets ?? [],
+          lastUpdated: data.lastUpdated ?? new Date().toISOString(),
+        })),
+
+      snapshot: () => {
+        const s = get();
+        return {
+          transactions: s.transactions,
+          books: s.books,
+          readingLogs: s.readingLogs,
+          journalEntries: s.journalEntries,
+          habits: s.habits,
+          recurring: s.recurring,
+          budgets: s.budgets,
+          lastUpdated: s.lastUpdated,
+        };
+      },
     }),
     {
       name: "my-dream-store",

@@ -14,9 +14,11 @@ export function today() {
   return new Date().toISOString().split("T")[0];
 }
 
+// Force Gregorian calendar + Latin digits so server (build) and client render
+// identically — avoids hydration mismatches from ar-SA's Hijri default.
 export function formatDate(dateStr: string) {
   const d = new Date(dateStr);
-  return d.toLocaleDateString("ar-SA", {
+  return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -25,11 +27,11 @@ export function formatDate(dateStr: string) {
 
 export function formatDateShort(dateStr: string) {
   const d = new Date(dateStr);
-  return d.toLocaleDateString("ar-SA", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric" });
 }
 
 export function formatAmount(amount: number) {
-  return amount.toLocaleString("ar-SA", {
+  return amount.toLocaleString("ar-SA-u-nu-latn", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
