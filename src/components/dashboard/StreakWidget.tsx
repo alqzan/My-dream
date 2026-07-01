@@ -37,6 +37,7 @@ interface DailyStreakBannerProps {
   journalStreak: number;
   readingStreak: number;
   financeStreak: number;
+  prayerStreak: number;
 }
 
 export function DailyStreakBanner({
@@ -44,6 +45,7 @@ export function DailyStreakBanner({
   journalStreak,
   readingStreak,
   financeStreak,
+  prayerStreak,
 }: DailyStreakBannerProps) {
   return (
     <div
@@ -70,6 +72,8 @@ export function DailyStreakBanner({
         </div>
       </div>
       <div className="flex justify-around bg-white/20 rounded-xl p-3">
+        <StreakWidget streak={prayerStreak} label="صلاة" icon="🕌" color="#f0e2c8" />
+        <div className="w-px bg-white/30" />
         <StreakWidget streak={journalStreak} label="مذكرات" icon="📓" color="#f0e2c8" />
         <div className="w-px bg-white/30" />
         <StreakWidget streak={financeStreak} label="مالي" icon="💰" color="#f0e2c8" />

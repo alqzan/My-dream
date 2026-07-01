@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { JournalEntry, ReadingLog, Transaction } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName } from "./types";
+import { PRAYERS } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -30,17 +31,17 @@ export function formatDateShort(dateStr: string) {
   return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric" });
 }
 
-// Hijri (Umm al-Qura) date, e.g. "١٥ محرم ١٤٤٨ هـ".
+// Hijri (Umm al-Qura) date, e.g. "15 محرم 1448 هـ".
+// Note: the ar-SA Islamic formatter already appends the "هـ" era marker on
+// its own — appending it again produced a doubled "هـ هـ" (garbled to "ه ه").
 export function hijriDate(dateStr: string) {
   try {
     const d = new Date(dateStr);
-    return (
-      new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }).format(d) + " هـ"
-    );
+    return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(d);
   } catch {
     return "";
   }
@@ -115,6 +116,55 @@ export function getMonthDates(year: number, month: number): string[] {
     d.setDate(d.getDate() + 1);
   }
   return dates;
+}
+
+// ===================== Prayers =====================
+
+export function getPrayerLog(logs: PrayerLog[], date: string): PrayerLog | undefined {
+  return logs.find((l) => l.date === date);
+}
+
+// Counts for a single day: how many of the 5 prayers were prayed at all,
+// and how many of those were prayed in congregation (at the mosque).
+export function countDayPrayers(log: PrayerLog | undefined): { prayed: number; mosque: number } {
+  if (!log) return { prayed: 0, mosque: 0 };
+  let prayed = 0;
+  let mosque = 0;
+  for (const p of PRAYERS) {
+    const status = log.prayers[p];
+    if (status === "منفردة" || status === "جماعة") prayed++;
+    if (status === "جماعة") mosque++;
+  }
+  return { prayed, mosque };
+}
+
+// Consecutive-day streak of days where all 5 prayers were performed
+// (in the mosque or alone — either counts).
+export function getPrayerStreak(logs: PrayerLog[]): number {
+  const fullDays = logs
+    .filter((l) => PRAYERS.every((p) => l.prayers[p] === "منفردة" || l.prayers[p] === "جماعة"))
+    .map((l) => l.date);
+  return calcStreak(fullDays);
+}
+
+// Consecutive-day streak of days where all 5 prayers were performed at the mosque.
+export function getMosqueStreak(logs: PrayerLog[]): number {
+  const fullMosqueDays = logs
+    .filter((l) => PRAYERS.every((p) => l.prayers[p] === "جماعة"))
+    .map((l) => l.date);
+  return calcStreak(fullMosqueDays);
+}
+
+// Per-prayer completion rate (0-1) across all logged days — used to find
+// which of the five prayers a person is most/least consistent with.
+export function prayerConsistency(logs: PrayerLog[]): Record<PrayerName, number> {
+  const result = {} as Record<PrayerName, number>;
+  const total = logs.length || 1;
+  for (const p of PRAYERS) {
+    const done = logs.filter((l) => l.prayers[p] === "منفردة" || l.prayers[p] === "جماعة").length;
+    result[p] = done / total;
+  }
+  return result;
 }
 
 export function arabicMonthName(month: number): string {

@@ -67,6 +67,35 @@ export interface Habit {
   logs: string[]; // dates YYYY-MM-DD
 }
 
+// ===================== Prayers =====================
+
+export type PrayerName = "الفجر" | "الظهر" | "العصر" | "المغرب" | "العشاء";
+
+export const PRAYERS: PrayerName[] = ["الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
+
+// لم: لم تُصلَّ بعد · منفردة: صليت وحدك · جماعة: صليت بالمسجد/جماعة
+export type PrayerStatus = "لم" | "منفردة" | "جماعة";
+
+export interface PrayerLog {
+  date: string; // YYYY-MM-DD
+  prayers: Partial<Record<PrayerName, PrayerStatus>>;
+}
+
+export const PRAYER_META: Record<PrayerName, { icon: string; angle: number }> = {
+  // angle: stylised position (degrees) along the dawn→night sky arc widget
+  الفجر: { icon: "🌅", angle: 172 },
+  الظهر: { icon: "☀️", angle: 116 },
+  العصر: { icon: "🌤️", angle: 74 },
+  المغرب: { icon: "🌇", angle: 36 },
+  العشاء: { icon: "🌙", angle: 8 },
+};
+
+export const PRAYER_STATUS_META: Record<PrayerStatus, { label: string; short: string; color: string }> = {
+  لم: { label: "لم تُصلَّ بعد", short: "لم", color: "#cbb894" },
+  منفردة: { label: "صليت منفرداً", short: "منفردة", color: "#dc9f3c" },
+  جماعة: { label: "صليت بالمسجد", short: "بالمسجد", color: "#1f7a6c" },
+};
+
 export type RecurringFrequency = "شهري" | "أسبوعي" | "سنوي";
 
 export interface RecurringTransaction {
@@ -94,6 +123,7 @@ export interface AppData {
   habits: Habit[];
   recurring: RecurringTransaction[];
   budgets: Budget[];
+  prayerLogs: PrayerLog[];
   lastUpdated: string;
 }
 

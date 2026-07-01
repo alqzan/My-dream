@@ -11,10 +11,12 @@ import {
   formatDate,
   hijriDate,
   yearProgress,
+  getPrayerStreak,
 } from "@/lib/utils";
 import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
 import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
+import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { MoodSpendingInsight } from "@/components/dashboard/MoodSpendingInsight";
 import { DayView } from "@/components/day/DayView";
@@ -24,7 +26,7 @@ import Link from "next/link";
 import { ChevronLeft, BookMarked, Wallet, BookOpen } from "lucide-react";
 
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, runRecurring } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, runRecurring } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // Auto-generate due recurring transactions on app open
@@ -36,6 +38,7 @@ export default function Dashboard() {
   const journalStreak = getJournalStreak(journalEntries);
   const readingStreak = getReadingStreak(readingLogs);
   const financeStreak = getFinanceStreak(transactions);
+  const prayerStreak = getPrayerStreak(prayerLogs);
   const completionDates = getDailyCompletionDates(journalEntries, readingLogs, transactions);
   const masterStreak = calcStreak(completionDates);
 
@@ -67,11 +70,16 @@ export default function Dashboard() {
         <YearOrbit pct={yearPct} />
       </div>
 
+      <Card>
+        <PrayerOrbit />
+      </Card>
+
       <DailyStreakBanner
         masterStreak={masterStreak}
         journalStreak={journalStreak}
         readingStreak={readingStreak}
         financeStreak={financeStreak}
+        prayerStreak={prayerStreak}
       />
 
       <Card>

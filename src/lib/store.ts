@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
-  RecurringTransaction, Budget, FinanceCategory,
+  RecurringTransaction, Budget, FinanceCategory, PrayerName, PrayerStatus,
 } from "./types";
 import { uid, today } from "./utils";
 import { idbStorage } from "./idbStorage";
@@ -40,6 +40,10 @@ interface AppStore extends AppData {
   addHabit: (habit: Habit) => void;
   toggleHabitLog: (habitId: string, date: string) => void;
   deleteHabit: (id: string) => void;
+
+  // Prayers
+  setPrayerStatus: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
+  cyclePrayerStatus: (date: string, prayer: PrayerName) => void;
 
   // Cloud sync
   hydrate: (data: Partial<AppData>) => void;
@@ -91,6 +95,7 @@ export const useAppStore = create<AppStore>()(
       ],
       recurring: [],
       budgets: [],
+      prayerLogs: [],
       theme: "light",
       lastUpdated: new Date().toISOString(),
 
@@ -235,6 +240,35 @@ export const useAppStore = create<AppStore>()(
       deleteHabit: (id) =>
         set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
 
+      setPrayerStatus: (date, prayer, status) =>
+        set((s) => {
+          const existing = s.prayerLogs.find((l) => l.date === date);
+          if (existing) {
+            return {
+              prayerLogs: s.prayerLogs.map((l) =>
+                l.date === date ? { ...l, prayers: { ...l.prayers, [prayer]: status } } : l
+              ),
+            };
+          }
+          return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: status } }] };
+        }),
+
+      cyclePrayerStatus: (date, prayer) =>
+        set((s) => {
+          const order: PrayerStatus[] = ["لم", "منفردة", "جماعة"];
+          const existing = s.prayerLogs.find((l) => l.date === date);
+          const current = existing?.prayers[prayer] ?? "لم";
+          const next = order[(order.indexOf(current) + 1) % order.length];
+          if (existing) {
+            return {
+              prayerLogs: s.prayerLogs.map((l) =>
+                l.date === date ? { ...l, prayers: { ...l.prayers, [prayer]: next } } : l
+              ),
+            };
+          }
+          return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
+        }),
+
       hydrate: (data) =>
         set(() => ({
           transactions: data.transactions ?? [],
@@ -244,6 +278,7 @@ export const useAppStore = create<AppStore>()(
           habits: data.habits ?? [],
           recurring: data.recurring ?? [],
           budgets: data.budgets ?? [],
+          prayerLogs: data.prayerLogs ?? [],
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -257,6 +292,7 @@ export const useAppStore = create<AppStore>()(
           habits: s.habits,
           recurring: s.recurring,
           budgets: s.budgets,
+          prayerLogs: s.prayerLogs,
           lastUpdated: s.lastUpdated,
         };
       },
@@ -271,6 +307,7 @@ export const useAppStore = create<AppStore>()(
           ...state,
           recurring: state.recurring ?? [],
           budgets: state.budgets ?? [],
+          prayerLogs: state.prayerLogs ?? [],
         } as AppData;
       },
     }
