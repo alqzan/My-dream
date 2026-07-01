@@ -1,16 +1,19 @@
-import type { Transaction, JournalEntry, ReadingLog, Book, Habit } from "./types";
+import type { Transaction, JournalEntry, ReadingLog, Book, Habit, PrayerLog } from "./types";
+import { countDayPrayers } from "./utils";
 
 export interface DaySummary {
   date: string;
   journal?: JournalEntry;
   transactions: Transaction[];
-  income: number;
   expense: number;
   readingLogs: { log: ReadingLog; book?: Book }[];
   pagesRead: number;
   habitsCompleted: { name: string; icon: string }[];
   mood?: JournalEntry["mood"];
   completionScore: number; // 0-3
+  prayerLog?: PrayerLog;
+  prayersCount: number; // 0-5
+  mosqueCount: number; // 0-5
 }
 
 export function aggregateDay(
@@ -21,12 +24,12 @@ export function aggregateDay(
     readingLogs: ReadingLog[];
     books: Book[];
     habits: Habit[];
+    prayerLogs: PrayerLog[];
   }
 ): DaySummary {
   const journal = data.journalEntries.find((e) => e.date === date);
   const transactions = data.transactions.filter((t) => t.date === date);
-  const income = transactions.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
-  const expense = transactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
+  const expense = transactions.reduce((s, t) => s + t.amount, 0);
 
   const dayLogs = data.readingLogs.filter((l) => l.date === date);
   const readingLogs = dayLogs.map((log) => ({
@@ -44,16 +47,21 @@ export function aggregateDay(
   const hasReading = dayLogs.length > 0;
   const completionScore = [hasJournal, hasFinance, hasReading].filter(Boolean).length;
 
+  const prayerLog = data.prayerLogs.find((l) => l.date === date);
+  const { prayed: prayersCount, mosque: mosqueCount } = countDayPrayers(prayerLog);
+
   return {
     date,
     journal,
     transactions,
-    income,
     expense,
     readingLogs,
     pagesRead,
     habitsCompleted,
     mood: journal?.mood,
     completionScore,
+    prayerLog,
+    prayersCount,
+    mosqueCount,
   };
 }

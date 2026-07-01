@@ -5,16 +5,20 @@ import {
   getJournalStreak,
   getReadingStreak,
   getFinanceStreak,
+  computeDailyBudgetStatus,
+  formatAmount,
   getDailyCompletionDates,
   calcStreak,
   today,
   formatDate,
   hijriDate,
   yearProgress,
+  getPrayerStreak,
 } from "@/lib/utils";
 import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
 import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
+import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { MoodSpendingInsight } from "@/components/dashboard/MoodSpendingInsight";
 import { DayView } from "@/components/day/DayView";
@@ -25,7 +29,7 @@ import Link from "next/link";
 import { ChevronLeft, BookMarked, Wallet, BookOpen, BarChart3 } from "lucide-react";
 
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, runRecurring } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, dailyBudget, runRecurring } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
 
@@ -38,6 +42,7 @@ export default function Dashboard() {
   const journalStreak = getJournalStreak(journalEntries);
   const readingStreak = getReadingStreak(readingLogs);
   const financeStreak = getFinanceStreak(transactions);
+  const prayerStreak = getPrayerStreak(prayerLogs);
   const completionDates = getDailyCompletionDates(journalEntries, readingLogs, transactions);
   const masterStreak = calcStreak(completionDates);
 
@@ -58,11 +63,9 @@ export default function Dashboard() {
   const currentBook = books.find((b) => b.status === "أقرأ");
   const recentEntry = journalEntries[0];
   const thisMonthExpense = transactions
-    .filter((t) => t.type === "مصروف" && t.date.startsWith(todayStr.slice(0, 7)))
+    .filter((t) => t.date.startsWith(todayStr.slice(0, 7)))
     .reduce((s, t) => s + t.amount, 0);
-  const thisMonthIncome = transactions
-    .filter((t) => t.type === "دخل" && t.date.startsWith(todayStr.slice(0, 7)))
-    .reduce((s, t) => s + t.amount, 0);
+  const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
 
   const yearPct = yearProgress();
 
@@ -81,12 +84,17 @@ export default function Dashboard() {
         <YearOrbit pct={yearPct} />
       </div>
 
+      <Card className="animate-fade-up stagger-1">
+        <PrayerOrbit />
+      </Card>
+
       <div className="animate-fade-up stagger-1">
         <DailyStreakBanner
           masterStreak={masterStreak}
           journalStreak={journalStreak}
           readingStreak={readingStreak}
           financeStreak={financeStreak}
+          prayerStreak={prayerStreak}
         />
       </div>
 
@@ -124,9 +132,11 @@ export default function Dashboard() {
           href="/finance"
           icon={<Wallet size={20} />}
           label="سجّل مصروف"
-          sub={thisMonthIncome > 0
-            ? `${thisMonthIncome.toLocaleString()} ر.س دخل`
-            : "لا يوجد دخل هذا الشهر"}
+          sub={dailyStatus
+            ? `${dailyStatus.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(dailyStatus.balance))} ر.س يومياً`
+            : thisMonthExpense > 0
+            ? `${thisMonthExpense.toLocaleString()} ر.س هذا الشهر`
+            : "سجّل أول مصروف"}
           color="finance"
           done={hasTodayFinance}
         />
@@ -180,7 +190,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {(thisMonthExpense > 0 || thisMonthIncome > 0) && (
+      {thisMonthExpense > 0 && (
         <Card className="animate-fade-up stagger-8">
           <Link href="/finance" className="block">
             <div className="flex items-center justify-between mb-3">
@@ -188,18 +198,20 @@ export default function Dashboard() {
               <ChevronLeft size={16} className="text-gray-400" />
             </div>
             <div className="flex gap-3">
-              <div className="flex-1 bg-finance/5 rounded-xl p-3 text-center">
-                <div className="text-xs text-gray-500">دخل</div>
-                <div className="text-base font-bold text-finance">
-                  {thisMonthIncome.toLocaleString("ar-SA")} <span className="text-xs font-normal">ر.س</span>
-                </div>
-              </div>
               <div className="flex-1 bg-red-50 rounded-xl p-3 text-center">
                 <div className="text-xs text-gray-500">مصاريف</div>
                 <div className="text-base font-bold text-red-500">
                   {thisMonthExpense.toLocaleString("ar-SA")} <span className="text-xs font-normal">ر.س</span>
                 </div>
               </div>
+              {dailyStatus && (
+                <div className={`flex-1 rounded-xl p-3 text-center ${dailyStatus.balance >= 0 ? "bg-prayer/5" : "bg-red-50"}`}>
+                  <div className="text-xs text-gray-500">الرصيد اليومي</div>
+                  <div className={`text-base font-bold ${dailyStatus.balance >= 0 ? "text-prayer" : "text-red-500"}`}>
+                    {dailyStatus.balance >= 0 ? "+" : "-"}{formatAmount(Math.abs(dailyStatus.balance))} <span className="text-xs font-normal">ر.س</span>
+                  </div>
+                </div>
+              )}
             </div>
           </Link>
         </Card>

@@ -1,28 +1,30 @@
-import type { Transaction, FinanceCategory } from "./types";
+import type { Transaction } from "./types";
 import { uid } from "./utils";
 
 // ========== Smart Categorization ==========
-const CATEGORY_KEYWORDS: { keywords: string[]; category: FinanceCategory }[] = [
-  { keywords: ["سوبرماركت", "هايبر", "بنده", "الدانوب", "لولو", "نون", "أمازون", "جرير", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "ساكو"], category: "طعام" },
-  { keywords: ["مطعم", "برغر", "كنتاكي", "ماكدونالدز", "ستاربكس", "كافيه", "مقهى", "pizza", "كبسه", "مندي", "سشي", "resturant", "restaurant", "cafe", "coffee"], category: "طعام" },
-  { keywords: ["إيجار", "ايجار", "rent"], category: "إيجار" },
-  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "fuel", "petrol"], category: "مواصلات" },
-  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "مواصلات" },
-  { keywords: ["مستشفى", "عيادة", "صيدلية", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "صحة" },
-  { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "تعليم" },
-  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal"], category: "سفر" },
-  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات"], category: "كمالي" },
-  { keywords: ["ادخار", "توفير", "saving"], category: "ادخار" },
-  { keywords: ["استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "استثمار" },
-  { keywords: ["راتب", "salary", "payroll"], category: "راتب" },
+// Maps to the seeded default category ids (src/lib/types.ts). If the user
+// has since renamed or deleted one of these, the transaction just falls
+// back to "غير مصنف" via getCategoryInfo — it's never lost.
+const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
+  { keywords: ["سوبرماركت", "هايبر", "بنده", "الدانوب", "لولو", "نون", "أمازون", "جرير", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "ساكو"], category: "cat-essentials" },
+  { keywords: ["مطعم", "برغر", "كنتاكي", "ماكدونالدز", "ستاربكس", "كافيه", "مقهى", "pizza", "كبسه", "مندي", "سشي", "resturant", "restaurant", "cafe", "coffee"], category: "cat-essentials" },
+  { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
+  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "fuel", "petrol"], category: "cat-essentials" },
+  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-essentials" },
+  { keywords: ["مستشفى", "عيادة", "صيدلية", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
+  { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
+  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal"], category: "cat-luxuries" },
+  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات"], category: "cat-luxuries" },
+  { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity"], category: "cat-charity" },
+  { keywords: ["ادخار", "توفير", "saving", "استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "cat-investment" },
 ];
 
-function autoCategory(text: string): FinanceCategory {
+function autoCategory(text: string): string {
   const lower = text.toLowerCase();
   for (const { keywords, category } of CATEGORY_KEYWORDS) {
     if (keywords.some((k) => lower.includes(k.toLowerCase()))) return category;
   }
-  return "أخرى";
+  return "cat-essentials";
 }
 
 // ========== SMS Parser ==========
@@ -42,15 +44,18 @@ const SMS_PATTERNS = [
 
 export interface SmsParseResult {
   amount: number;
-  type: "دخل" | "مصروف";
-  category: FinanceCategory;
+  category: string;
   note: string;
   date: string;
 }
 
+// Returns null both when no amount could be read AND when the message looks
+// like an incoming deposit (income) — this tracker is expense-only, so
+// credits are silently skipped rather than logged as spending.
 export function parseBankSms(smsText: string, date: string): SmsParseResult | null {
   const text = smsText.trim();
   const isCredit = /(?:إيداع|راتب|حُوّل إليك|تم استلام|credit)/i.test(text);
+  if (isCredit) return null;
 
   let amount = 0;
   let merchant = "";
@@ -67,11 +72,9 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
 
   if (!amount) return null;
 
-  const category = isCredit ? "راتب" : autoCategory(text + " " + merchant);
   return {
     amount,
-    type: isCredit ? "دخل" : "مصروف",
-    category: isCredit ? "راتب" : category,
+    category: autoCategory(text + " " + merchant),
     note: merchant || text.slice(0, 60),
     date: extractSmsDate(text) ?? date,
   };
@@ -93,9 +96,12 @@ function extractSmsDate(text: string): string | null {
 // Parse a blob containing many bank SMS pasted together. Splits into
 // individual messages and parses each, so the user copies everything at
 // once instead of one message at a time.
-export function parseBankSmsBulk(blob: string, defaultDate: string): SmsParseResult[] {
+export function parseBankSmsBulk(
+  blob: string,
+  defaultDate: string
+): { transactions: SmsParseResult[]; skippedIncome: number } {
   const text = blob.trim();
-  if (!text) return [];
+  if (!text) return { transactions: [], skippedIncome: 0 };
 
   // First try splitting on blank lines (typical when copying several SMS).
   let chunks = text.split(/\n\s*\n+/).map((c) => c.trim()).filter(Boolean);
@@ -104,12 +110,15 @@ export function parseBankSmsBulk(blob: string, defaultDate: string): SmsParseRes
     chunks = text.split(/\r?\n/).map((c) => c.trim()).filter(Boolean);
   }
 
+  const isCreditRe = /(?:إيداع|راتب|حُوّل إليك|تم استلام|credit)/i;
   const results: SmsParseResult[] = [];
+  let skippedIncome = 0;
   for (const chunk of chunks) {
     const parsed = parseBankSms(chunk, defaultDate);
     if (parsed) results.push(parsed);
+    else if (isCreditRe.test(chunk)) skippedIncome++;
   }
-  return results;
+  return { transactions: results, skippedIncome };
 }
 
 // ========== CSV Bank Statement Parser ==========
@@ -136,9 +145,9 @@ function parseAmount(raw: string): number {
   return parseFloat(raw.replace(/[,،\s]/g, "")) || 0;
 }
 
-export function parseBankCsv(csvText: string): Transaction[] {
+export function parseBankCsv(csvText: string): { transactions: Transaction[]; skippedIncome: number } {
   const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { transactions: [], skippedIncome: 0 };
 
   // Detect header
   const header = lines[0].toLowerCase();
@@ -154,6 +163,7 @@ export function parseBankCsv(csvText: string): Transaction[] {
   };
 
   const transactions: Transaction[] = [];
+  let skippedIncome = 0;
 
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i].split(/,|\t/);
@@ -167,20 +177,21 @@ export function parseBankCsv(csvText: string): Transaction[] {
 
     if (!amount) continue;
 
+    // Expense-only tracker: skip incoming deposits/credits entirely.
     const isIncome = credit > 0 && debit === 0;
+    if (isIncome) { skippedIncome++; continue; }
+
     const date = parseDate(rawDate);
     const descText = desc.replace(/"/g, "").trim();
-    const category = isIncome ? "راتب" : autoCategory(descText);
 
     transactions.push({
       id: uid(),
       date,
       amount,
-      type: isIncome ? "دخل" : "مصروف",
-      category,
+      category: autoCategory(descText),
       note: descText.slice(0, 80),
     });
   }
 
-  return transactions;
+  return { transactions, skippedIncome };
 }

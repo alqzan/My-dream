@@ -6,9 +6,11 @@ import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/auth/SyncButton";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { BrandMark } from "@/components/layout/BrandMark";
+import { MosqueIcon } from "@/components/icons/MosqueIcon";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "الرئيسية", color: "text-gray-700" },
+  { href: "/prayers", icon: MosqueIcon, label: "الصلاة", color: "text-prayer" },
   { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-journal" },
   { href: "/finance", icon: Wallet, label: "الأموال", color: "text-finance" },
   { href: "/reading", icon: BookOpen, label: "القراءة", color: "text-reading" },

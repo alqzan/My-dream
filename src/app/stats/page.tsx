@@ -5,6 +5,8 @@ import {
   getJournalStreak,
   getReadingStreak,
   getFinanceStreak,
+  getPrayerStreak,
+  countDayPrayers,
   getDailyCompletionDates,
   calcStreak,
   longestStreak,
@@ -28,7 +30,7 @@ import {
 import { Flame, Trophy, BookOpen, Wallet, BookMarked, CalendarCheck } from "lucide-react";
 
 export default function StatsPage() {
-  const { journalEntries, readingLogs, transactions, books } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs } = useAppStore();
 
   const year = today().slice(0, 4);
 
@@ -40,9 +42,12 @@ export default function StatsPage() {
   const booksFinished = books.filter(
     (b) => b.status === "أنهيت" && (!b.finishDate || b.finishDate.startsWith(year))
   ).length;
-  const netThisYear = transactions
+  const spentThisYear = transactions
     .filter((t) => t.date.startsWith(year))
-    .reduce((s, t) => s + (t.type === "دخل" ? t.amount : -t.amount), 0);
+    .reduce((s, t) => s + t.amount, 0);
+  const fullPrayerDays = prayerLogs
+    .filter((l) => countDayPrayers(l).prayed === 5)
+    .map((l) => l.date);
 
   // ---------- Heatmap scores ----------
   const heatmapScores = useMemo(() => {
@@ -68,6 +73,13 @@ export default function StatsPage() {
       best: longestStreak(completionDates),
     },
     {
+      label: "الصلوات الخمس",
+      icon: <span className="text-sm">🕌</span>,
+      color: "#2d8577",
+      current: getPrayerStreak(prayerLogs),
+      best: longestStreak(fullPrayerDays),
+    },
+    {
       label: "المذكرات",
       icon: <BookMarked size={16} />,
       color: "#8a6fb0",
@@ -90,23 +102,23 @@ export default function StatsPage() {
     },
   ];
 
-  // ---------- Monthly finance (last 6 months) ----------
+  // ---------- Monthly spending (last 6 months) ----------
   const financeMonthly = useMemo(() => {
     const now = new Date();
-    const months: { key: string; name: string; دخل: number; مصروف: number }[] = [];
+    const months: { key: string; name: string; يومي: number; التزامات: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      months.push({ key, name: arabicMonthName(d.getMonth()), دخل: 0, مصروف: 0 });
+      months.push({ key, name: arabicMonthName(d.getMonth()), يومي: 0, التزامات: 0 });
     }
     const byKey = Object.fromEntries(months.map((m) => [m.key, m]));
     transactions.forEach((t) => {
       const m = byKey[t.date.slice(0, 7)];
-      if (m) m[t.type] += t.amount;
+      if (m) m[t.big ? "التزامات" : "يومي"] += t.amount;
     });
     return months;
   }, [transactions]);
-  const hasFinanceData = financeMonthly.some((m) => m.دخل > 0 || m.مصروف > 0);
+  const hasFinanceData = financeMonthly.some((m) => m.يومي > 0 || m.التزامات > 0);
 
   // ---------- Monthly reading pages (last 6 months) ----------
   const readingMonthly = useMemo(() => {
@@ -173,9 +185,9 @@ export default function StatsPage() {
         />
         <HeroStat
           emoji="💰"
-          value={Math.abs(netThisYear)}
-          label={netThisYear >= 0 ? "ر.س صافي ادخار" : "ر.س صافي إنفاق"}
-          gradient={netThisYear >= 0 ? "from-[#c9852a] to-[#a96c20]" : "from-[#b5541e] to-[#8f3f14]"}
+          value={spentThisYear}
+          label="ر.س مصاريف العام"
+          gradient="from-[#c9852a] to-[#a96c20]"
         />
       </div>
 
@@ -226,7 +238,7 @@ export default function StatsPage() {
         <Card className="animate-fade-up stagger-4">
           <div className="flex items-center gap-2 mb-4">
             <Wallet size={16} className="text-finance" />
-            <span className="text-sm font-semibold text-gray-700">الدخل والمصاريف — آخر ٦ أشهر</span>
+            <span className="text-sm font-semibold text-gray-700">مصاريفك — آخر ٦ أشهر</span>
           </div>
           <div className="h-52" dir="ltr">
             <ResponsiveContainer width="100%" height="100%">
@@ -239,17 +251,17 @@ export default function StatsPage() {
                   contentStyle={tooltipStyle}
                   cursor={{ fill: "rgba(201,133,42,0.06)" }}
                 />
-                <Bar dataKey="دخل" fill="#3d9640" radius={[6, 6, 0, 0]} maxBarSize={22} />
-                <Bar dataKey="مصروف" fill="#d96a4a" radius={[6, 6, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="يومي" stackId="a" fill="#d96a4a" radius={[0, 0, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="التزامات" stackId="a" fill="#c9852a" radius={[6, 6, 0, 0]} maxBarSize={26} />
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="flex justify-center gap-5 mt-2 text-xs text-gray-500">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#3d9640]" /> دخل
+              <span className="w-2.5 h-2.5 rounded-full bg-[#d96a4a]" /> مصاريف يومية
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#d96a4a]" /> مصروف
+              <span className="w-2.5 h-2.5 rounded-full bg-[#c9852a]" /> التزامات كبيرة
             </span>
           </div>
         </Card>

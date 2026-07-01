@@ -5,6 +5,7 @@ on:
     branches:
       - claude/project-overview-development-ahxetk
       - claude/super-app-tracker-finances-notes-nudq3a
+      - claude/prayer-tracker-redesign-bpzm8w
       - main
   workflow_dispatch: {}
 
@@ -48,9 +49,6 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

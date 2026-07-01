@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { JournalEntry, ReadingLog, Transaction } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef } from "./types";
+import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -30,7 +31,9 @@ export function formatDateShort(dateStr: string) {
   return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric" });
 }
 
-// Hijri (Umm al-Qura) date, e.g. "١٥ محرم ١٤٤٨ هـ".
+// Hijri (Umm al-Qura) date, e.g. "15 محرم 1448 هـ".
+// Note: the ar-SA Islamic formatter already appends the "هـ" era marker on
+// its own — appending it again produced a doubled "هـ هـ" (garbled to "ه ه").
 export function hijriDate(dateStr: string) {
   try {
     const d = new Date(dateStr);
@@ -113,6 +116,87 @@ export function getFinanceStreak(transactions: Transaction[]): number {
   return calcStreak(transactions.map((t) => t.date));
 }
 
+export function getCategoryInfo(categories: FinanceCategoryDef[], id: string): FinanceCategoryDef {
+  return categories.find((c) => c.id === id) ?? UNKNOWN_CATEGORY;
+}
+
+export interface DailyBudgetStatus {
+  days: number; // days since (and including) startDate, through today
+  allowance: number; // amount * days
+  spent: number; // sum of non-big transactions since startDate
+  balance: number; // allowance - spent (negative = over)
+}
+
+// Cumulative daily allowance: every day since `startDate` contributes
+// `amount`, and every (non-"big") transaction since then eats into the
+// running total — a surplus day cushions a rough one later on.
+export function computeDailyBudgetStatus(
+  dailyBudget: { amount: number; startDate: string },
+  transactions: Transaction[]
+): DailyBudgetStatus {
+  const todayStr = today();
+  const days = Math.max(
+    1,
+    Math.round((new Date(todayStr).getTime() - new Date(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
+  );
+  const allowance = dailyBudget.amount * days;
+  const spent = transactions
+    .filter((t) => !t.big && t.date >= dailyBudget.startDate && t.date <= todayStr)
+    .reduce((s, t) => s + t.amount, 0);
+  return { days, allowance, spent, balance: allowance - spent };
+}
+
+// Compute the most recent date this recurring item was/is due, on or before
+// `now`. The interval's phase is anchored to `anchorDate` so "every N months/
+// weeks" (not just a fixed 1/12) lines up on a consistent cadence.
+export function mostRecentDueDate(r: RecurringTransaction, now: Date): Date {
+  const every = Math.max(1, Math.floor(r.every) || 1);
+  const anchor = new Date(r.anchorDate || today());
+
+  if (r.unit === "أسبوعي") {
+    // dayOfMonth reused as weekday 0-6
+    const target = ((r.dayOfMonth % 7) + 7) % 7;
+    const due = new Date(now);
+    due.setDate(now.getDate() - ((now.getDay() - target + 7) % 7));
+
+    const anchorDue = new Date(anchor);
+    anchorDue.setDate(anchor.getDate() - ((anchor.getDay() - target + 7) % 7));
+
+    const weeksBetween = Math.round((due.getTime() - anchorDue.getTime()) / (7 * 24 * 3600 * 1000));
+    const remainder = ((weeksBetween % every) + every) % every;
+    if (remainder !== 0) due.setDate(due.getDate() - remainder * 7);
+    return due < anchorDue ? anchorDue : due;
+  }
+
+  // شهري (and anything else) — monthly-based cadence
+  const day = Math.min(Math.max(r.dayOfMonth, 1), 28);
+  const anchorMonthIndex = anchor.getFullYear() * 12 + anchor.getMonth();
+  const nowMonthIndex = now.getFullYear() * 12 + now.getMonth();
+  let k = Math.floor((nowMonthIndex - anchorMonthIndex) / every);
+  let dueMonthIndex = anchorMonthIndex + k * every;
+  let due = new Date(Math.floor(dueMonthIndex / 12), ((dueMonthIndex % 12) + 12) % 12, day);
+  if (due > now) {
+    k -= 1;
+    dueMonthIndex = anchorMonthIndex + k * every;
+    due = new Date(Math.floor(dueMonthIndex / 12), ((dueMonthIndex % 12) + 12) % 12, day);
+  }
+  return due < anchor ? new Date(anchor.getFullYear(), anchor.getMonth(), day) : due;
+}
+
+// The next occurrence strictly after `now` — one interval past the most
+// recent due date.
+export function nextDueDate(r: RecurringTransaction, now: Date): Date {
+  const recent = mostRecentDueDate(r, now);
+  const every = Math.max(1, Math.floor(r.every) || 1);
+  if (r.unit === "أسبوعي") {
+    const next = new Date(recent);
+    next.setDate(recent.getDate() + every * 7);
+    return next;
+  }
+  const monthIndex = recent.getFullYear() * 12 + recent.getMonth() + every;
+  return new Date(Math.floor(monthIndex / 12), ((monthIndex % 12) + 12) % 12, recent.getDate());
+}
+
 export function getDailyCompletionDates(
   journalEntries: JournalEntry[],
   readingLogs: ReadingLog[],
@@ -134,6 +218,55 @@ export function getMonthDates(year: number, month: number): string[] {
     d.setDate(d.getDate() + 1);
   }
   return dates;
+}
+
+// ===================== Prayers =====================
+
+export function getPrayerLog(logs: PrayerLog[], date: string): PrayerLog | undefined {
+  return logs.find((l) => l.date === date);
+}
+
+// Counts for a single day: how many of the 5 prayers were prayed at all,
+// and how many of those were prayed in congregation (at the mosque).
+export function countDayPrayers(log: PrayerLog | undefined): { prayed: number; mosque: number } {
+  if (!log) return { prayed: 0, mosque: 0 };
+  let prayed = 0;
+  let mosque = 0;
+  for (const p of PRAYERS) {
+    const status = log.prayers[p];
+    if (status === "منفردة" || status === "جماعة") prayed++;
+    if (status === "جماعة") mosque++;
+  }
+  return { prayed, mosque };
+}
+
+// Consecutive-day streak of days where all 5 prayers were performed
+// (in the mosque or alone — either counts).
+export function getPrayerStreak(logs: PrayerLog[]): number {
+  const fullDays = logs
+    .filter((l) => PRAYERS.every((p) => l.prayers[p] === "منفردة" || l.prayers[p] === "جماعة"))
+    .map((l) => l.date);
+  return calcStreak(fullDays);
+}
+
+// Consecutive-day streak of days where all 5 prayers were performed at the mosque.
+export function getMosqueStreak(logs: PrayerLog[]): number {
+  const fullMosqueDays = logs
+    .filter((l) => PRAYERS.every((p) => l.prayers[p] === "جماعة"))
+    .map((l) => l.date);
+  return calcStreak(fullMosqueDays);
+}
+
+// Per-prayer completion rate (0-1) across all logged days — used to find
+// which of the five prayers a person is most/least consistent with.
+export function prayerConsistency(logs: PrayerLog[]): Record<PrayerName, number> {
+  const result = {} as Record<PrayerName, number>;
+  const total = logs.length || 1;
+  for (const p of PRAYERS) {
+    const done = logs.filter((l) => l.prayers[p] === "منفردة" || l.prayers[p] === "جماعة").length;
+    result[p] = done / total;
+  }
+  return result;
 }
 
 export function arabicMonthName(month: number): string {

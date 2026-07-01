@@ -2,9 +2,10 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
-  RecurringTransaction, Budget, FinanceCategory,
+  RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
 } from "./types";
-import { uid, today } from "./utils";
+import { DEFAULT_CATEGORIES } from "./types";
+import { uid, today, mostRecentDueDate } from "./utils";
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -26,8 +27,17 @@ interface AppStore extends AppData {
   runRecurring: () => number; // returns count of generated transactions
 
   // Budgets
-  setBudget: (category: FinanceCategory, limit: number) => void;
-  removeBudget: (category: FinanceCategory) => void;
+  setBudget: (category: string, limit: number) => void;
+  removeBudget: (category: string) => void;
+
+  // Categories (user-managed, like habits)
+  addCategory: (def: FinanceCategoryDef) => void;
+  updateCategory: (id: string, updates: Partial<FinanceCategoryDef>) => void;
+  deleteCategory: (id: string) => void;
+
+  // Daily cumulative budget
+  setDailyBudget: (amount: number) => void;
+  removeDailyBudget: () => void;
 
   // Reading
   addBook: (book: Book) => void;
@@ -41,6 +51,10 @@ interface AppStore extends AppData {
   toggleHabitLog: (habitId: string, date: string) => void;
   deleteHabit: (id: string) => void;
 
+  // Prayers
+  setPrayerStatus: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
+  cyclePrayerStatus: (date: string, prayer: PrayerName) => void;
+
   // Cloud sync
   hydrate: (data: Partial<AppData>) => void;
   snapshot: () => AppData;
@@ -48,33 +62,6 @@ interface AppStore extends AppData {
   // Theme (device-local)
   theme: "light" | "dark";
   toggleTheme: () => void;
-}
-
-// Compute the most recent date this recurring item was/is due, on or before `now`.
-function mostRecentDueDate(r: RecurringTransaction, now: Date): Date | null {
-  const d = new Date(now);
-  if (r.frequency === "شهري") {
-    const day = Math.min(Math.max(r.dayOfMonth, 1), 28);
-    let due = new Date(d.getFullYear(), d.getMonth(), day);
-    if (due > d) due = new Date(d.getFullYear(), d.getMonth() - 1, day);
-    return due;
-  }
-  if (r.frequency === "أسبوعي") {
-    // dayOfMonth reused as weekday 0-6
-    const target = ((r.dayOfMonth % 7) + 7) % 7;
-    const due = new Date(d);
-    const diff = (d.getDay() - target + 7) % 7;
-    due.setDate(d.getDate() - diff);
-    return due;
-  }
-  if (r.frequency === "سنوي") {
-    let due = new Date(d.getFullYear(), 0, 1);
-    due.setMonth(0);
-    due.setDate(Math.min(Math.max(r.dayOfMonth, 1), 28));
-    if (due > d) due = new Date(d.getFullYear() - 1, 0, Math.min(Math.max(r.dayOfMonth, 1), 28));
-    return due;
-  }
-  return null;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -91,6 +78,9 @@ export const useAppStore = create<AppStore>()(
       ],
       recurring: [],
       budgets: [],
+      categories: DEFAULT_CATEGORIES,
+      prayerLogs: [],
+      dailyBudget: null,
       theme: "light",
       lastUpdated: new Date().toISOString(),
 
@@ -159,7 +149,6 @@ export const useAppStore = create<AppStore>()(
             if (!r.active) return r;
             // Determine the most recent due date on/before today
             const due = mostRecentDueDate(r, now);
-            if (!due) return r;
             const dueStr = due.toISOString().split("T")[0];
             // Already generated for this period?
             if (r.lastGenerated && r.lastGenerated >= dueStr) return r;
@@ -167,9 +156,9 @@ export const useAppStore = create<AppStore>()(
               id: uid(),
               date: dueStr,
               amount: r.amount,
-              type: r.type,
               category: r.category,
               note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
+              big: r.big,
             });
             generated++;
             return { ...r, lastGenerated: dueStr };
@@ -200,6 +189,31 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({
           budgets: s.budgets.filter((b) => b.category !== category),
         })),
+
+      addCategory: (def) =>
+        set((s) => ({ categories: [...s.categories, def] })),
+
+      updateCategory: (id, updates) =>
+        set((s) => ({
+          categories: s.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+        })),
+
+      deleteCategory: (id) =>
+        set((s) => ({
+          categories: s.categories.filter((c) => c.id !== id),
+          // A budget cap for a category that no longer exists is meaningless —
+          // the transactions/recurring rules themselves are kept (history is
+          // never deleted), they'll just show as "غير مصنف".
+          budgets: s.budgets.filter((b) => b.category !== id),
+        })),
+
+      setDailyBudget: (amount) =>
+        // Changing the daily amount restarts the cumulative tally from today
+        // rather than reinterpreting all of history under the new rate.
+        set(() => ({ dailyBudget: { amount, startDate: today() } })),
+
+      removeDailyBudget: () =>
+        set(() => ({ dailyBudget: null })),
 
       addBook: (book) =>
         set((s) => ({ books: [book, ...s.books] })),
@@ -235,6 +249,35 @@ export const useAppStore = create<AppStore>()(
       deleteHabit: (id) =>
         set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
 
+      setPrayerStatus: (date, prayer, status) =>
+        set((s) => {
+          const existing = s.prayerLogs.find((l) => l.date === date);
+          if (existing) {
+            return {
+              prayerLogs: s.prayerLogs.map((l) =>
+                l.date === date ? { ...l, prayers: { ...l.prayers, [prayer]: status } } : l
+              ),
+            };
+          }
+          return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: status } }] };
+        }),
+
+      cyclePrayerStatus: (date, prayer) =>
+        set((s) => {
+          const order: PrayerStatus[] = ["لم", "منفردة", "جماعة"];
+          const existing = s.prayerLogs.find((l) => l.date === date);
+          const current = existing?.prayers[prayer] ?? "لم";
+          const next = order[(order.indexOf(current) + 1) % order.length];
+          if (existing) {
+            return {
+              prayerLogs: s.prayerLogs.map((l) =>
+                l.date === date ? { ...l, prayers: { ...l.prayers, [prayer]: next } } : l
+              ),
+            };
+          }
+          return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
+        }),
+
       hydrate: (data) =>
         set(() => ({
           transactions: data.transactions ?? [],
@@ -244,6 +287,9 @@ export const useAppStore = create<AppStore>()(
           habits: data.habits ?? [],
           recurring: data.recurring ?? [],
           budgets: data.budgets ?? [],
+          categories: data.categories ?? DEFAULT_CATEGORIES,
+          prayerLogs: data.prayerLogs ?? [],
+          dailyBudget: data.dailyBudget ?? null,
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -257,21 +303,91 @@ export const useAppStore = create<AppStore>()(
           habits: s.habits,
           recurring: s.recurring,
           budgets: s.budgets,
+          categories: s.categories,
+          prayerLogs: s.prayerLogs,
+          dailyBudget: s.dailyBudget,
           lastUpdated: s.lastUpdated,
         };
       },
     }),
     {
       name: "my-dream-store",
-      version: 1,
+      version: 3,
       storage: createJSONStorage(() => idbStorage),
-      migrate: (persisted: unknown) => {
-        const state = (persisted ?? {}) as Partial<AppData>;
-        return {
-          ...state,
-          recurring: state.recurring ?? [],
-          budgets: state.budgets ?? [],
-        } as AppData;
+      migrate: (persisted: unknown, version: number) => {
+        let state = (persisted ?? {}) as Record<string, unknown>;
+        const todayStr = today();
+
+        // v2 dropped income entirely (finance is expense/budget-only) and
+        // replaced the fixed شهري/أسبوعي/سنوي frequency with a flexible
+        // (unit, every) interval.
+        if (version < 2) {
+          const oldExpenseCategories = new Set([
+            "إيجار", "مواصلات", "طعام", "صحة", "تعليم", "كمالي", "سفر", "ادخار", "استثمار", "أخرى",
+          ]);
+          const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
+            .filter((t) => t.type !== "دخل" && oldExpenseCategories.has(t.category as string))
+            .map((t) => ({
+              id: t.id, date: t.date, amount: t.amount,
+              category: t.category, note: t.note, linkedJournalId: t.linkedJournalId,
+            }));
+          const recurring = ((state.recurring as Record<string, unknown>[]) ?? [])
+            .filter((r) => r.type !== "دخل" && oldExpenseCategories.has(r.category as string))
+            .map((r) => {
+              let unit = "شهري";
+              let every = 1;
+              if (r.frequency === "أسبوعي") { unit = "أسبوعي"; every = 1; }
+              else if (r.frequency === "سنوي") { unit = "شهري"; every = 12; }
+              return {
+                id: r.id, amount: r.amount, category: r.category, note: r.note,
+                unit, every, dayOfMonth: (r.dayOfMonth as number) ?? 1,
+                anchorDate: (r.lastGenerated as string) ?? todayStr,
+                active: r.active, lastGenerated: r.lastGenerated,
+              };
+            });
+          const budgets = ((state.budgets as Record<string, unknown>[]) ?? [])
+            .filter((b) => oldExpenseCategories.has(b.category as string));
+          state = { ...state, transactions, recurring, budgets, prayerLogs: state.prayerLogs ?? [] };
+        }
+
+        // v3 turns the fixed category union into user-managed categories
+        // (add/rename/delete freely, like habits) seeded with 5 defaults.
+        if (version < 3) {
+          const CATEGORY_REMAP: Record<string, string> = {
+            "إيجار": "cat-essentials", "مواصلات": "cat-essentials", "طعام": "cat-essentials",
+            "صحة": "cat-essentials", "تعليم": "cat-essentials", "أخرى": "cat-essentials",
+            "كمالي": "cat-luxuries", "سفر": "cat-luxuries",
+            "ادخار": "cat-investment", "استثمار": "cat-investment",
+          };
+          const remapCategory = (cat: unknown) => CATEGORY_REMAP[cat as string] ?? (cat as string) ?? "cat-essentials";
+
+          const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
+            .map((t) => ({ ...t, category: remapCategory(t.category) })) as Transaction[];
+
+          const recurring = ((state.recurring as Record<string, unknown>[]) ?? [])
+            .map((r) => ({ ...r, category: remapCategory(r.category) })) as RecurringTransaction[];
+
+          // Several old categories can collapse onto the same new one —
+          // sum their caps instead of silently dropping any.
+          const oldBudgets = (state.budgets as Record<string, unknown>[]) ?? [];
+          const summed: Record<string, number> = {};
+          for (const b of oldBudgets) {
+            const id = remapCategory(b.category);
+            summed[id] = (summed[id] ?? 0) + (b.limit as number);
+          }
+          const budgets: Budget[] = Object.entries(summed).map(([category, limit]) => ({ category, limit }));
+
+          state = {
+            ...state,
+            transactions,
+            recurring,
+            budgets,
+            categories: state.categories ?? DEFAULT_CATEGORIES,
+            dailyBudget: state.dailyBudget ?? null,
+          };
+        }
+
+        return state as unknown as AppData;
       },
     }
   )

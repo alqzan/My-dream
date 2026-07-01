@@ -1,9 +1,10 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
-import { CATEGORY_LABELS, MOOD_LABELS } from "@/lib/types";
-import { formatDate, formatAmount } from "@/lib/utils";
+import { MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { formatDate, formatAmount, getCategoryInfo } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
+import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BookOpen, Wallet, BookMarked, CheckCircle2 } from "lucide-react";
 
 interface DayViewProps {
@@ -12,13 +13,12 @@ interface DayViewProps {
 }
 
 export function DayView({ date, onClose }: DayViewProps) {
-  const { transactions, journalEntries, readingLogs, books, habits } = useAppStore();
+  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories } = useAppStore();
 
   if (!date) return null;
 
-  const day = aggregateDay(date, { transactions, journalEntries, readingLogs, books, habits });
+  const day = aggregateDay(date, { transactions, journalEntries, readingLogs, books, habits, prayerLogs });
   const mood = day.mood ? MOOD_LABELS[day.mood] : null;
-  const net = day.income - day.expense;
 
   return (
     <Modal open={!!date} onClose={onClose} title={formatDate(date)} className="sm:max-w-xl">
@@ -47,7 +47,47 @@ export function DayView({ date, onClose }: DayViewProps) {
               <span>{mood.label}</span>
             </div>
           )}
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+              day.prayersCount > 0 ? "bg-prayer/10 text-prayer" : "bg-gray-100 text-gray-400"
+            }`}
+          >
+            <span>🕌</span>
+            <span>{day.prayersCount}/5 صلوات</span>
+          </div>
         </div>
+
+        {/* Prayers */}
+        {day.prayerLog ? (
+          <Section
+            icon={<MosqueIcon size={15} />}
+            title="الصلاة"
+            color="text-prayer"
+            extra={
+              day.mosqueCount > 0 ? (
+                <span className="text-xs font-semibold text-prayer">{day.mosqueCount} بالمسجد</span>
+              ) : undefined
+            }
+          >
+            <div className="flex gap-2 flex-wrap">
+              {PRAYERS.map((p) => {
+                const status = day.prayerLog!.prayers[p] ?? "لم";
+                const meta = PRAYER_STATUS_META[status];
+                return (
+                  <span
+                    key={p}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
+                    style={{ backgroundColor: `${meta.color}22`, color: meta.color }}
+                  >
+                    <span>{PRAYER_META[p].icon}</span> {p}
+                  </span>
+                );
+              })}
+            </div>
+          </Section>
+        ) : (
+          <EmptyHint text="لم تُسجَّل صلوات هذا اليوم" />
+        )}
 
         {day.completionScore === 3 && (
           <div className="text-center text-sm font-bold text-orange-600 bg-orange-50 rounded-xl py-2">
@@ -80,23 +120,23 @@ export function DayView({ date, onClose }: DayViewProps) {
         {day.transactions.length > 0 ? (
           <Section
             icon={<Wallet size={15} />}
-            title="الأموال"
+            title="المصاريف"
             color="text-finance"
             extra={
-              <span className={`text-sm font-bold ${net >= 0 ? "text-finance" : "text-red-500"}`}>
-                {net >= 0 ? "+" : ""}{formatAmount(net)} ر.س
+              <span className="text-sm font-bold text-red-500">
+                -{formatAmount(day.expense)} ر.س
               </span>
             }
           >
             <div className="space-y-1.5">
               {day.transactions.map((tx) => {
-                const info = CATEGORY_LABELS[tx.category];
+                const info = getCategoryInfo(categories, tx.category);
                 return (
                   <div key={tx.id} className="flex items-center gap-2 text-sm">
                     <span>{info.icon}</span>
                     <span className="text-gray-600 flex-1 truncate">{tx.note || info.label}</span>
-                    <span className={tx.type === "دخل" ? "text-finance font-semibold" : "text-red-500 font-semibold"}>
-                      {tx.type === "دخل" ? "+" : "-"}{formatAmount(tx.amount)}
+                    <span className="text-red-500 font-semibold">
+                      -{formatAmount(tx.amount)}
                     </span>
                   </div>
                 );
@@ -104,7 +144,7 @@ export function DayView({ date, onClose }: DayViewProps) {
             </div>
           </Section>
         ) : (
-          <EmptyHint text="لم تسجّل أي معاملة" />
+          <EmptyHint text="لم تسجّل أي مصروف" />
         )}
 
         {/* Reading */}

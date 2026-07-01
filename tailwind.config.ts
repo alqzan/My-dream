@@ -29,6 +29,7 @@ const config: Config = {
         journal: { DEFAULT: "#8a6fb0", light: "#efe9f6" },
         finance: { DEFAULT: "#3d9640", light: "#dcf0dc" },
         reading: { DEFAULT: "#c1663f", light: "#f7e7dd" },
+        prayer: { DEFAULT: "#1f7a6c", light: "#dcece6" },
       },
     },
   },

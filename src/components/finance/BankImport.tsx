@@ -2,28 +2,33 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, parseBankCsv } from "@/lib/bankParser";
-import { today } from "@/lib/utils";
+import { today, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { CATEGORY_LABELS } from "@/lib/types";
 import type { Transaction } from "@/lib/types";
 import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
 
 type Mode = "sms" | "csv";
 
 export function BankImport({ onClose }: { onClose: () => void }) {
-  const { addTransaction } = useAppStore();
+  const { categories, addTransaction } = useAppStore();
   const [mode, setMode] = useState<Mode>("sms");
   const [smsText, setSmsText] = useState("");
   const [date, setDate] = useState(today());
   const [preview, setPreview] = useState<Transaction[]>([]);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [skippedIncome, setSkippedIncome] = useState(0);
 
   function handleSmsPreview() {
     setError("");
-    const results = parseBankSmsBulk(smsText, date);
+    setSkippedIncome(0);
+    const { transactions: results, skippedIncome: skipped } = parseBankSmsBulk(smsText, date);
     if (!results.length) {
-      setError("لم أستطع قراءة أي مبلغ. الصق رسائل البنك (تقدر تلصق عدة رسائل مرة وحدة).");
+      setError(
+        skipped > 0
+          ? `لقيت ${skipped} رسالة دخل وتجاهلتها (التطبيق للمصاريف بس) — ما فيه أي مصروف لأستورده.`
+          : "لم أستطع قراءة أي مبلغ. الصق رسائل البنك (تقدر تلصق عدة رسائل مرة وحدة)."
+      );
       return;
     }
     const txs: Transaction[] = results.map((r) => ({
@@ -31,17 +36,27 @@ export function BankImport({ onClose }: { onClose: () => void }) {
       ...r,
     }));
     setPreview(txs);
+    setSkippedIncome(skipped);
   }
 
   function handleCsvFile(file: File) {
     setError("");
+    setSkippedIncome(0);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const csv = e.target?.result as string;
-        const txs = parseBankCsv(csv);
-        if (!txs.length) { setError("لم أجد معاملات في الملف. تأكد أن الملف CSV صحيح."); return; }
+        const { transactions: txs, skippedIncome: skipped } = parseBankCsv(csv);
+        if (!txs.length) {
+          setError(
+            skipped > 0
+              ? `لقيت ${skipped} معاملة دخل وتجاهلتها (التطبيق للمصاريف بس) — ما فيه أي مصروف لأستورده.`
+              : "لم أجد معاملات في الملف. تأكد أن الملف CSV صحيح."
+          );
+          return;
+        }
         setPreview(txs);
+        setSkippedIncome(skipped);
       } catch {
         setError("خطأ في قراءة الملف");
       }
@@ -90,7 +105,7 @@ export function BankImport({ onClose }: { onClose: () => void }) {
         <>
           <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 leading-relaxed">
             <strong>الصق كل الرسائل دفعة وحدة 👇</strong><br />
-            من تطبيق الرسائل، حدّد رسائل البنك وانسخها كلها مرة وحدة والصقها هنا — التطبيق يفصلها ويسجّلها كلها تلقائياً (المبلغ + التصنيف + التاريخ).
+            من تطبيق الرسائل، حدّد رسائل البنك وانسخها كلها مرة وحدة والصقها هنا — التطبيق يفصلها ويسجّل المصاريف فيها تلقائياً (المبلغ + التصنيف + التاريخ)، ويتجاهل رسائل الإيداع/الراتب.
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">رسائل البنك (واحدة أو أكثر)</label>
@@ -144,9 +159,14 @@ export function BankImport({ onClose }: { onClose: () => void }) {
             <p className="text-sm font-semibold text-gray-700">معاينة ({preview.length} معاملة)</p>
             <button onClick={() => setPreview([])} className="text-xs text-gray-400 hover:text-red-400">مسح</button>
           </div>
+          {skippedIncome > 0 && (
+            <p className="text-[11px] text-gray-400">
+              (تجاهلت {skippedIncome} معاملة دخل — التطبيق للمصاريف بس)
+            </p>
+          )}
           <div className="max-h-52 overflow-y-auto space-y-2">
             {preview.map((tx) => {
-              const info = CATEGORY_LABELS[tx.category];
+              const info = getCategoryInfo(categories, tx.category);
               return (
                 <div key={tx.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5">
                   <span className="text-lg">{info.icon}</span>
@@ -154,8 +174,8 @@ export function BankImport({ onClose }: { onClose: () => void }) {
                     <div className="text-xs font-semibold text-gray-700 truncate">{tx.note || info.label}</div>
                     <div className="text-[10px] text-gray-400">{tx.date} · {info.label}</div>
                   </div>
-                  <span className={`text-sm font-bold shrink-0 ${tx.type === "دخل" ? "text-finance" : "text-red-500"}`}>
-                    {tx.type === "دخل" ? "+" : "-"}{tx.amount.toLocaleString("ar-SA")}
+                  <span className="text-sm font-bold shrink-0 text-red-500">
+                    -{tx.amount.toLocaleString("ar-SA")}
                   </span>
                   <button onClick={() => removePreview(tx.id)} className="p-1 text-gray-300 hover:text-red-400">
                     <Trash2 size={13} />

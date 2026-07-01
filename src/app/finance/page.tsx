@@ -2,28 +2,34 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
-import { FinanceHealthScore } from "@/components/finance/FinanceHealthScore";
+import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
+import { FinancePace } from "@/components/finance/FinancePace";
+import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
+import { BigCommitments } from "@/components/finance/BigCommitments";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
 import { RecurringManager } from "@/components/finance/RecurringManager";
+import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
+import { CategoryManager } from "@/components/finance/CategoryManager";
+import { SpendCalendar } from "@/components/finance/SpendCalendar";
+import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat } from "lucide-react";
-
-type FilterType = "الكل" | "دخل" | "مصروف";
+import { Plus, Smartphone, Repeat, Tags } from "lucide-react";
 
 export default function FinancePage() {
-  const { transactions, deleteTransaction, runRecurring } = useAppStore();
+  const { transactions, budgets, recurring, categories, dailyBudget, deleteTransaction, runRecurring } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
-  const [filter, setFilter] = useState<FilterType>("الكل");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     runRecurring();
@@ -34,7 +40,11 @@ export default function FinancePage() {
   });
 
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
-  const filtered = byMonth.filter((t) => filter === "الكل" || t.type === filter);
+  // "Big" commitments (rent, a loan...) still count in totals/category
+  // budgets, but are excluded from anything pacing-oriented (daily budget,
+  // spending trend) so one exceptional payment doesn't wreck those numbers.
+  const byMonthRegular = byMonth.filter((t) => !t.big);
+  const transactionsRegular = transactions.filter((t) => !t.big);
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
@@ -48,7 +58,7 @@ export default function FinancePage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">الأموال</h1>
+          <h1 className="text-2xl font-bold text-gray-900">المصاريف</h1>
           <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
         </div>
         <div className="flex gap-2">
@@ -90,56 +100,71 @@ export default function FinancePage() {
         </div>
       )}
 
-      <Card className="animate-fade-up stagger-1">
-        <FinanceSummary transactions={byMonth} />
+      <div className="animate-fade-up stagger-1">
+        <DailyBudgetCard />
+      </div>
+
+      <BigCommitments transactions={byMonth} categories={categories} />
+
+      <Card className="animate-fade-up stagger-2">
+        <FinanceSummary transactions={byMonth} categories={categories} />
       </Card>
 
-      <div className="animate-fade-up stagger-2">
-        <FinanceHealthScore transactions={transactions} />
-      </div>
+      <FinancePace budgets={budgets} monthTransactions={byMonthRegular} />
+
+      <BudgetDisciplineScore
+        transactions={transactionsRegular}
+        monthTransactions={byMonth}
+        budgets={budgets}
+        dailyBudget={dailyBudget}
+      />
 
       <Card className="animate-fade-up stagger-3">
         <BudgetTracker monthPrefix={monthFilter} />
       </Card>
 
-      <button
-        onClick={() => setShowRecurring(true)}
-        className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press animate-fade-up stagger-4"
-      >
-        <Repeat size={16} className="text-finance" />
-        المعاملات المتكررة التلقائية
-      </button>
+      <UpcomingRecurring recurring={recurring} categories={categories} />
 
-      <div className="flex gap-2">
-        {(["الكل", "مصروف", "دخل"] as FilterType[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-              filter === f
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setShowRecurring(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press"
+        >
+          <Repeat size={16} className="text-finance" />
+          المصاريف المتكررة
+        </button>
+        <button
+          onClick={() => setShowCategories(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press"
+        >
+          <Tags size={16} className="text-finance" />
+          تصنيفاتي
+        </button>
       </div>
 
-      {filtered.length === 0 ? (
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold text-gray-700">سجل الشهر</span>
+          <span className="text-xs text-gray-400">اضغط أي يوم للتفاصيل 👆</span>
+        </div>
+        <SpendCalendar transactions={byMonth} dailyBudget={dailyBudget} onDayClick={setSelectedDay} />
+      </Card>
+
+      {byMonth.length === 0 ? (
         <EmptyState
           emoji="💰"
-          title="لا توجد معاملات"
-          subtitle="سجّل أول معاملة مالية أو استوردها من رسائل البنك"
+          title="لا توجد مصاريف"
+          subtitle="سجّل أول مصروف لهذا الشهر أو استورده من رسائل البنك"
           action={
             <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5 bg-finance hover:bg-finance/90">
-              <Plus size={14} /> سجّل معاملة
+              <Plus size={14} /> سجّل مصروف
             </Button>
           }
         />
       ) : (
         <TransactionList
-          transactions={filtered}
+          transactions={byMonth}
+          categories={categories}
           onDelete={deleteTransaction}
           onEdit={(tx) => setEditTx(tx)}
         />
@@ -148,7 +173,7 @@ export default function FinancePage() {
       <Modal
         open={showForm || !!editTx}
         onClose={() => { setShowForm(false); setEditTx(undefined); }}
-        title={editTx ? "تعديل المعاملة" : "معاملة جديدة"}
+        title={editTx ? "تعديل المصروف" : "مصروف جديد"}
       >
         <TransactionForm
           onClose={() => { setShowForm(false); setEditTx(undefined); }}
@@ -167,10 +192,20 @@ export default function FinancePage() {
       <Modal
         open={showRecurring}
         onClose={() => setShowRecurring(false)}
-        title="المعاملات المتكررة 🔁"
+        title="المصاريف المتكررة 🔁"
       >
         <RecurringManager onClose={() => setShowRecurring(false)} />
       </Modal>
+
+      <Modal
+        open={showCategories}
+        onClose={() => setShowCategories(false)}
+        title="تصنيفاتي"
+      >
+        <CategoryManager onClose={() => setShowCategories(false)} />
+      </Modal>
+
+      <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
     </div>
   );
 }

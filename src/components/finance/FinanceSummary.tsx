@@ -1,65 +1,35 @@
 "use client";
-import type { Transaction } from "@/lib/types";
-import { CATEGORY_LABELS } from "@/lib/types";
-import { formatAmount } from "@/lib/utils";
+import type { Transaction, FinanceCategoryDef } from "@/lib/types";
+import { formatAmount, getCategoryInfo } from "@/lib/utils";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 interface FinanceSummaryProps {
   transactions: Transaction[];
+  categories: FinanceCategoryDef[];
 }
 
-export function FinanceSummary({ transactions }: FinanceSummaryProps) {
-  const totalIncome = transactions
-    .filter((t) => t.type === "دخل")
-    .reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions
-    .filter((t) => t.type === "مصروف")
-    .reduce((s, t) => s + t.amount, 0);
-  const balance = totalIncome - totalExpense;
+export function FinanceSummary({ transactions, categories }: FinanceSummaryProps) {
+  const totalExpense = transactions.reduce((s, t) => s + t.amount, 0);
 
   const expenseByCategory = transactions
-    .filter((t) => t.type === "مصروف")
     .reduce<Record<string, number>>((acc, t) => {
       acc[t.category] = (acc[t.category] || 0) + t.amount;
       return acc;
     }, {});
 
   const pieData = Object.entries(expenseByCategory)
-    .map(([cat, amount]) => ({
-      name: CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS]?.label ?? cat,
-      value: amount,
-      color: CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS]?.color ?? "#888",
-    }))
+    .map(([cat, amount]) => {
+      const info = getCategoryInfo(categories, cat);
+      return { name: info.label, value: amount, color: info.color };
+    })
     .sort((a, b) => b.value - a.value);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-finance/5 rounded-xl p-3 text-center">
-          <div className="text-xs text-gray-500 mb-1">دخل</div>
-          <div className="text-base font-bold text-finance">{formatAmount(totalIncome)}</div>
-          <div className="text-[10px] text-gray-400">ر.س</div>
-        </div>
-        <div className="bg-red-50 rounded-xl p-3 text-center">
-          <div className="text-xs text-gray-500 mb-1">مصاريف</div>
-          <div className="text-base font-bold text-red-500">{formatAmount(totalExpense)}</div>
-          <div className="text-[10px] text-gray-400">ر.س</div>
-        </div>
-        <div
-          className={`rounded-xl p-3 text-center ${
-            balance >= 0 ? "bg-blue-50" : "bg-orange-50"
-          }`}
-        >
-          <div className="text-xs text-gray-500 mb-1">صافي</div>
-          <div
-            className={`text-base font-bold ${
-              balance >= 0 ? "text-blue-600" : "text-orange-500"
-            }`}
-          >
-            {formatAmount(Math.abs(balance))}
-          </div>
-          <div className="text-[10px] text-gray-400">ر.س</div>
-        </div>
+      <div className="text-center">
+        <div className="text-xs text-gray-500 mb-1">إجمالي المصاريف</div>
+        <div className="text-3xl font-bold text-red-500">{formatAmount(totalExpense)}</div>
+        <div className="text-[11px] text-gray-400 mt-0.5">ر.س</div>
       </div>
 
       {pieData.length > 0 && (

@@ -1,17 +1,17 @@
 "use client";
-import type { Transaction } from "@/lib/types";
-import { CATEGORY_LABELS } from "@/lib/types";
-import { formatDate, formatAmount } from "@/lib/utils";
-import { Trash2 } from "lucide-react";
+import type { Transaction, FinanceCategoryDef } from "@/lib/types";
+import { formatDate, formatAmount, getCategoryInfo } from "@/lib/utils";
+import { Trash2, Gem } from "lucide-react";
 
 interface TransactionListProps {
   transactions: Transaction[];
+  categories: FinanceCategoryDef[];
   onDelete?: (id: string) => void;
   onEdit?: (tx: Transaction) => void;
   limit?: number;
 }
 
-export function TransactionList({ transactions, onDelete, onEdit, limit }: TransactionListProps) {
+export function TransactionList({ transactions, categories, onDelete, onEdit, limit }: TransactionListProps) {
   const shown = limit ? transactions.slice(0, limit) : transactions;
 
   if (!shown.length) {
@@ -25,12 +25,13 @@ export function TransactionList({ transactions, onDelete, onEdit, limit }: Trans
   return (
     <div className="space-y-2">
       {shown.map((tx) => {
-        const info = CATEGORY_LABELS[tx.category];
-        const isIncome = tx.type === "دخل";
+        const info = getCategoryInfo(categories, tx.category);
         return (
           <div
             key={tx.id}
-            className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-3 hover:shadow-md transition-shadow cursor-pointer press"
+            className={`flex items-center gap-3 rounded-xl border p-3 hover:shadow-md transition-shadow cursor-pointer press ${
+              tx.big ? "bg-brand-50 border-brand-200" : "bg-white border-gray-100"
+            }`}
             onClick={() => onEdit?.(tx)}
           >
             <div
@@ -40,15 +41,20 @@ export function TransactionList({ transactions, onDelete, onEdit, limit }: Trans
               {info.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-800">{info.label}</div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-sm font-semibold text-gray-800 truncate">{info.label}</div>
+                {tx.big && (
+                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-brand-700 bg-brand-100 px-1.5 py-0.5 rounded-full shrink-0">
+                    <Gem size={9} /> التزام كبير
+                  </span>
+                )}
+              </div>
               {tx.note && <div className="text-xs text-gray-400 truncate">{tx.note}</div>}
               <div className="text-xs text-gray-400 mt-0.5">{formatDate(tx.date)}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span
-                className={`text-base font-bold ${isIncome ? "text-finance" : "text-red-500"}`}
-              >
-                {isIncome ? "+" : "-"}{formatAmount(tx.amount)}
+              <span className="text-base font-bold text-red-500">
+                -{formatAmount(tx.amount)}
                 <span className="text-xs font-normal mr-0.5">ر.س</span>
               </span>
               {onDelete && (
