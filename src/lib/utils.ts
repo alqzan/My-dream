@@ -30,6 +30,29 @@ export function formatDateShort(dateStr: string) {
   return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric" });
 }
 
+// Hijri (Umm al-Qura) date, e.g. "١٥ محرم ١٤٤٨ هـ".
+export function hijriDate(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    return (
+      new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(d) + " هـ"
+    );
+  } catch {
+    return "";
+  }
+}
+
+// Percentage of the current year elapsed (0-100).
+export function yearProgress(now = new Date()): number {
+  const start = new Date(now.getFullYear(), 0, 1).getTime();
+  const end = new Date(now.getFullYear() + 1, 0, 1).getTime();
+  return Math.round(((now.getTime() - start) / (end - start)) * 100);
+}
+
 export function formatAmount(amount: number) {
   return amount.toLocaleString("ar-SA-u-nu-latn", {
     minimumFractionDigits: 0,

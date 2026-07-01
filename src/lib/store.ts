@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategory,
 } from "./types";
 import { uid, today } from "./utils";
+import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
   // Journal
@@ -263,6 +264,7 @@ export const useAppStore = create<AppStore>()(
     {
       name: "my-dream-store",
       version: 1,
+      storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown) => {
         const state = (persisted ?? {}) as Partial<AppData>;
         return {

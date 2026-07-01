@@ -25,8 +25,8 @@ import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "حلمي — تتبّع يومي",
-  description: "مذكرات، أموال، قراءة — كل شيء في مكان واحد",
+  title: "مسار — مساحتك الشخصية",
+  description: "مذكرات، أموال، قراءة، وعادات — كل شيء في مكان واحد",
   manifest: `${bp}/manifest.webmanifest`,
   icons: {
     icon: [
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "حلمي",
+    title: "مسار",
     statusBarStyle: "default",
   },
 };

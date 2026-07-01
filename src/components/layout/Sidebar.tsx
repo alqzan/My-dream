@@ -5,6 +5,7 @@ import { BookOpen, Wallet, BookMarked, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/auth/SyncButton";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { BrandMark } from "@/components/layout/BrandMark";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "الرئيسية", color: "text-gray-700" },
@@ -18,9 +19,12 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex flex-col w-56 bg-white border-l border-gray-100 min-h-screen fixed right-0 top-0 z-40">
-      <div className="p-6 border-b border-gray-100">
-        <h1 className="text-xl font-bold text-gray-900">حلمي</h1>
-        <p className="text-xs text-gray-400 mt-0.5">متابعتك اليومية</p>
+      <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center gap-3">
+        <BrandMark size={38} />
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">مسار</h1>
+          <p className="text-xs text-gray-400 mt-0.5">مساحتك الشخصية</p>
+        </div>
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {navItems.map((item) => {

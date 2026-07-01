@@ -9,6 +9,8 @@ import {
   calcStreak,
   today,
   formatDate,
+  hijriDate,
+  yearProgress,
 } from "@/lib/utils";
 import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
 import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
@@ -50,13 +52,19 @@ export default function Dashboard() {
     .filter((t) => t.type === "دخل" && t.date.startsWith(todayStr.slice(0, 7)))
     .reduce((s, t) => s + t.amount, 0);
 
+  const yearPct = yearProgress();
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {getGreeting()} 👋
-        </h1>
-        <p className="text-sm text-gray-400 mt-0.5">{formatDate(todayStr)}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {getGreeting()} 👋
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">{formatDate(todayStr)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{hijriDate(todayStr)}</p>
+        </div>
+        <YearOrbit pct={yearPct} />
       </div>
 
       <DailyStreakBanner
@@ -175,6 +183,28 @@ function getGreeting() {
   if (hour < 12) return "صباح النور";
   if (hour < 17) return "مساء الخير";
   return "مساء النور";
+}
+
+// Orbit ring showing how much of the year has passed — the "مسار" motif.
+function YearOrbit({ pct }: { pct: number }) {
+  const size = 82;
+  const stroke = 6;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const on = (c * pct) / 100;
+  const gold = "#e8b15a";
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" className="text-gray-200 dark:text-slate-700" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={gold} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${on} ${c - on}`} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-base font-bold text-gray-800 leading-none">{pct}%</span>
+        <span className="text-[9px] text-gray-400 mt-0.5">من العام</span>
+      </div>
+    </div>
+  );
 }
 
 function QuickLink({
