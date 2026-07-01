@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/super-app-tracker-finances-notes-nudq3a
+      - claude/prayer-tracker-redesign-bpzm8w
       - main
   workflow_dispatch: {}
 
