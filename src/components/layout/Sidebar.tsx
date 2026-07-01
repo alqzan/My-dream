@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Wallet, BookMarked, LayoutDashboard } from "lucide-react";
+import { BookOpen, Wallet, BookMarked, LayoutDashboard, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/auth/SyncButton";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-journal" },
   { href: "/finance", icon: Wallet, label: "الأموال", color: "text-finance" },
   { href: "/reading", icon: BookOpen, label: "القراءة", color: "text-reading" },
+  { href: "/stats", icon: BarChart3, label: "الإحصائيات", color: "text-brand-600" },
 ];
 
 export function Sidebar() {

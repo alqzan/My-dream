@@ -3,6 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
+      - claude/project-overview-development-ahxetk
       - claude/super-app-tracker-finances-notes-nudq3a
       - main
   workflow_dispatch: {}

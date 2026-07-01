@@ -10,6 +10,7 @@ import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame } from "lucide-react";
 
@@ -34,11 +35,11 @@ export default function JournalPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-fade-up">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">المذكرات</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Flame size={14} className={streak > 0 ? "text-orange-500" : "text-gray-300"} />
+            <Flame size={14} className={streak > 0 ? "text-orange-500 animate-flame" : "text-gray-300"} />
             <span className="text-sm text-gray-500">
               {streak > 0 ? `${streak} يوم متواصل` : "ابدأ سلسلتك اليوم"}
             </span>
@@ -61,11 +62,11 @@ export default function JournalPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="animate-fade-up stagger-1">
         <StreakCalendar markedDates={markedDates} color="#7c6fcd" onDayClick={setSelectedDay} />
       </Card>
 
-      <div className="relative">
+      <div className="relative animate-fade-up stagger-2">
         <Search size={15} className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400" />
         <input
           value={search}
@@ -75,13 +76,18 @@ export default function JournalPage() {
         />
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 animate-fade-up stagger-3">
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
-            <p className="text-4xl mb-3">📓</p>
-            <p className="text-sm font-medium">لا توجد مذكرات بعد</p>
-            <p className="text-xs mt-1">ابدأ بكتابة أول مذكرة أو استيراد من Day One</p>
-          </div>
+          <EmptyState
+            emoji="📓"
+            title="لا توجد مذكرات بعد"
+            subtitle="ابدأ بكتابة أول مذكرة أو استورد مذكراتك من Day One"
+            action={
+              <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5 bg-journal hover:bg-journal/90">
+                <Plus size={14} /> اكتب أول مذكرة
+              </Button>
+            }
+          />
         )}
         {filtered.map((entry) => (
           <JournalEntryCard

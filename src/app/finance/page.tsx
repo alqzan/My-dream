@@ -11,6 +11,7 @@ import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat } from "lucide-react";
 
@@ -45,28 +46,30 @@ export default function FinancePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-fade-up">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">الأموال</h1>
           <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setShowImport(true)}
-          className="gap-1.5"
-        >
-          <Smartphone size={14} />
-          SMS / CSV
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => setShowForm(true)}
-          className="gap-1.5 bg-finance hover:bg-finance/90"
-        >
-          <Plus size={16} />
-          إضافة
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowImport(true)}
+            className="gap-1.5"
+          >
+            <Smartphone size={14} />
+            SMS / CSV
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setShowForm(true)}
+            className="gap-1.5 bg-finance hover:bg-finance/90"
+          >
+            <Plus size={16} />
+            إضافة
+          </Button>
+        </div>
       </div>
 
       {months.length > 1 && (
@@ -87,19 +90,21 @@ export default function FinancePage() {
         </div>
       )}
 
-      <Card>
+      <Card className="animate-fade-up stagger-1">
         <FinanceSummary transactions={byMonth} />
       </Card>
 
-      <FinanceHealthScore transactions={transactions} />
+      <div className="animate-fade-up stagger-2">
+        <FinanceHealthScore transactions={transactions} />
+      </div>
 
-      <Card>
+      <Card className="animate-fade-up stagger-3">
         <BudgetTracker monthPrefix={monthFilter} />
       </Card>
 
       <button
         onClick={() => setShowRecurring(true)}
-        className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors"
+        className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press animate-fade-up stagger-4"
       >
         <Repeat size={16} className="text-finance" />
         المعاملات المتكررة التلقائية
@@ -122,11 +127,16 @@ export default function FinancePage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-4xl mb-3">💰</p>
-          <p className="text-sm font-medium">لا توجد معاملات</p>
-          <p className="text-xs mt-1">سجّل أول معاملة مالية</p>
-        </div>
+        <EmptyState
+          emoji="💰"
+          title="لا توجد معاملات"
+          subtitle="سجّل أول معاملة مالية أو استوردها من رسائل البنك"
+          action={
+            <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5 bg-finance hover:bg-finance/90">
+              <Plus size={14} /> سجّل معاملة
+            </Button>
+          }
+        />
       ) : (
         <TransactionList
           transactions={filtered}

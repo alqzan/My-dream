@@ -10,6 +10,8 @@ import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import type { Book } from "@/lib/types";
 import { Plus, BookOpen, Flame } from "lucide-react";
 
@@ -42,11 +44,11 @@ export default function ReadingPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-fade-up">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">القراءة</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Flame size={14} className={streak > 0 ? "text-reading" : "text-gray-300"} />
+            <Flame size={14} className={streak > 0 ? "text-reading animate-flame" : "text-gray-300"} />
             <span className="text-sm text-gray-500">
               {streak > 0 ? `${streak} يوم متواصل` : "سجّل قراءة اليوم"}
             </span>
@@ -65,8 +67,7 @@ export default function ReadingPage() {
           <Button
             size="sm"
             onClick={() => setShowBookForm(true)}
-            className="gap-1.5"
-            style={{ backgroundColor: "#e07b39" }}
+            className="gap-1.5 bg-reading hover:bg-reading/90"
           >
             <Plus size={16} />
             كتاب
@@ -74,22 +75,22 @@ export default function ReadingPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-reading/5 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-reading">{books.length}</div>
+      <div className="grid grid-cols-3 gap-3 animate-fade-up stagger-1">
+        <div className="bg-reading/5 rounded-xl p-3 text-center card-shadow">
+          <div className="text-xl font-bold text-reading tabular-nums"><AnimatedNumber value={books.length} /></div>
           <div className="text-[11px] text-gray-500 mt-0.5">كتاب</div>
         </div>
-        <div className="bg-green-50 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-finance">{booksFinished}</div>
+        <div className="bg-green-50 rounded-xl p-3 text-center card-shadow">
+          <div className="text-xl font-bold text-finance tabular-nums"><AnimatedNumber value={booksFinished} /></div>
           <div className="text-[11px] text-gray-500 mt-0.5">أنهيت</div>
         </div>
-        <div className="bg-orange-50 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-orange-500">{totalPagesRead.toLocaleString("ar-SA")}</div>
+        <div className="bg-orange-50 rounded-xl p-3 text-center card-shadow">
+          <div className="text-xl font-bold text-orange-500 tabular-nums"><AnimatedNumber value={totalPagesRead} /></div>
           <div className="text-[11px] text-gray-500 mt-0.5">صفحة قرأت</div>
         </div>
       </div>
 
-      <Card>
+      <Card className="animate-fade-up stagger-2">
         <StreakCalendar markedDates={logDates} color="#e07b39" />
       </Card>
 
@@ -114,13 +115,18 @@ export default function ReadingPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-4xl mb-3">📚</p>
-          <p className="text-sm font-medium">لا توجد كتب</p>
-          <p className="text-xs mt-1">أضف أول كتاب في قائمتك</p>
-        </div>
+        <EmptyState
+          emoji="📚"
+          title="لا توجد كتب"
+          subtitle="أضف أول كتاب في قائمتك وابدأ رحلة القراءة"
+          action={
+            <Button size="sm" onClick={() => setShowBookForm(true)} className="gap-1.5 bg-reading hover:bg-reading/90">
+              <Plus size={14} /> أضف كتاباً
+            </Button>
+          }
+        />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 animate-fade-up stagger-3">
           {filtered.map((book) => (
             <BookCard
               key={book.id}

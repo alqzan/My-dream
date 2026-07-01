@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Wallet, BookMarked, LayoutDashboard } from "lucide-react";
+import { BookOpen, Wallet, BookMarked, LayoutDashboard, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { href: "/journal", icon: BookMarked, label: "مذكرات" },
   { href: "/finance", icon: Wallet, label: "الأموال" },
   { href: "/reading", icon: BookOpen, label: "القراءة" },
+  { href: "/stats", icon: BarChart3, label: "إحصائيات" },
 ];
 
 export function MobileNav() {
@@ -24,11 +25,16 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors min-w-[60px]",
+                "flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-xl transition-all min-w-[56px] press",
                 active ? "text-brand-600" : "text-gray-400"
               )}
             >
-              <item.icon size={22} />
+              <span className={cn(
+                "flex items-center justify-center rounded-full px-3 py-0.5 transition-colors",
+                active && "bg-brand-100/70"
+              )}>
+                <item.icon size={21} />
+              </span>
               <span className="text-[10px] font-medium">{item.label}</span>
             </Link>
           );

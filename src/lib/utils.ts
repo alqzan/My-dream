@@ -34,13 +34,13 @@ export function formatDateShort(dateStr: string) {
 export function hijriDate(dateStr: string) {
   try {
     const d = new Date(dateStr);
-    return (
-      new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }).format(d) + " هـ"
-    );
+    const formatted = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(d);
+    // Some environments already append the هـ era marker — don't double it.
+    return formatted.includes("هـ") ? formatted : formatted + " هـ";
   } catch {
     return "";
   }
@@ -80,6 +80,25 @@ export function calcStreak(dates: string[]): number {
     }
   }
   return streak;
+}
+
+// Longest run of consecutive days in the given dates (all-time best).
+export function longestStreak(dates: string[]): number {
+  if (!dates.length) return 0;
+  const sorted = [...new Set(dates)].sort();
+  let best = 1;
+  let run = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1]);
+    prev.setDate(prev.getDate() + 1);
+    if (prev.toISOString().split("T")[0] === sorted[i]) {
+      run++;
+      best = Math.max(best, run);
+    } else {
+      run = 1;
+    }
+  }
+  return best;
 }
 
 export function getJournalStreak(entries: JournalEntry[]): number {

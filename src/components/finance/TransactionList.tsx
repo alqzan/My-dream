@@ -30,7 +30,7 @@ export function TransactionList({ transactions, onDelete, onEdit, limit }: Trans
         return (
           <div
             key={tx.id}
-            className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-3 hover:shadow-sm transition-shadow cursor-pointer"
+            className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-3 hover:shadow-md transition-shadow cursor-pointer press"
             onClick={() => onEdit?.(tx)}
           >
             <div

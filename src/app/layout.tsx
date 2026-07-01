@@ -62,7 +62,7 @@ export default function RootLayout({
           <AuthProvider>
             <div className="min-h-screen flex">
               <Sidebar />
-              <main className="flex-1 lg:mr-56 pb-20 lg:pb-0">
+              <main className="flex-1 min-w-0 lg:mr-56 pb-20 lg:pb-0">
                 <MobileHeader />
                 {children}
               </main>
