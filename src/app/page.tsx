@@ -127,7 +127,7 @@ export default function Dashboard() {
           <span className="text-sm font-semibold text-gray-700">سلسلة يومية — الأيام الثلاثة</span>
           <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
         </div>
-        <StreakCalendar markedDates={completionDates} color="#f97316" onDayClick={setSelectedDay} />
+        <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />
       </Card>
 
       {recentEntry && (

@@ -50,8 +50,8 @@ export function DailyStreakBanner({
       className={cn(
         "rounded-2xl p-4 text-white",
         masterStreak > 0
-          ? "bg-gradient-to-r from-orange-500 to-amber-400"
-          : "bg-gradient-to-r from-gray-300 to-gray-200"
+          ? "bg-gradient-to-br from-[#a85a2c] via-[#c0842b] to-[#dca63f]"
+          : "bg-gradient-to-br from-[#9c8b73] to-[#c3b49a]"
       )}
     >
       <div className="flex items-center justify-between mb-3">
@@ -70,11 +70,11 @@ export function DailyStreakBanner({
         </div>
       </div>
       <div className="flex justify-around bg-white/20 rounded-xl p-3">
-        <StreakWidget streak={journalStreak} label="مذكرات" icon="📓" color="#7c6fcd" />
+        <StreakWidget streak={journalStreak} label="مذكرات" icon="📓" color="#f0e2c8" />
         <div className="w-px bg-white/30" />
-        <StreakWidget streak={financeStreak} label="مالي" icon="💰" color="#3d9640" />
+        <StreakWidget streak={financeStreak} label="مالي" icon="💰" color="#f0e2c8" />
         <div className="w-px bg-white/30" />
-        <StreakWidget streak={readingStreak} label="قراءة" icon="📚" color="#e07b39" />
+        <StreakWidget streak={readingStreak} label="قراءة" icon="📚" color="#f0e2c8" />
       </div>
     </div>
   );

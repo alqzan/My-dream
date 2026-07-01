@@ -1,5 +1,5 @@
 "use client";
-import { today } from "@/lib/utils";
+import Link from "next/link";
 import { CheckCircle, Circle } from "lucide-react";
 
 interface DailyTask {
@@ -37,9 +37,10 @@ export function DailyCompletion({
       </div>
       <div className="space-y-2">
         {tasks.map((task) => (
-          <div
+          <Link
+            href={task.href}
             key={task.label}
-            className="flex items-center gap-3 py-2 px-3 rounded-xl bg-gray-50"
+            className="flex items-center gap-3 py-2 px-3 rounded-xl bg-gray-50 hover:bg-gray-100 active:scale-[0.99] transition"
           >
             <span className="text-lg">{task.icon}</span>
             <span
@@ -58,7 +59,7 @@ export function DailyCompletion({
                 <Circle size={18} className="text-gray-300" />
               )}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
       {allDone && (
