@@ -5,6 +5,7 @@ import {
   getJournalStreak,
   getReadingStreak,
   getFinanceStreak,
+  getNoSpendStreak,
   getDailyCompletionDates,
   calcStreak,
   today,
@@ -49,11 +50,9 @@ export default function Dashboard() {
   const currentBook = books.find((b) => b.status === "أقرأ");
   const recentEntry = journalEntries[0];
   const thisMonthExpense = transactions
-    .filter((t) => t.type === "مصروف" && t.date.startsWith(todayStr.slice(0, 7)))
+    .filter((t) => t.date.startsWith(todayStr.slice(0, 7)))
     .reduce((s, t) => s + t.amount, 0);
-  const thisMonthIncome = transactions
-    .filter((t) => t.type === "دخل" && t.date.startsWith(todayStr.slice(0, 7)))
-    .reduce((s, t) => s + t.amount, 0);
+  const noSpendStreak = getNoSpendStreak(transactions);
 
   const yearPct = yearProgress();
 
@@ -114,9 +113,11 @@ export default function Dashboard() {
           href="/finance"
           icon={<Wallet size={20} />}
           label="سجّل مصروف"
-          sub={thisMonthIncome > 0
-            ? `${thisMonthIncome.toLocaleString()} ر.س دخل`
-            : "لا يوجد دخل هذا الشهر"}
+          sub={noSpendStreak > 0
+            ? `🌿 ${noSpendStreak} يوم بدون صرف`
+            : thisMonthExpense > 0
+            ? `${thisMonthExpense.toLocaleString()} ر.س هذا الشهر`
+            : "سجّل أول مصروف"}
           color="finance"
           done={hasTodayFinance}
         />
@@ -153,7 +154,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {(thisMonthExpense > 0 || thisMonthIncome > 0) && (
+      {thisMonthExpense > 0 && (
         <Card>
           <Link href="/finance" className="block">
             <div className="flex items-center justify-between mb-3">
@@ -161,16 +162,16 @@ export default function Dashboard() {
               <ChevronLeft size={16} className="text-gray-400" />
             </div>
             <div className="flex gap-3">
-              <div className="flex-1 bg-finance/5 rounded-xl p-3 text-center">
-                <div className="text-xs text-gray-500">دخل</div>
-                <div className="text-base font-bold text-finance">
-                  {thisMonthIncome.toLocaleString("ar-SA")} <span className="text-xs font-normal">ر.س</span>
-                </div>
-              </div>
               <div className="flex-1 bg-red-50 rounded-xl p-3 text-center">
                 <div className="text-xs text-gray-500">مصاريف</div>
                 <div className="text-base font-bold text-red-500">
                   {thisMonthExpense.toLocaleString("ar-SA")} <span className="text-xs font-normal">ر.س</span>
+                </div>
+              </div>
+              <div className="flex-1 bg-prayer/5 rounded-xl p-3 text-center">
+                <div className="text-xs text-gray-500">بدون صرف</div>
+                <div className="text-base font-bold text-prayer">
+                  {noSpendStreak} <span className="text-xs font-normal">يوم</span>
                 </div>
               </div>
             </div>

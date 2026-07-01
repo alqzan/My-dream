@@ -28,8 +28,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
   const weekJournal = journalEntries.filter((e) => weekSet.has(e.date));
   const weekLogs = readingLogs.filter((l) => weekSet.has(l.date));
 
-  const spent = weekTx.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
-  const income = weekTx.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
+  const spent = weekTx.reduce((s, t) => s + t.amount, 0);
   const pagesRead = weekLogs.reduce((s, l) => s + l.pagesRead, 0);
   const journalDays = weekJournal.length;
   const readingDays = new Set(weekLogs.map((l) => l.date)).size;
@@ -61,9 +60,9 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
         <StatPill icon="📚" label="صفحات" value={pagesRead.toLocaleString("ar-SA")} color="text-orange-300" />
         <StatPill
           icon="💰"
-          label="صافي الأسبوع"
-          value={`${income - spent >= 0 ? "+" : ""}${formatAmount(income - spent)}`}
-          color={income - spent >= 0 ? "text-green-300" : "text-red-300"}
+          label="مصاريف الأسبوع"
+          value={formatAmount(spent)}
+          color="text-red-300"
         />
         <StatPill icon="📖" label="أيام قراءة" value={`${readingDays}/7`} color="text-blue-300" />
       </div>

@@ -26,7 +26,6 @@ export function TransactionList({ transactions, onDelete, onEdit, limit }: Trans
     <div className="space-y-2">
       {shown.map((tx) => {
         const info = CATEGORY_LABELS[tx.category];
-        const isIncome = tx.type === "دخل";
         return (
           <div
             key={tx.id}
@@ -45,10 +44,8 @@ export function TransactionList({ transactions, onDelete, onEdit, limit }: Trans
               <div className="text-xs text-gray-400 mt-0.5">{formatDate(tx.date)}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span
-                className={`text-base font-bold ${isIncome ? "text-finance" : "text-red-500"}`}
-              >
-                {isIncome ? "+" : "-"}{formatAmount(tx.amount)}
+              <span className="text-base font-bold text-red-500">
+                -{formatAmount(tx.amount)}
                 <span className="text-xs font-normal mr-0.5">ر.س</span>
               </span>
               {onDelete && (

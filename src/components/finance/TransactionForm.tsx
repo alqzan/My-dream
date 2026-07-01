@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { Transaction, FinanceCategory, FinanceType } from "@/lib/types";
+import type { Transaction, FinanceCategory } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
 import { uid, today } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,6 @@ interface TransactionFormProps {
   initial?: Transaction;
 }
 
-const INCOME_CATS: FinanceCategory[] = ["راتب", "استثمارات_دخل"];
 const EXPENSE_CATS: FinanceCategory[] = [
   "إيجار", "مواصلات", "طعام", "صحة", "تعليم",
   "كمالي", "سفر", "ادخار", "استثمار", "أخرى",
@@ -19,13 +18,10 @@ const EXPENSE_CATS: FinanceCategory[] = [
 
 export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const { addTransaction, updateTransaction } = useAppStore();
-  const [type, setType] = useState<FinanceType>(initial?.type ?? "مصروف");
   const [category, setCategory] = useState<FinanceCategory>(initial?.category ?? "طعام");
   const [amount, setAmount] = useState(initial?.amount?.toString() ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [date, setDate] = useState(initial?.date ?? today());
-
-  const cats = type === "دخل" ? INCOME_CATS : EXPENSE_CATS;
 
   function handleSave() {
     const parsed = parseFloat(amount);
@@ -34,7 +30,6 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       id: initial?.id ?? uid(),
       date,
       amount: parsed,
-      type,
       category,
       note,
     };
@@ -48,24 +43,6 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
-        {(["مصروف", "دخل"] as FinanceType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => { setType(t); setCategory(t === "دخل" ? "راتب" : "طعام"); }}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              type === t
-                ? t === "دخل"
-                  ? "bg-white text-finance shadow-sm"
-                  : "bg-white text-red-500 shadow-sm"
-                : "text-gray-500"
-            }`}
-          >
-            {t === "دخل" ? "دخل +" : "مصروف -"}
-          </button>
-        ))}
-      </div>
-
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">المبلغ (ريال)</label>
         <input
@@ -81,7 +58,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">التصنيف</label>
         <div className="grid grid-cols-3 gap-2">
-          {cats.map((cat) => {
+          {EXPENSE_CATS.map((cat) => {
             const info = CATEGORY_LABELS[cat];
             return (
               <button

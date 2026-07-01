@@ -19,7 +19,6 @@ export function DayView({ date, onClose }: DayViewProps) {
 
   const day = aggregateDay(date, { transactions, journalEntries, readingLogs, books, habits, prayerLogs });
   const mood = day.mood ? MOOD_LABELS[day.mood] : null;
-  const net = day.income - day.expense;
 
   return (
     <Modal open={!!date} onClose={onClose} title={formatDate(date)} className="sm:max-w-xl">
@@ -121,11 +120,11 @@ export function DayView({ date, onClose }: DayViewProps) {
         {day.transactions.length > 0 ? (
           <Section
             icon={<Wallet size={15} />}
-            title="الأموال"
+            title="المصاريف"
             color="text-finance"
             extra={
-              <span className={`text-sm font-bold ${net >= 0 ? "text-finance" : "text-red-500"}`}>
-                {net >= 0 ? "+" : ""}{formatAmount(net)} ر.س
+              <span className="text-sm font-bold text-red-500">
+                -{formatAmount(day.expense)} ر.س
               </span>
             }
           >
@@ -136,8 +135,8 @@ export function DayView({ date, onClose }: DayViewProps) {
                   <div key={tx.id} className="flex items-center gap-2 text-sm">
                     <span>{info.icon}</span>
                     <span className="text-gray-600 flex-1 truncate">{tx.note || info.label}</span>
-                    <span className={tx.type === "دخل" ? "text-finance font-semibold" : "text-red-500 font-semibold"}>
-                      {tx.type === "دخل" ? "+" : "-"}{formatAmount(tx.amount)}
+                    <span className="text-red-500 font-semibold">
+                      -{formatAmount(tx.amount)}
                     </span>
                   </div>
                 );
@@ -145,7 +144,7 @@ export function DayView({ date, onClose }: DayViewProps) {
             </div>
           </Section>
         ) : (
-          <EmptyHint text="لم تسجّل أي معاملة" />
+          <EmptyHint text="لم تسجّل أي مصروف" />
         )}
 
         {/* Reading */}

@@ -1,28 +1,31 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
+import { getNoSpendStreak } from "@/lib/utils";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
-import { FinanceHealthScore } from "@/components/finance/FinanceHealthScore";
+import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
+import { FinancePace } from "@/components/finance/FinancePace";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
 import { RecurringManager } from "@/components/finance/RecurringManager";
+import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
+import { SpendCalendar } from "@/components/finance/SpendCalendar";
+import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat } from "lucide-react";
 
-type FilterType = "الكل" | "دخل" | "مصروف";
-
 export default function FinancePage() {
-  const { transactions, deleteTransaction, runRecurring } = useAppStore();
+  const { transactions, budgets, recurring, deleteTransaction, runRecurring } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
-  const [filter, setFilter] = useState<FilterType>("الكل");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     runRecurring();
@@ -33,7 +36,7 @@ export default function FinancePage() {
   });
 
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
-  const filtered = byMonth.filter((t) => filter === "الكل" || t.type === filter);
+  const noSpendStreak = getNoSpendStreak(transactions);
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
@@ -47,8 +50,12 @@ export default function FinancePage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">الأموال</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
+          <h1 className="text-2xl font-bold text-gray-900">المصاريف</h1>
+          <div className="flex items-center gap-2 mt-1">
+            {noSpendStreak > 0 && (
+              <span className="text-sm text-prayer font-medium">🌿 {noSpendStreak} يوم بدون صرف</span>
+            )}
+          </div>
         </div>
         <Button
           variant="secondary"
@@ -91,45 +98,41 @@ export default function FinancePage() {
         <FinanceSummary transactions={byMonth} />
       </Card>
 
-      <FinanceHealthScore transactions={transactions} />
+      <FinancePace budgets={budgets} monthTransactions={byMonth} />
+
+      <BudgetDisciplineScore transactions={transactions} monthTransactions={byMonth} budgets={budgets} />
 
       <Card>
         <BudgetTracker monthPrefix={monthFilter} />
       </Card>
+
+      <UpcomingRecurring recurring={recurring} />
 
       <button
         onClick={() => setShowRecurring(true)}
         className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors"
       >
         <Repeat size={16} className="text-finance" />
-        المعاملات المتكررة التلقائية
+        المصاريف المتكررة التلقائية
       </button>
 
-      <div className="flex gap-2">
-        {(["الكل", "مصروف", "دخل"] as FilterType[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-              filter === f
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold text-gray-700">سجل الشهر</span>
+          <span className="text-xs text-gray-400">اضغط أي يوم للتفاصيل 👆</span>
+        </div>
+        <SpendCalendar transactions={byMonth} onDayClick={setSelectedDay} />
+      </Card>
 
-      {filtered.length === 0 ? (
+      {byMonth.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <p className="text-4xl mb-3">💰</p>
-          <p className="text-sm font-medium">لا توجد معاملات</p>
-          <p className="text-xs mt-1">سجّل أول معاملة مالية</p>
+          <p className="text-sm font-medium">لا توجد مصاريف</p>
+          <p className="text-xs mt-1">سجّل أول مصروف لهذا الشهر</p>
         </div>
       ) : (
         <TransactionList
-          transactions={filtered}
+          transactions={byMonth}
           onDelete={deleteTransaction}
           onEdit={(tx) => setEditTx(tx)}
         />
@@ -138,7 +141,7 @@ export default function FinancePage() {
       <Modal
         open={showForm || !!editTx}
         onClose={() => { setShowForm(false); setEditTx(undefined); }}
-        title={editTx ? "تعديل المعاملة" : "معاملة جديدة"}
+        title={editTx ? "تعديل المصروف" : "مصروف جديد"}
       >
         <TransactionForm
           onClose={() => { setShowForm(false); setEditTx(undefined); }}
@@ -157,10 +160,12 @@ export default function FinancePage() {
       <Modal
         open={showRecurring}
         onClose={() => setShowRecurring(false)}
-        title="المعاملات المتكررة 🔁"
+        title="المصاريف المتكررة 🔁"
       >
         <RecurringManager onClose={() => setShowRecurring(false)} />
       </Modal>
+
+      <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
     </div>
   );
 }

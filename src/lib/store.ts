@@ -4,7 +4,8 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategory, PrayerName, PrayerStatus,
 } from "./types";
-import { uid, today } from "./utils";
+import { CATEGORY_LABELS } from "./types";
+import { uid, today, mostRecentDueDate } from "./utils";
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -52,33 +53,6 @@ interface AppStore extends AppData {
   // Theme (device-local)
   theme: "light" | "dark";
   toggleTheme: () => void;
-}
-
-// Compute the most recent date this recurring item was/is due, on or before `now`.
-function mostRecentDueDate(r: RecurringTransaction, now: Date): Date | null {
-  const d = new Date(now);
-  if (r.frequency === "شهري") {
-    const day = Math.min(Math.max(r.dayOfMonth, 1), 28);
-    let due = new Date(d.getFullYear(), d.getMonth(), day);
-    if (due > d) due = new Date(d.getFullYear(), d.getMonth() - 1, day);
-    return due;
-  }
-  if (r.frequency === "أسبوعي") {
-    // dayOfMonth reused as weekday 0-6
-    const target = ((r.dayOfMonth % 7) + 7) % 7;
-    const due = new Date(d);
-    const diff = (d.getDay() - target + 7) % 7;
-    due.setDate(d.getDate() - diff);
-    return due;
-  }
-  if (r.frequency === "سنوي") {
-    let due = new Date(d.getFullYear(), 0, 1);
-    due.setMonth(0);
-    due.setDate(Math.min(Math.max(r.dayOfMonth, 1), 28));
-    if (due > d) due = new Date(d.getFullYear() - 1, 0, Math.min(Math.max(r.dayOfMonth, 1), 28));
-    return due;
-  }
-  return null;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -164,7 +138,6 @@ export const useAppStore = create<AppStore>()(
             if (!r.active) return r;
             // Determine the most recent due date on/before today
             const due = mostRecentDueDate(r, now);
-            if (!due) return r;
             const dueStr = due.toISOString().split("T")[0];
             // Already generated for this period?
             if (r.lastGenerated && r.lastGenerated >= dueStr) return r;
@@ -172,7 +145,6 @@ export const useAppStore = create<AppStore>()(
               id: uid(),
               date: dueStr,
               amount: r.amount,
-              type: r.type,
               category: r.category,
               note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
             });
@@ -299,14 +271,47 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "my-dream-store",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => idbStorage),
+      // v2 drops income entirely (finance is expense/budget-only now) and
+      // replaces the fixed شهري/أسبوعي/سنوي frequency with a flexible
+      // (unit, every) interval — this migration transforms any v1 data.
       migrate: (persisted: unknown) => {
-        const state = (persisted ?? {}) as Partial<AppData>;
+        const state = (persisted ?? {}) as Record<string, unknown>;
+        const validCategories = new Set(Object.keys(CATEGORY_LABELS));
+        const todayStr = today();
+
+        const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
+          .filter((t) => t.type !== "دخل" && validCategories.has(t.category as string))
+          .map((t) => ({
+            id: t.id, date: t.date, amount: t.amount,
+            category: t.category, note: t.note, linkedJournalId: t.linkedJournalId,
+          })) as Transaction[];
+
+        const recurring = ((state.recurring as Record<string, unknown>[]) ?? [])
+          .filter((r) => r.type !== "دخل" && validCategories.has(r.category as string))
+          .map((r) => {
+            if (r.unit && typeof r.every === "number") return r as unknown as RecurringTransaction;
+            let unit: RecurringTransaction["unit"] = "شهري";
+            let every = 1;
+            if (r.frequency === "أسبوعي") { unit = "أسبوعي"; every = 1; }
+            else if (r.frequency === "سنوي") { unit = "شهري"; every = 12; }
+            return {
+              id: r.id, amount: r.amount, category: r.category, note: r.note,
+              unit, every, dayOfMonth: (r.dayOfMonth as number) ?? 1,
+              anchorDate: (r.lastGenerated as string) ?? todayStr,
+              active: r.active, lastGenerated: r.lastGenerated,
+            } as RecurringTransaction;
+          });
+
+        const budgets = ((state.budgets as Record<string, unknown>[]) ?? [])
+          .filter((b) => validCategories.has(b.category as string)) as unknown as Budget[];
+
         return {
           ...state,
-          recurring: state.recurring ?? [],
-          budgets: state.budgets ?? [],
+          transactions,
+          recurring,
+          budgets,
           prayerLogs: state.prayerLogs ?? [],
         } as AppData;
       },

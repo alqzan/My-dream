@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction } from "./types";
 import { PRAYERS } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -93,6 +93,79 @@ export function getReadingStreak(logs: ReadingLog[]): number {
 
 export function getFinanceStreak(transactions: Transaction[]): number {
   return calcStreak(transactions.map((t) => t.date));
+}
+
+// Consecutive-day streak of days with zero recorded spending, ending today
+// (or yesterday, if something was already logged today). Capped at the
+// earliest transaction ever recorded so a brand-new account with no history
+// can't claim a huge streak it never earned.
+export function getNoSpendStreak(transactions: Transaction[]): number {
+  if (!transactions.length) return 0;
+  const spentDates = new Set(transactions.map((t) => t.date));
+  const earliestDate = [...spentDates].sort()[0];
+  const todayStr = today();
+  const current = new Date(todayStr);
+  if (spentDates.has(todayStr)) current.setDate(current.getDate() - 1);
+
+  let streak = 0;
+  while (true) {
+    const dateStr = current.toISOString().split("T")[0];
+    if (dateStr < earliestDate || spentDates.has(dateStr)) break;
+    streak++;
+    current.setDate(current.getDate() - 1);
+  }
+  return streak;
+}
+
+// Compute the most recent date this recurring item was/is due, on or before
+// `now`. The interval's phase is anchored to `anchorDate` so "every N months/
+// weeks" (not just a fixed 1/12) lines up on a consistent cadence.
+export function mostRecentDueDate(r: RecurringTransaction, now: Date): Date {
+  const every = Math.max(1, Math.floor(r.every) || 1);
+  const anchor = new Date(r.anchorDate || today());
+
+  if (r.unit === "أسبوعي") {
+    // dayOfMonth reused as weekday 0-6
+    const target = ((r.dayOfMonth % 7) + 7) % 7;
+    const due = new Date(now);
+    due.setDate(now.getDate() - ((now.getDay() - target + 7) % 7));
+
+    const anchorDue = new Date(anchor);
+    anchorDue.setDate(anchor.getDate() - ((anchor.getDay() - target + 7) % 7));
+
+    const weeksBetween = Math.round((due.getTime() - anchorDue.getTime()) / (7 * 24 * 3600 * 1000));
+    const remainder = ((weeksBetween % every) + every) % every;
+    if (remainder !== 0) due.setDate(due.getDate() - remainder * 7);
+    return due < anchorDue ? anchorDue : due;
+  }
+
+  // شهري (and anything else) — monthly-based cadence
+  const day = Math.min(Math.max(r.dayOfMonth, 1), 28);
+  const anchorMonthIndex = anchor.getFullYear() * 12 + anchor.getMonth();
+  const nowMonthIndex = now.getFullYear() * 12 + now.getMonth();
+  let k = Math.floor((nowMonthIndex - anchorMonthIndex) / every);
+  let dueMonthIndex = anchorMonthIndex + k * every;
+  let due = new Date(Math.floor(dueMonthIndex / 12), ((dueMonthIndex % 12) + 12) % 12, day);
+  if (due > now) {
+    k -= 1;
+    dueMonthIndex = anchorMonthIndex + k * every;
+    due = new Date(Math.floor(dueMonthIndex / 12), ((dueMonthIndex % 12) + 12) % 12, day);
+  }
+  return due < anchor ? new Date(anchor.getFullYear(), anchor.getMonth(), day) : due;
+}
+
+// The next occurrence strictly after `now` — one interval past the most
+// recent due date.
+export function nextDueDate(r: RecurringTransaction, now: Date): Date {
+  const recent = mostRecentDueDate(r, now);
+  const every = Math.max(1, Math.floor(r.every) || 1);
+  if (r.unit === "أسبوعي") {
+    const next = new Date(recent);
+    next.setDate(recent.getDate() + every * 7);
+    return next;
+  }
+  const monthIndex = recent.getFullYear() * 12 + recent.getMonth() + every;
+  return new Date(Math.floor(monthIndex / 12), ((monthIndex % 12) + 12) % 12, recent.getDate());
 }
 
 export function getDailyCompletionDates(

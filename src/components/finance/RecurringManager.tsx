@@ -1,26 +1,32 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { RecurringTransaction, FinanceCategory, FinanceType, RecurringFrequency } from "@/lib/types";
-import { CATEGORY_LABELS } from "@/lib/types";
-import { uid } from "@/lib/utils";
+import type { RecurringTransaction, FinanceCategory, RecurringUnit } from "@/lib/types";
+import { CATEGORY_LABELS, RECURRING_PRESETS } from "@/lib/types";
+import { uid, today } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Plus, Trash2, Power } from "lucide-react";
 
 const EXPENSE_CATS: FinanceCategory[] = ["إيجار", "مواصلات", "طعام", "صحة", "تعليم", "كمالي", "سفر", "ادخار", "استثمار", "أخرى"];
-const INCOME_CATS: FinanceCategory[] = ["راتب", "استثمارات_دخل"];
+const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
+export function describeFrequency(unit: RecurringUnit, every: number): string {
+  const preset = RECURRING_PRESETS.find((p) => p.unit === unit && p.every === every);
+  if (preset) return preset.label;
+  const noun = unit === "شهري" ? "أشهر" : "أسابيع";
+  return `كل ${every} ${noun}`;
+}
 
 export function RecurringManager({ onClose }: { onClose: () => void }) {
   const { recurring, addRecurring, deleteRecurring, updateRecurring, runRecurring } = useAppStore();
   const [adding, setAdding] = useState(false);
-  const [type, setType] = useState<FinanceType>("مصروف");
   const [category, setCategory] = useState<FinanceCategory>("إيجار");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [frequency, setFrequency] = useState<RecurringFrequency>("شهري");
-  const [dayOfMonth, setDayOfMonth] = useState("1");
-
-  const cats = type === "دخل" ? INCOME_CATS : EXPENSE_CATS;
+  const [unit, setUnit] = useState<RecurringUnit>("شهري");
+  const [every, setEvery] = useState(1);
+  const [customEvery, setCustomEvery] = useState(false);
+  const [dayOfMonth, setDayOfMonth] = useState(1); // day-of-month (شهري) or weekday index (أسبوعي)
 
   function handleAdd() {
     const parsed = parseFloat(amount);
@@ -28,11 +34,12 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
     const r: RecurringTransaction = {
       id: uid(),
       amount: parsed,
-      type,
       category,
       note,
-      frequency,
-      dayOfMonth: parseInt(dayOfMonth) || 1,
+      unit,
+      every: Math.max(1, every || 1),
+      dayOfMonth,
+      anchorDate: today(),
       active: true,
     };
     addRecurring(r);
@@ -45,13 +52,13 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700 leading-relaxed">
-        المعاملات المتكررة تُضاف <strong>تلقائياً</strong> في موعدها كل شهر/أسبوع — مثل الإيجار والراتب والاشتراكات. ما عاد تحتاج تسجّلها يدوياً.
+        المصاريف المتكررة تُضاف <strong>تلقائياً</strong> في موعدها — إيجار، اشتراكات، تأمين سنوي، أي التزام دوري. اختر أي وتيرة تناسبك، حتى كل ٦ أشهر أو أكثر.
       </div>
 
       {/* List */}
       <div className="space-y-2">
         {recurring.length === 0 && !adding && (
-          <p className="text-center text-sm text-gray-400 py-4">لا توجد معاملات متكررة</p>
+          <p className="text-center text-sm text-gray-400 py-4">لا توجد مصاريف متكررة</p>
         )}
         {recurring.map((r) => {
           const info = CATEGORY_LABELS[r.category];
@@ -61,11 +68,11 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</div>
                 <div className="text-[11px] text-gray-400">
-                  {r.frequency} · يوم {r.dayOfMonth} · {info.label}
+                  {describeFrequency(r.unit, r.every)} · {info.label}
                 </div>
               </div>
-              <span className={`text-sm font-bold ${r.type === "دخل" ? "text-finance" : "text-red-500"}`}>
-                {r.type === "دخل" ? "+" : "-"}{r.amount.toLocaleString("ar-SA")}
+              <span className="text-sm font-bold text-red-500">
+                -{r.amount.toLocaleString("ar-SA")}
               </span>
               <button
                 onClick={() => updateRecurring(r.id, { active: !r.active })}
@@ -85,20 +92,8 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
       {/* Add form */}
       {adding ? (
         <div className="bg-gray-50 rounded-xl p-3 space-y-3">
-          <div className="flex gap-2 p-1 bg-white rounded-lg">
-            {(["مصروف", "دخل"] as FinanceType[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => { setType(t); setCategory(t === "دخل" ? "راتب" : "إيجار"); }}
-                className={`flex-1 py-1.5 rounded-md text-sm font-semibold ${type === t ? (t === "دخل" ? "bg-finance/10 text-finance" : "bg-red-50 text-red-500") : "text-gray-400"}`}
-              >
-                {t === "دخل" ? "دخل +" : "مصروف -"}
-              </button>
-            ))}
-          </div>
-
           <div className="grid grid-cols-3 gap-1.5">
-            {cats.map((cat) => {
+            {EXPENSE_CATS.map((cat) => {
               const info = CATEGORY_LABELS[cat];
               return (
                 <button
@@ -126,22 +121,85 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={frequency} onChange={(e) => setFrequency(e.target.value as RecurringFrequency)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
-            >
-              <option value="شهري">شهري</option>
-              <option value="أسبوعي">أسبوعي</option>
-              <option value="سنوي">سنوي</option>
-            </select>
-            <input
-              type="number" value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)}
-              placeholder="اليوم"
-              min={1} max={28}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
-            />
+          {/* Frequency presets */}
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1.5">الوتيرة</label>
+            <div className="flex flex-wrap gap-1.5">
+              {RECURRING_PRESETS.map((p) => {
+                const isActive = !customEvery && unit === p.unit && every === p.every;
+                return (
+                  <button
+                    key={p.label}
+                    onClick={() => { setUnit(p.unit); setEvery(p.every); setCustomEvery(false); }}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${
+                      isActive ? "border-finance bg-finance/5 text-finance" : "border-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setCustomEvery(true)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${
+                  customEvery ? "border-finance bg-finance/5 text-finance" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                مخصص…
+              </button>
+            </div>
           </div>
+
+          {customEvery && (
+            <div className="flex items-center gap-2 bg-white rounded-lg p-2 border border-gray-200">
+              <span className="text-xs text-gray-500 shrink-0">كل</span>
+              <input
+                type="number" min={1} value={every}
+                onChange={(e) => setEvery(parseInt(e.target.value) || 1)}
+                className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
+              />
+              <div className="flex gap-1 flex-1">
+                {(["شهري", "أسبوعي"] as RecurringUnit[]).map((u) => (
+                  <button
+                    key={u}
+                    onClick={() => setUnit(u)}
+                    className={`flex-1 py-1 rounded-md text-[11px] font-medium ${unit === u ? "bg-finance/10 text-finance" : "text-gray-400"}`}
+                  >
+                    {u === "شهري" ? "شهر" : "أسبوع"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Anchor day: weekday picker for أسبوعي, day-of-month for شهري */}
+          {unit === "أسبوعي" ? (
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1.5">يوم الأسبوع</label>
+              <div className="flex flex-wrap gap-1.5">
+                {WEEKDAYS.map((w, i) => (
+                  <button
+                    key={w}
+                    onClick={() => setDayOfMonth(i)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border ${
+                      dayOfMonth === i ? "border-finance bg-finance/5 text-finance" : "border-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {w}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1.5">يوم الشهر</label>
+              <input
+                type="number" min={1} max={28} value={dayOfMonth}
+                onChange={(e) => setDayOfMonth(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
+                className="w-20 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
+              />
+            </div>
+          )}
 
           <div className="flex gap-2">
             <Button onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90" size="sm">حفظ</Button>
@@ -150,7 +208,7 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <Button onClick={() => setAdding(true)} variant="secondary" className="w-full gap-1.5">
-          <Plus size={16} /> إضافة معاملة متكررة
+          <Plus size={16} /> إضافة مصروف متكرر
         </Button>
       )}
 

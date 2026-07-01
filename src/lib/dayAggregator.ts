@@ -5,7 +5,6 @@ export interface DaySummary {
   date: string;
   journal?: JournalEntry;
   transactions: Transaction[];
-  income: number;
   expense: number;
   readingLogs: { log: ReadingLog; book?: Book }[];
   pagesRead: number;
@@ -30,8 +29,7 @@ export function aggregateDay(
 ): DaySummary {
   const journal = data.journalEntries.find((e) => e.date === date);
   const transactions = data.transactions.filter((t) => t.date === date);
-  const income = transactions.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
-  const expense = transactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
+  const expense = transactions.reduce((s, t) => s + t.amount, 0);
 
   const dayLogs = data.readingLogs.filter((l) => l.date === date);
   const readingLogs = dayLogs.map((log) => ({
@@ -56,7 +54,6 @@ export function aggregateDay(
     date,
     journal,
     transactions,
-    income,
     expense,
     readingLogs,
     pagesRead,

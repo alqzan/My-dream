@@ -19,7 +19,7 @@ export function MoodSpendingInsight({ journalEntries, transactions }: MoodSpendi
   for (const entry of journalEntries) {
     if (!entry.mood) continue;
     const dayExpense = transactions
-      .filter((t) => t.date === entry.date && t.type === "مصروف")
+      .filter((t) => t.date === entry.date)
       .reduce((s, t) => s + t.amount, 0);
     (moodToExpenses[entry.mood] ??= []).push(dayExpense);
   }
