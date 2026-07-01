@@ -25,7 +25,7 @@ import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "مسار — مساحتك الشخصية",
+  title: "مدار — مساحتك الشخصية",
   description: "مذكرات، أموال، قراءة، وعادات — كل شيء في مكان واحد",
   manifest: `${bp}/manifest.webmanifest`,
   icons: {
@@ -37,15 +37,15 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "مسار",
+    title: "مدار",
     statusBarStyle: "default",
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#eef0f8" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
+    { media: "(prefers-color-scheme: light)", color: "#f3ecdd" },
+    { media: "(prefers-color-scheme: dark)", color: "#161009" },
   ],
 };
 

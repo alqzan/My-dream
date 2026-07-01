@@ -1,4 +1,4 @@
-// Orbit brand mark for "مسار" — concentric rings with an orbiting dot.
+// Orbit brand mark for "مدار" — concentric rings with an orbiting dot.
 export function BrandMark({ size = 40 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 44 44" fill="none" aria-hidden>

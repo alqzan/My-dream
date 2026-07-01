@@ -18,38 +18,37 @@ html {
 
 body {
   font-family: var(--font-thamaniah), "Tajawal", sans-serif;
-  color: #1a1a2e;
+  color: #2c2418;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  /* Soft three-colour mesh tying the app's sections together:
-     journal purple, reading orange, finance green — kept faint so the
-     white cards stay crisp on top. */
-  background-color: #eef0f8;
+  /* Warm Andalusian parchment: cream base with gold + terracotta washes,
+     evoking Alhambra stucco and Córdoba's warm stone. */
+  background-color: #f3ecdd;
   background-image:
-    radial-gradient(at 10% 5%, rgba(124, 111, 205, 0.22) 0px, transparent 45%),
-    radial-gradient(at 92% 10%, rgba(224, 123, 57, 0.20) 0px, transparent 42%),
-    radial-gradient(at 82% 85%, rgba(61, 150, 64, 0.20) 0px, transparent 45%),
-    radial-gradient(at 15% 95%, rgba(74, 159, 189, 0.16) 0px, transparent 42%);
+    radial-gradient(at 88% -6%, rgba(201, 133, 42, 0.28) 0px, transparent 55%),
+    radial-gradient(at 6% 4%, rgba(193, 102, 63, 0.16) 0px, transparent 46%),
+    radial-gradient(at 12% 100%, rgba(138, 111, 176, 0.12) 0px, transparent 44%),
+    radial-gradient(at 95% 96%, rgba(61, 150, 64, 0.10) 0px, transparent 44%);
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
 
 /* Andalusian Islamic geometric pattern: eight-pointed star (khatim) within
-   an octagon, tessellated and fixed behind the content. */
+   an octagon, tessellated and fixed behind the content — warm ink. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='%231a1a2e' stroke-width='1'%3E%3Cpolygon points='17.6,0 42.4,0 60,17.6 60,42.4 42.4,60 17.6,60 0,42.4 0,17.6'/%3E%3Cpath d='M17.6,0 L60,42.4 L0,42.4 L42.4,0 L42.4,60 L0,17.6 L60,17.6 L17.6,60 Z'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='%235c3d21' stroke-width='1'%3E%3Cpolygon points='17.6,0 42.4,0 60,17.6 60,42.4 42.4,60 17.6,60 0,42.4 0,17.6'/%3E%3Cpath d='M17.6,0 L60,42.4 L0,42.4 L42.4,0 L42.4,60 L0,17.6 L60,17.6 L17.6,60 Z'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 60px 60px;
-  opacity: 0.06;
+  opacity: 0.08;
 }
 
 .dark body::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1'%3E%3Cpolygon points='17.6,0 42.4,0 60,17.6 60,42.4 42.4,60 17.6,60 0,42.4 0,17.6'/%3E%3Cpath d='M17.6,0 L60,42.4 L0,42.4 L42.4,0 L42.4,60 L0,17.6 L60,17.6 L17.6,60 Z'/%3E%3C/g%3E%3C/svg%3E");
-  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='%23e8b15a' stroke-width='1'%3E%3Cpolygon points='17.6,0 42.4,0 60,17.6 60,42.4 42.4,60 17.6,60 0,42.4 0,17.6'/%3E%3Cpath d='M17.6,0 L60,42.4 L0,42.4 L42.4,0 L42.4,60 L0,17.6 L60,17.6 L17.6,60 Z'/%3E%3C/g%3E%3C/svg%3E");
+  opacity: 0.08;
 }
 
 /* ===================== Dark mode ===================== */
@@ -61,45 +60,44 @@ body::before {
 }
 
 .dark body {
-  color: #e5e7eb;
-  background-color: #0b1120;
+  color: #ece2d0;
+  background-color: #161009;
   background-image:
-    radial-gradient(at 10% 5%, rgba(124, 111, 205, 0.20) 0px, transparent 45%),
-    radial-gradient(at 92% 10%, rgba(224, 123, 57, 0.16) 0px, transparent 42%),
-    radial-gradient(at 82% 85%, rgba(61, 150, 64, 0.16) 0px, transparent 45%),
-    radial-gradient(at 15% 95%, rgba(74, 159, 189, 0.14) 0px, transparent 42%);
+    radial-gradient(at 88% -6%, rgba(201, 133, 42, 0.18) 0px, transparent 55%),
+    radial-gradient(at 6% 4%, rgba(193, 102, 63, 0.12) 0px, transparent 46%),
+    radial-gradient(at 12% 100%, rgba(138, 111, 176, 0.10) 0px, transparent 44%);
 }
 
-.dark .bg-white { background-color: #1e293b !important; }
-.dark .bg-gray-50 { background-color: #243044 !important; }
-.dark .bg-gray-100 { background-color: #334155 !important; }
+.dark .bg-white { background-color: #241c12 !important; }
+.dark .bg-gray-50 { background-color: #2c2318 !important; }
+.dark .bg-gray-100 { background-color: #382c1d !important; }
 
-.dark .text-gray-900 { color: #f8fafc !important; }
-.dark .text-gray-800 { color: #f1f5f9 !important; }
-.dark .text-gray-700 { color: #e2e8f0 !important; }
-.dark .text-gray-600 { color: #cbd5e1 !important; }
-.dark .text-gray-500 { color: #94a3b8 !important; }
-.dark .text-gray-400 { color: #7c8aa0 !important; }
-.dark .text-gray-300 { color: #64748b !important; }
+.dark .text-gray-900 { color: #f7f0e1 !important; }
+.dark .text-gray-800 { color: #efe6d5 !important; }
+.dark .text-gray-700 { color: #e2d6c1 !important; }
+.dark .text-gray-600 { color: #cbbda2 !important; }
+.dark .text-gray-500 { color: #a2947a !important; }
+.dark .text-gray-400 { color: #897c63 !important; }
+.dark .text-gray-300 { color: #6f6450 !important; }
 
-.dark .border-gray-100 { border-color: #2b3a52 !important; }
-.dark .border-gray-200 { border-color: #3a4a63 !important; }
+.dark .border-gray-100 { border-color: #3a2e1e !important; }
+.dark .border-gray-200 { border-color: #493a26 !important; }
 
 /* Form controls */
 .dark input,
 .dark textarea,
 .dark select {
-  background-color: #1e293b;
-  color: #e5e7eb;
-  border-color: #3a4a63;
+  background-color: #241c12;
+  color: #ece2d0;
+  border-color: #493a26;
 }
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #64748b;
+  color: #897c63;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #5a4a34;
 }
 
 .pb-safe {
@@ -114,7 +112,7 @@ body::before {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: #cbb894;
   border-radius: 99px;
 }
 

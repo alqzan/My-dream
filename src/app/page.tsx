@@ -185,7 +185,7 @@ function getGreeting() {
   return "مساء النور";
 }
 
-// Orbit ring showing how much of the year has passed — the "مسار" motif.
+// Orbit ring showing how much of the year has passed — the "مدار" motif.
 function YearOrbit({ pct }: { pct: number }) {
   const size = 82;
   const stroke = 6;
@@ -196,7 +196,7 @@ function YearOrbit({ pct }: { pct: number }) {
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" className="text-gray-200 dark:text-slate-700" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={gold} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${on} ${c - on}`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">

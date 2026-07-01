@@ -19,10 +19,10 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex flex-col w-56 bg-white border-l border-gray-100 min-h-screen fixed right-0 top-0 z-40">
-      <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center gap-3">
+      <div className="p-6 border-b border-gray-100 dark:border-[#3a2e1e] flex items-center gap-3">
         <BrandMark size={38} />
         <div>
-          <h1 className="text-xl font-bold text-gray-900">مسار</h1>
+          <h1 className="text-xl font-bold text-gray-900">مدار</h1>
           <p className="text-xs text-gray-400 mt-0.5">مساحتك الشخصية</p>
         </div>
       </div>
@@ -46,7 +46,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between gap-2">
+      <div className="p-3 border-t border-gray-100 dark:border-[#3a2e1e] flex items-center justify-between gap-2">
         <SyncButton />
         <ThemeToggle />
       </div>

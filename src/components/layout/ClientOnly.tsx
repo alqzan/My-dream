@@ -20,7 +20,7 @@ export function ClientOnly({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="text-3xl font-bold text-gray-900">مسار</div>
+          <div className="text-3xl font-bold text-gray-900">مدار</div>
           <div className="w-6 h-6 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
         </div>
       </div>
