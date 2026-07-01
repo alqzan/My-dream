@@ -2,16 +2,15 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, parseBankCsv } from "@/lib/bankParser";
-import { today } from "@/lib/utils";
+import { today, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { CATEGORY_LABELS } from "@/lib/types";
 import type { Transaction } from "@/lib/types";
 import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
 
 type Mode = "sms" | "csv";
 
 export function BankImport({ onClose }: { onClose: () => void }) {
-  const { addTransaction } = useAppStore();
+  const { categories, addTransaction } = useAppStore();
   const [mode, setMode] = useState<Mode>("sms");
   const [smsText, setSmsText] = useState("");
   const [date, setDate] = useState(today());
@@ -167,7 +166,7 @@ export function BankImport({ onClose }: { onClose: () => void }) {
           )}
           <div className="max-h-52 overflow-y-auto space-y-2">
             {preview.map((tx) => {
-              const info = CATEGORY_LABELS[tx.category];
+              const info = getCategoryInfo(categories, tx.category);
               return (
                 <div key={tx.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5">
                   <span className="text-lg">{info.icon}</span>

@@ -1,22 +1,38 @@
-export type FinanceCategory =
-  | "إيجار"
-  | "مواصلات"
-  | "طعام"
-  | "صحة"
-  | "تعليم"
-  | "كمالي"
-  | "سفر"
-  | "ادخار"
-  | "استثمار"
-  | "أخرى";
+// Categories are fully user-managed (add/rename/delete freely), the same
+// way habits are — not a fixed list. Transactions/recurring rules/budgets
+// reference a category by id; DEFAULT_CATEGORIES below just seeds new
+// accounts with a starting set.
+export interface FinanceCategoryDef {
+  id: string;
+  label: string;
+  icon: string;
+  color: string;
+}
+
+export const DEFAULT_CATEGORIES: FinanceCategoryDef[] = [
+  { id: "cat-essentials", label: "أساسيات", icon: "🧺", color: "#e07b39" },
+  { id: "cat-luxuries", label: "كماليات", icon: "✨", color: "#9b6fcd" },
+  { id: "cat-investment", label: "استثمار", icon: "📊", color: "#256128" },
+  { id: "cat-charity", label: "صدقة", icon: "🤲", color: "#1f7a6c" },
+  { id: "cat-others", label: "للآخرين", icon: "🎁", color: "#4a9fbd" },
+];
+
+// Shown for a transaction/budget whose category was since deleted, instead
+// of crashing or silently dropping the entry.
+export const UNKNOWN_CATEGORY: FinanceCategoryDef = { id: "", label: "غير مصنف", icon: "📌", color: "#888" };
 
 export interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD
   amount: number;
-  category: FinanceCategory;
+  category: string; // FinanceCategoryDef id
   note: string;
   linkedJournalId?: string;
+  // A large one-off or recurring commitment (rent, a loan, a big investment)
+  // that would otherwise blow out the daily cumulative budget. Still counts
+  // toward category totals/budgets, but is excluded from that calculation
+  // and shown with its own treatment instead.
+  big?: boolean;
 }
 
 export interface Book {
@@ -99,7 +115,7 @@ export type RecurringUnit = "أسبوعي" | "شهري";
 export interface RecurringTransaction {
   id: string;
   amount: number;
-  category: FinanceCategory;
+  category: string; // FinanceCategoryDef id
   note: string;
   unit: RecurringUnit;
   every: number; // repeat every N units
@@ -107,6 +123,7 @@ export interface RecurringTransaction {
   anchorDate: string; // YYYY-MM-DD — first occurrence; interval phase is counted from here
   active: boolean;
   lastGenerated?: string; // YYYY-MM-DD of last auto-created instance
+  big?: boolean; // e.g. rent — propagated onto every auto-generated transaction
 }
 
 // Quick presets shown in the UI on top of the free "every N" input.
@@ -122,8 +139,16 @@ export const RECURRING_PRESETS: { label: string; unit: RecurringUnit; every: num
 ];
 
 export interface Budget {
-  category: FinanceCategory;
+  category: string; // FinanceCategoryDef id
   limit: number; // monthly cap in SAR
+}
+
+// A personal daily spending allowance that rolls over — under-spend one day
+// and it cushions the next, overspend and it eats into it. Cumulative since
+// startDate, not reset every calendar month.
+export interface DailyBudget {
+  amount: number; // SAR per day
+  startDate: string; // YYYY-MM-DD — changing the amount resets this to today
 }
 
 export interface AppData {
@@ -134,22 +159,11 @@ export interface AppData {
   habits: Habit[];
   recurring: RecurringTransaction[];
   budgets: Budget[];
+  categories: FinanceCategoryDef[];
   prayerLogs: PrayerLog[];
+  dailyBudget: DailyBudget | null;
   lastUpdated: string;
 }
-
-export const CATEGORY_LABELS: Record<FinanceCategory, { label: string; icon: string; color: string }> = {
-  إيجار: { label: "إيجار", icon: "🏠", color: "#e07b39" },
-  مواصلات: { label: "مواصلات", icon: "🚗", color: "#7c6fcd" },
-  طعام: { label: "طعام", icon: "🍽️", color: "#e07b39" },
-  صحة: { label: "صحة", icon: "❤️", color: "#e05555" },
-  تعليم: { label: "تعليم", icon: "📚", color: "#3d9640" },
-  كمالي: { label: "كمالي", icon: "✨", color: "#9b6fcd" },
-  سفر: { label: "سفر", icon: "✈️", color: "#4a9fbd" },
-  ادخار: { label: "ادخار", icon: "🏦", color: "#2d7a30" },
-  استثمار: { label: "استثمار", icon: "📊", color: "#256128" },
-  أخرى: { label: "أخرى", icon: "📌", color: "#888" },
-};
 
 export const MOOD_LABELS = {
   ممتاز: { label: "ممتاز", icon: "😄" },

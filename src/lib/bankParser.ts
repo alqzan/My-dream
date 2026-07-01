@@ -1,27 +1,30 @@
-import type { Transaction, FinanceCategory } from "./types";
+import type { Transaction } from "./types";
 import { uid } from "./utils";
 
 // ========== Smart Categorization ==========
-const CATEGORY_KEYWORDS: { keywords: string[]; category: FinanceCategory }[] = [
-  { keywords: ["سوبرماركت", "هايبر", "بنده", "الدانوب", "لولو", "نون", "أمازون", "جرير", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "ساكو"], category: "طعام" },
-  { keywords: ["مطعم", "برغر", "كنتاكي", "ماكدونالدز", "ستاربكس", "كافيه", "مقهى", "pizza", "كبسه", "مندي", "سشي", "resturant", "restaurant", "cafe", "coffee"], category: "طعام" },
-  { keywords: ["إيجار", "ايجار", "rent"], category: "إيجار" },
-  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "fuel", "petrol"], category: "مواصلات" },
-  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "مواصلات" },
-  { keywords: ["مستشفى", "عيادة", "صيدلية", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "صحة" },
-  { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "تعليم" },
-  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal"], category: "سفر" },
-  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات"], category: "كمالي" },
-  { keywords: ["ادخار", "توفير", "saving"], category: "ادخار" },
-  { keywords: ["استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "استثمار" },
+// Maps to the seeded default category ids (src/lib/types.ts). If the user
+// has since renamed or deleted one of these, the transaction just falls
+// back to "غير مصنف" via getCategoryInfo — it's never lost.
+const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
+  { keywords: ["سوبرماركت", "هايبر", "بنده", "الدانوب", "لولو", "نون", "أمازون", "جرير", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "ساكو"], category: "cat-essentials" },
+  { keywords: ["مطعم", "برغر", "كنتاكي", "ماكدونالدز", "ستاربكس", "كافيه", "مقهى", "pizza", "كبسه", "مندي", "سشي", "resturant", "restaurant", "cafe", "coffee"], category: "cat-essentials" },
+  { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
+  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "fuel", "petrol"], category: "cat-essentials" },
+  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-essentials" },
+  { keywords: ["مستشفى", "عيادة", "صيدلية", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
+  { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
+  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal"], category: "cat-luxuries" },
+  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات"], category: "cat-luxuries" },
+  { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity"], category: "cat-charity" },
+  { keywords: ["ادخار", "توفير", "saving", "استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "cat-investment" },
 ];
 
-function autoCategory(text: string): FinanceCategory {
+function autoCategory(text: string): string {
   const lower = text.toLowerCase();
   for (const { keywords, category } of CATEGORY_KEYWORDS) {
     if (keywords.some((k) => lower.includes(k.toLowerCase()))) return category;
   }
-  return "أخرى";
+  return "cat-essentials";
 }
 
 // ========== SMS Parser ==========
@@ -41,7 +44,7 @@ const SMS_PATTERNS = [
 
 export interface SmsParseResult {
   amount: number;
-  category: FinanceCategory;
+  category: string;
   note: string;
   date: string;
 }

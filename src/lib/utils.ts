@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction } from "./types";
-import { PRAYERS } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef } from "./types";
+import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -95,26 +95,34 @@ export function getFinanceStreak(transactions: Transaction[]): number {
   return calcStreak(transactions.map((t) => t.date));
 }
 
-// Consecutive-day streak of days with zero recorded spending, ending today
-// (or yesterday, if something was already logged today). Capped at the
-// earliest transaction ever recorded so a brand-new account with no history
-// can't claim a huge streak it never earned.
-export function getNoSpendStreak(transactions: Transaction[]): number {
-  if (!transactions.length) return 0;
-  const spentDates = new Set(transactions.map((t) => t.date));
-  const earliestDate = [...spentDates].sort()[0];
-  const todayStr = today();
-  const current = new Date(todayStr);
-  if (spentDates.has(todayStr)) current.setDate(current.getDate() - 1);
+export function getCategoryInfo(categories: FinanceCategoryDef[], id: string): FinanceCategoryDef {
+  return categories.find((c) => c.id === id) ?? UNKNOWN_CATEGORY;
+}
 
-  let streak = 0;
-  while (true) {
-    const dateStr = current.toISOString().split("T")[0];
-    if (dateStr < earliestDate || spentDates.has(dateStr)) break;
-    streak++;
-    current.setDate(current.getDate() - 1);
-  }
-  return streak;
+export interface DailyBudgetStatus {
+  days: number; // days since (and including) startDate, through today
+  allowance: number; // amount * days
+  spent: number; // sum of non-big transactions since startDate
+  balance: number; // allowance - spent (negative = over)
+}
+
+// Cumulative daily allowance: every day since `startDate` contributes
+// `amount`, and every (non-"big") transaction since then eats into the
+// running total — a surplus day cushions a rough one later on.
+export function computeDailyBudgetStatus(
+  dailyBudget: { amount: number; startDate: string },
+  transactions: Transaction[]
+): DailyBudgetStatus {
+  const todayStr = today();
+  const days = Math.max(
+    1,
+    Math.round((new Date(todayStr).getTime() - new Date(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
+  );
+  const allowance = dailyBudget.amount * days;
+  const spent = transactions
+    .filter((t) => !t.big && t.date >= dailyBudget.startDate && t.date <= todayStr)
+    .reduce((s, t) => s + t.amount, 0);
+  return { days, allowance, spent, balance: allowance - spent };
 }
 
 // Compute the most recent date this recurring item was/is due, on or before

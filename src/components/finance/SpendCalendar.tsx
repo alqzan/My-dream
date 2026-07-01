@@ -1,19 +1,22 @@
 "use client";
 import { useState } from "react";
 import { getMonthDates, arabicMonthName, formatAmount } from "@/lib/utils";
-import type { Transaction } from "@/lib/types";
+import type { Transaction, DailyBudget } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
 const DAYS_AR = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
 
 interface SpendCalendarProps {
   transactions: Transaction[];
+  dailyBudget: DailyBudget | null;
   onDayClick: (date: string) => void;
 }
 
-// A month at a glance: each day is a little bar sized by that day's spend —
-// and a quiet green dot marks days you spent nothing at all.
-export function SpendCalendar({ transactions, onDayClick }: SpendCalendarProps) {
+// A month at a glance: each day is a little bar sized by that day's spend.
+// With a daily budget set, the bar is tinted by whether that day kept to
+// the daily rate (green) or ran over it (red); otherwise it's a plain
+// relative-height bar.
+export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -24,6 +27,7 @@ export function SpendCalendar({ transactions, onDayClick }: SpendCalendarProps) 
 
   const spendByDate = new Map<string, number>();
   for (const t of transactions) {
+    if (t.big) continue; // big commitments have their own display, keep the mosaic about daily spending
     spendByDate.set(t.date, (spendByDate.get(t.date) ?? 0) + t.amount);
   }
   const maxSpend = Math.max(1, ...dates.map((d) => spendByDate.get(d) ?? 0));
@@ -55,6 +59,9 @@ export function SpendCalendar({ transactions, onDayClick }: SpendCalendarProps) 
           const isToday = date === todayStr;
           const isFuture = date > todayStr;
           const barHeight = spent > 0 ? Math.max(4, Math.round((spent / maxSpend) * 20)) : 0;
+          const barColor = dailyBudget
+            ? spent > dailyBudget.amount ? "#e05555" : "#1f7a6c"
+            : "#e17b6e";
           return (
             <button
               key={date}
@@ -63,11 +70,10 @@ export function SpendCalendar({ transactions, onDayClick }: SpendCalendarProps) 
                 isToday ? "ring-1 ring-finance" : "hover:bg-gray-50"
               }`}
             >
-              {!isFuture && spent === 0 && <span className="text-[9px] leading-none text-prayer">●</span>}
               {spent > 0 && (
                 <div
-                  className="w-2.5 rounded-full bg-red-400"
-                  style={{ height: barHeight }}
+                  className="w-2.5 rounded-full"
+                  style={{ height: barHeight, backgroundColor: barColor }}
                   title={`${formatAmount(spent)} ر.س`}
                 />
               )}
@@ -80,8 +86,14 @@ export function SpendCalendar({ transactions, onDayClick }: SpendCalendarProps) 
       </div>
 
       <div className="flex items-center justify-center gap-3 text-[10px] text-gray-400 pt-1">
-        <span className="flex items-center gap-1"><span className="text-prayer">●</span> يوم بدون صرف</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> صرف (الطول = المبلغ)</span>
+        {dailyBudget ? (
+          <>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-prayer inline-block" /> ضمن اليومية</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> تجاوزتها</span>
+          </>
+        ) : (
+          <span>الطول = المبلغ المصروف</span>
+        )}
       </div>
     </div>
   );

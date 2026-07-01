@@ -1,14 +1,14 @@
 "use client";
-import type { Transaction } from "@/lib/types";
-import { CATEGORY_LABELS } from "@/lib/types";
-import { formatAmount } from "@/lib/utils";
+import type { Transaction, FinanceCategoryDef } from "@/lib/types";
+import { formatAmount, getCategoryInfo } from "@/lib/utils";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 interface FinanceSummaryProps {
   transactions: Transaction[];
+  categories: FinanceCategoryDef[];
 }
 
-export function FinanceSummary({ transactions }: FinanceSummaryProps) {
+export function FinanceSummary({ transactions, categories }: FinanceSummaryProps) {
   const totalExpense = transactions.reduce((s, t) => s + t.amount, 0);
 
   const expenseByCategory = transactions
@@ -18,11 +18,10 @@ export function FinanceSummary({ transactions }: FinanceSummaryProps) {
     }, {});
 
   const pieData = Object.entries(expenseByCategory)
-    .map(([cat, amount]) => ({
-      name: CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS]?.label ?? cat,
-      value: amount,
-      color: CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS]?.color ?? "#888",
-    }))
+    .map(([cat, amount]) => {
+      const info = getCategoryInfo(categories, cat);
+      return { name: info.label, value: amount, color: info.color };
+    })
     .sort((a, b) => b.value - a.value);
 
   return (

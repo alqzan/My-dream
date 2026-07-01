@@ -5,7 +5,8 @@ import {
   getJournalStreak,
   getReadingStreak,
   getFinanceStreak,
-  getNoSpendStreak,
+  computeDailyBudgetStatus,
+  formatAmount,
   getDailyCompletionDates,
   calcStreak,
   today,
@@ -27,7 +28,7 @@ import Link from "next/link";
 import { ChevronLeft, BookMarked, Wallet, BookOpen } from "lucide-react";
 
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, runRecurring } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, dailyBudget, runRecurring } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // Auto-generate due recurring transactions on app open
@@ -52,7 +53,7 @@ export default function Dashboard() {
   const thisMonthExpense = transactions
     .filter((t) => t.date.startsWith(todayStr.slice(0, 7)))
     .reduce((s, t) => s + t.amount, 0);
-  const noSpendStreak = getNoSpendStreak(transactions);
+  const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
 
   const yearPct = yearProgress();
 
@@ -113,8 +114,8 @@ export default function Dashboard() {
           href="/finance"
           icon={<Wallet size={20} />}
           label="سجّل مصروف"
-          sub={noSpendStreak > 0
-            ? `🌿 ${noSpendStreak} يوم بدون صرف`
+          sub={dailyStatus
+            ? `${dailyStatus.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(dailyStatus.balance))} ر.س يومياً`
             : thisMonthExpense > 0
             ? `${thisMonthExpense.toLocaleString()} ر.س هذا الشهر`
             : "سجّل أول مصروف"}
@@ -168,12 +169,14 @@ export default function Dashboard() {
                   {thisMonthExpense.toLocaleString("ar-SA")} <span className="text-xs font-normal">ر.س</span>
                 </div>
               </div>
-              <div className="flex-1 bg-prayer/5 rounded-xl p-3 text-center">
-                <div className="text-xs text-gray-500">بدون صرف</div>
-                <div className="text-base font-bold text-prayer">
-                  {noSpendStreak} <span className="text-xs font-normal">يوم</span>
+              {dailyStatus && (
+                <div className={`flex-1 rounded-xl p-3 text-center ${dailyStatus.balance >= 0 ? "bg-prayer/5" : "bg-red-50"}`}>
+                  <div className="text-xs text-gray-500">الرصيد اليومي</div>
+                  <div className={`text-base font-bold ${dailyStatus.balance >= 0 ? "text-prayer" : "text-red-500"}`}>
+                    {dailyStatus.balance >= 0 ? "+" : "-"}{formatAmount(Math.abs(dailyStatus.balance))} <span className="text-xs font-normal">ر.س</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </Link>
         </Card>

@@ -1,29 +1,32 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { getNoSpendStreak } from "@/lib/utils";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import { FinancePace } from "@/components/finance/FinancePace";
+import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
+import { BigCommitments } from "@/components/finance/BigCommitments";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
 import { RecurringManager } from "@/components/finance/RecurringManager";
 import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
+import { CategoryManager } from "@/components/finance/CategoryManager";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat } from "lucide-react";
+import { Plus, Smartphone, Repeat, Tags } from "lucide-react";
 
 export default function FinancePage() {
-  const { transactions, budgets, recurring, deleteTransaction, runRecurring } = useAppStore();
+  const { transactions, budgets, recurring, categories, dailyBudget, deleteTransaction, runRecurring } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
@@ -36,7 +39,11 @@ export default function FinancePage() {
   });
 
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
-  const noSpendStreak = getNoSpendStreak(transactions);
+  // "Big" commitments (rent, a loan...) still count in totals/category
+  // budgets, but are excluded from anything pacing-oriented (daily budget,
+  // spending trend) so one exceptional payment doesn't wreck those numbers.
+  const byMonthRegular = byMonth.filter((t) => !t.big);
+  const transactionsRegular = transactions.filter((t) => !t.big);
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
@@ -51,11 +58,7 @@ export default function FinancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">المصاريف</h1>
-          <div className="flex items-center gap-2 mt-1">
-            {noSpendStreak > 0 && (
-              <span className="text-sm text-prayer font-medium">🌿 {noSpendStreak} يوم بدون صرف</span>
-            )}
-          </div>
+          <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
         </div>
         <Button
           variant="secondary"
@@ -94,34 +97,52 @@ export default function FinancePage() {
         </div>
       )}
 
+      <DailyBudgetCard />
+
+      <BigCommitments transactions={byMonth} categories={categories} />
+
       <Card>
-        <FinanceSummary transactions={byMonth} />
+        <FinanceSummary transactions={byMonth} categories={categories} />
       </Card>
 
-      <FinancePace budgets={budgets} monthTransactions={byMonth} />
+      <FinancePace budgets={budgets} monthTransactions={byMonthRegular} />
 
-      <BudgetDisciplineScore transactions={transactions} monthTransactions={byMonth} budgets={budgets} />
+      <BudgetDisciplineScore
+        transactions={transactionsRegular}
+        monthTransactions={byMonth}
+        budgets={budgets}
+        dailyBudget={dailyBudget}
+      />
 
       <Card>
         <BudgetTracker monthPrefix={monthFilter} />
       </Card>
 
-      <UpcomingRecurring recurring={recurring} />
+      <UpcomingRecurring recurring={recurring} categories={categories} />
 
-      <button
-        onClick={() => setShowRecurring(true)}
-        className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors"
-      >
-        <Repeat size={16} className="text-finance" />
-        المصاريف المتكررة التلقائية
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setShowRecurring(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors"
+        >
+          <Repeat size={16} className="text-finance" />
+          المصاريف المتكررة
+        </button>
+        <button
+          onClick={() => setShowCategories(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors"
+        >
+          <Tags size={16} className="text-finance" />
+          تصنيفاتي
+        </button>
+      </div>
 
       <Card>
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-gray-700">سجل الشهر</span>
           <span className="text-xs text-gray-400">اضغط أي يوم للتفاصيل 👆</span>
         </div>
-        <SpendCalendar transactions={byMonth} onDayClick={setSelectedDay} />
+        <SpendCalendar transactions={byMonth} dailyBudget={dailyBudget} onDayClick={setSelectedDay} />
       </Card>
 
       {byMonth.length === 0 ? (
@@ -133,6 +154,7 @@ export default function FinancePage() {
       ) : (
         <TransactionList
           transactions={byMonth}
+          categories={categories}
           onDelete={deleteTransaction}
           onEdit={(tx) => setEditTx(tx)}
         />
@@ -163,6 +185,14 @@ export default function FinancePage() {
         title="المصاريف المتكررة 🔁"
       >
         <RecurringManager onClose={() => setShowRecurring(false)} />
+      </Modal>
+
+      <Modal
+        open={showCategories}
+        onClose={() => setShowCategories(false)}
+        title="تصنيفاتي"
+      >
+        <CategoryManager onClose={() => setShowCategories(false)} />
       </Modal>
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />

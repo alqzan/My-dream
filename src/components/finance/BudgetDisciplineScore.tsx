@@ -1,17 +1,18 @@
 "use client";
-import type { Transaction, Budget } from "@/lib/types";
-import { getNoSpendStreak } from "@/lib/utils";
+import type { Transaction, Budget, DailyBudget } from "@/lib/types";
+import { computeDailyBudgetStatus, formatAmount } from "@/lib/utils";
 
 interface BudgetDisciplineScoreProps {
-  transactions: Transaction[]; // all-time, for trend + no-spend streak
+  transactions: Transaction[]; // all-time, for trend + daily budget calc
   monthTransactions: Transaction[]; // current filtered month only
   budgets: Budget[];
+  dailyBudget: DailyBudget | null;
 }
 
-// A spending-discipline score (0-100) built entirely from expense data — no
-// income needed. Rewards staying under budget, no-spend days, and spending
-// less than last week.
-export function BudgetDisciplineScore({ transactions, monthTransactions, budgets }: BudgetDisciplineScoreProps) {
+// A spending-discipline score (0-100) built entirely from expense data —
+// staying under category budgets, staying under the daily allowance, and
+// spending less than last week.
+export function BudgetDisciplineScore({ transactions, monthTransactions, budgets, dailyBudget }: BudgetDisciplineScoreProps) {
   if (!transactions.length) return null;
 
   let budgetScore = 20; // neutral baseline when no budgets are set yet
@@ -44,8 +45,19 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
     else trendScore = 0;
   }
 
-  const noSpendStreak = getNoSpendStreak(transactions);
-  const score = Math.max(0, Math.min(100, budgetScore + noSpendScore(transactions) + trendScore));
+  let dailyScore = 15; // neutral baseline when no daily budget is set
+  let dailyRatioLabel = "—";
+  if (dailyBudget) {
+    const status = computeDailyBudgetStatus(dailyBudget, transactions);
+    const ratio = status.spent / Math.max(1, status.allowance);
+    if (ratio <= 0.8) dailyScore = 30;
+    else if (ratio <= 1) dailyScore = 20;
+    else if (ratio <= 1.2) dailyScore = 10;
+    else dailyScore = 0;
+    dailyRatioLabel = `${status.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(status.balance))}`;
+  }
+
+  const score = Math.max(0, Math.min(100, budgetScore + dailyScore + trendScore));
   const { label, color, bg, advice } = getInfo(score);
 
   return (
@@ -78,12 +90,12 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
 
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
-          <div className="text-xs text-gray-500">🔥 بدون صرف</div>
-          <div className="text-sm font-bold text-gray-800">{noSpendStreak} يوم</div>
-        </div>
-        <div>
           <div className="text-xs text-gray-500">ضمن الميزانية</div>
           <div className="text-sm font-bold text-gray-800">{budgets.length ? `${Math.round((budgetScore / 40) * 100)}%` : "—"}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">الرصيد اليومي</div>
+          <div className="text-sm font-bold text-gray-800">{dailyRatioLabel}</div>
         </div>
         <div>
           <div className="text-xs text-gray-500">مقابل الأسبوع الماضي</div>
@@ -96,15 +108,10 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
   );
 }
 
-function noSpendScore(transactions: Transaction[]): number {
-  // Reward a healthy no-spend streak, capped so it doesn't dominate the score.
-  return Math.min(30, getNoSpendStreak(transactions) * 3);
-}
-
 function getInfo(score: number) {
   if (score >= 80) return { label: "ممتاز 🌟", color: "#3d9640", bg: "bg-green-50", advice: "انضباط رائع في مصاريفك، استمر!" };
   if (score >= 65) return { label: "جيد جداً", color: "#4a9fbd", bg: "bg-blue-50", advice: "أداء جيد، حافظ على وتيرتك." };
   if (score >= 50) return { label: "متوسط", color: "#d4a017", bg: "bg-yellow-50", advice: "راقب مصاريف الكماليات أكثر شوي." };
-  if (score >= 35) return { label: "يحتاج تحسين", color: "#e07b39", bg: "bg-orange-50", advice: "مصاريفك تتسارع، جرّب يوم بدون صرف." };
+  if (score >= 35) return { label: "يحتاج تحسين", color: "#e07b39", bg: "bg-orange-50", advice: "مصاريفك تتسارع، راجع التصنيفات الكبيرة." };
   return { label: "خطر", color: "#e05555", bg: "bg-red-50", advice: "راجع ميزانياتك — الصرف يتجاوز الحدود." };
 }

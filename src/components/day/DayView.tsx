@@ -1,8 +1,8 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
-import { CATEGORY_LABELS, MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
-import { formatDate, formatAmount } from "@/lib/utils";
+import { MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { formatDate, formatAmount, getCategoryInfo } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BookOpen, Wallet, BookMarked, CheckCircle2 } from "lucide-react";
@@ -13,7 +13,7 @@ interface DayViewProps {
 }
 
 export function DayView({ date, onClose }: DayViewProps) {
-  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs } = useAppStore();
+  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories } = useAppStore();
 
   if (!date) return null;
 
@@ -130,7 +130,7 @@ export function DayView({ date, onClose }: DayViewProps) {
           >
             <div className="space-y-1.5">
               {day.transactions.map((tx) => {
-                const info = CATEGORY_LABELS[tx.category];
+                const info = getCategoryInfo(categories, tx.category);
                 return (
                   <div key={tx.id} className="flex items-center gap-2 text-sm">
                     <span>{info.icon}</span>

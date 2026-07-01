@@ -1,13 +1,12 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { RecurringTransaction, FinanceCategory, RecurringUnit } from "@/lib/types";
-import { CATEGORY_LABELS, RECURRING_PRESETS } from "@/lib/types";
-import { uid, today } from "@/lib/utils";
+import type { RecurringTransaction, RecurringUnit } from "@/lib/types";
+import { RECURRING_PRESETS } from "@/lib/types";
+import { uid, today, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Plus, Trash2, Power } from "lucide-react";
+import { Plus, Trash2, Power, Gem } from "lucide-react";
 
-const EXPENSE_CATS: FinanceCategory[] = ["إيجار", "مواصلات", "طعام", "صحة", "تعليم", "كمالي", "سفر", "ادخار", "استثمار", "أخرى"];
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 export function describeFrequency(unit: RecurringUnit, every: number): string {
@@ -18,15 +17,16 @@ export function describeFrequency(unit: RecurringUnit, every: number): string {
 }
 
 export function RecurringManager({ onClose }: { onClose: () => void }) {
-  const { recurring, addRecurring, deleteRecurring, updateRecurring, runRecurring } = useAppStore();
+  const { categories, recurring, addRecurring, deleteRecurring, updateRecurring, runRecurring } = useAppStore();
   const [adding, setAdding] = useState(false);
-  const [category, setCategory] = useState<FinanceCategory>("إيجار");
+  const [category, setCategory] = useState<string>(categories[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [unit, setUnit] = useState<RecurringUnit>("شهري");
   const [every, setEvery] = useState(1);
   const [customEvery, setCustomEvery] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState(1); // day-of-month (شهري) or weekday index (أسبوعي)
+  const [big, setBig] = useState(false);
 
   function handleAdd() {
     const parsed = parseFloat(amount);
@@ -41,12 +41,13 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
       dayOfMonth,
       anchorDate: today(),
       active: true,
+      big,
     };
     addRecurring(r);
     // Immediately generate any due instance
     setTimeout(() => runRecurring(), 0);
     setAdding(false);
-    setAmount(""); setNote("");
+    setAmount(""); setNote(""); setBig(false);
   }
 
   return (
@@ -61,12 +62,15 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
           <p className="text-center text-sm text-gray-400 py-4">لا توجد مصاريف متكررة</p>
         )}
         {recurring.map((r) => {
-          const info = CATEGORY_LABELS[r.category];
+          const info = getCategoryInfo(categories, r.category);
           return (
             <div key={r.id} className={`flex items-center gap-2 rounded-xl p-3 border ${r.active ? "bg-white border-gray-100" : "bg-gray-50 border-gray-100 opacity-60"}`}>
               <span className="text-lg">{info.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</div>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</div>
+                  {r.big && <Gem size={11} className="text-brand-600 shrink-0" />}
+                </div>
                 <div className="text-[11px] text-gray-400">
                   {describeFrequency(r.unit, r.every)} · {info.label}
                 </div>
@@ -93,19 +97,16 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
       {adding ? (
         <div className="bg-gray-50 rounded-xl p-3 space-y-3">
           <div className="grid grid-cols-3 gap-1.5">
-            {EXPENSE_CATS.map((cat) => {
-              const info = CATEGORY_LABELS[cat];
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  className={`flex flex-col items-center gap-0.5 py-1.5 rounded-lg border text-[11px] ${category === cat ? "border-finance bg-finance/5 text-finance" : "border-gray-200 text-gray-500"}`}
-                >
-                  <span className="text-base">{info.icon}</span>
-                  {info.label}
-                </button>
-              );
-            })}
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setCategory(cat.id)}
+                className={`flex flex-col items-center gap-0.5 py-1.5 rounded-lg border text-[11px] ${category === cat.id ? "border-finance bg-finance/5 text-finance" : "border-gray-200 text-gray-500"}`}
+              >
+                <span className="text-base">{cat.icon}</span>
+                {cat.label}
+              </button>
+            ))}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -200,6 +201,18 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
               />
             </div>
           )}
+
+          <label className="flex items-center gap-2.5 bg-amber-50 rounded-xl p-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={big}
+              onChange={(e) => setBig(e.target.checked)}
+              className="w-4 h-4 accent-brand-600"
+            />
+            <span className="text-[11px] text-amber-700 leading-relaxed">
+              <strong>التزام كبير</strong> (إيجار مرتفع...) — ما يأثر على ميزانيتك اليومية
+            </span>
+          </label>
 
           <div className="flex gap-2">
             <Button onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90" size="sm">حفظ</Button>

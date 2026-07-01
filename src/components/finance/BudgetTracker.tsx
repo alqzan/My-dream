@@ -1,12 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { FinanceCategory } from "@/lib/types";
-import { CATEGORY_LABELS } from "@/lib/types";
-import { formatAmount } from "@/lib/utils";
+import { formatAmount, getCategoryInfo } from "@/lib/utils";
 import { Plus, X } from "lucide-react";
-
-const BUDGETABLE: FinanceCategory[] = ["طعام", "مواصلات", "كمالي", "سفر", "صحة", "تعليم", "أخرى"];
 
 interface BudgetTrackerProps {
   monthPrefix: string; // YYYY-MM
@@ -16,12 +12,12 @@ interface BudgetTrackerProps {
 // empty and glowing gold when you're safe, amber as you approach the cap,
 // red once it overflows past the rim.
 export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
-  const { budgets, transactions, setBudget, removeBudget } = useAppStore();
+  const { categories, budgets, transactions, setBudget, removeBudget } = useAppStore();
   const [adding, setAdding] = useState(false);
-  const [cat, setCat] = useState<FinanceCategory>("طعام");
+  const [cat, setCat] = useState<string>(categories[0]?.id ?? "");
   const [limit, setLimit] = useState("");
 
-  const spentByCategory = (category: FinanceCategory) =>
+  const spentByCategory = (category: string) =>
     transactions
       .filter((t) => t.category === category && t.date.startsWith(monthPrefix))
       .reduce((s, t) => s + t.amount, 0);
@@ -34,7 +30,7 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
     setLimit("");
   }
 
-  const availableCats = BUDGETABLE.filter((c) => !budgets.some((b) => b.category === c));
+  const availableCats = categories.filter((c) => !budgets.some((b) => b.category === c.id));
   const anyOver = budgets.some((b) => spentByCategory(b.category) > b.limit);
 
   return (
@@ -42,7 +38,7 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">ميزانية الشهر</span>
         {availableCats.length > 0 && (
-          <button onClick={() => { setAdding(!adding); setCat(availableCats[0]); }} className="text-finance p-1">
+          <button onClick={() => { setAdding(!adding); setCat(availableCats[0].id); }} className="text-finance p-1">
             <Plus size={16} />
           </button>
         )}
@@ -58,11 +54,11 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
         <div className="bg-gray-50 rounded-xl p-3 space-y-2">
           <div className="flex gap-2">
             <select
-              value={cat} onChange={(e) => setCat(e.target.value as FinanceCategory)}
+              value={cat} onChange={(e) => setCat(e.target.value)}
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-finance/40"
             >
               {availableCats.map((c) => (
-                <option key={c} value={c}>{CATEGORY_LABELS[c].icon} {CATEGORY_LABELS[c].label}</option>
+                <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
               ))}
             </select>
             <input
@@ -84,7 +80,7 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
             const pct = Math.min((spent / b.limit) * 100, 100);
             const over = spent > b.limit;
             const near = !over && pct >= 80;
-            const info = CATEGORY_LABELS[b.category];
+            const info = getCategoryInfo(categories, b.category);
             const fillColor = over ? "#e05555" : near ? "#e07b39" : "#dc9f3c";
 
             return (
