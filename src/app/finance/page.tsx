@@ -13,14 +13,16 @@ import { RecurringManager } from "@/components/finance/RecurringManager";
 import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { CategoryManager } from "@/components/finance/CategoryManager";
+import { ReserveFunds } from "@/components/finance/ReserveFunds";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
+import Link from "next/link";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat, Tags } from "lucide-react";
+import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft } from "lucide-react";
 
 export default function FinancePage() {
   const { transactions, budgets, recurring, categories, dailyBudget, deleteTransaction, runRecurring } = useAppStore();
@@ -100,9 +102,30 @@ export default function FinancePage() {
         </div>
       )}
 
+      <Link href="/finance/insights" className="block animate-fade-up">
+        <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+                <TrendingDown size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-bold">متابعة الصرف</p>
+                <p className="text-xs opacity-80 mt-0.5">أسبوعي · شهري · سنوي — أرقامك وتحليلك التلقائي</p>
+              </div>
+            </div>
+            <ChevronLeft size={18} className="opacity-70" />
+          </div>
+        </div>
+      </Link>
+
       <div className="animate-fade-up stagger-1">
         <DailyBudgetCard />
       </div>
+
+      <Card className="animate-fade-up stagger-1">
+        <ReserveFunds />
+      </Card>
 
       <BigCommitments transactions={byMonth} categories={categories} />
 

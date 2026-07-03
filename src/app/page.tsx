@@ -13,23 +13,28 @@ import {
   formatDate,
   hijriDate,
   yearProgress,
-  getPrayerStreak,
 } from "@/lib/utils";
-import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
-import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
+import { DailyPulse } from "@/components/dashboard/DailyPulse";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
 import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
-import { MoodSpendingInsight } from "@/components/dashboard/MoodSpendingInsight";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Confetti } from "@/components/ui/Confetti";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import Link from "next/link";
-import { ChevronLeft, BookMarked, Wallet, BookOpen, BarChart3 } from "lucide-react";
+import { ChevronLeft, BarChart3, TrendingDown } from "lucide-react";
 
+// Dashboard layout, top to bottom — one card per idea, nothing repeated:
+//   1. التحية والتاريخ (هجري + ميلادي) + مدار السنة
+//   2. صلوات اليوم
+//   3. بطاقة اليوم الموحّدة (السلسلة + المهام الثلاث بروابطها)
+//   4. عاداتي
+//   5. حصيلة الأسبوع
+//   6. تقويم السلسلة
+//   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, dailyBudget, runRecurring } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, dailyBudget, runRecurring } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
 
@@ -42,7 +47,6 @@ export default function Dashboard() {
   const journalStreak = getJournalStreak(journalEntries);
   const readingStreak = getReadingStreak(readingLogs);
   const financeStreak = getFinanceStreak(transactions);
-  const prayerStreak = getPrayerStreak(prayerLogs);
   const completionDates = getDailyCompletionDates(journalEntries, readingLogs, transactions);
   const masterStreak = calcStreak(completionDates);
 
@@ -61,11 +65,10 @@ export default function Dashboard() {
   }, [allDoneToday, todayStr]);
 
   const currentBook = books.find((b) => b.status === "أقرأ");
-  const recentEntry = journalEntries[0];
+  const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
   const thisMonthExpense = transactions
     .filter((t) => t.date.startsWith(todayStr.slice(0, 7)))
     .reduce((s, t) => s + t.amount, 0);
-  const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
 
   const yearPct = yearProgress();
 
@@ -88,23 +91,44 @@ export default function Dashboard() {
         <PrayerOrbit />
       </Card>
 
-      <div className="animate-fade-up stagger-1">
-        <DailyStreakBanner
+      <div className="animate-fade-up stagger-2">
+        <DailyPulse
           masterStreak={masterStreak}
-          journalStreak={journalStreak}
-          readingStreak={readingStreak}
-          financeStreak={financeStreak}
-          prayerStreak={prayerStreak}
+          rows={[
+            {
+              href: "/journal",
+              icon: "📓",
+              label: "مذكرة اليوم",
+              sub: hasTodayJournal ? "كتبتها — عوّد على المزيد" : "اكتب الآن",
+              done: hasTodayJournal,
+              streak: journalStreak,
+              color: "#8a6fb0",
+            },
+            {
+              href: "/finance",
+              icon: "💰",
+              label: "سجّل مصروفك",
+              sub: dailyStatus
+                ? `رصيدك اليومي ${dailyStatus.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(dailyStatus.balance))} ر.س`
+                : thisMonthExpense > 0
+                ? `${formatAmount(thisMonthExpense)} ر.س هذا الشهر`
+                : "سجّل أول مصروف",
+              done: hasTodayFinance,
+              streak: financeStreak,
+              color: "#3d9640",
+            },
+            {
+              href: "/reading",
+              icon: "📚",
+              label: "اقرأ شيئاً",
+              sub: currentBook ? currentBook.title : "أضف كتاباً",
+              done: hasTodayReading,
+              streak: readingStreak,
+              color: "#c1663f",
+            },
+          ]}
         />
       </div>
-
-      <Card className="animate-fade-up stagger-2">
-        <DailyCompletion
-          hasTodayJournal={hasTodayJournal}
-          hasTodayFinance={hasTodayFinance}
-          hasTodayReading={hasTodayReading}
-        />
-      </Card>
 
       <Card className="animate-fade-up stagger-3">
         <HabitTracker />
@@ -119,38 +143,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-up stagger-5">
-        <QuickLink
-          href="/journal"
-          icon={<BookMarked size={20} />}
-          label="مذكرة اليوم"
-          sub={hasTodayJournal ? "كتبتها ✓" : "اكتب الآن"}
-          color="journal"
-          done={hasTodayJournal}
-        />
-        <QuickLink
-          href="/finance"
-          icon={<Wallet size={20} />}
-          label="سجّل مصروف"
-          sub={dailyStatus
-            ? `${dailyStatus.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(dailyStatus.balance))} ر.س يومياً`
-            : thisMonthExpense > 0
-            ? `${thisMonthExpense.toLocaleString()} ر.س هذا الشهر`
-            : "سجّل أول مصروف"}
-          color="finance"
-          done={hasTodayFinance}
-        />
-        <QuickLink
-          href="/reading"
-          icon={<BookOpen size={20} />}
-          label="القراءة"
-          sub={currentBook ? currentBook.title : "أضف كتاباً"}
-          color="reading"
-          done={hasTodayReading}
-        />
-      </div>
-
-      <Card className="animate-fade-up stagger-6">
+      <Card className="animate-fade-up stagger-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-gray-700">سلسلة يومية — الأيام الثلاثة</span>
           <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
@@ -158,66 +151,28 @@ export default function Dashboard() {
         <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />
       </Card>
 
-      <Link href="/stats" className="block animate-fade-up stagger-7">
-        <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#5c3d21] to-[#8a5a24] card-shadow press shine">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
-                <BarChart3 size={20} />
-              </div>
-              <div>
-                <p className="text-sm font-bold">إحصائياتك الكاملة</p>
-                <p className="text-xs opacity-80 mt-0.5">خريطة سنتك، أرقامك القياسية، ومزاجك</p>
-              </div>
+      <div className="grid grid-cols-2 gap-3 animate-fade-up stagger-6">
+        <Link href="/finance/insights" className="block">
+          <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine h-full">
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
+              <TrendingDown size={18} />
             </div>
-            <ChevronLeft size={18} className="opacity-70" />
+            <p className="text-sm font-bold">متابعة الصرف</p>
+            <p className="text-[11px] opacity-80 mt-0.5">أسبوعي · شهري · سنوي</p>
+            <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
           </div>
-        </div>
-      </Link>
-
-      {recentEntry && (
-        <Card className="animate-fade-up stagger-8">
-          <Link href="/journal" className="block">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-700">آخر مذكرة</span>
-              <ChevronLeft size={16} className="text-gray-400" />
+        </Link>
+        <Link href="/stats" className="block">
+          <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#5c3d21] to-[#8a5a24] card-shadow press shine h-full">
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
+              <BarChart3 size={18} />
             </div>
-            <p className="text-xs text-gray-400 mb-1">{formatDate(recentEntry.date)}</p>
-            <p className="text-sm text-gray-600 line-clamp-3 leading-relaxed">
-              {recentEntry.content}
-            </p>
-          </Link>
-        </Card>
-      )}
-
-      {thisMonthExpense > 0 && (
-        <Card className="animate-fade-up stagger-8">
-          <Link href="/finance" className="block">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-gray-700">هذا الشهر</span>
-              <ChevronLeft size={16} className="text-gray-400" />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1 bg-red-50 rounded-xl p-3 text-center">
-                <div className="text-xs text-gray-500">مصاريف</div>
-                <div className="text-base font-bold text-red-500">
-                  {thisMonthExpense.toLocaleString("ar-SA")} <span className="text-xs font-normal">ر.س</span>
-                </div>
-              </div>
-              {dailyStatus && (
-                <div className={`flex-1 rounded-xl p-3 text-center ${dailyStatus.balance >= 0 ? "bg-prayer/5" : "bg-red-50"}`}>
-                  <div className="text-xs text-gray-500">الرصيد اليومي</div>
-                  <div className={`text-base font-bold ${dailyStatus.balance >= 0 ? "text-prayer" : "text-red-500"}`}>
-                    {dailyStatus.balance >= 0 ? "+" : "-"}{formatAmount(Math.abs(dailyStatus.balance))} <span className="text-xs font-normal">ر.س</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Link>
-        </Card>
-      )}
-
-      <MoodSpendingInsight journalEntries={journalEntries} transactions={transactions} />
+            <p className="text-sm font-bold">إحصائياتك الكاملة</p>
+            <p className="text-[11px] opacity-80 mt-0.5">خريطة سنتك ومزاجك</p>
+            <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
+          </div>
+        </Link>
+      </div>
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
     </div>
@@ -285,37 +240,5 @@ function YearOrbit({ pct }: { pct: number }) {
         <span className="text-[9px] text-gray-400 mt-0.5">من العام</span>
       </div>
     </div>
-  );
-}
-
-function QuickLink({
-  href, icon, label, sub, color, done,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  sub: string;
-  color: "journal" | "finance" | "reading";
-  done?: boolean;
-}) {
-  const colors = {
-    journal: { bg: "bg-journal/10", text: "text-journal", border: "border-journal/30" },
-    finance: { bg: "bg-finance/10", text: "text-finance", border: "border-finance/30" },
-    reading: { bg: "bg-reading/10", text: "text-reading", border: "border-reading/30" },
-  };
-  const c = colors[color];
-
-  return (
-    <Link href={href}>
-      <div
-        className={`rounded-2xl p-4 border press card-shadow ${done ? c.border + " " + c.bg : "border-gray-100 bg-white"} hover:shadow-lg transition-shadow`}
-      >
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${c.bg}`}>
-          <span className={c.text}>{icon}</span>
-        </div>
-        <p className={`text-sm font-bold ${done ? c.text : "text-gray-800"}`}>{label}</p>
-        <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>
-      </div>
-    </Link>
   );
 }

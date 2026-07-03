@@ -1,7 +1,7 @@
 "use client";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
-import { formatDate, formatAmount, getCategoryInfo } from "@/lib/utils";
-import { Trash2, Gem } from "lucide-react";
+import { formatDate, formatAmount, getCategoryInfo, getMainCategory } from "@/lib/utils";
+import { Trash2, Gem, PiggyBank } from "lucide-react";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -26,6 +26,9 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
     <div className="space-y-2">
       {shown.map((tx) => {
         const info = getCategoryInfo(categories, tx.category);
+        const main = getMainCategory(categories, tx.category);
+        const isSub = main.id !== info.id;
+        const reservedPct = tx.reserveSplits?.reduce((s, sp) => s + sp.pct, 0) ?? 0;
         return (
           <div
             key={tx.id}
@@ -42,10 +45,24 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <div className="text-sm font-semibold text-gray-800 truncate">{info.label}</div>
+                <div className="text-sm font-semibold text-gray-800 truncate">
+                  {isSub ? (
+                    <>
+                      <span className="text-gray-400 font-normal">{main.label} · </span>
+                      {info.label}
+                    </>
+                  ) : (
+                    info.label
+                  )}
+                </div>
                 {tx.big && (
                   <span className="flex items-center gap-0.5 text-[10px] font-semibold text-brand-700 bg-brand-100 px-1.5 py-0.5 rounded-full shrink-0">
                     <Gem size={9} /> التزام كبير
+                  </span>
+                )}
+                {reservedPct > 0 && (
+                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-prayer bg-prayer/10 px-1.5 py-0.5 rounded-full shrink-0">
+                    <PiggyBank size={9} /> {reservedPct}% احتياطي
                   </span>
                 )}
               </div>

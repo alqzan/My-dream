@@ -97,7 +97,7 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
       {adding ? (
         <div className="bg-gray-50 rounded-xl p-3 space-y-3">
           <div className="grid grid-cols-3 gap-1.5">
-            {categories.map((cat) => (
+            {categories.filter((c) => !c.parentId).map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setCategory(cat.id)}

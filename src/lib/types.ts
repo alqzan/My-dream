@@ -2,11 +2,14 @@
 // way habits are — not a fixed list. Transactions/recurring rules/budgets
 // reference a category by id; DEFAULT_CATEGORIES below just seeds new
 // accounts with a starting set.
+// Two levels: a main category (no parentId) and its sub-categories
+// (parentId = the main category's id). Totals/budgets roll up to the main.
 export interface FinanceCategoryDef {
   id: string;
   label: string;
   icon: string;
   color: string;
+  parentId?: string;
 }
 
 export const DEFAULT_CATEGORIES: FinanceCategoryDef[] = [
@@ -21,6 +24,16 @@ export const DEFAULT_CATEGORIES: FinanceCategoryDef[] = [
 // of crashing or silently dropping the entry.
 export const UNKNOWN_CATEGORY: FinanceCategoryDef = { id: "", label: "غير مصنف", icon: "📌", color: "#888" };
 
+// How an expense is funded. By default 100% comes out of the daily
+// cumulative budget; `reserveSplits` moves part (or all) of it onto one or
+// more reserve funds instead — e.g. a gift paid 50% from the daily budget
+// and 50% from the الاحتياطي envelope. The percentages here are the reserve
+// shares; whatever remains up to 100% is the daily-budget share.
+export interface ReserveSplit {
+  fundId: string; // ReserveFund id
+  pct: number; // 1-100
+}
+
 export interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD
@@ -33,6 +46,30 @@ export interface Transaction {
   // toward category totals/budgets, but is excluded from that calculation
   // and shown with its own treatment instead.
   big?: boolean;
+  reserveSplits?: ReserveSplit[];
+}
+
+// ===================== Reserve funds (الاحتياطي) =====================
+
+// A labeled envelope of money set aside for a purpose (rent, a trip, ...).
+// Deposits top it up; expenses charged to it via reserveSplits drain it.
+// Its live balance is always derived: sum(deposits) − sum(charged shares),
+// so editing/deleting a transaction can never desync the fund.
+export interface ReserveDeposit {
+  id: string;
+  date: string; // YYYY-MM-DD
+  amount: number; // positive = تعبئة, negative = سحب يدوي
+  note?: string;
+}
+
+export interface ReserveFund {
+  id: string;
+  name: string; // e.g. "الإيجار", "سفرة الصيف"
+  icon: string; // any emoji
+  color: string;
+  target?: number; // optional goal amount for the envelope
+  deposits: ReserveDeposit[];
+  createdAt: string; // YYYY-MM-DD
 }
 
 export interface Book {
@@ -160,6 +197,7 @@ export interface AppData {
   recurring: RecurringTransaction[];
   budgets: Budget[];
   categories: FinanceCategoryDef[];
+  reserves: ReserveFund[];
   prayerLogs: PrayerLog[];
   dailyBudget: DailyBudget | null;
   lastUpdated: string;

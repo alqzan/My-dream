@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
+  ReserveFund, ReserveDeposit,
 } from "./types";
 import { DEFAULT_CATEGORIES } from "./types";
 import { uid, today, mostRecentDueDate } from "./utils";
@@ -35,6 +36,13 @@ interface AppStore extends AppData {
   updateCategory: (id: string, updates: Partial<FinanceCategoryDef>) => void;
   deleteCategory: (id: string) => void;
 
+  // Reserve funds (الاحتياطي)
+  addReserve: (fund: ReserveFund) => void;
+  updateReserve: (id: string, updates: Partial<ReserveFund>) => void;
+  deleteReserve: (id: string) => void;
+  addReserveDeposit: (fundId: string, deposit: ReserveDeposit) => void;
+  deleteReserveDeposit: (fundId: string, depositId: string) => void;
+
   // Daily cumulative budget
   setDailyBudget: (amount: number) => void;
   removeDailyBudget: () => void;
@@ -59,8 +67,9 @@ interface AppStore extends AppData {
   hydrate: (data: Partial<AppData>) => void;
   snapshot: () => AppData;
 
-  // Theme (device-local)
-  theme: "light" | "dark";
+  // Theme (device-local). "auto" follows the sun: dark from المغرب
+  // (sunset) until sunrise, light through the day.
+  theme: "light" | "dark" | "auto";
   toggleTheme: () => void;
 }
 
@@ -79,13 +88,17 @@ export const useAppStore = create<AppStore>()(
       recurring: [],
       budgets: [],
       categories: DEFAULT_CATEGORIES,
+      reserves: [],
       prayerLogs: [],
       dailyBudget: null,
-      theme: "light",
+      theme: "auto",
       lastUpdated: new Date().toISOString(),
 
+      // Cycles auto → light → dark → auto.
       toggleTheme: () =>
-        set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+        set((s) => ({
+          theme: s.theme === "auto" ? "light" : s.theme === "light" ? "dark" : "auto",
+        })),
 
       addJournalEntry: (entry) =>
         set((s) => ({ journalEntries: [entry, ...s.journalEntries] })),
@@ -200,11 +213,48 @@ export const useAppStore = create<AppStore>()(
 
       deleteCategory: (id) =>
         set((s) => ({
-          categories: s.categories.filter((c) => c.id !== id),
+          // Deleting a main category takes its sub-categories with it.
+          categories: s.categories.filter((c) => c.id !== id && c.parentId !== id),
           // A budget cap for a category that no longer exists is meaningless —
           // the transactions/recurring rules themselves are kept (history is
           // never deleted), they'll just show as "غير مصنف".
           budgets: s.budgets.filter((b) => b.category !== id),
+        })),
+
+      addReserve: (fund) =>
+        set((s) => ({ reserves: [...s.reserves, fund] })),
+
+      updateReserve: (id, updates) =>
+        set((s) => ({
+          reserves: s.reserves.map((f) => (f.id === id ? { ...f, ...updates } : f)),
+        })),
+
+      deleteReserve: (id) =>
+        set((s) => ({
+          reserves: s.reserves.filter((f) => f.id !== id),
+          // Splits pointing at a deleted fund would silently re-charge those
+          // amounts nowhere; fold them back into the daily budget instead.
+          transactions: s.transactions.map((t) =>
+            t.reserveSplits?.some((sp) => sp.fundId === id)
+              ? { ...t, reserveSplits: t.reserveSplits.filter((sp) => sp.fundId !== id) }
+              : t
+          ),
+        })),
+
+      addReserveDeposit: (fundId, deposit) =>
+        set((s) => ({
+          reserves: s.reserves.map((f) =>
+            f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
+          ),
+        })),
+
+      deleteReserveDeposit: (fundId, depositId) =>
+        set((s) => ({
+          reserves: s.reserves.map((f) =>
+            f.id === fundId
+              ? { ...f, deposits: f.deposits.filter((d) => d.id !== depositId) }
+              : f
+          ),
         })),
 
       setDailyBudget: (amount) =>
@@ -288,6 +338,7 @@ export const useAppStore = create<AppStore>()(
           recurring: data.recurring ?? [],
           budgets: data.budgets ?? [],
           categories: data.categories ?? DEFAULT_CATEGORIES,
+          reserves: data.reserves ?? [],
           prayerLogs: data.prayerLogs ?? [],
           dailyBudget: data.dailyBudget ?? null,
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
@@ -304,6 +355,7 @@ export const useAppStore = create<AppStore>()(
           recurring: s.recurring,
           budgets: s.budgets,
           categories: s.categories,
+          reserves: s.reserves,
           prayerLogs: s.prayerLogs,
           dailyBudget: s.dailyBudget,
           lastUpdated: s.lastUpdated,
@@ -312,7 +364,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "my-dream-store",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -384,6 +436,17 @@ export const useAppStore = create<AppStore>()(
             budgets,
             categories: state.categories ?? DEFAULT_CATEGORIES,
             dailyBudget: state.dailyBudget ?? null,
+          };
+        }
+
+        // v4 adds reserve funds (الاحتياطي) and the "auto" theme mode.
+        // Everyone lands on auto once — the mode didn't exist before, so a
+        // stored "light" was the old default, not a choice.
+        if (version < 4) {
+          state = {
+            ...state,
+            reserves: state.reserves ?? [],
+            theme: "auto",
           };
         }
 

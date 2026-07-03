@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, hijriMonthLabel, hijriDay } from "@/lib/utils";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
 interface StreakCalendarProps {
@@ -36,9 +36,12 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: S
         <button onClick={next} className="p-1.5 hover:bg-gray-100 rounded-full">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
-        <span className="text-sm font-semibold text-gray-700">
-          {arabicMonthName(month)} {year}
-        </span>
+        <div className="text-center">
+          <span className="block text-sm font-semibold text-gray-700">
+            {arabicMonthName(month)} {year}
+          </span>
+          <span className="block text-[10px] text-gray-400 mt-0.5">{hijriMonthLabel(year, month)}</span>
+        </div>
         <button onClick={prev} className="p-1.5 hover:bg-gray-100 rounded-full">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
@@ -59,7 +62,7 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: S
               key={date}
               onClick={() => onDayClick?.(date)}
               disabled={!onDayClick}
-              className={`aspect-square flex items-center justify-center rounded-full text-xs font-medium transition-colors ${
+              className={`aspect-square flex flex-col items-center justify-center rounded-2xl text-xs font-medium leading-none transition-colors ${
                 onDayClick ? "hover:ring-2 hover:ring-offset-1 cursor-pointer" : ""
               }`}
               style={
@@ -70,7 +73,10 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: S
                   : {}
               }
             >
-              {new Date(date).getDate()}
+              <span>{new Date(date).getDate()}</span>
+              <span className={`text-[8px] mt-0.5 ${isMarked ? "text-white/70" : "text-gray-400"}`}>
+                {hijriDay(date)}
+              </span>
             </button>
           );
         })}

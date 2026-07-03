@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName, formatAmount } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay } from "@/lib/utils";
 import type { Transaction, DailyBudget } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
@@ -41,7 +41,10 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
         <button onClick={next} className="p-1.5 hover:bg-gray-100 rounded-full">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
-        <span className="text-sm font-semibold text-gray-700">{arabicMonthName(month)} {year}</span>
+        <div className="text-center">
+          <span className="block text-sm font-semibold text-gray-700">{arabicMonthName(month)} {year}</span>
+          <span className="block text-[10px] text-gray-400 mt-0.5">{hijriMonthLabel(year, month)}</span>
+        </div>
         <button onClick={prev} className="p-1.5 hover:bg-gray-100 rounded-full">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
@@ -77,8 +80,11 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
                   title={`${formatAmount(spent)} ر.س`}
                 />
               )}
-              <span className={`text-[10px] font-medium ${isFuture ? "text-gray-300" : "text-gray-600"}`}>
+              <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-300" : "text-gray-600"}`}>
                 {new Date(date).getDate()}
+              </span>
+              <span className={`text-[7px] leading-none ${isFuture ? "text-gray-200" : "text-gray-400"}`}>
+                {hijriDay(date)}
               </span>
             </button>
           );

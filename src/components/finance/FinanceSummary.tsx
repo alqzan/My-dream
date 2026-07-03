@@ -1,6 +1,6 @@
 "use client";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
-import { formatAmount, getCategoryInfo } from "@/lib/utils";
+import { formatAmount, getMainCategory } from "@/lib/utils";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 interface FinanceSummaryProps {
@@ -11,15 +11,17 @@ interface FinanceSummaryProps {
 export function FinanceSummary({ transactions, categories }: FinanceSummaryProps) {
   const totalExpense = transactions.reduce((s, t) => s + t.amount, 0);
 
+  // Sub-categories roll up to their main — the pie stays at the main level.
   const expenseByCategory = transactions
     .reduce<Record<string, number>>((acc, t) => {
-      acc[t.category] = (acc[t.category] || 0) + t.amount;
+      const mainId = getMainCategory(categories, t.category).id;
+      acc[mainId] = (acc[mainId] || 0) + t.amount;
       return acc;
     }, {});
 
   const pieData = Object.entries(expenseByCategory)
     .map(([cat, amount]) => {
-      const info = getCategoryInfo(categories, cat);
+      const info = getMainCategory(categories, cat);
       return { name: info.label, value: amount, color: info.color };
     })
     .sort((a, b) => b.value - a.value);

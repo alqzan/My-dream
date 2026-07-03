@@ -15,6 +15,19 @@ const COLORS = [
   "#c94f6d", // rose
 ];
 
+// First full emoji (grapheme cluster) of a string — so a flag, a skin-tone
+// variant, or any composed emoji is kept whole instead of split into
+// surrogate halves.
+function firstGrapheme(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    for (const s of seg.segment(trimmed)) return s.segment;
+  }
+  return [...trimmed][0] ?? "";
+}
+
 // Last 7 days, oldest first (renders oldest on the right in RTL).
 function last7Days(): string[] {
   const days: string[] = [];
@@ -126,6 +139,24 @@ export function HabitTracker() {
 
       {showAdd && (
         <div className="bg-gray-50 rounded-xl p-3 space-y-2.5 animate-fade-up">
+          <div className="flex items-center gap-2">
+            <span className="w-11 h-11 shrink-0 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-2xl">
+              {newIcon}
+            </span>
+            <div className="flex-1">
+              <input
+                value=""
+                onChange={(e) => {
+                  const emoji = firstGrapheme(e.target.value);
+                  if (emoji) setNewIcon(emoji);
+                }}
+                placeholder="اكتب أي إيموجي تبيه ✍️"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                aria-label="إيموجي العادة"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">من كيبورد الإيموجي — أو اختر من المقترحات:</p>
+            </div>
+          </div>
           <div className="flex gap-1 flex-wrap">
             {ICONS.map((ic) => (
               <button

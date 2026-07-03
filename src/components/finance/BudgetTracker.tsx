@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { formatAmount, getCategoryInfo } from "@/lib/utils";
+import { formatAmount, getCategoryInfo, getMainCategory } from "@/lib/utils";
 import { Plus, X } from "lucide-react";
 
 interface BudgetTrackerProps {
@@ -17,9 +17,10 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
   const [cat, setCat] = useState<string>(categories[0]?.id ?? "");
   const [limit, setLimit] = useState("");
 
+  // A budget cap sits on a main category; spending in its subs counts too.
   const spentByCategory = (category: string) =>
     transactions
-      .filter((t) => t.category === category && t.date.startsWith(monthPrefix))
+      .filter((t) => getMainCategory(categories, t.category).id === category && t.date.startsWith(monthPrefix))
       .reduce((s, t) => s + t.amount, 0);
 
   function handleAdd() {
@@ -30,7 +31,7 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
     setLimit("");
   }
 
-  const availableCats = categories.filter((c) => !budgets.some((b) => b.category === c.id));
+  const availableCats = categories.filter((c) => !c.parentId && !budgets.some((b) => b.category === c.id));
   const anyOver = budgets.some((b) => spentByCategory(b.category) > b.limit);
 
   return (
