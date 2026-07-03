@@ -12,7 +12,7 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onClose, initial }: TransactionFormProps) {
-  const { categories, reserves, transactions, addTransaction, updateTransaction } = useAppStore();
+  const { categories, reserves, transactions, addTransaction, updateTransaction, addCategory } = useAppStore();
   const mains = categories.filter((c) => !c.parentId);
 
   // If editing a transaction whose category is a sub, pre-select its parent
@@ -27,7 +27,10 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const [date, setDate] = useState(initial?.date ?? today());
   const [big, setBig] = useState(initial?.big ?? false);
   const [splits, setSplits] = useState<ReserveSplit[]>(initial?.reserveSplits ?? []);
+  const [addingSub, setAddingSub] = useState(false);
+  const [newSubName, setNewSubName] = useState("");
 
+  const selectedMain = categories.find((c) => c.id === mainCat);
   const subs = getSubCategories(categories, mainCat);
   const parsedAmount = parseFloat(amount) || 0;
   const reservedPct = Math.min(100, splits.reduce((s, sp) => s + sp.pct, 0));
@@ -45,6 +48,18 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       const clamped = Math.max(0, Math.min(pct, 100 - othersPct));
       return clamped === 0 ? others : [...others, { fundId, pct: clamped }];
     });
+  }
+
+  // Create a sub-category inline (under the selected main) and pick it
+  // right away — no detour through "تصنيفاتي".
+  function handleAddSub() {
+    const label = newSubName.trim();
+    if (!label || !selectedMain) return;
+    const id = uid();
+    addCategory({ id, label, icon: selectedMain.icon, color: selectedMain.color, parentId: selectedMain.id });
+    setSubCat(id);
+    setNewSubName("");
+    setAddingSub(false);
   }
 
   function handleSave() {
@@ -88,7 +103,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           {mains.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setMainCat(cat.id); setSubCat(""); }}
+              onClick={() => { setMainCat(cat.id); setSubCat(""); setAddingSub(false); }}
               className={`flex flex-col items-center gap-1 py-2 px-2 rounded-xl border text-xs transition-colors ${
                 mainCat === cat.id
                   ? "border-finance bg-finance/5 text-finance font-semibold"
@@ -101,10 +116,10 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           ))}
         </div>
 
-        {subs.length > 0 && (
+        {selectedMain?.allowSubs && (
           <div className="mt-2 bg-gray-50 rounded-xl p-2 animate-fade-up">
             <div className="text-[10px] font-medium text-gray-400 mb-1.5">القسم الفرعي (اختياري)</div>
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="flex gap-1.5 flex-wrap items-center">
               <button
                 onClick={() => setSubCat("")}
                 className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
@@ -124,7 +139,39 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
                   {sub.icon} {sub.label}
                 </button>
               ))}
+              {!addingSub && (
+                <button
+                  onClick={() => setAddingSub(true)}
+                  className="text-[11px] px-2.5 py-1 rounded-full border border-dashed border-finance/50 text-finance bg-white font-semibold"
+                >
+                  + فرعي جديد
+                </button>
+              )}
             </div>
+            {addingSub && (
+              <div className="flex gap-1.5 mt-2 animate-fade-up">
+                <input
+                  value={newSubName}
+                  onChange={(e) => setNewSubName(e.target.value)}
+                  placeholder="اكتب اسم القسم الفرعي... (بنزين، فواتير)"
+                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
+                  onKeyDown={(e) => e.key === "Enter" && handleAddSub()}
+                  autoFocus
+                />
+                <button
+                  onClick={handleAddSub}
+                  className="text-[11px] font-bold text-white bg-finance rounded-lg px-3 press shrink-0"
+                >
+                  إضافة
+                </button>
+                <button
+                  onClick={() => { setAddingSub(false); setNewSubName(""); }}
+                  className="text-[11px] text-gray-400 bg-gray-100 rounded-lg px-2 press shrink-0"
+                >
+                  إلغاء
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

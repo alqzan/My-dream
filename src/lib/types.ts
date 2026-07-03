@@ -10,11 +10,14 @@ export interface FinanceCategoryDef {
   icon: string;
   color: string;
   parentId?: string;
+  // Only mains with this flag get sub-categories (per the user's setup:
+  // أساسيات وكماليات فقط) — the sub row/inline-add UI hides elsewhere.
+  allowSubs?: boolean;
 }
 
 export const DEFAULT_CATEGORIES: FinanceCategoryDef[] = [
-  { id: "cat-essentials", label: "أساسيات", icon: "🧺", color: "#e07b39" },
-  { id: "cat-luxuries", label: "كماليات", icon: "✨", color: "#9b6fcd" },
+  { id: "cat-essentials", label: "أساسيات", icon: "🧺", color: "#e07b39", allowSubs: true },
+  { id: "cat-luxuries", label: "كماليات", icon: "✨", color: "#9b6fcd", allowSubs: true },
   { id: "cat-investment", label: "استثمار", icon: "📊", color: "#256128" },
   { id: "cat-charity", label: "صدقة", icon: "🤲", color: "#1f7a6c" },
   { id: "cat-others", label: "للآخرين", icon: "🎁", color: "#4a9fbd" },
@@ -184,8 +187,14 @@ export interface Budget {
 // and it cushions the next, overspend and it eats into it. Cumulative since
 // startDate, not reset every calendar month.
 export interface DailyBudget {
-  amount: number; // SAR per day
+  amount: number; // SAR per day — always the resolved figure every calculation uses
   startDate: string; // YYYY-MM-DD — changing the amount resets this to today
+  // Set when the amount was derived as a percentage of monthly income
+  // (amount = monthlyIncome × incomePct / 100 / 30) — kept so the editor
+  // can reopen in that mode and the card can explain where the number
+  // came from. Absent for a plain fixed amount.
+  monthlyIncome?: number;
+  incomePct?: number;
 }
 
 export interface AppData {

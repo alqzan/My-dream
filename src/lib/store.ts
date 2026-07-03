@@ -43,8 +43,9 @@ interface AppStore extends AppData {
   addReserveDeposit: (fundId: string, deposit: ReserveDeposit) => void;
   deleteReserveDeposit: (fundId: string, depositId: string) => void;
 
-  // Daily cumulative budget
-  setDailyBudget: (amount: number) => void;
+  // Daily cumulative budget — `source` marks an income-percentage-derived
+  // amount (نسبة من الدخل الشهري) so the editor can reopen in that mode.
+  setDailyBudget: (amount: number, source?: { monthlyIncome: number; incomePct: number }) => void;
   removeDailyBudget: () => void;
 
   // Reading
@@ -257,10 +258,17 @@ export const useAppStore = create<AppStore>()(
           ),
         })),
 
-      setDailyBudget: (amount) =>
+      setDailyBudget: (amount, source) =>
         // Changing the daily amount restarts the cumulative tally from today
         // rather than reinterpreting all of history under the new rate.
-        set(() => ({ dailyBudget: { amount, startDate: today() } })),
+        set(() => ({
+          dailyBudget: {
+            amount,
+            startDate: today(),
+            monthlyIncome: source?.monthlyIncome,
+            incomePct: source?.incomePct,
+          },
+        })),
 
       removeDailyBudget: () =>
         set(() => ({ dailyBudget: null })),
@@ -364,7 +372,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "my-dream-store",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -447,6 +455,18 @@ export const useAppStore = create<AppStore>()(
             ...state,
             reserves: state.reserves ?? [],
             theme: "auto",
+          };
+        }
+
+        // v5 marks which main categories take sub-categories: أساسيات
+        // وكماليات فقط (the flag is what shows the sub-category UI).
+        if (version < 5) {
+          const subEnabled = new Set(["cat-essentials", "cat-luxuries"]);
+          state = {
+            ...state,
+            categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) =>
+              subEnabled.has(c.id) ? { ...c, allowSubs: true } : c
+            ),
           };
         }
 

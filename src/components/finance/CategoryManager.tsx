@@ -35,7 +35,7 @@ export function CategoryManager({ onClose }: { onClose: () => void }) {
       <p className="text-[11px] text-gray-400 leading-relaxed bg-gray-50 rounded-xl px-3 py-2">
         القسم <strong className="text-gray-600">الرئيسي</strong> يظهر في كل التقارير، وتحته
         أقسام <strong className="text-gray-600">فرعية</strong> تفصيلية تكتب فيها اللي تبي —
-        اضغط «فرعي +» تحت أي قسم.
+        متاحة للأساسيات والكماليات.
       </p>
 
       <div className="space-y-2.5">
@@ -57,15 +57,17 @@ export function CategoryManager({ onClose }: { onClose: () => void }) {
                     قسم رئيسي{subs.length > 0 ? ` · ${subs.length} فرعي` : ""}
                   </span>
                 </div>
-                <button
-                  onClick={() => setAddingSubFor(addingSubFor === main.id ? null : main.id)}
-                  className={cn(
-                    "text-[10px] font-bold rounded-lg px-2 py-1.5 press shrink-0",
-                    addingSubFor === main.id ? "bg-finance text-white" : "bg-finance/10 text-finance"
-                  )}
-                >
-                  فرعي +
-                </button>
+                {main.allowSubs && (
+                  <button
+                    onClick={() => setAddingSubFor(addingSubFor === main.id ? null : main.id)}
+                    className={cn(
+                      "text-[10px] font-bold rounded-lg px-2 py-1.5 press shrink-0",
+                      addingSubFor === main.id ? "bg-finance text-white" : "bg-finance/10 text-finance"
+                    )}
+                  >
+                    فرعي +
+                  </button>
+                )}
                 <button
                   onClick={() => deleteCategory(main.id)}
                   disabled={mains.length <= 1}
