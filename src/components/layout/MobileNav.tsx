@@ -26,12 +26,18 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-xl transition-colors min-w-[52px]",
-                active ? "text-brand-600" : "text-gray-400"
+                "relative flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-xl transition-all min-w-[52px]",
+                active ? "text-brand-600 bg-brand-50" : "text-gray-400"
               )}
             >
               <item.icon size={21} />
-              <span className="text-[9.5px] font-medium">{item.label}</span>
+              <span className={cn("text-[9.5px]", active ? "font-bold" : "font-medium")}>{item.label}</span>
+              <span
+                className={cn(
+                  "absolute -top-[9px] h-[3px] rounded-b-full bg-brand-500 transition-all duration-300",
+                  active ? "w-6 opacity-100" : "w-0 opacity-0"
+                )}
+              />
             </Link>
           );
         })}

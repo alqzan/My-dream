@@ -46,7 +46,7 @@ export default function PrayersPage() {
   const editCounts = countDayPrayers(editLog);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-enter max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">الصلاة</h1>

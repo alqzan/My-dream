@@ -36,12 +36,13 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors",
+                "relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors",
                 active
-                  ? "bg-gray-100 text-gray-900 font-semibold"
+                  ? "bg-brand-50 text-gray-900 font-semibold"
                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
               )}
             >
+              {active && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-l-full bg-brand-500" />}
               <item.icon size={18} className={active ? item.color : ""} />
               <span className="text-sm">{item.label}</span>
             </Link>

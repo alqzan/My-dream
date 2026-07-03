@@ -18,6 +18,7 @@ import {
 import { DailyStreakBanner } from "@/components/dashboard/StreakWidget";
 import { DailyCompletion } from "@/components/dashboard/DailyCompletion";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
+import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { MoodSpendingInsight } from "@/components/dashboard/MoodSpendingInsight";
@@ -58,7 +59,7 @@ export default function Dashboard() {
   const yearPct = yearProgress();
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-enter max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
@@ -69,6 +70,8 @@ export default function Dashboard() {
         </div>
         <YearOrbit pct={yearPct} />
       </div>
+
+      <HikmaCard />
 
       <Card>
         <PrayerOrbit />
@@ -198,18 +201,29 @@ function getGreeting() {
 }
 
 // Orbit ring showing how much of the year has passed — the "مدار" motif.
+// The gold arc sweeps in from zero on mount for a small moment of delight.
 function YearOrbit({ pct }: { pct: number }) {
   const size = 82;
   const stroke = 6;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const on = (c * pct) / 100;
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setShown(pct));
+    return () => cancelAnimationFrame(t);
+  }, [pct]);
+  const on = (c * shown) / 100;
   const gold = "#e8b15a";
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={gold} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${on} ${c - on}`} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none"
+          stroke={gold} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={`${on} ${c - on}`}
+          style={{ transition: "stroke-dasharray 1.1s cubic-bezier(0.22, 1, 0.36, 1)" }}
+        />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-base font-bold text-gray-800 leading-none">{pct}%</span>

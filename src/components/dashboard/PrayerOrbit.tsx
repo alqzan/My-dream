@@ -2,6 +2,7 @@
 import { useAppStore } from "@/lib/store";
 import { today, getPrayerLog, countDayPrayers, getPrayerStreak, getMosqueStreak } from "@/lib/utils";
 import { PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { Celebration } from "@/components/ui/Celebration";
 
 // A stylised dawn-to-night sky arc — each of the five daily prayers sits at
 // its rough place along the day, echoing the app's orbit motif (مدار).
@@ -36,6 +37,7 @@ export function PrayerOrbit() {
 
   return (
     <div className="space-y-2">
+      <Celebration trigger={prayed === 5} />
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">صلوات اليوم</span>
         <div className="flex items-center gap-3 text-xs font-medium">
@@ -67,6 +69,8 @@ export function PrayerOrbit() {
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeDasharray={`${(prayed / 5) * ARC_LENGTH} 999`}
+            className={prayed === 5 ? "glow-gold" : undefined}
+            style={{ transition: "stroke-dasharray 0.7s cubic-bezier(0.22, 1, 0.36, 1)" }}
           />
           {nowPoint && (
             <circle cx={nowPoint.x} cy={nowPoint.y} r="1.4" fill="#e8b15a">

@@ -1,6 +1,7 @@
 "use client";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatAmount, getCategoryInfo } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 interface FinanceSummaryProps {
@@ -28,7 +29,9 @@ export function FinanceSummary({ transactions, categories }: FinanceSummaryProps
     <div className="space-y-4">
       <div className="text-center">
         <div className="text-xs text-gray-500 mb-1">إجمالي المصاريف</div>
-        <div className="text-3xl font-bold text-red-500">{formatAmount(totalExpense)}</div>
+        <div className="text-3xl font-bold text-red-500">
+          <AnimatedNumber value={totalExpense} format={formatAmount} />
+        </div>
         <div className="text-[11px] text-gray-400 mt-0.5">ر.س</div>
       </div>
 

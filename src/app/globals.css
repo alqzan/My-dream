@@ -83,6 +83,29 @@ body::before {
 .dark .border-gray-100 { border-color: #3a2e1e !important; }
 .dark .border-gray-200 { border-color: #493a26 !important; }
 
+/* Pastel tint surfaces (bg-*-50 and brand washes) flip to deep warm tones
+   so info boxes, score cards and the hikma card stay readable in dark. */
+.dark .bg-red-50 { background-color: #33201c !important; }
+.dark .bg-green-50 { background-color: #1e2b1a !important; }
+.dark .bg-blue-50 { background-color: #1c2733 !important; }
+.dark .bg-yellow-50 { background-color: #322a12 !important; }
+.dark .bg-orange-50 { background-color: #332410 !important; }
+.dark .bg-teal-50 { background-color: #14302b !important; }
+.dark .bg-purple-50 { background-color: #2a2135 !important; }
+.dark .bg-amber-50 { background-color: #33270f !important; }
+.dark .bg-brand-50 { background-color: #2e2415 !important; }
+.dark .bg-brand-100 { background-color: #3a2d18 !important; }
+.dark .border-brand-200 { border-color: #4a3a20 !important; }
+.dark .from-brand-50 {
+  --tw-gradient-from: #2e2415 var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(46 36 21 / 0) var(--tw-gradient-to-position);
+}
+.dark .to-white { --tw-gradient-to: #241c12 var(--tw-gradient-to-position); }
+.dark .text-amber-700 { color: #e5c07b !important; }
+.dark .text-blue-700 { color: #9cc3e5 !important; }
+.dark .text-brand-700 { color: #e8c15a !important; }
+.dark .text-brand-600 { color: #dcae52 !important; }
+
 /* Form controls */
 .dark input,
 .dark textarea,
@@ -102,6 +125,88 @@ body::before {
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ===================== Motion system ===================== */
+/* Staggered entrance for page sections: put .page-enter on a page's root
+   container and every direct child glides in with a small cascade. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter > * {
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.page-enter > *:nth-child(1) { animation-delay: 0.02s; }
+.page-enter > *:nth-child(2) { animation-delay: 0.06s; }
+.page-enter > *:nth-child(3) { animation-delay: 0.1s; }
+.page-enter > *:nth-child(4) { animation-delay: 0.14s; }
+.page-enter > *:nth-child(5) { animation-delay: 0.18s; }
+.page-enter > *:nth-child(6) { animation-delay: 0.22s; }
+.page-enter > *:nth-child(7) { animation-delay: 0.26s; }
+.page-enter > *:nth-child(8) { animation-delay: 0.3s; }
+.page-enter > *:nth-child(9) { animation-delay: 0.34s; }
+.page-enter > *:nth-child(n + 10) { animation-delay: 0.38s; }
+
+/* Modal choreography: backdrop fades, sheet slides up (mobile) / pops (desktop) */
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(48px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.modal-backdrop { animation: backdrop-in 0.25s ease both; }
+.modal-panel { animation: sheet-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Subtle press feedback everywhere — buttons and links feel tactile */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+button:active {
+  transform: scale(0.97);
+}
+button {
+  transition: transform 0.12s ease;
+}
+
+/* Celebration confetti */
+@keyframes confetti-fall {
+  0% { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate3d(var(--cx), var(--cy), 0) rotate(var(--cr)); }
+}
+.confetti-piece {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  pointer-events: none;
+  animation: confetti-fall 1.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Soft golden pulse for completed states (prayer arc, streak flames) */
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(232, 177, 90, 0.35)); }
+  50% { filter: drop-shadow(0 0 9px rgba(232, 177, 90, 0.75)); }
+}
+.glow-gold { animation: glow-pulse 2.4s ease-in-out infinite; }
+
+/* Gentle attention pop (used when a number ticks up) */
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.pop-once { animation: pop 0.4s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter > *, .modal-backdrop, .modal-panel, .confetti-piece, .glow-gold, .pop-once {
+    animation: none !important;
+  }
 }
 
 /* Scrollbar */

@@ -26,15 +26,18 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
       <div
         className={cn(
-          "relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl",
+          "modal-panel relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl",
           className
         )}
       >
+        <div className="sm:hidden pt-2.5 flex justify-center">
+          <div className="w-10 h-1 rounded-full bg-gray-200" />
+        </div>
         {title && (
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-900">{title}</h2>

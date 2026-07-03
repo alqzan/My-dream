@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Settings2 } from "lucide-react";
 
 // A cumulative daily allowance instead of a monthly cap: spend less than
@@ -67,7 +68,7 @@ export function DailyBudgetCard() {
       </div>
       <div className="text-center py-1">
         <div className={`text-3xl font-bold ${over ? "text-red-500" : "text-prayer"}`}>
-          {over ? "-" : "+"}{formatAmount(Math.abs(status.balance))}
+          {over ? "-" : "+"}<AnimatedNumber value={Math.abs(status.balance)} format={formatAmount} />
         </div>
         <div className="text-[11px] text-gray-400 mt-0.5">ر.س {over ? "بالسالب" : "رصيدك متراكم"}</div>
       </div>

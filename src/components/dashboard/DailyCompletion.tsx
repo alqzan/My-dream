@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { CheckCircle, Circle } from "lucide-react";
+import { Celebration } from "@/components/ui/Celebration";
 
 interface DailyTask {
   label: string;
@@ -31,6 +32,7 @@ export function DailyCompletion({
 
   return (
     <div className="space-y-3">
+      <Celebration trigger={allDone} />
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">إنجازات اليوم</span>
         <span className="text-xs text-gray-400">{completedCount}/3</span>

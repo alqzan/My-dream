@@ -10,6 +10,7 @@ import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { Book } from "@/lib/types";
 import { Plus, BookOpen, Flame } from "lucide-react";
 
@@ -41,7 +42,7 @@ export default function ReadingPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-enter max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">القراءة</h1>
@@ -114,11 +115,7 @@ export default function ReadingPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-4xl mb-3">📚</p>
-          <p className="text-sm font-medium">لا توجد كتب</p>
-          <p className="text-xs mt-1">أضف أول كتاب في قائمتك</p>
-        </div>
+        <EmptyState icon="📚" title="لا توجد كتب" hint="أضف أول كتاب في قائمتك" />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {filtered.map((book) => (

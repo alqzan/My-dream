@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak } from "@/lib/utils";
+import { getJournalStreak, formatDate } from "@/lib/utils";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
 import { JournalForm } from "@/components/journal/JournalForm";
 import { DayOneImport } from "@/components/journal/DayOneImport";
@@ -10,6 +10,7 @@ import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame } from "lucide-react";
 
@@ -33,7 +34,7 @@ export default function JournalPage() {
   );
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-enter max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">المذكرات</h1>
@@ -77,11 +78,11 @@ export default function JournalPage() {
 
       <div className="space-y-3">
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
-            <p className="text-4xl mb-3">📓</p>
-            <p className="text-sm font-medium">لا توجد مذكرات بعد</p>
-            <p className="text-xs mt-1">ابدأ بكتابة أول مذكرة أو استيراد من Day One</p>
-          </div>
+          <EmptyState
+            icon="📓"
+            title={search ? "لا توجد نتائج" : "لا توجد مذكرات بعد"}
+            hint={search ? "جرّب كلمة بحث ثانية" : "ابدأ بكتابة أول مذكرة أو استيراد من Day One"}
+          />
         )}
         {filtered.map((entry) => (
           <JournalEntryCard
@@ -115,7 +116,7 @@ export default function JournalPage() {
       <Modal
         open={!!viewEntry}
         onClose={() => setViewEntry(undefined)}
-        title={viewEntry ? new Date(viewEntry.date).toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" }) : ""}
+        title={viewEntry ? formatDate(viewEntry.date) : ""}
         className="sm:max-w-2xl"
       >
         {viewEntry && (

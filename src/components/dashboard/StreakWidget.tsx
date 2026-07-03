@@ -1,5 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 interface StreakWidgetProps {
   streak: number;
@@ -59,8 +60,8 @@ export function DailyStreakBanner({
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="text-4xl font-bold flex items-center gap-2">
-            {masterStreak}
-            <span className="text-2xl">{masterStreak > 0 ? "🔥" : "💤"}</span>
+            <AnimatedNumber value={masterStreak} />
+            <span className={cn("text-2xl", masterStreak > 0 && "glow-gold")}>{masterStreak > 0 ? "🔥" : "💤"}</span>
           </div>
           <div className="text-sm opacity-90 mt-0.5">
             {masterStreak > 0 ? "يوم متواصل" : "ابدأ يومك اليوم!"}
