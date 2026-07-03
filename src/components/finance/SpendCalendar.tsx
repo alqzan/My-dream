@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate } from "@/lib/utils";
 import type { Transaction, DailyBudget } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
@@ -23,7 +23,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
 
   const dates = getMonthDates(year, month);
   const firstDay = new Date(year, month, 1).getDay();
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = today();
 
   const spendByDate = new Map<string, number>();
   for (const t of transactions) {
@@ -80,7 +80,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
                 />
               )}
               <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-300" : "text-gray-600"}`}>
-                {new Date(date).getDate()}
+                {parseDate(date).getDate()}
               </span>
               <span className={`text-[7px] leading-none ${isFuture ? "text-gray-200" : "text-gray-400"}`}>
                 {hijriDay(date)}

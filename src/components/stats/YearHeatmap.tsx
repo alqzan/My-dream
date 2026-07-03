@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, today, toDateStr } from "@/lib/utils";
 
 interface YearHeatmapProps {
   // date (YYYY-MM-DD) → score 0..3 (how many of the three dailies were done)
@@ -27,13 +27,13 @@ export function YearHeatmap({ scores }: YearHeatmapProps) {
     const end = new Date();
     end.setDate(end.getDate() + (6 - end.getDay()));
     const result: { date: string; future: boolean }[][] = [];
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = today();
     for (let w = 0; w < 52; w++) {
       const week: { date: string; future: boolean }[] = [];
       for (let d = 6; d >= 0; d--) {
         const day = new Date(end);
         day.setDate(end.getDate() - w * 7 - (6 - d));
-        const dateStr = day.toISOString().split("T")[0];
+        const dateStr = toDateStr(day);
         week.push({ date: dateStr, future: dateStr > todayStr });
       }
       result.push(week); // result[0] = current week (newest first)

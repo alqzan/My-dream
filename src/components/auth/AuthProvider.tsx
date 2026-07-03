@@ -8,7 +8,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth, isFirebaseEnabled } from "@/lib/firebase";
-import { loadUserData, saveUserData } from "@/lib/sync";
+import { loadUserData, saveUserData, mergeLocalPhotos } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
 
 interface AuthContextValue {
@@ -57,7 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const cloud = await loadUserData(u.uid);
           const local = snapshot();
           if (cloud && (cloud.lastUpdated ?? "") > (local.lastUpdated ?? "")) {
-            hydrate(cloud);
+            // Photos never travel through Firestore (1MB doc limit) —
+            // graft this device's photos back onto the cloud entries.
+            hydrate(mergeLocalPhotos(cloud, local));
           } else {
             await saveUserData(u.uid, local);
           }

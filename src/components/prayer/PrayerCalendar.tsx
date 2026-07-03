@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName, getPrayerLog, hijriMonthLabel, hijriDay } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, getPrayerLog, hijriMonthLabel, hijriDay, today, parseDate } from "@/lib/utils";
 import { PRAYERS, PRAYER_STATUS_META, type PrayerLog } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
@@ -20,7 +20,7 @@ export function PrayerCalendar({ prayerLogs, onDayClick }: PrayerCalendarProps) 
 
   const dates = getMonthDates(year, month);
   const firstDay = new Date(year, month, 1).getDay();
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = today();
 
   function prev() {
     if (month === 0) { setYear((y) => y - 1); setMonth(11); }
@@ -68,7 +68,7 @@ export function PrayerCalendar({ prayerLogs, onDayClick }: PrayerCalendarProps) 
               }`}
             >
               <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-300" : "text-gray-600"}`}>
-                {new Date(date).getDate()}
+                {parseDate(date).getDate()}
               </span>
               <span className={`text-[7px] leading-none ${isFuture ? "text-gray-200" : "text-gray-400"}`}>
                 {hijriDay(date)}

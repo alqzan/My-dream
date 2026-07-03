@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName, hijriMonthLabel, hijriDay } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, hijriMonthLabel, hijriDay, today, parseDate } from "@/lib/utils";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
 interface StreakCalendarProps {
@@ -19,7 +19,7 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: S
   const dates = getMonthDates(year, month);
   const firstDay = new Date(year, month, 1).getDay();
   const marked = new Set(markedDates);
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = today();
 
   function prev() {
     if (month === 0) { setYear(y => y - 1); setMonth(11); }
@@ -73,7 +73,7 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: S
                   : {}
               }
             >
-              <span>{new Date(date).getDate()}</span>
+              <span>{parseDate(date).getDate()}</span>
               <span className={`text-[8px] mt-0.5 ${isMarked ? "text-white/70" : "text-gray-400"}`}>
                 {hijriDay(date)}
               </span>

@@ -1,21 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { sunTimes } from "@/lib/utils";
+import { sunTimes, getCachedCoords, GEO_KEY } from "@/lib/utils";
 import { Moon, Sun, SunMoon } from "lucide-react";
-
-// Default coordinates (Riyadh) until the browser shares a real location —
-// close enough for sunset/sunrise anywhere in the Gulf.
-const FALLBACK_COORDS = { lat: 24.7136, lng: 46.6753 };
-const GEO_KEY = "madar-geo";
-
-function getCachedCoords(): { lat: number; lng: number } {
-  try {
-    const raw = localStorage.getItem(GEO_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return FALLBACK_COORDS;
-}
 
 // Is it currently "night" — i.e. after المغرب (sunset) or before sunrise?
 function isNightNow(): boolean {

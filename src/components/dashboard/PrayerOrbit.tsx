@@ -1,7 +1,11 @@
 "use client";
+import { useMemo } from "react";
 import { useAppStore } from "@/lib/store";
-import { today, getPrayerLog, countDayPrayers, getPrayerStreak, getMosqueStreak } from "@/lib/utils";
-import { PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import {
+  today, getPrayerLog, countDayPrayers, getPrayerStreak, getMosqueStreak,
+  computePrayerTimes, getCachedCoords, formatClock, buzz,
+} from "@/lib/utils";
+import { PRAYERS, PRAYER_META, PRAYER_STATUS_META, type PrayerName } from "@/lib/types";
 
 // A stylised dawn-to-night sky arc — each of the five daily prayers sits at
 // its rough place along the day, echoing the app's orbit motif (مدار).
@@ -30,6 +34,14 @@ export function PrayerOrbit() {
   const mosqueStreak = getMosqueStreak(prayerLogs);
 
   const now = new Date();
+
+  // Actual prayer times for the device's location (offline astronomical
+  // calc, Umm al-Qura convention) + which prayer is up next.
+  const times = useMemo(() => computePrayerTimes(now, getCachedCoords().lat, getCachedCoords().lng), [todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextPrayer: PrayerName | null = useMemo(() => {
+    if (!times) return null;
+    return PRAYERS.find((p) => times[p] > now) ?? null;
+  }, [times, now]); // eslint-disable-line react-hooks/exhaustive-deps
   const hourFrac = now.getHours() + now.getMinutes() / 60;
   const inRange = hourFrac >= 4.5 && hourFrac <= 21;
   const nowPoint = inRange ? point(178 - ((hourFrac - 4.5) / (21 - 4.5)) * 176) : null;
@@ -80,16 +92,19 @@ export function PrayerOrbit() {
           const { x, y } = point(meta.angle);
           const status = log?.prayers[prayer] ?? "لم";
           const statusMeta = PRAYER_STATUS_META[status];
+          const isNext = prayer === nextPrayer;
           return (
             <button
               key={prayer}
-              onClick={() => cyclePrayerStatus(todayStr, prayer)}
+              onClick={() => { buzz(); cyclePrayerStatus(todayStr, prayer); }}
               className="absolute flex flex-col items-center gap-1 -translate-x-1/2 -translate-y-1/2 group"
               style={{ left: `${x}%`, top: `${(y / VB_H) * 100}%` }}
               title={`${prayer} — ${statusMeta.label}`}
             >
               <span
-                className="w-9 h-9 rounded-full flex items-center justify-center text-base shadow-sm border-2 transition-all group-active:scale-90"
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-base shadow-sm border-2 transition-all group-active:scale-90 ${
+                  isNext && status === "لم" ? "animate-pulse ring-2 ring-brand-300 ring-offset-1" : ""
+                }`}
                 style={{
                   backgroundColor: status === "لم" ? "#fff" : statusMeta.color,
                   borderColor: statusMeta.color,
@@ -97,7 +112,14 @@ export function PrayerOrbit() {
               >
                 {meta.icon}
               </span>
-              <span className="text-[10px] font-medium text-gray-500 whitespace-nowrap">{prayer}</span>
+              <span className={`text-[10px] font-medium whitespace-nowrap ${isNext ? "text-brand-600 font-bold" : "text-gray-500"}`}>
+                {prayer}
+              </span>
+              {times && (
+                <span className={`text-[8px] tabular-nums whitespace-nowrap -mt-0.5 ${isNext ? "text-brand-500 font-bold" : "text-gray-400"}`}>
+                  {formatClock(times[prayer])}
+                </span>
+              )}
             </button>
           );
         })}
@@ -111,6 +133,7 @@ export function PrayerOrbit() {
         ) : (
           <span className="text-gray-400">
             {prayed}/5 اليوم{mosque > 0 ? ` · ${mosque} بالمسجد 🕌` : ""}
+            {nextPrayer && times ? ` · القادمة ${nextPrayer} ${formatClock(times[nextPrayer])}` : ""}
           </span>
         )}
       </div>

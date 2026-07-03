@@ -21,6 +21,8 @@ const thamaniah = localFont({
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { ClientOnly } from "@/components/layout/ClientOnly";
+import { SWRegister } from "@/components/layout/SWRegister";
+import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
@@ -58,6 +60,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className={thamaniah.variable}>
       <body>
         <ClientOnly>
+          <SWRegister bp={bp} />
           <ThemeApplier />
           <AuthProvider>
             <div className="min-h-screen flex">
@@ -68,6 +71,7 @@ export default function RootLayout({
               </main>
             </div>
             <MobileNav />
+            <UndoToast />
           </AuthProvider>
         </ClientOnly>
       </body>

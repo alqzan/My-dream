@@ -20,10 +20,12 @@ import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 import { Confetti } from "@/components/ui/Confetti";
+import { TransactionForm } from "@/components/finance/TransactionForm";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import Link from "next/link";
-import { ChevronLeft, BarChart3, TrendingDown } from "lucide-react";
+import { ChevronLeft, BarChart3, TrendingDown, Plus } from "lucide-react";
 
 // Dashboard layout, top to bottom — one card per idea, nothing repeated:
 //   1. التحية والتاريخ (هجري + ميلادي) + مدار السنة
@@ -37,6 +39,7 @@ export default function Dashboard() {
   const { journalEntries, readingLogs, transactions, books, dailyBudget, runRecurring } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [quickExpense, setQuickExpense] = useState(false);
 
   // Auto-generate due recurring transactions on app open
   useEffect(() => {
@@ -175,6 +178,19 @@ export default function Dashboard() {
       </div>
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
+
+      {/* Quick-add expense — the most frequent daily action, always two
+          taps away instead of a trip through the الأموال tab. */}
+      <button
+        onClick={() => setQuickExpense(true)}
+        className="fixed bottom-24 lg:bottom-8 left-4 z-40 p-4 rounded-full bg-finance text-white shadow-lg shadow-finance/30 press"
+        aria-label="سجّل مصروف سريع"
+      >
+        <Plus size={22} />
+      </button>
+      <Modal open={quickExpense} onClose={() => setQuickExpense(false)} title="مصروف سريع 💸">
+        <TransactionForm onClose={() => setQuickExpense(false)} />
+      </Modal>
     </div>
   );
 }

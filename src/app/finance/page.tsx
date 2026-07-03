@@ -22,9 +22,17 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft } from "lucide-react";
+import { showUndo } from "@/components/ui/UndoToast";
 
 export default function FinancePage() {
-  const { transactions, budgets, recurring, categories, dailyBudget, deleteTransaction, runRecurring } = useAppStore();
+  const { transactions, budgets, recurring, categories, dailyBudget, deleteTransaction, addTransaction, runRecurring } = useAppStore();
+
+  // Instant delete + 5s undo window.
+  function handleDelete(id: string) {
+    const tx = transactions.find((t) => t.id === id);
+    deleteTransaction(id);
+    if (tx) showUndo("حذفت المصروف", () => addTransaction(tx));
+  }
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
@@ -131,6 +139,7 @@ export default function FinancePage() {
         transactions={transactions}
         monthTransactions={byMonth}
         budgets={budgets}
+        categories={categories}
         dailyBudget={dailyBudget}
       />
 
@@ -180,7 +189,7 @@ export default function FinancePage() {
         <TransactionList
           transactions={byMonth}
           categories={categories}
-          onDelete={deleteTransaction}
+          onDelete={handleDelete}
           onEdit={(tx) => setEditTx(tx)}
         />
       )}

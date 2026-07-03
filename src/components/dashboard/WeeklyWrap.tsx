@@ -1,6 +1,6 @@
 "use client";
 import type { Transaction, JournalEntry, ReadingLog, Book } from "@/lib/types";
-import { formatAmount } from "@/lib/utils";
+import { formatAmount, toDateStr, parseDate } from "@/lib/utils";
 
 interface WeeklyWrapProps {
   transactions: Transaction[];
@@ -15,7 +15,7 @@ function getThisWeekDates() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    dates.push(d.toISOString().split("T")[0]);
+    dates.push(toDateStr(d));
   }
   return dates;
 }
@@ -76,7 +76,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
           return (
             <div key={d} className="flex flex-col items-center gap-1">
               <div className="text-[10px] text-gray-500">
-                {["أح","إث","ثل","أر","خم","جم","سب"][new Date(d).getDay()]}
+                {["أح","إث","ثل","أر","خم","جم","سب"][parseDate(d).getDay()]}
               </div>
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"

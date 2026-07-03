@@ -1,25 +1,27 @@
 "use client";
-import type { Transaction, Budget, DailyBudget } from "@/lib/types";
-import { computeDailyBudgetStatus, formatAmount } from "@/lib/utils";
+import type { Transaction, Budget, DailyBudget, FinanceCategoryDef } from "@/lib/types";
+import { computeDailyBudgetStatus, formatAmount, toDateStr, getMainCategory } from "@/lib/utils";
 
 interface BudgetDisciplineScoreProps {
   transactions: Transaction[]; // all-time, for trend + daily budget calc
   monthTransactions: Transaction[]; // current filtered month only
   budgets: Budget[];
+  categories: FinanceCategoryDef[];
   dailyBudget: DailyBudget | null;
 }
 
 // A spending-discipline score (0-100) built entirely from expense data —
 // staying under category budgets, staying under the daily allowance, and
 // spending less than last week.
-export function BudgetDisciplineScore({ transactions, monthTransactions, budgets, dailyBudget }: BudgetDisciplineScoreProps) {
+export function BudgetDisciplineScore({ transactions, monthTransactions, budgets, categories, dailyBudget }: BudgetDisciplineScoreProps) {
   if (!transactions.length) return null;
 
   let budgetScore = 20; // neutral baseline when no budgets are set yet
   if (budgets.length) {
     const within = budgets.filter((b) => {
+      // Budgets sit on main categories — sub-category spending counts too.
       const spent = monthTransactions
-        .filter((t) => t.category === b.category)
+        .filter((t) => getMainCategory(categories, t.category).id === b.category)
         .reduce((s, t) => s + t.amount, 0);
       return spent <= b.limit;
     }).length;
@@ -29,8 +31,8 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
   function sumInRange(startDaysAgo: number, endDaysAgo: number) {
     const end = new Date(); end.setDate(end.getDate() - startDaysAgo);
     const start = new Date(); start.setDate(start.getDate() - endDaysAgo);
-    const startStr = start.toISOString().split("T")[0];
-    const endStr = end.toISOString().split("T")[0];
+    const startStr = toDateStr(start);
+    const endStr = toDateStr(end);
     return transactions
       .filter((t) => t.date >= startStr && t.date <= endStr)
       .reduce((s, t) => s + t.amount, 0);

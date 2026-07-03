@@ -1,6 +1,7 @@
 "use client";
 import type { PrayerName, PrayerStatus } from "@/lib/types";
 import { PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { buzz } from "@/lib/utils";
 
 interface PrayerRowProps {
   prayer: PrayerName;
@@ -25,7 +26,7 @@ export function PrayerRow({ prayer, status, onChange }: PrayerRowProps) {
           return (
             <button
               key={opt}
-              onClick={() => onChange(opt)}
+              onClick={() => { if (!isActive && opt !== "لم") buzz(); onChange(opt); }}
               className="flex-1 text-[11px] font-medium py-1.5 rounded-md transition-colors"
               style={
                 isActive

@@ -1,6 +1,6 @@
 "use client";
 import { useAppStore } from "@/lib/store";
-import { today, calcStreak, uid, cn } from "@/lib/utils";
+import { today, calcStreak, uid, cn, toDateStr, buzz } from "@/lib/utils";
 import { Plus, Check, Settings2, X, Flame } from "lucide-react";
 import { useState } from "react";
 
@@ -35,7 +35,7 @@ function last7Days(): string[] {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    days.push(d.toISOString().split("T")[0]);
+    days.push(toDateStr(d));
   }
   return days;
 }
@@ -215,7 +215,11 @@ export function HabitTracker() {
           return (
             <button
               key={habit.id}
-              onClick={() => (manage ? undefined : toggleHabitLog(habit.id, todayStr))}
+              onClick={() => {
+                if (manage) return;
+                if (!done) buzz();
+                toggleHabitLog(habit.id, todayStr);
+              }}
               className={cn(
                 "relative rounded-2xl border p-3 text-right press transition-all duration-300",
                 done ? "card-shadow" : "bg-white border-gray-200 hover:border-gray-300"

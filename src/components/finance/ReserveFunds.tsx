@@ -197,8 +197,13 @@ function FundCard({ fund, expanded, onToggle }: { fund: ReserveFund; expanded: b
     .slice(0, 5);
 
   function move(dir: 1 | -1) {
-    const parsed = parseFloat(amount);
+    let parsed = parseFloat(amount);
     if (!parsed || parsed <= 0) return;
+    // A withdrawal can't take out more than the envelope holds.
+    if (dir === -1) {
+      if (balance <= 0) return;
+      parsed = Math.min(parsed, balance);
+    }
     addReserveDeposit(fund.id, {
       id: uid(),
       date: today(),

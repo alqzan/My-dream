@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   today,
+  toDateStr,
+  parseDate,
   formatAmount,
   getMainCategory,
   getSubCategories,
@@ -24,14 +26,10 @@ type Period = "أسبوع" | "شهر" | "سنة";
 
 const DAY_NAMES = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
 
-function isoDate(d: Date) {
-  return d.toISOString().split("T")[0];
-}
-
 function addDays(dateStr: string, n: number) {
-  const d = new Date(dateStr);
+  const d = parseDate(dateStr);
   d.setDate(d.getDate() + n);
-  return isoDate(d);
+  return toDateStr(d);
 }
 
 // The date range for the selected period plus the matching previous range
@@ -46,23 +44,23 @@ function periodRanges(period: Period, todayStr: string) {
     };
   }
   if (period === "شهر") {
-    const d = new Date(todayStr);
-    const start = isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+    const d = parseDate(todayStr);
+    const start = toDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
     const dayCount = d.getDate();
     const prevMonth = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-    const prevStart = isoDate(prevMonth);
+    const prevStart = toDateStr(prevMonth);
     const lastDayPrev = new Date(d.getFullYear(), d.getMonth(), 0).getDate();
-    const prevEnd = isoDate(new Date(prevMonth.getFullYear(), prevMonth.getMonth(), Math.min(dayCount, lastDayPrev)));
+    const prevEnd = toDateStr(new Date(prevMonth.getFullYear(), prevMonth.getMonth(), Math.min(dayCount, lastDayPrev)));
     return {
       start, end: todayStr,
       prevStart, prevEnd,
       label: `${arabicMonthName(d.getMonth())} (حتى اليوم)`, prevLabel: "نفس الفترة من الشهر الماضي",
     };
   }
-  const d = new Date(todayStr);
-  const start = isoDate(new Date(d.getFullYear(), 0, 1));
-  const prevStart = isoDate(new Date(d.getFullYear() - 1, 0, 1));
-  const prevEnd = isoDate(new Date(d.getFullYear() - 1, d.getMonth(), d.getDate()));
+  const d = parseDate(todayStr);
+  const start = toDateStr(new Date(d.getFullYear(), 0, 1));
+  const prevStart = toDateStr(new Date(d.getFullYear() - 1, 0, 1));
+  const prevEnd = toDateStr(new Date(d.getFullYear() - 1, d.getMonth(), d.getDate()));
   return {
     start, end: todayStr,
     prevStart, prevEnd,
@@ -87,7 +85,7 @@ export default function SpendInsightsPage() {
   const prevTotal = prevTx.reduce((s, t) => s + t.amount, 0);
   const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null;
   const daysInPeriod =
-    Math.round((new Date(ranges.end).getTime() - new Date(ranges.start).getTime()) / 86400000) + 1;
+    Math.round((parseDate(ranges.end).getTime() - parseDate(ranges.start).getTime()) / 86400000) + 1;
   const avgPerDay = total / Math.max(1, daysInPeriod);
 
   // ---------- Time-series bars ----------
@@ -98,8 +96,8 @@ export default function SpendInsightsPage() {
       byKey.set(key, (byKey.get(key) ?? 0) + t.amount);
     }
     if (period === "سنة") {
-      const year = new Date(todayStr).getFullYear();
-      const currentMonth = new Date(todayStr).getMonth();
+      const year = parseDate(todayStr).getFullYear();
+      const currentMonth = parseDate(todayStr).getMonth();
       return Array.from({ length: currentMonth + 1 }, (_, m) => {
         const key = `${year}-${String(m + 1).padStart(2, "0")}`;
         return { key, label: arabicMonthName(m).slice(0, 3), value: byKey.get(key) ?? 0, isNow: m === currentMonth };
@@ -108,7 +106,7 @@ export default function SpendInsightsPage() {
     const days: { key: string; label: string; value: number; isNow: boolean }[] = [];
     let cursor = ranges.start;
     while (cursor <= ranges.end) {
-      const d = new Date(cursor);
+      const d = parseDate(cursor);
       days.push({
         key: cursor,
         label: period === "أسبوع" ? DAY_NAMES[d.getDay()] : String(d.getDate()),
@@ -185,6 +183,16 @@ export default function SpendInsightsPage() {
     const biggest = [...periodTx].sort((a, b) => b.amount - a.amount)[0];
     if (biggest && total > 0 && biggest.amount / total > 0.25) {
       list.push(`💸 أكبر مصروف واحد (${biggest.note || getMainCategory(categories, biggest.category).label}) = ${formatAmount(biggest.amount)} ر.س — ربع صرفك أو أكثر.`);
+    }
+
+    // Month-end projection: current daily pace extended over the full month.
+    if (period === "شهر" && total > 0) {
+      const d = parseDate(todayStr);
+      const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      if (d.getDate() >= 3 && d.getDate() < daysInMonth) {
+        const projected = (total / d.getDate()) * daysInMonth;
+        list.push(`📈 على وتيرتك الحالية، متوقع تصرف ${formatAmount(Math.round(projected))} ر.س بنهاية الشهر.`);
+      }
     }
 
     return list;

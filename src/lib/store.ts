@@ -6,7 +6,7 @@ import type {
   ReserveFund, ReserveDeposit,
 } from "./types";
 import { DEFAULT_CATEGORIES } from "./types";
-import { uid, today, mostRecentDueDate } from "./utils";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate } from "./utils";
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -156,25 +156,42 @@ export const useAppStore = create<AppStore>()(
       runRecurring: () => {
         let generated = 0;
         set((s) => {
-          const todayStr = today();
-          const now = new Date(todayStr);
+          const now = parseDate(today());
           const newTx: Transaction[] = [];
           const updatedRecurring = s.recurring.map((r) => {
             if (!r.active) return r;
-            // Determine the most recent due date on/before today
-            const due = mostRecentDueDate(r, now);
-            const dueStr = due.toISOString().split("T")[0];
-            // Already generated for this period?
-            if (r.lastGenerated && r.lastGenerated >= dueStr) return r;
-            newTx.push({
-              id: uid(),
-              date: dueStr,
-              amount: r.amount,
-              category: r.category,
-              note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
-            });
-            generated++;
-            return { ...r, lastGenerated: dueStr };
+            // Backfill every missed occurrence, not just the latest — if the
+            // app wasn't opened for two months, both rent payments land.
+            // Walk back from the most recent due date until we hit what was
+            // already generated (capped so a corrupt anchor can't explode).
+            const every = Math.max(1, Math.floor(r.every) || 1);
+            const dueDates: string[] = [];
+            let due = mostRecentDueDate(r, now);
+            for (let i = 0; i < 36; i++) {
+              const dueStr = toDateStr(due);
+              if (r.lastGenerated && dueStr <= r.lastGenerated) break;
+              if (dueStr < r.anchorDate) break;
+              dueDates.unshift(dueStr);
+              if (r.unit === "أسبوعي") {
+                due = new Date(due);
+                due.setDate(due.getDate() - every * 7);
+              } else {
+                const idx = due.getFullYear() * 12 + due.getMonth() - every;
+                due = new Date(Math.floor(idx / 12), ((idx % 12) + 12) % 12, due.getDate());
+              }
+            }
+            if (!dueDates.length) return r;
+            for (const dueStr of dueDates) {
+              newTx.push({
+                id: uid(),
+                date: dueStr,
+                amount: r.amount,
+                category: r.category,
+                note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
+              });
+              generated++;
+            }
+            return { ...r, lastGenerated: dueDates[dueDates.length - 1] };
           });
           if (!newTx.length) return {};
           return {

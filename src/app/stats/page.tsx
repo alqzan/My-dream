@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils";
 import { MOOD_LABELS } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
+import { BackupCard } from "@/components/settings/BackupCard";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { YearHeatmap } from "@/components/stats/YearHeatmap";
 import {
@@ -316,6 +317,10 @@ export default function StatsPage() {
           </div>
         </Card>
       )}
+
+      <div className="animate-fade-up">
+        <BackupCard />
+      </div>
     </div>
   );
 }

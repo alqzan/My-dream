@@ -1,5 +1,5 @@
 import type { JournalEntry } from "./types";
-import { uid } from "./utils";
+import { uid, today, toDateStr } from "./utils";
 
 interface DayOneRichText {
   contents?: Array<{ text?: string; attributes?: Record<string, unknown> }>;
@@ -90,8 +90,8 @@ export function parseDayOneJson(jsonString: string): JournalEntry[] {
       const date = entry.creationDate
         ? (/^\d{4}-\d{2}-\d{2}/.test(entry.creationDate)
             ? entry.creationDate.slice(0, 10)
-            : new Date(entry.creationDate).toISOString().split("T")[0])
-        : new Date().toISOString().split("T")[0];
+            : toDateStr(new Date(entry.creationDate)))
+        : today();
 
       return {
         id: uid(),

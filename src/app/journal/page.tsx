@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate } from "@/lib/utils";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
 import { JournalForm } from "@/components/journal/JournalForm";
 import { DayOneImport } from "@/components/journal/DayOneImport";
@@ -13,9 +13,17 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame } from "lucide-react";
+import { showUndo } from "@/components/ui/UndoToast";
 
 export default function JournalPage() {
-  const { journalEntries, deleteJournalEntry } = useAppStore();
+  const { journalEntries, deleteJournalEntry, addJournalEntry } = useAppStore();
+
+  // Instant delete + 5s undo window instead of a confirm dialog.
+  function handleDelete(id: string) {
+    const entry = journalEntries.find((e) => e.id === id);
+    deleteJournalEntry(id);
+    if (entry) showUndo("حذفت المذكرة", () => addJournalEntry(entry));
+  }
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editEntry, setEditEntry] = useState<JournalEntry | undefined>();
@@ -93,7 +101,7 @@ export default function JournalPage() {
           <JournalEntryCard
             key={entry.id}
             entry={entry}
-            onDelete={deleteJournalEntry}
+            onDelete={handleDelete}
             onClick={() => setViewEntry(entry)}
           />
         ))}
@@ -121,7 +129,7 @@ export default function JournalPage() {
       <Modal
         open={!!viewEntry}
         onClose={() => setViewEntry(undefined)}
-        title={viewEntry ? new Date(viewEntry.date).toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" }) : ""}
+        title={viewEntry ? `${formatDate(viewEntry.date)} · ${hijriDate(viewEntry.date)}` : ""}
         className="sm:max-w-2xl"
       >
         {viewEntry && (
@@ -146,7 +154,7 @@ export default function JournalPage() {
               <Button
                 variant="danger"
                 size="sm"
-                onClick={() => { deleteJournalEntry(viewEntry.id); setViewEntry(undefined); }}
+                onClick={() => { handleDelete(viewEntry.id); setViewEntry(undefined); }}
               >
                 حذف
               </Button>

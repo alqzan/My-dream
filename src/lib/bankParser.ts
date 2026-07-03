@@ -1,5 +1,5 @@
 import type { Transaction } from "./types";
-import { uid } from "./utils";
+import { uid, today } from "./utils";
 
 // ========== Smart Categorization ==========
 // Maps to the seeded default category ids (src/lib/types.ts). If the user
@@ -138,7 +138,7 @@ function parseDate(raw: string): string {
     const [d, m, y] = parts;
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
-  return new Date().toISOString().split("T")[0];
+  return today();
 }
 
 function parseAmount(raw: string): number {

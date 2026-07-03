@@ -11,14 +11,31 @@ export function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// ===================== Local-date primitives =====================
+// All date keys in the app are YYYY-MM-DD in the USER'S timezone. Never
+// derive them via toISOString() — that's UTC, and in Riyadh (UTC+3) it
+// reports yesterday between midnight and 3am, shifting prayers, streaks
+// and whole calendar grids by a day.
+
+export function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Parse a YYYY-MM-DD key as LOCAL midnight (new Date("YYYY-MM-DD") would
+// be UTC midnight — a different calendar day in some timezones).
+export function parseDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 export function today() {
-  return new Date().toISOString().split("T")[0];
+  return toDateStr(new Date());
 }
 
 // Force Gregorian calendar + Latin digits so server (build) and client render
 // identically — avoids hydration mismatches from ar-SA's Hijri default.
 export function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
+  const d = parseDate(dateStr);
   return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
     year: "numeric",
     month: "long",
@@ -27,7 +44,7 @@ export function formatDate(dateStr: string) {
 }
 
 export function formatDateShort(dateStr: string) {
-  const d = new Date(dateStr);
+  const d = parseDate(dateStr);
   return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric" });
 }
 
@@ -36,7 +53,7 @@ export function formatDateShort(dateStr: string) {
 // its own — appending it again produced a doubled "هـ هـ" (garbled to "ه ه").
 export function hijriDate(dateStr: string) {
   try {
-    const d = new Date(dateStr);
+    const d = parseDate(dateStr);
     const formatted = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
       day: "numeric",
       month: "long",
@@ -58,7 +75,7 @@ const hijriDayFmt =
 
 export function hijriDay(dateStr: string): string {
   try {
-    return hijriDayFmt?.format(new Date(dateStr)) ?? "";
+    return hijriDayFmt?.format(parseDate(dateStr)) ?? "";
   } catch {
     return "";
   }
@@ -81,17 +98,14 @@ export function hijriMonthLabel(year: number, month: number): string {
   }
 }
 
-// ===================== Sun times (auto theme) =====================
+// ===================== Sun & prayer times =====================
 
-// NOAA-simplified sunrise/sunset for a date + location. Accurate to a couple
-// of minutes — plenty for flipping the app theme at المغرب and الصباح.
-// Returns null in polar edge cases (sun never rises/sets).
-export function sunTimes(date: Date, lat: number, lng: number): { sunrise: Date; sunset: Date } | null {
-  const rad = Math.PI / 180;
+// NOAA-simplified solar position for a date + location. Shared by
+// sunrise/sunset (auto theme) and the five prayer times.
+function solarParams(date: Date) {
   const dayOfYear = Math.floor(
     (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000
   );
-  // Fractional year (radians)
   const gamma = ((2 * Math.PI) / 365) * (dayOfYear - 1 + (date.getHours() - 12) / 24);
   const eqTime =
     229.18 *
@@ -108,20 +122,93 @@ export function sunTimes(date: Date, lat: number, lng: number): { sunrise: Date;
     0.000907 * Math.sin(2 * gamma) -
     0.002697 * Math.cos(3 * gamma) +
     0.00148 * Math.sin(3 * gamma);
-  // Zenith 90.833° accounts for refraction + solar disc radius
+  return { eqTime, decl };
+}
+
+const RAD = Math.PI / 180;
+
+// Hour angle (degrees) at which the sun's centre sits at `zenith` degrees
+// from vertical. Null when the sun never reaches that altitude.
+function hourAngle(zenith: number, lat: number, decl: number): number | null {
   const cosHA =
-    (Math.cos(90.833 * rad) - Math.sin(lat * rad) * Math.sin(decl)) /
-    (Math.cos(lat * rad) * Math.cos(decl));
+    (Math.cos(zenith * RAD) - Math.sin(lat * RAD) * Math.sin(decl)) /
+    (Math.cos(lat * RAD) * Math.cos(decl));
   if (cosHA < -1 || cosHA > 1) return null;
-  const ha = Math.acos(cosHA) / rad; // degrees
-  const utcNoonMin = 720 - 4 * lng - eqTime; // minutes from UTC midnight
-  const sunriseUTC = utcNoonMin - 4 * ha;
-  const sunsetUTC = utcNoonMin + 4 * ha;
+  return Math.acos(cosHA) / RAD;
+}
+
+function utcMinutesToDate(date: Date, minutes: number): Date {
   const dayStartUTC = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return new Date(dayStartUTC + minutes * 60000);
+}
+
+// Sunrise/sunset — used for the auto theme flip. Accurate to a couple of
+// minutes. Returns null in polar edge cases.
+export function sunTimes(date: Date, lat: number, lng: number): { sunrise: Date; sunset: Date } | null {
+  const { eqTime, decl } = solarParams(date);
+  const ha = hourAngle(90.833, lat, decl); // refraction + solar disc radius
+  if (ha === null) return null;
+  const utcNoonMin = 720 - 4 * lng - eqTime;
   return {
-    sunrise: new Date(dayStartUTC + sunriseUTC * 60000),
-    sunset: new Date(dayStartUTC + sunsetUTC * 60000),
+    sunrise: utcMinutesToDate(date, utcNoonMin - 4 * ha),
+    sunset: utcMinutesToDate(date, utcNoonMin + 4 * ha),
   };
+}
+
+// The five daily prayer times, Umm al-Qura convention: الفجر at sun 18.5°
+// below the horizon, العشاء fixed at 90 minutes after المغرب, العصر at
+// shadow factor 1 (Shafi'i). Computed fully offline. Null near the poles.
+export function computePrayerTimes(
+  date: Date,
+  lat: number,
+  lng: number
+): Record<PrayerName, Date> | null {
+  const { eqTime, decl } = solarParams(date);
+  const noonMin = 720 - 4 * lng - eqTime; // solar noon, minutes from UTC midnight
+
+  const haSunset = hourAngle(90.833, lat, decl);
+  const haFajr = hourAngle(90 + 18.5, lat, decl);
+  if (haSunset === null || haFajr === null) return null;
+
+  // العصر: shadow length = object length + noon shadow (factor 1).
+  const noonAltitude = Math.abs(lat * RAD - decl);
+  const asrAltitude = Math.atan(1 / (1 + Math.tan(noonAltitude))); // radians
+  const haAsr = hourAngle(90 - asrAltitude / RAD, lat, decl);
+  if (haAsr === null) return null;
+
+  const maghribMin = noonMin + 4 * haSunset;
+  return {
+    الفجر: utcMinutesToDate(date, noonMin - 4 * haFajr),
+    الظهر: utcMinutesToDate(date, noonMin),
+    العصر: utcMinutesToDate(date, noonMin + 4 * haAsr),
+    المغرب: utcMinutesToDate(date, maghribMin),
+    العشاء: utcMinutesToDate(date, maghribMin + 90),
+  };
+}
+
+// Cached device location (set once by the theme applier / prayer widgets).
+// Falls back to Riyadh — close enough anywhere in the Gulf.
+export const FALLBACK_COORDS = { lat: 24.7136, lng: 46.6753 };
+export const GEO_KEY = "madar-geo";
+
+export function getCachedCoords(): { lat: number; lng: number } {
+  try {
+    const raw = localStorage.getItem(GEO_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return FALLBACK_COORDS;
+}
+
+export function formatClock(d: Date): string {
+  return d.toLocaleTimeString("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit" });
+}
+
+// Tiny haptic tick on satisfying actions (habit done, prayer logged).
+// Silently a no-op where the Vibration API doesn't exist (iOS Safari).
+export function buzz(ms = 12) {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {}
 }
 
 // Percentage of the current year elapsed (0-100).
@@ -140,14 +227,13 @@ export function formatAmount(amount: number) {
 
 export function calcStreak(dates: string[]): number {
   if (!dates.length) return 0;
-  const sorted = [...new Set(dates)].sort().reverse();
-  const todayStr = today();
-  let streak = 0;
-  let current = new Date(todayStr);
+  const logged = new Set(dates);
+  const current = parseDate(today());
 
+  let streak = 0;
   for (let i = 0; i < 365; i++) {
-    const dateStr = current.toISOString().split("T")[0];
-    if (sorted.includes(dateStr)) {
+    const dateStr = toDateStr(current);
+    if (logged.has(dateStr)) {
       streak++;
       current.setDate(current.getDate() - 1);
     } else if (i === 0) {
@@ -167,9 +253,9 @@ export function longestStreak(dates: string[]): number {
   let best = 1;
   let run = 1;
   for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]);
+    const prev = parseDate(sorted[i - 1]);
     prev.setDate(prev.getDate() + 1);
-    if (prev.toISOString().split("T")[0] === sorted[i]) {
+    if (toDateStr(prev) === sorted[i]) {
       run++;
       best = Math.max(best, run);
     } else {
@@ -255,7 +341,7 @@ export function computeDailyBudgetStatus(
   const todayStr = today();
   const days = Math.max(
     1,
-    Math.round((new Date(todayStr).getTime() - new Date(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
+    Math.round((parseDate(todayStr).getTime() - parseDate(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
   );
   const allowance = dailyBudget.amount * days;
   const spent = transactions
@@ -269,7 +355,7 @@ export function computeDailyBudgetStatus(
 // weeks" (not just a fixed 1/12) lines up on a consistent cadence.
 export function mostRecentDueDate(r: RecurringTransaction, now: Date): Date {
   const every = Math.max(1, Math.floor(r.every) || 1);
-  const anchor = new Date(r.anchorDate || today());
+  const anchor = parseDate(r.anchorDate || today());
 
   if (r.unit === "أسبوعي") {
     // dayOfMonth reused as weekday 0-6
@@ -332,7 +418,7 @@ export function getMonthDates(year: number, month: number): string[] {
   const dates: string[] = [];
   const d = new Date(year, month, 1);
   while (d.getMonth() === month) {
-    dates.push(d.toISOString().split("T")[0]);
+    dates.push(toDateStr(d));
     d.setDate(d.getDate() + 1);
   }
   return dates;
