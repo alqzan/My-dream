@@ -172,7 +172,6 @@ export const useAppStore = create<AppStore>()(
               amount: r.amount,
               category: r.category,
               note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
-              big: r.big,
             });
             generated++;
             return { ...r, lastGenerated: dueStr };
@@ -372,7 +371,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "my-dream-store",
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -467,6 +466,18 @@ export const useAppStore = create<AppStore>()(
             categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) =>
               subEnabled.has(c.id) ? { ...c, allowSubs: true } : c
             ),
+          };
+        }
+
+        // v6 retires the "صرف كبير" feature: the flag is stripped and those
+        // transactions count like any other expense from here on.
+        if (version < 6) {
+          const stripBig = (items: unknown) =>
+            ((items as Record<string, unknown>[]) ?? []).map(({ big: _big, ...rest }) => rest);
+          state = {
+            ...state,
+            transactions: stripBig(state.transactions),
+            recurring: stripBig(state.recurring),
           };
         }
 

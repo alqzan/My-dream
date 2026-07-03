@@ -5,7 +5,7 @@ import type { RecurringTransaction, RecurringUnit } from "@/lib/types";
 import { RECURRING_PRESETS } from "@/lib/types";
 import { uid, today, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Plus, Trash2, Power, Gem } from "lucide-react";
+import { Plus, Trash2, Power } from "lucide-react";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -26,7 +26,6 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
   const [every, setEvery] = useState(1);
   const [customEvery, setCustomEvery] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState(1); // day-of-month (شهري) or weekday index (أسبوعي)
-  const [big, setBig] = useState(false);
 
   function handleAdd() {
     const parsed = parseFloat(amount);
@@ -41,13 +40,12 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
       dayOfMonth,
       anchorDate: today(),
       active: true,
-      big,
     };
     addRecurring(r);
     // Immediately generate any due instance
     setTimeout(() => runRecurring(), 0);
     setAdding(false);
-    setAmount(""); setNote(""); setBig(false);
+    setAmount(""); setNote("");
   }
 
   return (
@@ -67,10 +65,7 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
             <div key={r.id} className={`flex items-center gap-2 rounded-xl p-3 border ${r.active ? "bg-white border-gray-100" : "bg-gray-50 border-gray-100 opacity-60"}`}>
               <span className="text-lg">{info.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <div className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</div>
-                  {r.big && <Gem size={11} className="text-brand-600 shrink-0" />}
-                </div>
+                <div className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</div>
                 <div className="text-[11px] text-gray-400">
                   {describeFrequency(r.unit, r.every)} · {info.label}
                 </div>
@@ -201,18 +196,6 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
               />
             </div>
           )}
-
-          <label className="flex items-center gap-2.5 bg-amber-50 rounded-xl p-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={big}
-              onChange={(e) => setBig(e.target.checked)}
-              className="w-4 h-4 accent-brand-600"
-            />
-            <span className="text-[11px] text-amber-700 leading-relaxed">
-              <strong>التزام كبير</strong> (إيجار مرتفع...) — ما يأثر على ميزانيتك اليومية
-            </span>
-          </label>
 
           <div className="flex gap-2">
             <Button onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90" size="sm">حفظ</Button>

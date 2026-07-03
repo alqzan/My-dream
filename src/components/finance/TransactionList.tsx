@@ -1,7 +1,7 @@
 "use client";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, getMainCategory } from "@/lib/utils";
-import { Trash2, Gem, PiggyBank } from "lucide-react";
+import { Trash2, PiggyBank } from "lucide-react";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -32,9 +32,7 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
         return (
           <div
             key={tx.id}
-            className={`flex items-center gap-3 rounded-xl border p-3 hover:shadow-md transition-shadow cursor-pointer press ${
-              tx.big ? "bg-brand-50 border-brand-200" : "bg-white border-gray-100"
-            }`}
+            className="flex items-center gap-3 rounded-xl border p-3 bg-white border-gray-100 hover:shadow-md transition-shadow cursor-pointer press"
             onClick={() => onEdit?.(tx)}
           >
             <div
@@ -55,11 +53,6 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                     info.label
                   )}
                 </div>
-                {tx.big && (
-                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-brand-700 bg-brand-100 px-1.5 py-0.5 rounded-full shrink-0">
-                    <Gem size={9} /> التزام كبير
-                  </span>
-                )}
                 {reservedPct > 0 && (
                   <span className="flex items-center gap-0.5 text-[10px] font-semibold text-prayer bg-prayer/10 px-1.5 py-0.5 rounded-full shrink-0">
                     <PiggyBank size={9} /> {reservedPct}% احتياطي

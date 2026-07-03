@@ -27,7 +27,6 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
 
   const spendByDate = new Map<string, number>();
   for (const t of transactions) {
-    if (t.big) continue; // big commitments have their own display, keep the mosaic about daily spending
     spendByDate.set(t.date, (spendByDate.get(t.date) ?? 0) + t.amount);
   }
   const maxSpend = Math.max(1, ...dates.map((d) => spendByDate.get(d) ?? 0));

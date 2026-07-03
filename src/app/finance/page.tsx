@@ -5,7 +5,6 @@ import { FinanceSummary } from "@/components/finance/FinanceSummary";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import { FinancePace } from "@/components/finance/FinancePace";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
-import { BigCommitments } from "@/components/finance/BigCommitments";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
@@ -42,11 +41,6 @@ export default function FinancePage() {
   });
 
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
-  // "Big" commitments (rent, a loan...) still count in totals/category
-  // budgets, but are excluded from anything pacing-oriented (daily budget,
-  // spending trend) so one exceptional payment doesn't wreck those numbers.
-  const byMonthRegular = byMonth.filter((t) => !t.big);
-  const transactionsRegular = transactions.filter((t) => !t.big);
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
@@ -127,16 +121,14 @@ export default function FinancePage() {
         <ReserveFunds />
       </Card>
 
-      <BigCommitments transactions={byMonth} categories={categories} />
-
       <Card className="animate-fade-up stagger-2">
         <FinanceSummary transactions={byMonth} categories={categories} />
       </Card>
 
-      <FinancePace budgets={budgets} monthTransactions={byMonthRegular} />
+      <FinancePace budgets={budgets} monthTransactions={byMonth} />
 
       <BudgetDisciplineScore
-        transactions={transactionsRegular}
+        transactions={transactions}
         monthTransactions={byMonth}
         budgets={budgets}
         dailyBudget={dailyBudget}

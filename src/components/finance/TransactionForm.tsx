@@ -25,7 +25,6 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const [amount, setAmount] = useState(initial?.amount?.toString() ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [date, setDate] = useState(initial?.date ?? today());
-  const [big, setBig] = useState(initial?.big ?? false);
   const [splits, setSplits] = useState<ReserveSplit[]>(initial?.reserveSplits ?? []);
   const [addingSub, setAddingSub] = useState(false);
   const [newSubName, setNewSubName] = useState("");
@@ -70,10 +69,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       amount: parsedAmount,
       category: subCat || mainCat,
       note,
-      big,
-      // "big" commitments live outside both the daily budget and the
-      // envelopes, so a hidden leftover split must not survive the save.
-      reserveSplits: !big && splits.length ? splits : undefined,
+      reserveSplits: splits.length ? splits : undefined,
     };
     if (initial) {
       updateTransaction(initial.id, tx);
@@ -197,7 +193,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
         </div>
       </div>
 
-      {reserves.length > 0 && !big && (
+      {reserves.length > 0 && (
         <div className="bg-prayer/5 rounded-xl p-3 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-prayer">
@@ -274,18 +270,6 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           </p>
         </div>
       )}
-
-      <label className="flex items-center gap-2.5 bg-amber-50 rounded-xl p-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={big}
-          onChange={(e) => setBig(e.target.checked)}
-          className="w-4 h-4 accent-brand-600"
-        />
-        <span className="text-xs text-amber-700 leading-relaxed">
-          <strong>صرف كبير</strong> (قرض، استثمار كبير...) — ما يأثر على ميزانيتك اليومية، وله عرض خاص في "الالتزامات الكبيرة"
-        </span>
-      </label>
 
       <div className="flex gap-2">
         <Button onClick={handleSave} className="flex-1 bg-finance hover:bg-finance/90">

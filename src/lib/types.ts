@@ -44,11 +44,6 @@ export interface Transaction {
   category: string; // FinanceCategoryDef id
   note: string;
   linkedJournalId?: string;
-  // A large one-off or recurring commitment (rent, a loan, a big investment)
-  // that would otherwise blow out the daily cumulative budget. Still counts
-  // toward category totals/budgets, but is excluded from that calculation
-  // and shown with its own treatment instead.
-  big?: boolean;
   reserveSplits?: ReserveSplit[];
 }
 
@@ -163,7 +158,6 @@ export interface RecurringTransaction {
   anchorDate: string; // YYYY-MM-DD — first occurrence; interval phase is counted from here
   active: boolean;
   lastGenerated?: string; // YYYY-MM-DD of last auto-created instance
-  big?: boolean; // e.g. rent — propagated onto every auto-generated transaction
 }
 
 // Quick presets shown in the UI on top of the free "every N" input.

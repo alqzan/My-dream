@@ -11,8 +11,7 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // A cumulative daily allowance instead of a monthly cap: spend less than
 // the daily rate today and it cushions tomorrow, spend more and it eats
 // into your running balance. The daily amount is either a fixed figure or
-// a percentage of monthly income (income × pct / 100 ÷ 30). "big"
-// transactions are excluded on purpose — see TransactionForm.
+// a percentage of monthly income (income × pct / 100 ÷ 30).
 export function DailyBudgetCard() {
   const { dailyBudget, transactions, setDailyBudget, removeDailyBudget } = useAppStore();
   const [editing, setEditing] = useState(false);
@@ -146,9 +145,6 @@ export function DailyBudgetCard() {
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
   const over = status.balance < 0;
-  const excludedBig = transactions
-    .filter((t) => t.big && t.date >= dailyBudget.startDate)
-    .reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-prayer/5"}`}>
@@ -166,7 +162,6 @@ export function DailyBudgetCard() {
       </div>
       <p className="text-xs text-gray-500 text-center leading-relaxed">
         {formatAmount(dailyBudget.amount)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
-        {excludedBig > 0 && ` (باستثناء ${formatAmount(excludedBig)} ر.س التزامات كبيرة)`}
       </p>
       {dailyBudget.incomePct && dailyBudget.monthlyIncome ? (
         <p className="text-[10px] text-gray-400 text-center">

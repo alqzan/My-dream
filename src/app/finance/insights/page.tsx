@@ -80,13 +80,8 @@ export default function SpendInsightsPage() {
   const todayStr = today();
   const ranges = periodRanges(period, todayStr);
 
-  // "big" commitments are excluded from pacing charts everywhere in the app;
-  // they get their own chip below so the number never silently disappears.
-  const periodTx = transactions.filter((t) => !t.big && inRange(t, ranges.start, ranges.end));
-  const prevTx = transactions.filter((t) => !t.big && inRange(t, ranges.prevStart, ranges.prevEnd));
-  const bigTotal = transactions
-    .filter((t) => t.big && inRange(t, ranges.start, ranges.end))
-    .reduce((s, t) => s + t.amount, 0);
+  const periodTx = transactions.filter((t) => inRange(t, ranges.start, ranges.end));
+  const prevTx = transactions.filter((t) => inRange(t, ranges.prevStart, ranges.prevEnd));
 
   const total = periodTx.reduce((s, t) => s + t.amount, 0);
   const prevTotal = prevTx.reduce((s, t) => s + t.amount, 0);
@@ -253,11 +248,6 @@ export default function SpendInsightsPage() {
           {spentFromDaily !== total && (
             <span className="text-[10px] bg-white/15 rounded-full px-2 py-1">
               من اليومية: {formatAmount(spentFromDaily)} ر.س
-            </span>
-          )}
-          {bigTotal > 0 && (
-            <span className="text-[10px] bg-white/15 rounded-full px-2 py-1">
-              + التزامات كبيرة: {formatAmount(bigTotal)} ر.س (خارج الرسم)
             </span>
           )}
         </div>

@@ -239,15 +239,15 @@ export function reserveSpent(fund: ReserveFund, transactions: Transaction[]): nu
 export interface DailyBudgetStatus {
   days: number; // days since (and including) startDate, through today
   allowance: number; // amount * days
-  spent: number; // sum of non-big transactions since startDate
+  spent: number; // sum of daily-budget shares since startDate
   balance: number; // allowance - spent (negative = over)
 }
 
 // Cumulative daily allowance: every day since `startDate` contributes
-// `amount`, and every (non-"big") transaction since then eats into the
-// running total — a surplus day cushions a rough one later on. Only the
-// daily-budget share counts: a portion split onto a reserve fund is that
-// fund's business, not the daily allowance's.
+// `amount`, and every transaction since then eats into the running total —
+// a surplus day cushions a rough one later on. Only the daily-budget share
+// counts: a portion split onto a reserve fund is that fund's business, not
+// the daily allowance's.
 export function computeDailyBudgetStatus(
   dailyBudget: { amount: number; startDate: string },
   transactions: Transaction[]
@@ -259,7 +259,7 @@ export function computeDailyBudgetStatus(
   );
   const allowance = dailyBudget.amount * days;
   const spent = transactions
-    .filter((t) => !t.big && t.date >= dailyBudget.startDate && t.date <= todayStr)
+    .filter((t) => t.date >= dailyBudget.startDate && t.date <= todayStr)
     .reduce((s, t) => s + dailyShare(t), 0);
   return { days, allowance, spent, balance: allowance - spent };
 }
