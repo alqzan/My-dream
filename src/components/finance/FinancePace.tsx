@@ -1,22 +1,25 @@
 "use client";
-import type { Budget, Transaction } from "@/lib/types";
-import { formatAmount } from "@/lib/utils";
+import type { Budget, Transaction, FinanceCategoryDef } from "@/lib/types";
+import { formatAmount, budgetLimit, getMainCategory } from "@/lib/utils";
 
 interface FinancePaceProps {
   budgets: Budget[];
   monthTransactions: Transaction[];
+  categories: FinanceCategoryDef[];
+  monthlyIncome: number | null;
 }
 
 // Turns "how much budget do I have left" into "how much can I spend per
 // day for the rest of the month" — the same pacing idea as ReadingPace,
 // applied to money instead of pages.
-export function FinancePace({ budgets, monthTransactions }: FinancePaceProps) {
+export function FinancePace({ budgets, monthTransactions, categories, monthlyIncome }: FinancePaceProps) {
   if (!budgets.length) return null;
 
-  const totalBudget = budgets.reduce((s, b) => s + b.limit, 0);
+  const totalBudget = budgets.reduce((s, b) => s + budgetLimit(b, monthlyIncome), 0);
   const budgetedCats = new Set(budgets.map((b) => b.category));
+  // Sub-category spending rolls up onto the main category's budget.
   const spent = monthTransactions
-    .filter((t) => budgetedCats.has(t.category))
+    .filter((t) => budgetedCats.has(getMainCategory(categories, t.category).id))
     .reduce((s, t) => s + t.amount, 0);
   const remaining = totalBudget - spent;
 

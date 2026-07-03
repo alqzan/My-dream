@@ -172,9 +172,13 @@ export const RECURRING_PRESETS: { label: string; unit: RecurringUnit; every: num
   { label: "سنوي", unit: "شهري", every: 12 },
 ];
 
+// A monthly cap on a main category — either a fixed SAR amount or a
+// percentage of the monthly income (pct wins when both are set, and the
+// effective cap follows the income automatically if it changes).
 export interface Budget {
   category: string; // FinanceCategoryDef id
-  limit: number; // monthly cap in SAR
+  limit?: number; // fixed monthly cap in SAR
+  pct?: number; // 1-100 — share of monthlyIncome
 }
 
 // A personal daily spending allowance that rolls over — under-spend one day
@@ -203,6 +207,7 @@ export interface AppData {
   reserves: ReserveFund[];
   prayerLogs: PrayerLog[];
   dailyBudget: DailyBudget | null;
+  monthlyIncome: number | null; // shared by %-based budgets and the daily budget editor
   lastUpdated: string;
 }
 

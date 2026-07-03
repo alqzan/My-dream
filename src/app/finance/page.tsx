@@ -25,7 +25,7 @@ import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft } from "lucid
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function FinancePage() {
-  const { transactions, budgets, recurring, categories, dailyBudget, deleteTransaction, addTransaction, runRecurring } = useAppStore();
+  const { transactions, budgets, recurring, categories, dailyBudget, monthlyIncome, deleteTransaction, addTransaction, runRecurring } = useAppStore();
 
   // Instant delete + 5s undo window.
   function handleDelete(id: string) {
@@ -133,7 +133,7 @@ export default function FinancePage() {
         <FinanceSummary transactions={byMonth} categories={categories} />
       </Card>
 
-      <FinancePace budgets={budgets} monthTransactions={byMonth} />
+      <FinancePace budgets={budgets} monthTransactions={byMonth} categories={categories} monthlyIncome={monthlyIncome} />
 
       <BudgetDisciplineScore
         transactions={transactions}
@@ -141,6 +141,7 @@ export default function FinancePage() {
         budgets={budgets}
         categories={categories}
         dailyBudget={dailyBudget}
+        monthlyIncome={monthlyIncome}
       />
 
       <Card className="animate-fade-up stagger-3">

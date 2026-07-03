@@ -27,9 +27,10 @@ interface AppStore extends AppData {
   deleteRecurring: (id: string) => void;
   runRecurring: () => number; // returns count of generated transactions
 
-  // Budgets
-  setBudget: (category: string, limit: number) => void;
+  // Budgets — a fixed limit OR a % of monthly income
+  setBudget: (category: string, cap: { limit?: number; pct?: number }) => void;
   removeBudget: (category: string) => void;
+  setMonthlyIncome: (amount: number | null) => void;
 
   // Categories (user-managed, like habits)
   addCategory: (def: FinanceCategoryDef) => void;
@@ -92,6 +93,7 @@ export const useAppStore = create<AppStore>()(
       reserves: [],
       prayerLogs: [],
       dailyBudget: null,
+      monthlyIncome: null,
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
@@ -202,18 +204,20 @@ export const useAppStore = create<AppStore>()(
         return generated;
       },
 
-      setBudget: (category, limit) =>
+      setBudget: (category, cap) =>
         set((s) => {
+          const entry = { category, limit: cap.limit, pct: cap.pct };
           const existing = s.budgets.find((b) => b.category === category);
           if (existing) {
             return {
-              budgets: s.budgets.map((b) =>
-                b.category === category ? { ...b, limit } : b
-              ),
+              budgets: s.budgets.map((b) => (b.category === category ? entry : b)),
             };
           }
-          return { budgets: [...s.budgets, { category, limit }] };
+          return { budgets: [...s.budgets, entry] };
         }),
+
+      setMonthlyIncome: (amount) =>
+        set(() => ({ monthlyIncome: amount && amount > 0 ? amount : null })),
 
       removeBudget: (category) =>
         set((s) => ({
@@ -365,6 +369,7 @@ export const useAppStore = create<AppStore>()(
           reserves: data.reserves ?? [],
           prayerLogs: data.prayerLogs ?? [],
           dailyBudget: data.dailyBudget ?? null,
+          monthlyIncome: data.monthlyIncome ?? null,
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -382,6 +387,7 @@ export const useAppStore = create<AppStore>()(
           reserves: s.reserves,
           prayerLogs: s.prayerLogs,
           dailyBudget: s.dailyBudget,
+          monthlyIncome: s.monthlyIncome,
           lastUpdated: s.lastUpdated,
         };
       },

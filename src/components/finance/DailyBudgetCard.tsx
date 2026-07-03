@@ -13,11 +13,12 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // into your running balance. The daily amount is either a fixed figure or
 // a percentage of monthly income (income × pct / 100 ÷ 30).
 export function DailyBudgetCard() {
-  const { dailyBudget, transactions, setDailyBudget, removeDailyBudget } = useAppStore();
+  const { dailyBudget, transactions, monthlyIncome, setDailyBudget, removeDailyBudget, setMonthlyIncome } = useAppStore();
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<Mode>(dailyBudget?.incomePct ? "income" : "fixed");
   const [amount, setAmount] = useState(dailyBudget?.amount?.toString() ?? "");
-  const [income, setIncome] = useState(dailyBudget?.monthlyIncome?.toString() ?? "");
+  // The monthly income is shared app-wide (budgets by % use it too).
+  const [income, setIncome] = useState((dailyBudget?.monthlyIncome ?? monthlyIncome)?.toString() ?? "");
   const [pct, setPct] = useState(dailyBudget?.incomePct?.toString() ?? "30");
 
   const parsedIncome = parseFloat(income) || 0;
@@ -27,6 +28,7 @@ export function DailyBudgetCard() {
   function handleSave() {
     if (mode === "income") {
       if (!derivedDaily) return;
+      setMonthlyIncome(parsedIncome);
       setDailyBudget(Math.round(derivedDaily * 100) / 100, {
         monthlyIncome: parsedIncome,
         incomePct: parsedPct,

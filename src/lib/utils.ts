@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef, ReserveFund } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef, ReserveFund, Budget } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -292,6 +292,13 @@ export function getMainCategory(categories: FinanceCategoryDef[], id: string): F
 
 export function getSubCategories(categories: FinanceCategoryDef[], mainId: string): FinanceCategoryDef[] {
   return categories.filter((c) => c.parentId === mainId);
+}
+
+// Effective monthly cap of a budget: %-of-income when pct is set (and an
+// income exists), the fixed limit otherwise.
+export function budgetLimit(b: Budget, monthlyIncome: number | null): number {
+  if (b.pct && monthlyIncome) return (monthlyIncome * b.pct) / 100;
+  return b.limit ?? 0;
 }
 
 // ===================== Reserve funds & split spending =====================

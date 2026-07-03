@@ -1,6 +1,6 @@
 "use client";
 import type { Transaction, Budget, DailyBudget, FinanceCategoryDef } from "@/lib/types";
-import { computeDailyBudgetStatus, formatAmount, toDateStr, getMainCategory } from "@/lib/utils";
+import { computeDailyBudgetStatus, formatAmount, toDateStr, getMainCategory, budgetLimit } from "@/lib/utils";
 
 interface BudgetDisciplineScoreProps {
   transactions: Transaction[]; // all-time, for trend + daily budget calc
@@ -8,12 +8,13 @@ interface BudgetDisciplineScoreProps {
   budgets: Budget[];
   categories: FinanceCategoryDef[];
   dailyBudget: DailyBudget | null;
+  monthlyIncome: number | null;
 }
 
 // A spending-discipline score (0-100) built entirely from expense data —
 // staying under category budgets, staying under the daily allowance, and
 // spending less than last week.
-export function BudgetDisciplineScore({ transactions, monthTransactions, budgets, categories, dailyBudget }: BudgetDisciplineScoreProps) {
+export function BudgetDisciplineScore({ transactions, monthTransactions, budgets, categories, dailyBudget, monthlyIncome }: BudgetDisciplineScoreProps) {
   if (!transactions.length) return null;
 
   let budgetScore = 20; // neutral baseline when no budgets are set yet
@@ -23,7 +24,7 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
       const spent = monthTransactions
         .filter((t) => getMainCategory(categories, t.category).id === b.category)
         .reduce((s, t) => s + t.amount, 0);
-      return spent <= b.limit;
+      return spent <= budgetLimit(b, monthlyIncome);
     }).length;
     budgetScore = Math.round((within / budgets.length) * 40);
   }
