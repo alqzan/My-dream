@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate, dailyShare } from "@/lib/utils";
 import type { Transaction, DailyBudget } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
@@ -25,9 +25,14 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
   const firstDay = new Date(year, month, 1).getDay();
   const todayStr = today();
 
+  // Bar height = the full amount spent that day; the green/red tint follows
+  // the DAILY-BUDGET share only (a portion charged to a reserve fund never
+  // counts against the daily rate — same rule as the daily budget itself).
   const spendByDate = new Map<string, number>();
+  const dailyShareByDate = new Map<string, number>();
   for (const t of transactions) {
     spendByDate.set(t.date, (spendByDate.get(t.date) ?? 0) + t.amount);
+    dailyShareByDate.set(t.date, (dailyShareByDate.get(t.date) ?? 0) + dailyShare(t));
   }
   const maxSpend = Math.max(1, ...dates.map((d) => spendByDate.get(d) ?? 0));
 
@@ -62,7 +67,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
           const isFuture = date > todayStr;
           const barHeight = spent > 0 ? Math.max(4, Math.round((spent / maxSpend) * 20)) : 0;
           const barColor = dailyBudget
-            ? spent > dailyBudget.amount ? "#e05555" : "#1f7a6c"
+            ? (dailyShareByDate.get(date) ?? 0) > dailyBudget.amount ? "#e05555" : "#1f7a6c"
             : "#e17b6e";
           return (
             <button

@@ -89,21 +89,26 @@ export default function SpendInsightsPage() {
   const avgPerDay = total / Math.max(1, daysInPeriod);
 
   // ---------- Time-series bars ----------
+  // value = full spend (what actually left your pocket); daily = the
+  // daily-budget share only — that's what the over-budget red compares,
+  // matching the daily budget's own rule (reserve shares don't count).
   const chartData = useMemo(() => {
     const byKey = new Map<string, number>();
+    const dailyByKey = new Map<string, number>();
     for (const t of periodTx) {
       const key = period === "سنة" ? t.date.slice(0, 7) : t.date;
       byKey.set(key, (byKey.get(key) ?? 0) + t.amount);
+      dailyByKey.set(key, (dailyByKey.get(key) ?? 0) + dailyShare(t));
     }
     if (period === "سنة") {
       const year = parseDate(todayStr).getFullYear();
       const currentMonth = parseDate(todayStr).getMonth();
       return Array.from({ length: currentMonth + 1 }, (_, m) => {
         const key = `${year}-${String(m + 1).padStart(2, "0")}`;
-        return { key, label: arabicMonthName(m).slice(0, 3), value: byKey.get(key) ?? 0, isNow: m === currentMonth };
+        return { key, label: arabicMonthName(m).slice(0, 3), value: byKey.get(key) ?? 0, daily: dailyByKey.get(key) ?? 0, isNow: m === currentMonth };
       });
     }
-    const days: { key: string; label: string; value: number; isNow: boolean }[] = [];
+    const days: { key: string; label: string; value: number; daily: number; isNow: boolean }[] = [];
     let cursor = ranges.start;
     while (cursor <= ranges.end) {
       const d = parseDate(cursor);
@@ -111,6 +116,7 @@ export default function SpendInsightsPage() {
         key: cursor,
         label: period === "أسبوع" ? DAY_NAMES[d.getDay()] : String(d.getDate()),
         value: byKey.get(cursor) ?? 0,
+        daily: dailyByKey.get(cursor) ?? 0,
         isNow: cursor === todayStr,
       });
       cursor = addDays(cursor, 1);
@@ -163,7 +169,7 @@ export default function SpendInsightsPage() {
     }
 
     if (dailyBudget && period !== "سنة") {
-      const daysOver = chartData.filter((d) => d.value > dailyBudget.amount).length;
+      const daysOver = chartData.filter((d) => d.daily > dailyBudget.amount).length;
       const daysTracked = chartData.filter((d) => d.key <= todayStr).length;
       list.push(
         daysOver === 0
@@ -296,7 +302,7 @@ export default function SpendInsightsPage() {
                   <Cell
                     key={d.key}
                     fill={
-                      dailyBudget && period !== "سنة" && d.value > dailyBudget.amount
+                      dailyBudget && period !== "سنة" && d.daily > dailyBudget.amount
                         ? "#e05555"
                         : d.isNow
                         ? "#1d5c20"

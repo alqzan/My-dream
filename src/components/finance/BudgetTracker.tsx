@@ -31,7 +31,10 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
       .filter((t) => getMainCategory(categories, t.category).id === category && t.date.startsWith(monthPrefix))
       .reduce((s, t) => s + t.amount, 0);
 
-  const parsedIncome = parseFloat(income) || 0;
+  // The live store income wins over the local input — the input only
+  // exists for the very first time, and the store may have been set from
+  // elsewhere (the daily-budget editor) after this component mounted.
+  const parsedIncome = monthlyIncome || parseFloat(income) || 0;
   const parsedPct = parseFloat(pct) || 0;
   const previewCap = mode === "pct" ? (parsedIncome * parsedPct) / 100 : parseFloat(limit) || 0;
 
