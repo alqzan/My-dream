@@ -7,6 +7,14 @@ import type {
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME } from "./types";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus } from "./utils";
+
+// الدورة الجديدة بعد ترحيل الفائض تبدأ من الغد — مخصص اليوم دخل ضمن
+// المبلغ المرحّل، وبدء الدورة من اليوم نفسه كان يمنحه مرتين.
+function tomorrow(): string {
+  const d = parseDate(today());
+  d.setDate(d.getDate() + 1);
+  return toDateStr(d);
+}
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -353,8 +361,9 @@ export const useAppStore = create<AppStore>()(
           return {
             reserves,
             lastSalaryConfirm: todayStr,
-            // تصفير كل العدادات: دورة يومية جديدة تبدأ اليوم
-            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: todayStr } : s.dailyBudget,
+            // تصفير كل العدادات: الدورة الجديدة تبدأ من الغد (مخصص اليوم
+            // دخل ضمن الفوائض المرحّلة)
+            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: tomorrow() } : s.dailyBudget,
           };
         });
         return moved;
@@ -373,8 +382,8 @@ export const useAppStore = create<AppStore>()(
             reserves: s.reserves.map((f) =>
               f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
             ),
-            // ما انتقل للاحتياطي يخرج من عدّاد اليومية — تبدأ الدورة من اليوم
-            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: today() } : s.dailyBudget,
+            // ما انتقل للاحتياطي يخرج من عدّاد اليومية — الدورة الجديدة من الغد
+            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: tomorrow() } : s.dailyBudget,
           };
         }),
 

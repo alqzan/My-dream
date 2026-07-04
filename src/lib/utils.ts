@@ -342,8 +342,12 @@ export function computeDailyBudgetStatus(
   transactions: Transaction[]
 ): DailyBudgetStatus {
   const todayStr = today();
+  // startDate in the future (right after ترحيل الفائض / نزول الراتب: the
+  // new cycle starts tomorrow) → zero days, zero allowance. Without this,
+  // resetting to "today" would re-grant today's allowance immediately and
+  // sweeping it repeatedly would mint money out of thin air.
   const days = Math.max(
-    1,
+    0,
     Math.round((parseDate(todayStr).getTime() - parseDate(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
   );
   const allowance = dailyBudget.amount * days;

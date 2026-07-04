@@ -199,9 +199,15 @@ export function DailyBudgetCard() {
         </div>
         <div className="text-[11px] text-gray-400 mt-0.5">ر.س {over ? "بالسالب" : "رصيدك متراكم"}</div>
       </div>
-      <p className="text-xs text-gray-500 text-center leading-relaxed">
-        {formatAmount(dailyBudget.amount)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
-      </p>
+      {status.days === 0 ? (
+        <p className="text-xs text-gray-500 text-center leading-relaxed">
+          🌱 رُحّل الفائض — الدورة الجديدة تبدأ من الغد بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً
+        </p>
+      ) : (
+        <p className="text-xs text-gray-500 text-center leading-relaxed">
+          {formatAmount(dailyBudget.amount)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
+        </p>
+      )}
       {dailyBudget.incomePct && dailyBudget.monthlyIncome ? (
         <p className="text-[10px] text-gray-400 text-center">
           💼 {dailyBudget.incomePct}٪ من دخلك الشهري ({formatAmount(dailyBudget.monthlyIncome)} ر.س)
