@@ -1,8 +1,8 @@
 "use client";
 import type { JournalEntry } from "@/lib/types";
 import { MOOD_LABELS } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
-import { Trash2, Clock } from "lucide-react";
+import { formatDate, entryPhotos } from "@/lib/utils";
+import { Trash2, Clock, Images } from "lucide-react";
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -13,14 +13,23 @@ interface JournalEntryCardProps {
 export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardProps) {
   const mood = entry.mood ? MOOD_LABELS[entry.mood] : null;
   const preview = entry.content.slice(0, 180) + (entry.content.length > 180 ? "..." : "");
+  const photos = entryPhotos(entry);
 
   return (
     <div
       className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-sm transition-shadow cursor-pointer"
       onClick={onClick}
     >
-      {entry.photo && (
-        <img src={entry.photo} alt="صورة اليوم" className="w-full h-36 object-cover" />
+      {photos.length > 0 && (
+        <div className="relative">
+          <img src={photos[0]} alt="صورة اليوم" className="w-full h-36 object-cover" />
+          {photos.length > 1 && (
+            <span className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/55 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <Images size={11} />
+              +{photos.length - 1}
+            </span>
+          )}
+        </div>
       )}
       <div className="p-4 space-y-2">
         {/* العنوان أولاً — أكبر وأغمق */}

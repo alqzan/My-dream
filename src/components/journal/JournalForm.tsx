@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
 import { uid, today, parseDate } from "@/lib/utils";
-import { compressImage, estimateSize } from "@/lib/imageUtils";
+import { compressImage } from "@/lib/imageUtils";
 import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -57,8 +57,9 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [question, setQuestion] = useState(initial?.question ?? dailyQuestion(today()));
   const [answering, setAnswering] = useState(!!initial?.question);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [photo, setPhoto] = useState<string | undefined>(initial?.photo);
-  const [photoSize, setPhotoSize] = useState("");
+  const [photos, setPhotos] = useState<string[]>(
+    initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
+  );
   const [compressing, setCompressing] = useState(false);
 
   const titleIdeas = useMemo(
@@ -66,12 +67,16 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     [content, date, question, answering]
   );
 
-  async function handlePhotoFile(file: File) {
+  const MAX_PHOTOS = 6;
+
+  async function handlePhotoFiles(files: File[]) {
     setCompressing(true);
     try {
-      const compressed = await compressImage(file, 200);
-      setPhoto(compressed);
-      setPhotoSize(estimateSize(compressed));
+      const compressed: string[] = [];
+      for (const file of files.slice(0, MAX_PHOTOS - photos.length)) {
+        compressed.push(await compressImage(file, 200));
+      }
+      setPhotos((prev) => [...prev, ...compressed].slice(0, MAX_PHOTOS));
     } finally {
       setCompressing(false);
     }
@@ -88,7 +93,9 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         title: title.trim(),
         content: content.trim(),
         question: answering ? question : "",
-        photo: photo ?? "",
+        photos,
+        // photo القديم يبقى مرآة لأول صورة للتوافق مع العروض القديمة
+        photo: photos[0] ?? "",
       });
     } else {
       addJournalEntry({
@@ -97,7 +104,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         title: title.trim(),
         content: content.trim(),
         ...(answering ? { question } : {}),
-        ...(photo ? { photo } : {}),
+        ...(photos.length ? { photos, photo: photos[0] } : {}),
         time: nowHHMM(),
         source: "manual",
       });
@@ -191,31 +198,37 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         />
       </div>
 
-      {/* الصورة: من الكاميرا أو من الاستديو — تُضغط تلقائياً */}
+      {/* الصور: من الكاميرا أو الاستديو، حتى 6 صور — تُضغط تلقائياً */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">صورة اليوم</label>
-        {photo ? (
-          <div className="relative">
-            <img src={photo} alt="صورة اليوم" className="w-full h-44 object-cover rounded-xl" />
-            {photoSize && (
-              <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full">
-                {photoSize} بعد الضغط
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+          صور اليوم
+          {photos.length > 0 && <span className="text-gray-300 font-normal"> — {photos.length}/{MAX_PHOTOS}</span>}
+        </label>
+
+        {photos.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {photos.map((p, i) => (
+              <div key={i} className="relative">
+                <img src={p} alt={`صورة ${i + 1}`} className="w-full h-24 object-cover rounded-xl" />
+                <button
+                  onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                  className="absolute top-1 left-1 bg-black/50 text-white p-1 rounded-full hover:bg-red-500/80 transition-colors"
+                  aria-label="حذف الصورة"
+                >
+                  <X size={12} />
+                </button>
               </div>
-            )}
-            <button
-              onClick={() => setPhoto(undefined)}
-              className="absolute top-2 left-2 bg-black/50 text-white p-1 rounded-full hover:bg-red-500/80 transition-colors"
-            >
-              <X size={14} />
-            </button>
+            ))}
           </div>
-        ) : compressing ? (
-          <div className="flex items-center justify-center h-24 border-2 border-dashed border-gray-200 rounded-xl">
+        )}
+
+        {compressing ? (
+          <div className="flex items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl">
             <Loader2 size={22} className="text-gray-400 animate-spin" />
           </div>
-        ) : (
+        ) : photos.length < MAX_PHOTOS ? (
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
+            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
               <Camera size={20} className="text-gray-400 mb-1" />
               <span className="text-xs text-gray-400">التقط صورة</span>
               <input
@@ -223,22 +236,25 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f); }}
+                onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
               />
             </label>
-            <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
+            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
               <ImageIcon size={20} className="text-gray-400 mb-1" />
               <span className="text-xs text-gray-400">من الاستديو</span>
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f); }}
+                onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
               />
             </label>
           </div>
+        ) : (
+          <p className="text-[10px] text-gray-300 text-center">وصلت الحد الأقصى ({MAX_PHOTOS} صور)</p>
         )}
-        {!photo && !compressing && (
+        {!compressing && photos.length < MAX_PHOTOS && (
           <p className="text-[10px] text-gray-300 mt-1 text-center">أي صورة تُضغط تلقائياً لتوفير المساحة</p>
         )}
       </div>

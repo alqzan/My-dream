@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos } from "@/lib/utils";
 import { dailyQuestion } from "@/lib/questions";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
 import { JournalForm } from "@/components/journal/JournalForm";
@@ -252,8 +252,12 @@ export default function JournalPage() {
                 💭 {viewEntry.question}
               </p>
             )}
-            {viewEntry.photo && (
-              <img src={viewEntry.photo} alt="" className="w-full max-h-72 object-cover rounded-2xl" />
+            {entryPhotos(viewEntry).length > 0 && (
+              <div className="space-y-2">
+                {entryPhotos(viewEntry).map((p, i) => (
+                  <img key={i} src={p} alt="" className="w-full max-h-80 object-cover rounded-2xl" />
+                ))}
+              </div>
             )}
             <p className="text-sm leading-loose whitespace-pre-line text-gray-800 min-h-[160px]">
               {viewEntry.content}

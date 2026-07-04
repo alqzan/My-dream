@@ -1,13 +1,11 @@
 name: Deploy to GitHub Pages
 
+# main هو المصدر الوحيد للنشر — الفروع الأخرى للتطوير فقط.
+# (سبب هذا القيد: تعدد فروع النشر سبق أن جعل نشراً من فرع قديم
+# يستبدل النسخة الكاملة الحية.)
 on:
   push:
     branches:
-      - claude/budget-surplus-notes-ui-51i0fq
-      - claude/app-restructure-features-nuoeut
-      - claude/project-overview-development-ahxetk
-      - claude/super-app-tracker-finances-notes-nudq3a
-      - claude/prayer-tracker-redesign-bpzm8w
       - main
   workflow_dispatch: {}
 
@@ -37,7 +35,15 @@ jobs:
       - name: Build static site (with base path for project pages)
         env:
           BASE_PATH: /My-dream
-          # No Firebase config here → cloud sync stays off, app runs on-device.
+          # Cloud sync activates automatically once these repo secrets are
+          # set (Settings → Secrets and variables → Actions). Empty secrets
+          # keep Firebase disabled and the app fully on-device.
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: npm run build
 
       - name: Disable Jekyll (needed for Next.js _next folder)

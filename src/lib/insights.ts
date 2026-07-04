@@ -31,6 +31,7 @@ interface InsightData {
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null;
   futureLetters: FutureLetter[];
+  lastBackup?: string | null; // YYYY-MM-DD لآخر تصدير نسخة احتياطية
 }
 
 const WEEKDAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -48,7 +49,36 @@ export function generateInsights(data: InsightData): Insight[] {
   const {
     transactions, journalEntries, readingLogs, books, habits,
     budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
+    lastBackup,
   } = data;
+
+  /* ---------- حماية البيانات وتذكير المساء ---------- */
+
+  // تذكير المذكرة المسائي: بعد الثامنة مساءً ولم تُكتب مذكرة اليوم
+  const hour = new Date().getHours();
+  const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
+  if (hour >= 20 && !hasTodayJournal) {
+    out.push({
+      icon: "🌙", tone: "tip", priority: 95,
+      text: "ما كتبت مذكرة اليوم بعد — سطران قبل النوم يحفظان يومك ويحيان سلسلتك.",
+    });
+  }
+
+  // تذكير النسخة الاحتياطية: بيانات معتبرة وما صُدّرت نسخة منذ 14+ يوم
+  const dataSize = journalEntries.length + transactions.length + prayerLogs.length;
+  if (dataSize >= 15) {
+    const backupAge = lastBackup
+      ? Math.floor((parseDate(todayStr).getTime() - parseDate(lastBackup).getTime()) / 86400000)
+      : null;
+    if (backupAge === null || backupAge >= 14) {
+      out.push({
+        icon: "🛡️", tone: "warning", priority: 76,
+        text: backupAge === null
+          ? "ما صدّرت نسخة احتياطية من بياناتك أبداً — سوّها الآن من صفحة الإحصائيات، دقيقة وحدة تحمي سنواتك."
+          : `آخر نسخة احتياطية قبل ${backupAge} يوم — صدّر نسخة جديدة من صفحة الإحصائيات.`,
+      });
+    }
+  }
 
   /* ---------- رسائل المستقبل ---------- */
 

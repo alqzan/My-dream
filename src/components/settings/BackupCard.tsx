@@ -24,6 +24,8 @@ export function BackupCard() {
     a.download = `madar-backup-${today()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    // تغذية تذكير النسخ الدوري في التوصيات الذكية
+    try { localStorage.setItem("madar-last-backup", today()); } catch { /* ignore */ }
   }
 
   async function importJson(file: File) {

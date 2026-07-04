@@ -269,6 +269,12 @@ export function getJournalStreak(entries: JournalEntry[]): number {
   return calcStreak(entries.map((e) => e.date));
 }
 
+// كل صور المذكرة — الحقل الجديد photos أولاً، مع التوافق مع photo القديم.
+export function entryPhotos(e: JournalEntry): string[] {
+  if (e.photos?.length) return e.photos;
+  return e.photo ? [e.photo] : [];
+}
+
 export function getReadingStreak(logs: ReadingLog[]): number {
   return calcStreak(logs.map((l) => l.date));
 }

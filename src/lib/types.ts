@@ -101,7 +101,8 @@ export interface JournalEntry {
   content: string;
   mood?: "ممتاز" | "جيد" | "محايد" | "سيء" | "سيء_جداً";
   tags?: string[];
-  photo?: string; // base64 WebP compressed
+  photo?: string; // base64 WebP compressed — legacy single photo
+  photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";

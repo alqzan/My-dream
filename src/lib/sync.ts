@@ -20,8 +20,8 @@ function stripPhotos(data: AppData): AppData {
   return {
     ...data,
     journalEntries: data.journalEntries.map((e) => {
-      if (!e.photo) return e;
-      const { photo: _photo, ...rest } = e;
+      if (!e.photo && !e.photos?.length) return e;
+      const { photo: _photo, photos: _photos, ...rest } = e;
       return rest;
     }),
   };
@@ -32,14 +32,18 @@ function stripPhotos(data: AppData): AppData {
 export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Partial<AppData> {
   if (!cloud.journalEntries) return cloud;
   const localPhotos = new Map(
-    local.journalEntries.filter((e) => e.photo).map((e) => [e.id, e.photo!])
+    local.journalEntries
+      .filter((e) => e.photo || e.photos?.length)
+      .map((e) => [e.id, { photo: e.photo, photos: e.photos }])
   );
   if (!localPhotos.size) return cloud;
   return {
     ...cloud,
-    journalEntries: cloud.journalEntries.map((e) =>
-      !e.photo && localPhotos.has(e.id) ? { ...e, photo: localPhotos.get(e.id) } : e
-    ),
+    journalEntries: cloud.journalEntries.map((e) => {
+      if (e.photo || e.photos?.length) return e;
+      const kept = localPhotos.get(e.id);
+      return kept ? { ...e, ...kept } : e;
+    }),
   };
 }
 

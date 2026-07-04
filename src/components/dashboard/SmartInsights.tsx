@@ -33,6 +33,7 @@ export function SmartInsights() {
         dailyBudget: dailyBudget ?? null,
         monthlyIncome: monthlyIncome ?? null,
         futureLetters: futureLetters ?? [],
+        lastBackup: typeof window !== "undefined" ? localStorage.getItem("madar-last-backup") : null,
       });
     } catch {
       return [];
