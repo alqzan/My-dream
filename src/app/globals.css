@@ -14,6 +14,11 @@
 
 html {
   direction: rtl;
+  /* No accidental pinch/double-tap zoom — native-app feel; also stops
+     iOS from auto-inflating text when the layout width changes. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {

@@ -45,6 +45,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // قفل التكبير/التصغير: التبعيد بالأصابع كان يكسر التخطيط (يفعّل نسخة
+  // الكمبيوتر على الجوال) — بدونه يتصرف التطبيق كتطبيق حقيقي سلس.
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f3ecdd" },
     { media: "(prefers-color-scheme: dark)", color: "#161009" },
