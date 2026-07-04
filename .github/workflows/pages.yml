@@ -3,6 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
+      - claude/budget-surplus-notes-ui-51i0fq
       - claude/app-restructure-features-nuoeut
       - claude/project-overview-development-ahxetk
       - claude/super-app-tracker-finances-notes-nudq3a

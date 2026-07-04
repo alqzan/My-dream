@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { computeDailyBudgetStatus, formatAmount, cn } from "@/lib/utils";
-import { Settings2 } from "lucide-react";
+import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
+import { SURPLUS_FUND_NAME } from "@/lib/types";
+import { Settings2, PiggyBank } from "lucide-react";
 
 type Mode = "fixed" | "income";
 
@@ -13,10 +14,16 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // into your running balance. The daily amount is either a fixed figure or
 // a percentage of monthly income (income × pct / 100 ÷ 30).
 export function DailyBudgetCard() {
-  const { dailyBudget, transactions, monthlyIncome, setDailyBudget, removeDailyBudget, setMonthlyIncome } = useAppStore();
+  const {
+    dailyBudget, transactions, monthlyIncome, reserves, salaryDay,
+    setDailyBudget, removeDailyBudget, setMonthlyIncome, setSalaryDay,
+    sweepToReserve, addReserve,
+  } = useAppStore();
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<Mode>(dailyBudget?.incomePct ? "income" : "fixed");
   const [amount, setAmount] = useState(dailyBudget?.amount?.toString() ?? "");
+  const [salaryDayInput, setSalaryDayInput] = useState(String(salaryDay ?? 27));
+  const [sweeping, setSweeping] = useState(false);
   // The monthly income is shared app-wide (budgets by % use it too).
   const [income, setIncome] = useState((dailyBudget?.monthlyIncome ?? monthlyIncome)?.toString() ?? "");
   const [pct, setPct] = useState(dailyBudget?.incomePct?.toString() ?? "30");
@@ -38,7 +45,28 @@ export function DailyBudgetCard() {
       if (!parsed || parsed <= 0) return;
       setDailyBudget(parsed);
     }
+    const day = parseInt(salaryDayInput);
+    if (day) setSalaryDay(day);
     setEditing(false);
+  }
+
+  // نقل كامل فائض اليومية إلى احتياطي محدد (وتصفير عدّاد اليومية).
+  function handleSweep(fundId: string, balance: number) {
+    sweepToReserve(fundId, Math.round(balance * 100) / 100);
+    setSweeping(false);
+  }
+
+  function handleSweepToNewSurplus(balance: number) {
+    const fund = {
+      id: uid(),
+      name: SURPLUS_FUND_NAME,
+      icon: "✨",
+      color: "#c9852a",
+      deposits: [],
+      createdAt: today(),
+    };
+    addReserve(fund);
+    handleSweep(fund.id, balance);
   }
 
   if (!dailyBudget || editing) {
@@ -131,6 +159,15 @@ export function DailyBudgetCard() {
           </div>
         )}
 
+        <div>
+          <label className="block text-[10px] text-gray-400 mb-1">يوم نزول الراتب — يظهر بعده سؤال «نزل الراتب؟» وتتحول البواقي للفوائض</label>
+          <input
+            type="number" value={salaryDayInput} onChange={(e) => setSalaryDayInput(e.target.value)}
+            min={1} max={31} inputMode="numeric"
+            className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
+          />
+        </div>
+
         {editing && (
           <div className="flex items-center justify-between">
             <button onClick={() => setEditing(false)} className="text-[11px] text-gray-400 hover:text-gray-500">إلغاء</button>
@@ -170,6 +207,46 @@ export function DailyBudgetCard() {
           💼 {dailyBudget.incomePct}٪ من دخلك الشهري ({formatAmount(dailyBudget.monthlyIncome)} ر.س)
         </p>
       ) : null}
+
+      {/* فائض متراكم؟ حوّله للاحتياطي بضغطة — ويبدأ العدّاد من جديد */}
+      {status.balance > 0 && (
+        sweeping ? (
+          <div className="bg-white/70 dark:bg-white/5 rounded-xl p-2.5 space-y-1.5 animate-fade-up">
+            <p className="text-[11px] font-bold text-gray-600 text-center">
+              وين تحب تحط {formatAmount(status.balance)} ر.س؟
+            </p>
+            {reserves.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => handleSweep(f.id, status.balance)}
+                className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-gray-100 rounded-lg px-3 py-2 hover:border-prayer/40 press"
+              >
+                <span>{f.icon}</span>
+                <span className="flex-1 text-right text-gray-700 font-medium">{f.name}</span>
+              </button>
+            ))}
+            {!reserves.some((f) => f.name === SURPLUS_FUND_NAME) && (
+              <button
+                onClick={() => handleSweepToNewSurplus(status.balance)}
+                className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-dashed border-prayer/40 rounded-lg px-3 py-2 text-prayer font-medium press"
+              >
+                ✨ صندوق {SURPLUS_FUND_NAME} (جديد)
+              </button>
+            )}
+            <button onClick={() => setSweeping(false)} className="w-full text-[11px] text-gray-400 py-1">
+              إلغاء
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setSweeping(true)}
+            className="w-full flex items-center justify-center gap-2 text-sm font-bold text-prayer bg-prayer/10 hover:bg-prayer/15 rounded-xl py-2.5 transition-colors press"
+          >
+            <PiggyBank size={15} />
+            أضف الفائض ({formatAmount(status.balance)} ر.س) للاحتياطي
+          </button>
+        )
+      )}
     </div>
   );
 }

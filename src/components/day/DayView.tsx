@@ -89,9 +89,9 @@ export function DayView({ date, onClose }: DayViewProps) {
           <EmptyHint text="لم تُسجَّل صلوات هذا اليوم" />
         )}
 
-        {day.completionScore === 3 && (
+        {day.completionScore === 2 && (
           <div className="text-center text-sm font-bold text-orange-600 bg-orange-50 rounded-xl py-2">
-            🔥 يوم مكتمل — الأقسام الثلاثة!
+            🔥 يوم مكتمل — مذكرة وقراءة!
           </div>
         )}
 
@@ -101,16 +101,12 @@ export function DayView({ date, onClose }: DayViewProps) {
             {day.journal.photo && (
               <img src={day.journal.photo} alt="" className="w-full h-40 object-cover rounded-xl mb-2" />
             )}
+            {day.journal.title && (
+              <h3 className="text-base font-black text-gray-900 mb-1">{day.journal.title}</h3>
+            )}
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line line-clamp-6">
               {day.journal.content}
             </p>
-            {day.journal.tags && day.journal.tags.length > 0 && (
-              <div className="flex gap-1.5 flex-wrap mt-2">
-                {day.journal.tags.map((t) => (
-                  <span key={t} className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{t}</span>
-                ))}
-              </div>
-            )}
           </Section>
         ) : (
           <EmptyHint text="لا توجد مذكرة لهذا اليوم" />

@@ -2,37 +2,54 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseDayOneJson } from "@/lib/dayOneParser";
-import { Upload, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+interface ImportStats {
+  files: number;
+  added: number;
+  duplicates: number;
+  skippedEmpty: number;
+}
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
   const { importDayOneEntries } = useAppStore();
-  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [stats, setStats] = useState<ImportStats | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  function handleFile(file: File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string;
-        const entries = parseDayOneJson(text);
-        importDayOneEntries(entries);
-        setStatus("success");
-        setMessage(`تم استيراد ${entries.length} مذكرة بنجاح`);
-      } catch (err) {
-        setStatus("error");
-        setMessage(err instanceof Error ? err.message : "خطأ في قراءة الملف");
+  async function handleFiles(files: File[]) {
+    const jsonFiles = files.filter((f) => f.name.endsWith(".json") || f.type === "application/json");
+    if (!jsonFiles.length) {
+      setStatus("error");
+      setMessage("اختر ملف JSON (تصدير Day One).");
+      return;
+    }
+    setStatus("working");
+    const total: ImportStats = { files: 0, added: 0, duplicates: 0, skippedEmpty: 0 };
+    try {
+      for (const file of jsonFiles) {
+        const text = await file.text();
+        const result = parseDayOneJson(text);
+        const added = importDayOneEntries(result.entries);
+        total.files++;
+        total.added += added;
+        total.duplicates += result.entries.length - added;
+        total.skippedEmpty += result.skippedEmpty;
       }
-    };
-    reader.readAsText(file);
+      setStats(total);
+      setStatus("success");
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "خطأ في قراءة الملف");
+    }
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    handleFiles([...e.dataTransfer.files]);
   }
 
   return (
@@ -40,7 +57,11 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       <div className="text-sm text-gray-500 bg-blue-50 rounded-xl p-3 leading-relaxed">
         <strong className="text-blue-700">كيفية التصدير من Day One:</strong>
         <br />
-        افتح Day One ← File ← Export ← JSON ← احفظ الملف وارفعه هنا
+        افتح Day One ← File ← Export ← JSON ← فك ضغط الملف وارفع JSON هنا.
+        <br />
+        <span className="text-xs opacity-80">
+          نستخرج العنوان والوقت تلقائياً، وننظف النص، ولا نكرر المذكرات المستوردة سابقاً — ارفع أكثر من ملف دفعة واحدة إن أردت.
+        </span>
       </div>
 
       {status === "idle" && (
@@ -53,21 +74,36 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           }`}
         >
           <Upload size={28} className="mx-auto text-gray-400 mb-3" />
-          <p className="text-sm font-medium text-gray-700">اسحب ملف JSON هنا</p>
-          <p className="text-xs text-gray-400 mt-1">أو اضغط للاختيار</p>
+          <p className="text-sm font-medium text-gray-700">اسحب ملفات JSON هنا</p>
+          <p className="text-xs text-gray-400 mt-1">أو اضغط للاختيار — يمكن اختيار عدة ملفات</p>
           <input
             type="file"
-            accept=".json"
+            accept=".json,application/json"
+            multiple
             className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            onChange={(e) => { if (e.target.files?.length) handleFiles([...e.target.files]); }}
           />
         </label>
       )}
 
-      {status === "success" && (
-        <div className="flex items-center gap-3 bg-green-50 text-green-700 rounded-xl p-4">
-          <CheckCircle size={20} />
-          <p className="text-sm font-medium">{message}</p>
+      {status === "working" && (
+        <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
+          <Loader2 size={20} className="animate-spin" />
+          <p className="text-sm">جارٍ الاستيراد والتنظيف...</p>
+        </div>
+      )}
+
+      {status === "success" && stats && (
+        <div className="bg-green-50 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2 text-green-700">
+            <CheckCircle size={20} />
+            <p className="text-sm font-bold">تم استيراد {stats.added} مذكرة بنجاح ✨</p>
+          </div>
+          <div className="text-xs text-green-700/80 space-y-0.5 pr-7">
+            {stats.files > 1 && <p>• من {stats.files} ملفات</p>}
+            {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (بلا تكرار)</p>}
+            {stats.skippedEmpty > 0 && <p>• تجاهلنا {stats.skippedEmpty} مدخلة فارغة (صور/وسائط فقط)</p>}
+          </div>
         </div>
       )}
 
@@ -79,8 +115,8 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       )}
 
       <div className="flex gap-2">
-        {status !== "idle" && (
-          <Button variant="secondary" onClick={() => setStatus("idle")} className="flex-1">
+        {(status === "success" || status === "error") && (
+          <Button variant="secondary" onClick={() => { setStatus("idle"); setStats(null); }} className="flex-1">
             استيراد مرة أخرى
           </Button>
         )}

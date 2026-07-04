@@ -13,6 +13,7 @@ import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { CategoryManager } from "@/components/finance/CategoryManager";
 import { ReserveFunds } from "@/components/finance/ReserveFunds";
+import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import Link from "next/link";
 import { DayView } from "@/components/day/DayView";
@@ -120,6 +121,8 @@ export default function FinancePage() {
           </div>
         </div>
       </Link>
+
+      <SalaryBanner />
 
       <div className="animate-fade-up stagger-1">
         <DailyBudgetCard />

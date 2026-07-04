@@ -2,7 +2,7 @@
 import type { JournalEntry } from "@/lib/types";
 import { MOOD_LABELS } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
-import { Tag, Trash2 } from "lucide-react";
+import { Trash2, Clock } from "lucide-react";
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -23,42 +23,48 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
         <img src={entry.photo} alt="صورة اليوم" className="w-full h-36 object-cover" />
       )}
       <div className="p-4 space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {mood && <span className="text-lg">{mood.icon}</span>}
-          <span className="text-sm font-semibold text-gray-800">{formatDate(entry.date)}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {entry.source === "dayOne" && (
-            <span className="text-[10px] bg-purple-50 text-purple-500 px-2 py-0.5 rounded-full font-medium">
-              Day One
-            </span>
-          )}
-          {onDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-              className="p-1 text-gray-300 hover:text-red-400 rounded-lg"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      </div>
+        {/* العنوان أولاً — أكبر وأغمق */}
+        {entry.title && (
+          <h3 className="text-lg font-black text-gray-900 leading-snug">{entry.title}</h3>
+        )}
 
-      <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line line-clamp-3">
-        {preview}
-      </p>
-
-      {entry.tags && entry.tags.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Tag size={11} className="text-gray-400" />
-          {entry.tags.map((tag) => (
-            <span key={tag} className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              {tag}
-            </span>
-          ))}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            {mood && <span className="text-base">{mood.icon}</span>}
+            <span className="font-medium">{formatDate(entry.date)}</span>
+            {entry.time && (
+              <span className="flex items-center gap-0.5">
+                <Clock size={10} />
+                {entry.time}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {entry.source === "dayOne" && (
+              <span className="text-[10px] bg-purple-50 text-purple-500 px-2 py-0.5 rounded-full font-medium">
+                Day One
+              </span>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+                className="p-1 text-gray-300 hover:text-red-400 rounded-lg press"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         </div>
-      )}
+
+        {entry.question && (
+          <p className="text-[11px] text-journal bg-journal/10 rounded-lg px-2.5 py-1.5 leading-relaxed">
+            💭 {entry.question}
+          </p>
+        )}
+
+        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line line-clamp-3">
+          {preview}
+        </p>
       </div>
     </div>
   );

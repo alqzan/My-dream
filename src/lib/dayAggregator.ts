@@ -10,7 +10,7 @@ export interface DaySummary {
   pagesRead: number;
   habitsCompleted: { name: string; icon: string }[];
   mood?: JournalEntry["mood"];
-  completionScore: number; // 0-3
+  completionScore: number; // 0-2 (مذكرة + قراءة)
   prayerLog?: PrayerLog;
   prayersCount: number; // 0-5
   mosqueCount: number; // 0-5
@@ -43,9 +43,9 @@ export function aggregateDay(
     .map((h) => ({ name: h.name, icon: h.icon }));
 
   const hasJournal = !!journal;
-  const hasFinance = transactions.length > 0;
   const hasReading = dayLogs.length > 0;
-  const completionScore = [hasJournal, hasFinance, hasReading].filter(Boolean).length;
+  // السلسلة تحسب المذكرة والقراءة فقط — المالية خارجها.
+  const completionScore = [hasJournal, hasReading].filter(Boolean).length;
 
   const prayerLog = data.prayerLogs.find((l) => l.date === date);
   const { prayed: prayersCount, mosque: mosqueCount } = countDayPrayers(prayerLog);

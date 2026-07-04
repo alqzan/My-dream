@@ -3,10 +3,10 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
-  ReserveFund, ReserveDeposit,
+  ReserveFund, ReserveDeposit, FutureLetter,
 } from "./types";
-import { DEFAULT_CATEGORIES } from "./types";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate } from "./utils";
+import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME } from "./types";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus } from "./utils";
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -14,7 +14,7 @@ interface AppStore extends AppData {
   addJournalEntry: (entry: JournalEntry) => void;
   updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
-  importDayOneEntries: (entries: JournalEntry[]) => void;
+  importDayOneEntries: (entries: JournalEntry[]) => number; // returns count actually added
 
   // Finance
   addTransaction: (tx: Transaction) => void;
@@ -48,6 +48,17 @@ interface AppStore extends AppData {
   // amount (نسبة من الدخل الشهري) so the editor can reopen in that mode.
   setDailyBudget: (amount: number, source?: { monthlyIncome: number; incomePct: number }) => void;
   removeDailyBudget: () => void;
+
+  // دورة الراتب: يوم النزول + تحويل باقي الميزانية اليومية إلى «الفوائض»
+  setSalaryDay: (day: number) => void;
+  confirmSalary: () => number; // ينقل الفائض لصندوق الفوائض ويصفّر العداد؛ يرجع المبلغ
+  // نقل مبلغ من فائض الميزانية اليومية إلى احتياطي محدد (ويصفّر عداد اليومية)
+  sweepToReserve: (fundId: string, amount: number, note?: string) => void;
+
+  // رسائل لنفسك المستقبلية
+  addFutureLetter: (letter: FutureLetter) => void;
+  openFutureLetter: (id: string) => void;
+  deleteFutureLetter: (id: string) => void;
 
   // Reading
   addBook: (book: Book) => void;
@@ -94,6 +105,9 @@ export const useAppStore = create<AppStore>()(
       prayerLogs: [],
       dailyBudget: null,
       monthlyIncome: null,
+      futureLetters: [],
+      salaryDay: 27,
+      lastSalaryConfirm: null,
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
@@ -118,14 +132,18 @@ export const useAppStore = create<AppStore>()(
           journalEntries: s.journalEntries.filter((e) => e.id !== id),
         })),
 
-      importDayOneEntries: (entries) =>
+      importDayOneEntries: (entries) => {
+        let added = 0;
         set((s) => {
           const existingIds = new Set(s.journalEntries.map((e) => e.dayOneUUID).filter(Boolean));
           const newEntries = entries.filter(
             (e) => !e.dayOneUUID || !existingIds.has(e.dayOneUUID)
           );
+          added = newEntries.length;
           return { journalEntries: [...newEntries, ...s.journalEntries] };
-        }),
+        });
+        return added;
+      },
 
       addTransaction: (tx) =>
         set((s) => ({ transactions: [tx, ...s.transactions] })),
@@ -293,6 +311,86 @@ export const useAppStore = create<AppStore>()(
       removeDailyBudget: () =>
         set(() => ({ dailyBudget: null })),
 
+      setSalaryDay: (day) =>
+        set(() => ({ salaryDay: Math.min(Math.max(Math.round(day) || 27, 1), 31) })),
+
+      // «نزل الراتب»: باقي الميزانية اليومية المتراكمة يتحول لصندوق
+      // «الفوائض» (يُنشأ تلقائياً إن لم يوجد)، ويبدأ عدّاد اليومية من جديد.
+      confirmSalary: () => {
+        let moved = 0;
+        set((s) => {
+          const todayStr = today();
+          const balance = s.dailyBudget
+            ? computeDailyBudgetStatus(s.dailyBudget, s.transactions).balance
+            : 0;
+          moved = Math.max(0, Math.round(balance * 100) / 100);
+
+          let reserves = s.reserves;
+          if (moved > 0) {
+            let fund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+            if (!fund) {
+              fund = {
+                id: uid(),
+                name: SURPLUS_FUND_NAME,
+                icon: "✨",
+                color: "#c9852a",
+                deposits: [],
+                createdAt: todayStr,
+              };
+              reserves = [...reserves, fund];
+            }
+            const deposit: ReserveDeposit = {
+              id: uid(),
+              date: todayStr,
+              amount: moved,
+              note: "فوائض دورة الراتب",
+            };
+            reserves = reserves.map((f) =>
+              f.id === fund!.id ? { ...f, deposits: [deposit, ...f.deposits] } : f
+            );
+          }
+
+          return {
+            reserves,
+            lastSalaryConfirm: todayStr,
+            // تصفير كل العدادات: دورة يومية جديدة تبدأ اليوم
+            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: todayStr } : s.dailyBudget,
+          };
+        });
+        return moved;
+      },
+
+      sweepToReserve: (fundId, amount, note) =>
+        set((s) => {
+          if (amount <= 0) return {};
+          const deposit: ReserveDeposit = {
+            id: uid(),
+            date: today(),
+            amount,
+            note: note ?? "من فائض الميزانية اليومية",
+          };
+          return {
+            reserves: s.reserves.map((f) =>
+              f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
+            ),
+            // ما انتقل للاحتياطي يخرج من عدّاد اليومية — تبدأ الدورة من اليوم
+            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: today() } : s.dailyBudget,
+          };
+        }),
+
+      addFutureLetter: (letter) =>
+        set((s) => ({ futureLetters: [letter, ...s.futureLetters] })),
+
+      openFutureLetter: (id) =>
+        set((s) => ({
+          futureLetters: s.futureLetters.map((l) =>
+            l.id === id ? { ...l, opened: true, openedDate: today() } : l
+          ),
+        })),
+
+      deleteFutureLetter: (id) =>
+        set((s) => ({ futureLetters: s.futureLetters.filter((l) => l.id !== id) })),
+
       addBook: (book) =>
         set((s) => ({ books: [book, ...s.books] })),
 
@@ -370,6 +468,9 @@ export const useAppStore = create<AppStore>()(
           prayerLogs: data.prayerLogs ?? [],
           dailyBudget: data.dailyBudget ?? null,
           monthlyIncome: data.monthlyIncome ?? null,
+          futureLetters: data.futureLetters ?? [],
+          salaryDay: data.salaryDay ?? 27,
+          lastSalaryConfirm: data.lastSalaryConfirm ?? null,
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -388,13 +489,16 @@ export const useAppStore = create<AppStore>()(
           prayerLogs: s.prayerLogs,
           dailyBudget: s.dailyBudget,
           monthlyIncome: s.monthlyIncome,
+          futureLetters: s.futureLetters,
+          salaryDay: s.salaryDay,
+          lastSalaryConfirm: s.lastSalaryConfirm,
           lastUpdated: s.lastUpdated,
         };
       },
     }),
     {
       name: "my-dream-store",
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -489,6 +593,18 @@ export const useAppStore = create<AppStore>()(
             categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) =>
               subEnabled.has(c.id) ? { ...c, allowSubs: true } : c
             ),
+          };
+        }
+
+        // v7 adds رسائل المستقبل ودورة الراتب (يوم 27 + الفوائض).
+        // lastSalaryConfirm يبدأ من اليوم حتى لا يظهر سؤال «نزل الراتب؟»
+        // فور الترقية عن راتبٍ سبق نزوله — أول ظهور له في يوم الراتب القادم.
+        if (version < 7) {
+          state = {
+            ...state,
+            futureLetters: state.futureLetters ?? [],
+            salaryDay: state.salaryDay ?? 27,
+            lastSalaryConfirm: state.lastSalaryConfirm ?? todayStr,
           };
         }
 

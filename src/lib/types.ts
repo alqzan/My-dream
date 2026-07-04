@@ -95,6 +95,9 @@ export interface ReadingLog {
 export interface JournalEntry {
   id: string;
   date: string; // YYYY-MM-DD
+  title?: string; // عنوان اليوم — يظهر فوق بخط أكبر وغامق
+  time?: string; // HH:MM وقت الكتابة
+  question?: string; // سؤال اليوم الذي كُتبت حوله المذكرة
   content: string;
   mood?: "ممتاز" | "جيد" | "محايد" | "سيء" | "سيء_جداً";
   tags?: string[];
@@ -195,6 +198,20 @@ export interface DailyBudget {
   incomePct?: number;
 }
 
+// رسالة لنفسك المستقبلية — تُقفل حتى تاريخ التسليم ثم تُفتح باحتفال.
+export interface FutureLetter {
+  id: string;
+  writtenDate: string; // YYYY-MM-DD
+  deliveryDate: string; // YYYY-MM-DD
+  title?: string;
+  content: string;
+  opened?: boolean;
+  openedDate?: string;
+}
+
+// اسم صندوق الفوائض الذي يستقبل باقي الميزانية اليومية عند نزول الراتب.
+export const SURPLUS_FUND_NAME = "الفوائض";
+
 export interface AppData {
   transactions: Transaction[];
   books: Book[];
@@ -208,6 +225,9 @@ export interface AppData {
   prayerLogs: PrayerLog[];
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null; // shared by %-based budgets and the daily budget editor
+  futureLetters: FutureLetter[];
+  salaryDay: number; // يوم نزول الراتب (افتراضياً 27) — يظهر بعده سؤال «نزل الراتب؟»
+  lastSalaryConfirm: string | null; // YYYY-MM-DD لآخر تأكيد «نزل الراتب»
   lastUpdated: string;
 }
 

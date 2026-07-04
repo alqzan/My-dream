@@ -4,9 +4,6 @@ import { useAppStore } from "@/lib/store";
 import {
   getJournalStreak,
   getReadingStreak,
-  getFinanceStreak,
-  computeDailyBudgetStatus,
-  formatAmount,
   getDailyCompletionDates,
   calcStreak,
   today,
@@ -16,6 +13,7 @@ import {
 } from "@/lib/utils";
 import { DailyPulse } from "@/components/dashboard/DailyPulse";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
+import { SmartInsights } from "@/components/dashboard/SmartInsights";
 import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { DayView } from "@/components/day/DayView";
@@ -36,7 +34,7 @@ import { ChevronLeft, BarChart3, TrendingDown, Plus } from "lucide-react";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, dailyBudget, runRecurring } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, runRecurring } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
@@ -49,14 +47,12 @@ export default function Dashboard() {
   const todayStr = today();
   const journalStreak = getJournalStreak(journalEntries);
   const readingStreak = getReadingStreak(readingLogs);
-  const financeStreak = getFinanceStreak(transactions);
-  const completionDates = getDailyCompletionDates(journalEntries, readingLogs, transactions);
+  const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
   const masterStreak = calcStreak(completionDates);
 
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
-  const hasTodayFinance = transactions.some((t) => t.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
-  const allDoneToday = hasTodayJournal && hasTodayFinance && hasTodayReading;
+  const allDoneToday = hasTodayJournal && hasTodayReading;
 
   // One confetti celebration per completed day.
   useEffect(() => {
@@ -68,11 +64,6 @@ export default function Dashboard() {
   }, [allDoneToday, todayStr]);
 
   const currentBook = books.find((b) => b.status === "أقرأ");
-  const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
-  const thisMonthExpense = transactions
-    .filter((t) => t.date.startsWith(todayStr.slice(0, 7)))
-    .reduce((s, t) => s + t.amount, 0);
-
   const yearPct = yearProgress();
 
   return (
@@ -108,19 +99,6 @@ export default function Dashboard() {
               color: "#8a6fb0",
             },
             {
-              href: "/finance",
-              icon: "💰",
-              label: "سجّل مصروفك",
-              sub: dailyStatus
-                ? `رصيدك اليومي ${dailyStatus.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(dailyStatus.balance))} ر.س`
-                : thisMonthExpense > 0
-                ? `${formatAmount(thisMonthExpense)} ر.س هذا الشهر`
-                : "سجّل أول مصروف",
-              done: hasTodayFinance,
-              streak: financeStreak,
-              color: "#3d9640",
-            },
-            {
               href: "/reading",
               icon: "📚",
               label: "اقرأ شيئاً",
@@ -137,6 +115,10 @@ export default function Dashboard() {
         <HabitTracker />
       </Card>
 
+      <div className="animate-fade-up stagger-3">
+        <SmartInsights />
+      </div>
+
       <div className="animate-fade-up stagger-4">
         <WeeklyWrap
           transactions={transactions}
@@ -148,7 +130,7 @@ export default function Dashboard() {
 
       <Card className="animate-fade-up stagger-5">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-gray-700">سلسلة يومية — الأيام الثلاثة</span>
+          <span className="text-sm font-semibold text-gray-700">سلسلة يومية — مذكرة + قراءة</span>
           <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
         </div>
         <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />

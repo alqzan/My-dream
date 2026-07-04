@@ -71,8 +71,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
         {week.map((d, i) => {
           const hasJ = weekJournal.some((e) => e.date === d);
           const hasR = readingLogs.some((l) => l.date === d);
-          const hasF = transactions.some((t) => t.date === d);
-          const score = [hasJ, hasR, hasF].filter(Boolean).length;
+          const score = [hasJ, hasR].filter(Boolean).length;
           return (
             <div key={d} className="flex flex-col items-center gap-1">
               <div className="text-[10px] text-gray-500">
@@ -81,10 +80,10 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"
                 style={{
-                  backgroundColor: score === 3 ? "#f97316" : score === 2 ? "#d4a017" : score === 1 ? "#444" : "#222",
+                  backgroundColor: score === 2 ? "#f97316" : score === 1 ? "#d4a017" : "#222",
                 }}
               >
-                {score === 3 ? "🔥" : score > 0 ? score : "·"}
+                {score === 2 ? "🔥" : score > 0 ? score : "·"}
               </div>
             </div>
           );

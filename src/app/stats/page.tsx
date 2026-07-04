@@ -4,7 +4,6 @@ import { useAppStore } from "@/lib/store";
 import {
   getJournalStreak,
   getReadingStreak,
-  getFinanceStreak,
   getPrayerStreak,
   countDayPrayers,
   getDailyCompletionDates,
@@ -64,7 +63,7 @@ export default function StatsPage() {
   }, [journalEntries, readingLogs, transactions]);
 
   // ---------- Streaks ----------
-  const completionDates = getDailyCompletionDates(journalEntries, readingLogs, transactions);
+  const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
   const streaks = [
     {
       label: "السلسلة الكاملة",
@@ -93,13 +92,6 @@ export default function StatsPage() {
       color: "#c1663f",
       current: getReadingStreak(readingLogs),
       best: longestStreak(readingLogs.map((l) => l.date)),
-    },
-    {
-      label: "المالية",
-      icon: <Wallet size={16} />,
-      color: "#3d9640",
-      current: getFinanceStreak(transactions),
-      best: longestStreak(transactions.map((t) => t.date)),
     },
   ];
 

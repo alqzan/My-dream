@@ -44,7 +44,7 @@ export function DailyPulse({ masterStreak, rows }: DailyPulseProps) {
             </span>
           </div>
           <div className="text-sm opacity-90 mt-0.5">
-            {masterStreak > 0 ? "يوم متواصل — الثلاثة معاً" : "ابدأ سلسلتك اليوم!"}
+            {masterStreak > 0 ? "يوم متواصل — مذكرة وقراءة" : "ابدأ سلسلتك اليوم!"}
           </div>
         </div>
         <div className="text-left">

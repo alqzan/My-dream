@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         <div className="sm:hidden pt-2.5 flex justify-center">
           <div className="w-10 h-1 rounded-full bg-gray-200" />
         </div>
-        {title && (
+        {title ? (
           <div className="flex items-center justify-between p-5 pb-4 border-b border-gray-100 sticky top-0 bg-white z-10 rounded-t-3xl">
             <h2 className="text-lg font-bold text-gray-900">{title}</h2>
             <button
@@ -61,6 +61,14 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
               <X size={18} />
             </button>
           </div>
+        ) : (
+          <button
+            onClick={onClose}
+            className="absolute top-4 left-4 z-10 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 press"
+            aria-label="إغلاق"
+          >
+            <X size={18} />
+          </button>
         )}
         <div className="p-5">{children}</div>
       </div>

@@ -273,10 +273,6 @@ export function getReadingStreak(logs: ReadingLog[]): number {
   return calcStreak(logs.map((l) => l.date));
 }
 
-export function getFinanceStreak(transactions: Transaction[]): number {
-  return calcStreak(transactions.map((t) => t.date));
-}
-
 export function getCategoryInfo(categories: FinanceCategoryDef[], id: string): FinanceCategoryDef {
   return categories.find((c) => c.id === id) ?? UNKNOWN_CATEGORY;
 }
@@ -408,17 +404,15 @@ export function nextDueDate(r: RecurringTransaction, now: Date): Date {
   return new Date(Math.floor(monthIndex / 12), ((monthIndex % 12) + 12) % 12, recent.getDate());
 }
 
+// اليوم «المكتمل» = مذكرة + قراءة. المالية خارج السلسلة عمداً:
+// الصرف مهب شرط كل يوم، فلا يُحاسب عليه العدّاد.
 export function getDailyCompletionDates(
   journalEntries: JournalEntry[],
-  readingLogs: ReadingLog[],
-  transactions: Transaction[]
+  readingLogs: ReadingLog[]
 ): string[] {
   const jDates = new Set(journalEntries.map((e) => e.date));
   const rDates = new Set(readingLogs.map((l) => l.date));
-  const fDates = new Set(transactions.map((t) => t.date));
-
-  const allDates = new Set([...jDates, ...rDates, ...fDates]);
-  return [...allDates].filter((d) => jDates.has(d) && rDates.has(d) && fDates.has(d));
+  return [...jDates].filter((d) => rDates.has(d));
 }
 
 export function getMonthDates(year: number, month: number): string[] {
