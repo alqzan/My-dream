@@ -8,7 +8,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth, isFirebaseEnabled } from "@/lib/firebase";
-import { loadUserData, saveUserData, mergeLocalPhotos } from "@/lib/sync";
+import { loadUserMain, hydrateCloudPhotos, saveUserData, mergeLocalPhotos } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
 
 interface AuthContextValue {
@@ -54,12 +54,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Merge: take whichever side has the newer lastUpdated
         setSyncing(true);
         try {
-          const cloud = await loadUserData(u.uid);
+          // Two-phase: read the lightweight main doc first (also seeds the
+          // photo-hash cache from its manifest), and only download the photo
+          // docs when the cloud copy is the newer one we're adopting.
+          const cloudMain = await loadUserMain(u.uid);
           const local = snapshot();
-          if (cloud && (cloud.lastUpdated ?? "") > (local.lastUpdated ?? "")) {
-            // Photos never travel through Firestore (1MB doc limit) —
-            // graft this device's photos back onto the cloud entries.
-            hydrate(mergeLocalPhotos(cloud, local));
+          if (cloudMain && (cloudMain.lastUpdated ?? "") > (local.lastUpdated ?? "")) {
+            const full = await hydrateCloudPhotos(u.uid, cloudMain);
+            // Safety net: keep any local photo whose cloud doc didn't resolve.
+            hydrate(mergeLocalPhotos(full, local));
           } else {
             await saveUserData(u.uid, local);
           }

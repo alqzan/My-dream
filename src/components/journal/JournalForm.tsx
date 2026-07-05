@@ -74,7 +74,9 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     try {
       const compressed: string[] = [];
       for (const file of files.slice(0, MAX_PHOTOS - photos.length)) {
-        compressed.push(await compressImage(file, 200));
+        // Lighter target (~140KB) so photos sync to the cloud quickly and
+        // stay well under the per-photo document limit.
+        compressed.push(await compressImage(file, 140));
       }
       setPhotos((prev) => [...prev, ...compressed].slice(0, MAX_PHOTOS));
     } finally {
