@@ -7,6 +7,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Round money to 2 decimals at computation boundaries. Percentage splits and
+// long reduce() sums accumulate binary-float error (e.g. a balance of
+// -0.00000001), which then trips sign checks like `balance < 0`; rounding here
+// keeps stored/compared amounts to real riyal-halalah precision.
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 export function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -310,13 +318,13 @@ export function budgetLimit(b: Budget, monthlyIncome: number | null): number {
 export function dailyShare(t: Transaction): number {
   if (!t.reserveSplits?.length) return t.amount;
   const reservedPct = Math.min(100, t.reserveSplits.reduce((s, sp) => s + sp.pct, 0));
-  return (t.amount * (100 - reservedPct)) / 100;
+  return round2((t.amount * (100 - reservedPct)) / 100);
 }
 
 // Share of a transaction charged to one specific reserve fund.
 export function reserveShare(t: Transaction, fundId: string): number {
   const split = t.reserveSplits?.find((s) => s.fundId === fundId);
-  return split ? (t.amount * split.pct) / 100 : 0;
+  return split ? round2((t.amount * split.pct) / 100) : 0;
 }
 
 // Live balance of a fund: deposits in, charged transaction shares out.
@@ -333,8 +341,9 @@ export function reserveSpent(fund: ReserveFund, transactions: Transaction[]): nu
 
 export interface DailyBudgetStatus {
   days: number; // days since (and including) startDate, through today
-  allowance: number; // amount * days
+  allowance: number; // effective allowance: amount * days − carryAdjust
   spent: number; // sum of daily-budget shares since startDate
+  carryAdjust: number; // amount already settled by a sweep on the start day
   balance: number; // allowance - spent (negative = over)
 }
 
@@ -344,23 +353,27 @@ export interface DailyBudgetStatus {
 // counts: a portion split onto a reserve fund is that fund's business, not
 // the daily allowance's.
 export function computeDailyBudgetStatus(
-  dailyBudget: { amount: number; startDate: string },
+  dailyBudget: { amount: number; startDate: string; carryAdjust?: number },
   transactions: Transaction[]
 ): DailyBudgetStatus {
   const todayStr = today();
-  // startDate in the future (right after ترحيل الفائض / نزول الراتب: the
-  // new cycle starts tomorrow) → zero days, zero allowance. Without this,
-  // resetting to "today" would re-grant today's allowance immediately and
-  // sweeping it repeatedly would mint money out of thin air.
+  // startDate in the future (legacy cycles reset to tomorrow) → zero days,
+  // zero allowance. Newer sweeps start today and use carryAdjust instead so
+  // same-day-after expenses still count (see the sweep actions in store.ts).
   const days = Math.max(
     0,
     Math.round((parseDate(todayStr).getTime() - parseDate(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
   );
-  const allowance = dailyBudget.amount * days;
-  const spent = transactions
-    .filter((t) => t.date >= dailyBudget.startDate && t.date <= todayStr)
-    .reduce((s, t) => s + dailyShare(t), 0);
-  return { days, allowance, spent, balance: allowance - spent };
+  const carryAdjust = dailyBudget.carryAdjust ?? 0;
+  // Fold carryAdjust into the effective allowance so the whole app (balance,
+  // display, discipline ratio) stays internally consistent.
+  const allowance = round2(dailyBudget.amount * days - carryAdjust);
+  const spent = round2(
+    transactions
+      .filter((t) => t.date >= dailyBudget.startDate && t.date <= todayStr)
+      .reduce((s, t) => s + dailyShare(t), 0)
+  );
+  return { days, allowance, spent, carryAdjust, balance: round2(allowance - spent) };
 }
 
 // Compute the most recent date this recurring item was/is due, on or before

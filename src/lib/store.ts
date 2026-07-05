@@ -6,15 +6,7 @@ import type {
   ReserveFund, ReserveDeposit, FutureLetter,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME } from "./types";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus } from "./utils";
-
-// الدورة الجديدة بعد ترحيل الفائض تبدأ من الغد — مخصص اليوم دخل ضمن
-// المبلغ المرحّل، وبدء الدورة من اليوم نفسه كان يمنحه مرتين.
-function tomorrow(): string {
-  const d = parseDate(today());
-  d.setDate(d.getDate() + 1);
-  return toDateStr(d);
-}
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2 } from "./utils";
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -96,7 +88,26 @@ interface AppStore extends AppData {
 
 export const useAppStore = create<AppStore>()(
   persist(
-    (set, get) => ({
+    (rawSet, get) => {
+    // Every mutating action goes through this wrapper so `lastUpdated` is
+    // stamped on any state change — the cloud-merge heuristic in AuthProvider
+    // compares `lastUpdated`, and without this the local value never moved,
+    // making a genuinely-newer local edit look older than the cloud (and get
+    // discarded). A genuine no-op (an action that returns `{}`, e.g.
+    // runRecurring with nothing due — which fires on every app open) is
+    // skipped entirely, so merely opening the app doesn't bump the timestamp
+    // and cause needless cloud churn. `hydrate` and `toggleTheme` deliberately
+    // use `rawSet`: hydrate must keep the cloud's own timestamp, and the theme
+    // is a device-local preference that should not trigger a cloud push.
+    const set: typeof rawSet = ((partial, replace) => {
+      const next = typeof partial === "function"
+        ? (partial as (s: AppStore) => Partial<AppStore>)(get())
+        : partial;
+      if (!next || Object.keys(next).length === 0) return; // real no-op
+      rawSet({ ...next, lastUpdated: new Date().toISOString() }, replace as false);
+    }) as typeof rawSet;
+
+    return {
       transactions: [],
       books: [],
       readingLogs: [],
@@ -119,9 +130,10 @@ export const useAppStore = create<AppStore>()(
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
-      // Cycles auto → light → dark → auto.
+      // Cycles auto → light → dark → auto. Uses rawSet: the theme is a
+      // device-local preference and must not bump lastUpdated / push to cloud.
       toggleTheme: () =>
-        set((s) => ({
+        rawSet((s) => ({
           theme: s.theme === "auto" ? "light" : s.theme === "light" ? "dark" : "auto",
         })),
 
@@ -195,7 +207,11 @@ export const useAppStore = create<AppStore>()(
             const every = Math.max(1, Math.floor(r.every) || 1);
             const dueDates: string[] = [];
             let due = mostRecentDueDate(r, now);
-            for (let i = 0; i < 36; i++) {
+            // The date-based breaks below (lastGenerated / anchorDate) are the
+            // real terminators; the counter is only a runaway guard for a
+            // corrupt anchor. 600 covers >10 years of weekly occurrences so a
+            // long gap never silently drops legitimate transactions.
+            for (let i = 0; i < 600; i++) {
               const dueStr = toDateStr(due);
               if (r.lastGenerated && dueStr <= r.lastGenerated) break;
               if (dueStr < r.anchorDate) break;
@@ -307,14 +323,18 @@ export const useAppStore = create<AppStore>()(
       setDailyBudget: (amount, source) =>
         // Changing the daily amount restarts the cumulative tally from today
         // rather than reinterpreting all of history under the new rate.
-        set(() => ({
-          dailyBudget: {
-            amount,
-            startDate: today(),
-            monthlyIncome: source?.monthlyIncome,
-            incomePct: source?.incomePct,
-          },
-        })),
+        // Ignore invalid amounts (NaN / non-positive), mirroring setMonthlyIncome.
+        set(() => {
+          if (!Number.isFinite(amount) || amount <= 0) return {};
+          return {
+            dailyBudget: {
+              amount,
+              startDate: today(),
+              monthlyIncome: source?.monthlyIncome,
+              incomePct: source?.incomePct,
+            },
+          };
+        }),
 
       removeDailyBudget: () =>
         set(() => ({ dailyBudget: null })),
@@ -358,12 +378,21 @@ export const useAppStore = create<AppStore>()(
             );
           }
 
+          // الدورة الجديدة تبدأ من اليوم (لا الغد) فيُحتسب أي صرف يسجَّل بعد
+          // تأكيد الراتب في نفس اليوم. carryAdjust يمنع منح مخصّص اليوم مرتين
+          // (كان ضمن الرصيد المرحّل): بعد التأكيد يصبح الرصيد صفراً بالضبط.
+          let dailyBudget = s.dailyBudget;
+          if (dailyBudget) {
+            const spentToday = round2(
+              s.transactions.filter((t) => t.date === todayStr).reduce((a, t) => a + dailyShare(t), 0)
+            );
+            dailyBudget = { ...dailyBudget, startDate: todayStr, carryAdjust: round2(dailyBudget.amount - spentToday) };
+          }
+
           return {
             reserves,
             lastSalaryConfirm: todayStr,
-            // تصفير كل العدادات: الدورة الجديدة تبدأ من الغد (مخصص اليوم
-            // دخل ضمن الفوائض المرحّلة)
-            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: tomorrow() } : s.dailyBudget,
+            dailyBudget,
           };
         });
         return moved;
@@ -372,18 +401,33 @@ export const useAppStore = create<AppStore>()(
       sweepToReserve: (fundId, amount, note) =>
         set((s) => {
           if (amount <= 0) return {};
+          const todayStr = today();
           const deposit: ReserveDeposit = {
             id: uid(),
-            date: today(),
+            date: todayStr,
             amount,
             note: note ?? "من فائض الميزانية اليومية",
           };
+          // ما انتقل للاحتياطي يخرج من عدّاد اليومية. الدورة الجديدة تبدأ من
+          // اليوم مع carryAdjust بحيث ينخفض الرصيد بمقدار المُحوَّل بالضبط
+          // ويظل صرف بقية اليوم محتسَباً (بدل استثنائه بالبدء من الغد).
+          let dailyBudget = s.dailyBudget;
+          if (dailyBudget) {
+            const oldBalance = computeDailyBudgetStatus(dailyBudget, s.transactions).balance;
+            const spentToday = round2(
+              s.transactions.filter((t) => t.date === todayStr).reduce((a, t) => a + dailyShare(t), 0)
+            );
+            dailyBudget = {
+              ...dailyBudget,
+              startDate: todayStr,
+              carryAdjust: round2(dailyBudget.amount - spentToday - (oldBalance - amount)),
+            };
+          }
           return {
             reserves: s.reserves.map((f) =>
               f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
             ),
-            // ما انتقل للاحتياطي يخرج من عدّاد اليومية — الدورة الجديدة من الغد
-            dailyBudget: s.dailyBudget ? { ...s.dailyBudget, startDate: tomorrow() } : s.dailyBudget,
+            dailyBudget,
           };
         }),
 
@@ -463,8 +507,10 @@ export const useAppStore = create<AppStore>()(
           return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
         }),
 
+      // Uses rawSet so the cloud's own lastUpdated is preserved (stamping a
+      // fresh one here would defeat the newer-wins merge comparison).
       hydrate: (data) =>
-        set(() => ({
+        rawSet(() => ({
           transactions: data.transactions ?? [],
           books: data.books ?? [],
           readingLogs: data.readingLogs ?? [],
@@ -504,7 +550,8 @@ export const useAppStore = create<AppStore>()(
           lastUpdated: s.lastUpdated,
         };
       },
-    }),
+    };
+    },
     {
       name: "my-dream-store",
       version: 7,

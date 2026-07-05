@@ -203,6 +203,12 @@ export function DailyBudgetCard() {
         <p className="text-xs text-gray-500 text-center leading-relaxed">
           🌱 رُحّل الفائض — الدورة الجديدة تبدأ من الغد بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً
         </p>
+      ) : status.carryAdjust > 0 ? (
+        // بعد ترحيل الفائض: المخصّص الفعّال ينقص بمقدار ما رُحّل، فلا تصحّ
+        // صيغة «المبلغ × الأيام». نعرض المتاح والمصروف مباشرةً.
+        <p className="text-xs text-gray-500 text-center leading-relaxed">
+          🌱 دورة جديدة بعد الترحيل بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً — متاح {formatAmount(status.allowance)} ر.س، صرفت {formatAmount(status.spent)} ر.س
+        </p>
       ) : (
         <p className="text-xs text-gray-500 text-center leading-relaxed">
           {formatAmount(dailyBudget.amount)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س

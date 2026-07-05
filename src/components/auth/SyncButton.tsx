@@ -4,7 +4,7 @@ import { Cloud, CloudOff, LogOut, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 export function SyncButton() {
-  const { user, enabled, syncing, signIn, signOut } = useAuth();
+  const { user, enabled, syncing, syncError, signIn, signOut, retrySync } = useAuth();
   const [busy, setBusy] = useState(false);
 
   // When Firebase isn't configured yet, hide entirely.
@@ -23,14 +23,26 @@ export function SyncButton() {
   if (user) {
     return (
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          {syncing ? (
-            <RefreshCw size={13} className="text-finance animate-spin" />
-          ) : (
-            <Cloud size={13} className="text-finance" />
-          )}
-          <span className="hidden sm:inline">{syncing ? "يزامن..." : "محفوظ سحابياً"}</span>
-        </div>
+        {syncError && !syncing ? (
+          // Honest failure state — don't claim "saved" when it isn't. Tap to retry.
+          <button
+            onClick={retrySync}
+            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-600"
+            title="فشلت المزامنة — اضغط لإعادة المحاولة"
+          >
+            <CloudOff size={13} />
+            <span>لم تُحفظ — إعادة المحاولة</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            {syncing ? (
+              <RefreshCw size={13} className="text-finance animate-spin" />
+            ) : (
+              <Cloud size={13} className="text-finance" />
+            )}
+            <span className="hidden sm:inline">{syncing ? "يزامن..." : "محفوظ سحابياً"}</span>
+          </div>
+        )}
         {user.photoURL && (
           <img src={user.photoURL} alt="" className="w-6 h-6 rounded-full" />
         )}

@@ -197,6 +197,11 @@ export interface DailyBudget {
   // came from. Absent for a plain fixed amount.
   monthlyIncome?: number;
   incomePct?: number;
+  // Adjustment subtracted from the cumulative allowance after a سحب/ترحيل
+  // (نزول الراتب / نقل الفائض للاحتياطي). Lets the new cycle start from today
+  // (so same-day-after expenses still count) without re-granting the day's
+  // allowance that was already settled by the sweep. Absent = plain cycle.
+  carryAdjust?: number;
 }
 
 // رسالة لنفسك المستقبلية — تُقفل حتى تاريخ التسليم ثم تُفتح باحتفال.
