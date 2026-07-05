@@ -1,21 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Wallet, BookMarked, LayoutDashboard, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NAV_ITEMS } from "@/lib/nav";
 import { SyncButton } from "@/components/auth/SyncButton";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { BrandMark } from "@/components/layout/BrandMark";
-import { MosqueIcon } from "@/components/icons/MosqueIcon";
-
-const navItems = [
-  { href: "/", icon: LayoutDashboard, label: "الرئيسية", color: "text-gray-700" },
-  { href: "/prayers", icon: MosqueIcon, label: "الصلاة", color: "text-prayer" },
-  { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-journal" },
-  { href: "/finance", icon: Wallet, label: "الأموال", color: "text-finance" },
-  { href: "/reading", icon: BookOpen, label: "القراءة", color: "text-reading" },
-  { href: "/stats", icon: BarChart3, label: "الإحصائيات", color: "text-brand-600" },
-];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -30,7 +20,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-1">
-        {navItems.map((item) => {
+        {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
           return (
             <Link

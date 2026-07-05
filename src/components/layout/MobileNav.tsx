@@ -1,18 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Wallet, BookMarked, LayoutDashboard, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MosqueIcon } from "@/components/icons/MosqueIcon";
-
-const navItems = [
-  { href: "/", icon: LayoutDashboard, label: "الرئيسية" },
-  { href: "/prayers", icon: MosqueIcon, label: "الصلاة" },
-  { href: "/journal", icon: BookMarked, label: "مذكرات" },
-  { href: "/finance", icon: Wallet, label: "الأموال" },
-  { href: "/reading", icon: BookOpen, label: "القراءة" },
-  { href: "/stats", icon: BarChart3, label: "إحصائيات" },
-];
+import { NAV_ITEMS } from "@/lib/nav";
 
 export function MobileNav() {
   const pathname = usePathname();
@@ -20,7 +10,7 @@ export function MobileNav() {
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 pb-safe">
       <div className="flex items-center justify-around py-2 px-0.5">
-        {navItems.map((item) => {
+        {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
           return (
             <Link

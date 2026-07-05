@@ -169,13 +169,14 @@ export function HabitTracker() {
             ))}
           </div>
           <div className="flex gap-1.5 items-center">
-            {COLORS.map((c) => (
+            {COLORS.map((c, i) => (
               <button
                 key={c}
                 onClick={() => setNewColor(c)}
                 className={cn("w-6 h-6 rounded-full press transition-transform", newColor === c && "scale-110 ring-2 ring-offset-1")}
                 style={{ backgroundColor: c, ["--tw-ring-color" as string]: c }}
-                aria-label={c}
+                aria-label={`اللون ${i + 1}`}
+                aria-pressed={newColor === c}
               />
             ))}
           </div>

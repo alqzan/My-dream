@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { RecurringTransaction, RecurringUnit } from "@/lib/types";
 import { RECURRING_PRESETS } from "@/lib/types";
-import { uid, today, getCategoryInfo } from "@/lib/utils";
+import { uid, today, getCategoryInfo, formatAmount } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Plus, Trash2, Power } from "lucide-react";
 
@@ -71,7 +71,7 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               <span className="text-sm font-bold text-red-500">
-                -{r.amount.toLocaleString("ar-SA")}
+                -{formatAmount(r.amount)}
               </span>
               <button
                 onClick={() => updateRecurring(r.id, { active: !r.active })}

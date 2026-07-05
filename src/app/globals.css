@@ -97,6 +97,7 @@ body::before {
 .dark .bg-orange-50 { background-color: rgba(224, 123, 57, 0.16) !important; }
 .dark .bg-orange-100 { background-color: rgba(224, 123, 57, 0.26) !important; }
 .dark .bg-yellow-50 { background-color: rgba(212, 160, 23, 0.15) !important; }
+.dark .bg-teal-50   { background-color: rgba(31, 122, 108, 0.18) !important; }
 .dark .bg-amber-50  { background-color: rgba(232, 177, 90, 0.15) !important; }
 .dark .bg-amber-100 { background-color: rgba(232, 177, 90, 0.24) !important; }
 .dark .bg-green-100 { background-color: rgba(61, 150, 64, 0.24) !important; }

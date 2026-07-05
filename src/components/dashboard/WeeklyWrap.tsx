@@ -57,7 +57,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
 
       <div className="grid grid-cols-2 gap-2">
         <StatPill icon="📓" label="أيام كتبت" value={`${journalDays}/7`} color="text-purple-300" />
-        <StatPill icon="📚" label="صفحات" value={pagesRead.toLocaleString("ar-SA")} color="text-orange-300" />
+        <StatPill icon="📚" label="صفحات" value={formatAmount(pagesRead)} color="text-orange-300" />
         <StatPill
           icon="💰"
           label="مصاريف الأسبوع"

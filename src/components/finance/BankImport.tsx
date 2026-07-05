@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, parseBankCsv } from "@/lib/bankParser";
-import { today, getCategoryInfo } from "@/lib/utils";
+import { today, getCategoryInfo, formatAmount } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
 import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
@@ -175,7 +175,7 @@ export function BankImport({ onClose }: { onClose: () => void }) {
                     <div className="text-[10px] text-gray-400">{tx.date} · {info.label}</div>
                   </div>
                   <span className="text-sm font-bold shrink-0 text-red-500">
-                    -{tx.amount.toLocaleString("ar-SA")}
+                    -{formatAmount(tx.amount)}
                   </span>
                   <button onClick={() => removePreview(tx.id)} className="p-1 text-gray-300 hover:text-red-400">
                     <Trash2 size={13} />

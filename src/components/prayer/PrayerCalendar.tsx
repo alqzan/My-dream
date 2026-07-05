@@ -34,7 +34,7 @@ export function PrayerCalendar({ prayerLogs, onDayClick }: PrayerCalendarProps) 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button onClick={next} className="p-1.5 hover:bg-gray-100 rounded-full">
+        <button onClick={next} aria-label="الشهر التالي" className="p-1.5 hover:bg-gray-100 rounded-full">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
         <div className="text-center">
@@ -43,7 +43,7 @@ export function PrayerCalendar({ prayerLogs, onDayClick }: PrayerCalendarProps) 
           </span>
           <span className="block text-[10px] text-gray-400 mt-0.5">{hijriMonthLabel(year, month)}</span>
         </div>
-        <button onClick={prev} className="p-1.5 hover:bg-gray-100 rounded-full">
+        <button onClick={prev} aria-label="الشهر السابق" className="p-1.5 hover:bg-gray-100 rounded-full">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
       </div>

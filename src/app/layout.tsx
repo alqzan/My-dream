@@ -51,6 +51,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // يفعّل env(safe-area-inset-*) على الأجهزة ذات النوتش فلا يختفي الشريط
+  // السفلي تحت مؤشر الهوم (المستهلك: .pb-safe في الشريط السفلي).
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f3ecdd" },
     { media: "(prefers-color-scheme: dark)", color: "#161009" },

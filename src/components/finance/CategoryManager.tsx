@@ -192,13 +192,14 @@ function CategoryForm({
       </div>
       {!compact && (
         <div className="flex gap-1.5 flex-wrap">
-          {COLORS.map((c) => (
+          {COLORS.map((c, i) => (
             <button
               key={c}
               onClick={() => setColor(c)}
               className={`w-6 h-6 rounded-full ${color === c ? "ring-2 ring-offset-1 ring-gray-400" : ""}`}
               style={{ backgroundColor: c }}
-              aria-label={c}
+              aria-label={`اللون ${i + 1}`}
+              aria-pressed={color === c}
             />
           ))}
         </div>

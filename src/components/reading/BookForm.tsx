@@ -120,7 +120,12 @@ export function BookForm({ onClose, initial }: BookFormProps) {
           <label className="block text-xs font-medium text-gray-500 mb-2">التقييم</label>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} onClick={() => setRating(rating === n ? undefined : n)}>
+              <button
+                key={n}
+                onClick={() => setRating(rating === n ? undefined : n)}
+                aria-label={`${n} من 5 نجوم`}
+                aria-pressed={!!rating && n <= rating}
+              >
                 <Star
                   size={24}
                   fill={rating && n <= rating ? "#d4a017" : "transparent"}
@@ -135,10 +140,12 @@ export function BookForm({ onClose, initial }: BookFormProps) {
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">لون الغلاف</label>
         <div className="flex gap-2 flex-wrap">
-          {COLORS.map((c) => (
+          {COLORS.map((c, i) => (
             <button
               key={c}
               onClick={() => setColor(c)}
+              aria-label={`لون الغلاف ${i + 1}`}
+              aria-pressed={color === c}
               className={`w-7 h-7 rounded-full transition-transform ${
                 color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : ""
               }`}
