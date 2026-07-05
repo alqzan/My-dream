@@ -2,13 +2,18 @@ import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
+// Firebase web config for the "my-dream-a" project. These NEXT_PUBLIC_
+// values are safe to ship in client code by design — access is gated by
+// the Firestore security rules (each user reads/writes only their own
+// document) and the Auth authorized-domains list, not by hiding the key.
+// Env vars override these so a fork can point at its own project.
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyD9Vg0WsM_5EJtESaRVKZY1H5YcfGs3WkA",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "my-dream-a.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "my-dream-a",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "my-dream-a.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "236145636929",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:236145636929:web:3081885cd728006b5038c0",
 };
 
 // Firebase is "enabled" only when the essential config is present.
