@@ -20,10 +20,23 @@ const COLLECTION = "userData";
 // ones instead of re-writing everything each time.
 let knownCloudHashes = new Set<string>();
 
+// A photo's bytes are immutable, so its content hash never changes. Memoize
+// data→hash so a save re-hashes only genuinely new images instead of every
+// photo of every entry on every (debounced, ~1.5s) save — the SHA-256 pass
+// over hundreds of base64 images was pure wasted CPU on each keystroke-driven
+// save. Bounded so a very long session can't grow it without limit.
+const hashCache = new Map<string, string>();
+const HASH_CACHE_LIMIT = 4000;
+
 async function photoHash(data: string): Promise<string> {
+  const cached = hashCache.get(data);
+  if (cached) return cached;
   const bytes = new TextEncoder().encode(data);
   const buf = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+  const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+  if (hashCache.size >= HASH_CACHE_LIMIT) hashCache.clear();
+  hashCache.set(data, hex);
+  return hex;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
