@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
 import { uid, today, parseDate } from "@/lib/utils";
@@ -61,6 +61,40 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
   const [compressing, setCompressing] = useState(false);
+  const [showHarakat, setShowHarakat] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Insert an Arabic diacritic at the caret (it attaches to the letter before
+  // it), then keep focus and caret in place.
+  function insertMark(mark: string) {
+    const ta = contentRef.current;
+    const start = ta ? ta.selectionStart : content.length;
+    const end = ta ? ta.selectionEnd : content.length;
+    const next = content.slice(0, start) + mark + content.slice(end);
+    setContent(next);
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(start + mark.length, start + mark.length);
+    });
+  }
+
+  // Strip all harakat, tanwin, shadda, sukun, tatweel and dagger alif.
+  function stripTashkeel() {
+    setContent(content.replace(/[ً-ْٰـ]/g, ""));
+  }
+
+  const HARAKAT: { m: string; t: string }[] = [
+    { m: "َ", t: "فتحة" },
+    { m: "ِ", t: "كسرة" },
+    { m: "ُ", t: "ضمة" },
+    { m: "ّ", t: "شدّة" },
+    { m: "ْ", t: "سكون" },
+    { m: "ً", t: "تنوين فتح" },
+    { m: "ٍ", t: "تنوين كسر" },
+    { m: "ٌ", t: "تنوين ضم" },
+    { m: "ـ", t: "تطويل" },
+  ];
 
   const titleIdeas = useMemo(
     () => suggestTitles(content, date, answering ? question : undefined),
@@ -186,11 +220,48 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">
-          ماذا في بالك اليوم؟
-          <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs font-medium text-gray-500">
+            ماذا في بالك اليوم؟
+            <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowHarakat((v) => !v)}
+            className={
+              "text-[11px] font-bold rounded-lg px-2 py-1 press shrink-0 " +
+              (showHarakat ? "bg-journal text-white" : "bg-journal/10 text-journal")
+            }
+          >
+            تشكيل
+          </button>
+        </div>
+
+        {showHarakat && (
+          <div className="flex flex-wrap gap-1 mb-2 p-2 bg-journal/5 rounded-xl animate-fade-up">
+            {HARAKAT.map((h) => (
+              <button
+                key={h.t}
+                type="button"
+                title={h.t}
+                onClick={() => insertMark(h.m)}
+                className="min-w-8 h-8 px-2 rounded-lg bg-white border border-gray-200 text-base font-bold text-gray-700 hover:border-journal/40 press"
+              >
+                {"ـ" + h.m}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={stripTashkeel}
+              className="h-8 px-2.5 rounded-lg bg-white border border-gray-200 text-[11px] font-semibold text-gray-500 hover:text-red-400 press"
+            >
+              مسح التشكيل
+            </button>
+          </div>
+        )}
+
         <textarea
+          ref={contentRef}
           value={content}
           onChange={(e) => setContent(expandTimeCommand(e.target.value))}
           rows={8}
