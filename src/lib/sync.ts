@@ -1,11 +1,56 @@
 import {
-  doc, getDoc, setDoc, getDocs, collection, writeBatch, onSnapshot,
+  doc, getDoc, setDoc, getDocs, collection, writeBatch, onSnapshot, deleteDoc,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, SYNC_SPACE_ID } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos } from "./utils";
 
 const COLLECTION = "userData";
+
+// ===================== Bank-SMS inbox =====================
+// An iOS Automation POSTs each incoming bank message (unauthenticated, via the
+// Firestore REST API) to userData/{space}/inbox. The app drains this queue on
+// open, parses each message, and asks the user to categorize — the closest
+// thing to "the app knows about my SMS automatically" that iOS allows.
+const INBOX = "inbox";
+
+export interface InboxItem {
+  id: string;
+  text: string;
+  ts?: string;
+}
+
+// The Automation may send the text raw, base64-encoded (enc:"b64"), or
+// url-encoded (enc:"url") — base64/url avoid breaking the JSON body on Arabic,
+// quotes or newlines. Decode defensively; fall back to the raw string.
+function decodeInboxText(data: Record<string, unknown>): string {
+  const raw = typeof data.text === "string" ? data.text : "";
+  try {
+    if (data.enc === "b64") {
+      const bin = atob(raw.replace(/\s+/g, ""));
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+    if (data.enc === "url") return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+  return raw;
+}
+
+export async function loadInbox(): Promise<InboxItem[]> {
+  if (!db) return [];
+  const snap = await getDocs(collection(db, COLLECTION, SYNC_SPACE_ID, INBOX));
+  return snap.docs.map((d) => {
+    const data = d.data() as Record<string, unknown>;
+    return { id: d.id, text: decodeInboxText(data), ts: typeof data.ts === "string" ? data.ts : undefined };
+  });
+}
+
+export async function deleteInboxItem(id: string): Promise<void> {
+  if (!db) return;
+  await deleteDoc(doc(db, COLLECTION, SYNC_SPACE_ID, INBOX, id));
+}
 
 // ===================== Photo cloud sync =====================
 // Firestore caps a single document at 1MB, so we can't cram every journal

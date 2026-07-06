@@ -8,6 +8,7 @@ import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
+import { PendingImport } from "@/components/finance/PendingImport";
 import { RecurringManager } from "@/components/finance/RecurringManager";
 import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
@@ -24,6 +25,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
+import { isFirebaseEnabled } from "@/lib/firebase";
+import { loadInbox, deleteInboxItem, type InboxItem } from "@/lib/sync";
+import { parseBankSmsBulk } from "@/lib/bankParser";
+import { today } from "@/lib/utils";
 
 export default function FinancePage() {
   const { transactions, budgets, recurring, categories, dailyBudget, monthlyIncome, deleteTransaction, addTransaction, runRecurring } = useAppStore();
@@ -43,6 +48,10 @@ export default function FinancePage() {
   // Bank SMS handed in via the URL (?sms=...) — e.g. from the iOS Shortcut
   // share sheet. Opens the importer pre-filled and auto-previewed.
   const [importSms, setImportSms] = useState<string | null>(null);
+  // Bank messages that arrived automatically into the cloud inbox, awaiting
+  // categorization. Drained on open.
+  const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
+  const [showPending, setShowPending] = useState(false);
 
   useEffect(() => {
     runRecurring();
@@ -64,6 +73,31 @@ export default function FinancePage() {
       const clean = window.location.pathname + window.location.hash;
       window.history.replaceState(null, "", clean);
     }
+  }, []);
+
+  // Drain the automatic bank-SMS inbox on open: if any message parses into an
+  // expense, open the review sheet; unreadable ones are cleared silently.
+  useEffect(() => {
+    if (!isFirebaseEnabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await loadInbox();
+        if (cancelled || !items.length) return;
+        const hasExpense = items.some(
+          (it) => parseBankSmsBulk(it.text, today()).transactions.length > 0
+        );
+        if (hasExpense) {
+          setInboxItems(items);
+          setShowPending(true);
+        } else {
+          await Promise.all(items.map((it) => deleteInboxItem(it.id).catch(() => {})));
+        }
+      } catch {
+        /* offline — try again next open */
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
   const [monthFilter, setMonthFilter] = useState(() => {
     const now = new Date();
@@ -239,6 +273,14 @@ export default function FinancePage() {
           initialSms={importSms ?? undefined}
           onClose={() => { setShowImport(false); setImportSms(null); }}
         />
+      </Modal>
+
+      <Modal
+        open={showPending}
+        onClose={() => setShowPending(false)}
+        title="معاملات جديدة من البنك 🏦"
+      >
+        <PendingImport items={inboxItems} onClose={() => { setShowPending(false); setInboxItems([]); }} />
       </Modal>
 
       <Modal
