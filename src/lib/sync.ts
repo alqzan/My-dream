@@ -1,5 +1,5 @@
 import {
-  doc, getDoc, setDoc, getDocs, collection, writeBatch,
+  doc, getDoc, setDoc, getDocs, collection, writeBatch, onSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
@@ -79,6 +79,27 @@ export async function loadUserMain(uid: string): Promise<AppData | null> {
   const main = snap.data() as AppData & { photoManifest?: string[] };
   knownCloudHashes = new Set(main.photoManifest ?? []);
   return main;
+}
+
+// Live-subscribe to the shared main doc so edits made on another device show
+// up here automatically. Fires with the lightweight main data (entries still
+// carry photoRefs) — the caller decides whether it's newer and, if so, calls
+// hydrateCloudPhotos to resolve the images. Returns an unsubscribe function.
+export function subscribeUserMain(
+  uid: string,
+  cb: (main: (AppData & { photoManifest?: string[] }) | null) => void
+): () => void {
+  if (!db) return () => {};
+  return onSnapshot(
+    doc(db, COLLECTION, uid),
+    (snap) => {
+      if (!snap.exists()) return cb(null);
+      const main = snap.data() as AppData & { photoManifest?: string[] };
+      knownCloudHashes = new Set(main.photoManifest ?? []);
+      cb(main);
+    },
+    () => cb(null)
+  );
 }
 
 // Fetch every photo doc and re-attach the bytes onto the entries' refs.
