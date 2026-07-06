@@ -5,7 +5,7 @@ import { parseBankSmsBulk, parseBankCsv, suggestCategory } from "@/lib/bankParse
 import { today, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
-import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
+import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
 
 type Mode = "sms" | "csv";
 
@@ -31,6 +31,21 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
     if (initialSms && initialSms.trim()) handleSmsPreview(initialSms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function handlePasteClipboard() {
+    setError("");
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        setError("الحافظة فاضية — انسخ رسالة البنك أول ثم اضغط هنا.");
+        return;
+      }
+      setSmsText(text);
+      handleSmsPreview(text);
+    } catch {
+      setError("ما قدرت أقرأ الحافظة. اسمح باللصق إذا طلب، أو الصق الرسالة يدوياً بالأعلى.");
+    }
+  }
 
   function handleSmsPreview(text: string = smsText) {
     setError("");
@@ -138,6 +153,15 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
           <Button onClick={() => handleSmsPreview()} className="w-full bg-finance hover:bg-finance/90" disabled={!smsText.trim()}>
             استخراج الكل تلقائياً 🤖
           </Button>
+          <button
+            onClick={handlePasteClipboard}
+            className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-finance bg-finance/10 rounded-xl py-2.5 press"
+          >
+            <ClipboardPaste size={15} /> استورد من الحافظة
+          </button>
+          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+            انسخ رسالة البنك من تطبيق الرسائل، ثم ارجع واضغط «استورد من الحافظة».
+          </p>
         </>
       )}
 

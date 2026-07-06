@@ -54,6 +54,12 @@ export default function FinancePage() {
     if (sms && sms.trim()) {
       setImportSms(sms);
       setShowImport(true);
+    } else if (params.get("import") === "1") {
+      // Simple deep-link (from the Shortcut) → just open the importer; the
+      // user taps "استورد من الحافظة" there (clipboard needs a tap on iOS).
+      setShowImport(true);
+    }
+    if (params.has("sms") || params.has("import")) {
       // Strip the query so a refresh/back doesn't re-import the same messages.
       const clean = window.location.pathname + window.location.hash;
       window.history.replaceState(null, "", clean);
