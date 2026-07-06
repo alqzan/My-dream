@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
 import { uid, today, parseDate } from "@/lib/utils";
@@ -49,6 +49,8 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
   return [...new Set(suggestions)].slice(0, 4);
 }
 
+const DRAFT_KEY = "madar-journal-draft";
+
 export function JournalForm({ onClose, initial }: JournalFormProps) {
   const { addJournalEntry, updateJournalEntry } = useAppStore();
   const [date, setDate] = useState(initial?.date ?? today());
@@ -63,6 +65,39 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [compressing, setCompressing] = useState(false);
   const [showHarakat, setShowHarakat] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-save a draft of a NEW entry so writing is never lost if you leave
+  // mid-way. Restored on reopen; cleared once the entry is actually saved.
+  // (Photos are excluded — too heavy for localStorage.)
+  useEffect(() => {
+    if (initial) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.title) setTitle(d.title);
+      if (d.content) setContent(d.content);
+      if (d.date) setDate(d.date);
+      if (d.question) setQuestion(d.question);
+      if (typeof d.answering === "boolean") setAnswering(d.answering);
+    } catch {
+      /* ignore corrupt draft */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (initial) return;
+    try {
+      if (title.trim() || content.trim()) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ date, title, content, question, answering }));
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {
+      /* storage full/unavailable — ignore */
+    }
+  }, [initial, date, title, content, question, answering]);
 
   // Insert an Arabic diacritic at the caret (it attaches to the letter before
   // it), then keep focus and caret in place.
@@ -145,6 +180,11 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         source: "manual",
       });
     }
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
     onClose();
   }
 
@@ -223,7 +263,11 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         <div className="flex items-center justify-between mb-1">
           <label className="text-xs font-medium text-gray-500">
             ماذا في بالك اليوم؟
-            <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
+            {!initial && (title.trim() || content.trim()) ? (
+              <span className="text-finance/80 font-normal"> · يُحفظ تلقائياً ✎</span>
+            ) : (
+              <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
+            )}
           </label>
           <button
             type="button"
