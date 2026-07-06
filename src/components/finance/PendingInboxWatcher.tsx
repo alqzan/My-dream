@@ -1,19 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PendingImport } from "@/components/finance/PendingImport";
 import { isFirebaseEnabled } from "@/lib/firebase";
-import { loadInbox, deleteInboxItem, type InboxItem } from "@/lib/sync";
+import { loadInbox, deleteInboxItem } from "@/lib/sync";
 import { parseBankSmsBulk } from "@/lib/bankParser";
 import { today } from "@/lib/utils";
+import { usePending } from "@/lib/pending";
 
 // App-wide watcher: on launch (from any page, including the home screen) it
-// drains the automatic bank-SMS inbox and, if anything parses into an expense,
-// pops the review sheet so the user approves right away — no need to open the
-// finance page first. Unreadable messages are cleared silently.
+// drains the automatic bank-SMS inbox into shared state, pops the review sheet,
+// and keeps the home-screen count in sync. Unreadable messages are cleared
+// silently. Closing the sheet with X keeps the items so the home banner can
+// reopen it; approving/discarding clears everything.
 export function PendingInboxWatcher() {
-  const [items, setItems] = useState<InboxItem[]>([]);
-  const [open, setOpen] = useState(false);
+  const { items, reviewing, setItems, openReview, closeReview, clear } = usePending();
 
   useEffect(() => {
     if (!isFirebaseEnabled) return;
@@ -22,12 +23,13 @@ export function PendingInboxWatcher() {
       try {
         const inbox = await loadInbox();
         if (cancelled || !inbox.length) return;
-        const hasExpense = inbox.some(
-          (it) => parseBankSmsBulk(it.text, today()).transactions.length > 0
+        const count = inbox.reduce(
+          (n, it) => n + parseBankSmsBulk(it.text, today()).transactions.length,
+          0
         );
-        if (hasExpense) {
-          setItems(inbox);
-          setOpen(true);
+        if (count > 0) {
+          setItems(inbox, count);
+          openReview();
         } else {
           await Promise.all(inbox.map((it) => deleteInboxItem(it.id).catch(() => {})));
         }
@@ -38,12 +40,13 @@ export function PendingInboxWatcher() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!open) return null;
+  if (!reviewing) return null;
   return (
-    <Modal open={open} onClose={() => setOpen(false)} title="معاملات جديدة من البنك 🏦">
-      <PendingImport items={items} onClose={() => { setOpen(false); setItems([]); }} />
+    <Modal open={reviewing} onClose={closeReview} title="معاملات جديدة من البنك 🏦">
+      <PendingImport items={items} onClose={clear} />
     </Modal>
   );
 }
