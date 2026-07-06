@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Transaction, ReserveSplit } from "@/lib/types";
-import { uid, today, formatAmount, getSubCategories, reserveBalance, cn } from "@/lib/utils";
+import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
 import { suggestCategory } from "@/lib/bankParser";
+import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { PiggyBank } from "lucide-react";
 
@@ -13,7 +14,7 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onClose, initial }: TransactionFormProps) {
-  const { categories, reserves, transactions, merchantRules, addTransaction, updateTransaction, addCategory, rememberMerchant } = useAppStore();
+  const { categories, reserves, transactions, budgets, monthlyIncome, merchantRules, addTransaction, updateTransaction, addCategory, rememberMerchant } = useAppStore();
   const mains = categories.filter((c) => !c.parentId);
 
   // If editing a transaction whose category is a sub, pre-select its parent
@@ -100,6 +101,14 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     }
     // Learn this merchant → category so the next one is auto-classified.
     if (note.trim()) rememberMerchant(note, tx.category);
+    // Live budget alert: warn the moment a category crosses 80% / its cap.
+    const w = budgetWarningFor(tx.category, budgets, useAppStore.getState().transactions, categories, monthlyIncome);
+    if (w) {
+      showToast(
+        w.over ? `📛 تجاوزت سقف «${w.label}»` : `⚠️ وصلت ${w.pct}% من سقف «${w.label}»`,
+        "warning"
+      );
+    }
     onClose();
   }
 

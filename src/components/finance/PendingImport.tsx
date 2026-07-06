@@ -3,7 +3,8 @@ import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate } from "@/lib/bankParser";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
-import { today, formatAmount, getCategoryInfo, cn } from "@/lib/utils";
+import { today, formatAmount, getCategoryInfo, budgetWarningFor, cn } from "@/lib/utils";
+import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { Sparkles, BrainCircuit, Check, Copy } from "lucide-react";
 import type { Transaction } from "@/lib/types";
@@ -23,7 +24,7 @@ interface Pending {
 // Automation → cloud inbox). Each row is pre-classified with the smart
 // suggestion; the user just confirms or changes the section, then adds.
 export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose: () => void }) {
-  const { categories, merchantRules, transactions, addTransaction, rememberMerchant } = useAppStore();
+  const { categories, merchantRules, transactions, budgets, monthlyIncome, addTransaction, rememberMerchant } = useAppStore();
 
   const initial = useMemo<Pending[]>(() => {
     const out: Pending[] = [];
@@ -69,6 +70,23 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
       const tx: Transaction = { id: Math.random().toString(36).slice(2), date: r.date, amount: r.amount, category: r.catId, note: r.note };
       addTransaction(tx);
       if (r.note.trim()) rememberMerchant(r.note, r.catId);
+    }
+    // Live budget alert for any category these expenses pushed to its limit.
+    const fresh = useAppStore.getState().transactions;
+    const seen = new Set<string>();
+    let warn: { label: string; over: boolean; pct: number } | null = null;
+    for (const r of chosen) {
+      const w = budgetWarningFor(r.catId, budgets, fresh, categories, monthlyIncome);
+      if (w && !seen.has(w.label)) {
+        seen.add(w.label);
+        if (!warn || (w.over && !warn.over)) warn = w;
+      }
+    }
+    if (warn) {
+      showToast(
+        warn.over ? `📛 تجاوزت سقف «${warn.label}»` : `⚠️ وصلت ${warn.pct}% من سقف «${warn.label}»`,
+        "warning"
+      );
     }
     await clearInbox();
     onClose();
