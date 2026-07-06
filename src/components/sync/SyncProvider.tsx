@@ -15,6 +15,7 @@ import {
   subscribeUserMain,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
+import type { AppData } from "@/lib/types";
 
 type SyncState = "idle" | "syncing" | "synced" | "offline";
 
@@ -31,6 +32,25 @@ const SyncContext = createContext<SyncContextValue>({
 });
 
 export const useSync = () => useContext(SyncContext);
+
+// Does this snapshot hold any real user data? Used so a fresh, empty device
+// can never overwrite a cloud space that already holds the owner's data —
+// timestamps alone aren't enough, since a brand-new device starts with a
+// "now" stamp that would otherwise look newer than older real data.
+function hasData(d: Partial<AppData>): boolean {
+  const nonEmpty =
+    (d.transactions?.length ?? 0) > 0 ||
+    (d.journalEntries?.length ?? 0) > 0 ||
+    (d.books?.length ?? 0) > 0 ||
+    (d.readingLogs?.length ?? 0) > 0 ||
+    (d.recurring?.length ?? 0) > 0 ||
+    (d.budgets?.length ?? 0) > 0 ||
+    (d.reserves?.length ?? 0) > 0 ||
+    (d.prayerLogs?.length ?? 0) > 0 ||
+    (d.futureLetters?.length ?? 0) > 0;
+  const habitsLogged = (d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0);
+  return nonEmpty || habitsLogged;
+}
 
 // Login-free sync: every device shares one Firestore document keyed by a
 // fixed secret space id, so opening the app just works — no email, no login.
@@ -56,16 +76,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let unsubSnap: () => void = () => {};
 
     (async () => {
-      // 1) Initial merge: newest side wins, then push local up if it's ahead.
+      // 1) Initial merge. Adopt the cloud when this device is empty (so a
+      //    fresh device pulls the owner's existing data) OR when the cloud is
+      //    genuinely newer. Only push local up when it actually has data, so a
+      //    blank device can never wipe a cloud space that holds real data.
       try {
         const cloudMain = await loadUserMain(space);
         const local = snapshot();
-        if (cloudMain && (cloudMain.lastUpdated ?? "") > (local.lastUpdated ?? "")) {
+        const cloudHasData = !!cloudMain && hasData(cloudMain);
+        const localHasData = hasData(local);
+        const cloudNewer = (cloudMain?.lastUpdated ?? "") > (local.lastUpdated ?? "");
+
+        if (cloudMain && cloudHasData && (!localHasData || cloudNewer)) {
           const full = await hydrateCloudPhotos(space, cloudMain);
           applyingRemoteRef.current = true;
           hydrate(mergeLocalPhotos(full, local));
           applyingRemoteRef.current = false;
-        } else {
+        } else if (localHasData) {
           await saveUserData(space, local);
         }
         setStatus("synced");
