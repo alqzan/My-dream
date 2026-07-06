@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { parseBankSmsBulk, parseBankCsv } from "@/lib/bankParser";
+import { parseBankSmsBulk, parseBankCsv, suggestCategory } from "@/lib/bankParser";
 import { today, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
@@ -10,7 +10,13 @@ import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2 } from "lucid
 type Mode = "sms" | "csv";
 
 export function BankImport({ onClose }: { onClose: () => void }) {
-  const { categories, addTransaction } = useAppStore();
+  const { categories, merchantRules, addTransaction } = useAppStore();
+
+  // Re-classify a parsed row through the user's learned merchant rules
+  // (falls back to the built-in keyword guess the parser already applied).
+  function classify(tx: Transaction): Transaction {
+    return { ...tx, category: suggestCategory(tx.note ?? "", categories, merchantRules) };
+  }
   const [mode, setMode] = useState<Mode>("sms");
   const [smsText, setSmsText] = useState("");
   const [date, setDate] = useState(today());
@@ -31,10 +37,9 @@ export function BankImport({ onClose }: { onClose: () => void }) {
       );
       return;
     }
-    const txs: Transaction[] = results.map((r) => ({
-      id: Math.random().toString(36).slice(2),
-      ...r,
-    }));
+    const txs: Transaction[] = results.map((r) =>
+      classify({ id: Math.random().toString(36).slice(2), ...r })
+    );
     setPreview(txs);
     setSkippedIncome(skipped);
   }
@@ -55,7 +60,7 @@ export function BankImport({ onClose }: { onClose: () => void }) {
           );
           return;
         }
-        setPreview(txs);
+        setPreview(txs.map(classify));
         setSkippedIncome(skipped);
       } catch {
         setError("خطأ في قراءة الملف");

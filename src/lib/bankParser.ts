@@ -1,30 +1,69 @@
-import type { Transaction } from "./types";
+import type { Transaction, FinanceCategoryDef } from "./types";
 import { uid, today } from "./utils";
 
 // ========== Smart Categorization ==========
 // Maps to the seeded default category ids (src/lib/types.ts). If the user
 // has since renamed or deleted one of these, the transaction just falls
 // back to "غير مصنف" via getCategoryInfo — it's never lost.
+//
+// Philosophy (the owner's rule): the line is "قوت أم تجربة؟". Buying
+// sustenance = أساسي; paying for an outing/experience = كمالي. So groceries,
+// rent, fuel, health, education are essentials, while eating out, cafes,
+// travel and subscriptions are luxuries.
 const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
-  { keywords: ["سوبرماركت", "هايبر", "بنده", "الدانوب", "لولو", "نون", "أمازون", "جرير", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "ساكو"], category: "cat-essentials" },
-  { keywords: ["مطعم", "برغر", "كنتاكي", "ماكدونالدز", "ستاربكس", "كافيه", "مقهى", "pizza", "كبسه", "مندي", "سشي", "resturant", "restaurant", "cafe", "coffee"], category: "cat-essentials" },
+  { keywords: ["سوبرماركت", "هايبر", "بقاله", "بقالة", "تموينات", "بنده", "الدانوب", "لولو", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "التميمي", "المزرعة", "نستو"], category: "cat-essentials" },
   { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
-  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "fuel", "petrol"], category: "cat-essentials" },
-  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-essentials" },
-  { keywords: ["مستشفى", "عيادة", "صيدلية", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
+  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "ساسكو", "fuel", "petrol"], category: "cat-essentials" },
+  { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "utility"], category: "cat-essentials" },
+  { keywords: ["مستشفى", "عيادة", "صيدلية", "النهدي", "الدواء", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
   { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
-  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal"], category: "cat-luxuries" },
-  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات"], category: "cat-luxuries" },
+  // Eating out & cafes → luxuries (an experience, not sustenance).
+  { keywords: ["مطعم", "برغر", "برجر", "كنتاكي", "ماكدونالدز", "هرفي", "البيك", "ستاربكس", "بارنز", "دانكن", "كافيه", "مقهى", "قهوة", "pizza", "بيتزا", "كبسه", "مندي", "سشي", "شاورما", "restaurant", "resturant", "cafe", "coffee"], category: "cat-luxuries" },
+  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal", "booking", "بوكينج"], category: "cat-luxuries" },
+  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات", "ألعاب", "playstation", "بلايستيشن"], category: "cat-luxuries" },
+  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-luxuries" },
   { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity"], category: "cat-charity" },
   { keywords: ["ادخار", "توفير", "saving", "استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "cat-investment" },
 ];
 
-function autoCategory(text: string): string {
+// Built-in keyword guess (main category). Falls back to essentials.
+function keywordCategory(text: string): string {
   const lower = text.toLowerCase();
   for (const { keywords, category } of CATEGORY_KEYWORDS) {
     if (keywords.some((k) => lower.includes(k.toLowerCase()))) return category;
   }
   return "cat-essentials";
+}
+
+// Normalize a merchant/note into a stable key: drop digits & punctuation,
+// collapse spaces. "ستاربكس #١٢٣  الرياض" and "ستاربكس الرياض" map alike.
+export function normalizeMerchant(text: string): string {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[0-9٠-٩]+/g, " ")
+    .replace(/[^\p{L}\p{N} ]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
+// The smart suggestion: your own learned rules win (exact merchant, then a
+// contained-name match), otherwise the built-in keyword guess. A learned id
+// that points at a since-deleted category is ignored.
+export function suggestCategory(
+  text: string,
+  categories: FinanceCategoryDef[],
+  merchantRules: Record<string, string> | undefined
+): string {
+  const exists = (id: string) => categories.some((c) => c.id === id);
+  const key = normalizeMerchant(text);
+  if (key && merchantRules) {
+    if (merchantRules[key] && exists(merchantRules[key])) return merchantRules[key];
+    for (const [rk, cid] of Object.entries(merchantRules)) {
+      if (rk && cid && exists(cid) && (key.includes(rk) || rk.includes(key))) return cid;
+    }
+  }
+  return keywordCategory(text);
 }
 
 // ========== SMS Parser ==========
@@ -74,7 +113,7 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
 
   return {
     amount,
-    category: autoCategory(text + " " + merchant),
+    category: keywordCategory(text + " " + merchant),
     note: merchant || text.slice(0, 60),
     date: extractSmsDate(text) ?? date,
   };
@@ -188,7 +227,7 @@ export function parseBankCsv(csvText: string): { transactions: Transaction[]; sk
       id: uid(),
       date,
       amount,
-      category: autoCategory(descText),
+      category: keywordCategory(descText),
       note: descText.slice(0, 80),
     });
   }
