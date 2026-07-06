@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
+import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import { FinancePace } from "@/components/finance/FinancePace";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
@@ -156,6 +157,10 @@ export default function FinancePage() {
 
       <Card className="animate-fade-up stagger-2">
         <FinanceSummary transactions={byMonth} categories={categories} />
+      </Card>
+
+      <Card className="animate-fade-up stagger-2">
+        <SpendingPatternCard transactions={transactions} categories={categories} monthFilter={monthFilter} />
       </Card>
 
       <FinancePace budgets={budgets} monthTransactions={byMonth} categories={categories} monthlyIncome={monthlyIncome} />
