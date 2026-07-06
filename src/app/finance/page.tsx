@@ -40,10 +40,25 @@ export default function FinancePage() {
   const [showCategories, setShowCategories] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Bank SMS handed in via the URL (?sms=...) — e.g. from the iOS Shortcut
+  // share sheet. Opens the importer pre-filled and auto-previewed.
+  const [importSms, setImportSms] = useState<string | null>(null);
 
   useEffect(() => {
     runRecurring();
   }, [runRecurring]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sms = params.get("sms");
+    if (sms && sms.trim()) {
+      setImportSms(sms);
+      setShowImport(true);
+      // Strip the query so a refresh/back doesn't re-import the same messages.
+      const clean = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", clean);
+    }
+  }, []);
   const [monthFilter, setMonthFilter] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -211,10 +226,13 @@ export default function FinancePage() {
 
       <Modal
         open={showImport}
-        onClose={() => setShowImport(false)}
+        onClose={() => { setShowImport(false); setImportSms(null); }}
         title="استيراد بنكي تلقائي 🤖"
       >
-        <BankImport onClose={() => setShowImport(false)} />
+        <BankImport
+          initialSms={importSms ?? undefined}
+          onClose={() => { setShowImport(false); setImportSms(null); }}
+        />
       </Modal>
 
       <Modal

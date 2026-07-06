@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, parseBankCsv, suggestCategory } from "@/lib/bankParser";
 import { today, getCategoryInfo } from "@/lib/utils";
@@ -9,7 +9,7 @@ import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2 } from "lucid
 
 type Mode = "sms" | "csv";
 
-export function BankImport({ onClose }: { onClose: () => void }) {
+export function BankImport({ onClose, initialSms }: { onClose: () => void; initialSms?: string }) {
   const { categories, merchantRules, addTransaction } = useAppStore();
 
   // Re-classify a parsed row through the user's learned merchant rules
@@ -18,17 +18,24 @@ export function BankImport({ onClose }: { onClose: () => void }) {
     return { ...tx, category: suggestCategory(tx.note ?? "", categories, merchantRules) };
   }
   const [mode, setMode] = useState<Mode>("sms");
-  const [smsText, setSmsText] = useState("");
+  const [smsText, setSmsText] = useState(initialSms ?? "");
   const [date, setDate] = useState(today());
   const [preview, setPreview] = useState<Transaction[]>([]);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [skippedIncome, setSkippedIncome] = useState(0);
 
-  function handleSmsPreview() {
+  // Shared straight from the iOS Shortcut → parse immediately so the user
+  // just reviews and confirms.
+  useEffect(() => {
+    if (initialSms && initialSms.trim()) handleSmsPreview(initialSms);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleSmsPreview(text: string = smsText) {
     setError("");
     setSkippedIncome(0);
-    const { transactions: results, skippedIncome: skipped } = parseBankSmsBulk(smsText, date);
+    const { transactions: results, skippedIncome: skipped } = parseBankSmsBulk(text, date);
     if (!results.length) {
       setError(
         skipped > 0
@@ -128,7 +135,7 @@ export function BankImport({ onClose }: { onClose: () => void }) {
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40" />
           </div>
-          <Button onClick={handleSmsPreview} className="w-full bg-finance hover:bg-finance/90" disabled={!smsText.trim()}>
+          <Button onClick={() => handleSmsPreview()} className="w-full bg-finance hover:bg-finance/90" disabled={!smsText.trim()}>
             استخراج الكل تلقائياً 🤖
           </Button>
         </>
