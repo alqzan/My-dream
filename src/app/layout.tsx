@@ -25,6 +25,7 @@ import { SWRegister } from "@/components/layout/SWRegister";
 import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { SyncProvider } from "@/components/sync/SyncProvider";
+import { PendingInboxWatcher } from "@/components/finance/PendingInboxWatcher";
 
 export const metadata: Metadata = {
   title: "مدار — مساحتك الشخصية",
@@ -78,6 +79,7 @@ export default function RootLayout({
             </div>
             <MobileNav />
             <UndoToast />
+            <PendingInboxWatcher />
           </SyncProvider>
         </ClientOnly>
       </body>
