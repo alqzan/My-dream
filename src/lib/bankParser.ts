@@ -47,23 +47,32 @@ export function normalizeMerchant(text: string): string {
     .slice(0, 40);
 }
 
-// The smart suggestion: your own learned rules win (exact merchant, then a
-// contained-name match), otherwise the built-in keyword guess. A learned id
-// that points at a since-deleted category is ignored.
+// A previously-learned category for this merchant, or null. Exact merchant
+// match wins, then a contained-name match. A rule pointing at a since-deleted
+// category is ignored. This is what powers "the app already knows this one".
+export function learnedCategory(
+  text: string,
+  categories: FinanceCategoryDef[],
+  merchantRules: Record<string, string> | undefined
+): string | null {
+  const exists = (id: string) => categories.some((c) => c.id === id);
+  const key = normalizeMerchant(text);
+  if (!key || !merchantRules) return null;
+  if (merchantRules[key] && exists(merchantRules[key])) return merchantRules[key];
+  for (const [rk, cid] of Object.entries(merchantRules)) {
+    if (rk && cid && exists(cid) && (key.includes(rk) || rk.includes(key))) return cid;
+  }
+  return null;
+}
+
+// The smart suggestion: your own learned rules win, otherwise the built-in
+// keyword guess.
 export function suggestCategory(
   text: string,
   categories: FinanceCategoryDef[],
   merchantRules: Record<string, string> | undefined
 ): string {
-  const exists = (id: string) => categories.some((c) => c.id === id);
-  const key = normalizeMerchant(text);
-  if (key && merchantRules) {
-    if (merchantRules[key] && exists(merchantRules[key])) return merchantRules[key];
-    for (const [rk, cid] of Object.entries(merchantRules)) {
-      if (rk && cid && exists(cid) && (key.includes(rk) || rk.includes(key))) return cid;
-    }
-  }
-  return keywordCategory(text);
+  return learnedCategory(text, categories, merchantRules) ?? keywordCategory(text);
 }
 
 // ========== SMS Parser ==========

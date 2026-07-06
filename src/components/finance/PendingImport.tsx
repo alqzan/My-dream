@@ -1,11 +1,11 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { parseBankSmsBulk, suggestCategory } from "@/lib/bankParser";
+import { parseBankSmsBulk, suggestCategory, learnedCategory } from "@/lib/bankParser";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
 import { today, formatAmount, getCategoryInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Trash2, Sparkles } from "lucide-react";
+import { Trash2, Sparkles, BrainCircuit } from "lucide-react";
 import type { Transaction } from "@/lib/types";
 
 interface Pending {
@@ -14,6 +14,7 @@ interface Pending {
   note: string;
   date: string;
   catId: string;
+  learned: boolean;
 }
 
 // Review queue for bank messages that arrived automatically (via the iOS
@@ -27,12 +28,14 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     for (const item of items) {
       const { transactions } = parseBankSmsBulk(item.text, today());
       transactions.forEach((r, i) => {
+        const known = learnedCategory(r.note ?? "", categories, merchantRules);
         out.push({
           key: `${item.id}-${i}`,
           amount: r.amount,
           note: r.note,
           date: r.date,
-          catId: suggestCategory(r.note ?? "", categories, merchantRules),
+          catId: known ?? suggestCategory(r.note ?? "", categories, merchantRules),
+          learned: !!known,
         });
       });
     }
@@ -81,7 +84,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 bg-finance/10 text-finance rounded-xl px-3 py-2 text-xs font-semibold">
-        <Sparkles size={15} /> وصلتك {rows.length} معاملة من البنك — اختر لكل وحدة وين تحطّها.
+        <Sparkles size={15} /> وصلتك {rows.length} معاملة — التجار المعروفون («متعلّم») مصنّفون مسبقاً، بس وافق.
       </div>
 
       <div className="max-h-[52vh] overflow-y-auto space-y-2 pr-0.5">
@@ -92,7 +95,14 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
               <div className="flex items-center gap-2">
                 <span className="text-lg shrink-0">{info.icon}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-gray-700 truncate">{r.note || "مصروف"}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-gray-700 truncate">{r.note || "مصروف"}</span>
+                    {r.learned && (
+                      <span className="flex items-center gap-0.5 text-[9px] font-bold text-finance bg-finance/10 rounded-full px-1.5 py-0.5 shrink-0">
+                        <BrainCircuit size={9} /> متعلّم
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[10px] text-gray-400">{r.date}</div>
                 </div>
                 <span className="text-sm font-bold text-red-500 shrink-0">-{formatAmount(r.amount)}</span>
