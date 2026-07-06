@@ -106,6 +106,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // 2) Live updates coming from the owner's other devices.
       unsubSnap = subscribeUserMain(space, (cloudMain) => {
         if (!cloudMain) return;
+        // Receiving a snapshot at all means we're connected — clear any
+        // lingering "offline" state even when there's nothing new to apply.
+        setStatus("synced");
+        setLastSyncedAt(Date.now());
         const localUpdated = useAppStore.getState().lastUpdated ?? "";
         if ((cloudMain.lastUpdated ?? "") <= localUpdated) return;
         (async () => {

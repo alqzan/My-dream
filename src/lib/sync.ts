@@ -155,20 +155,33 @@ export async function saveUserData(uid: string, data: AppData): Promise<void> {
   await setDoc(doc(db, COLLECTION, uid), main, { merge: false });
 
   // 2) photo docs — upload only new hashes, delete only removed ones.
+  //    Non-fatal: a photo that fails to upload or is too big for a single
+  //    Firestore doc is skipped, so it can never break syncing of the core
+  //    data (the app would otherwise flip to "offline" on one bad photo).
   const desired = new Set(photos.keys());
   const toUpload = [...desired].filter((h) => !knownCloudHashes.has(h));
   const toDelete = [...knownCloudHashes].filter((h) => !desired.has(h));
 
-  for (const part of chunk(toUpload, 400)) {
-    const batch = writeBatch(db);
-    for (const h of part) batch.set(doc(db, COLLECTION, uid, "photos", h), { data: photos.get(h) });
-    await batch.commit();
+  try {
+    for (const part of chunk(toUpload, 400)) {
+      const batch = writeBatch(db);
+      let n = 0;
+      for (const h of part) {
+        const val = photos.get(h);
+        if (!val || val.length > 1_000_000) continue; // Firestore 1MB doc cap
+        batch.set(doc(db, COLLECTION, uid, "photos", h), { data: val });
+        n++;
+      }
+      if (n) await batch.commit();
+    }
+    for (const part of chunk(toDelete, 400)) {
+      const batch = writeBatch(db);
+      for (const h of part) batch.delete(doc(db, COLLECTION, uid, "photos", h));
+      await batch.commit();
+    }
+    knownCloudHashes = desired;
+  } catch {
+    // Keep knownCloudHashes as-is so the next save retries the photos; the
+    // core data is already saved above, so sync stays healthy meanwhile.
   }
-  for (const part of chunk(toDelete, 400)) {
-    const batch = writeBatch(db);
-    for (const h of part) batch.delete(doc(db, COLLECTION, uid, "photos", h));
-    await batch.commit();
-  }
-
-  knownCloudHashes = desired;
 }

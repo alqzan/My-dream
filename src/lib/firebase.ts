@@ -1,5 +1,5 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { initializeFirestore, type Firestore } from "firebase/firestore";
 
 // Firebase web config for the "my-dream-a" project. These NEXT_PUBLIC_
 // values are safe to ship in client code by design — access is gated by
@@ -33,7 +33,11 @@ let dbInstance: Firestore | null = null;
 
 if (isFirebaseEnabled) {
   app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  dbInstance = getFirestore(app);
+  // Force long-polling instead of the default WebChannel stream. Mobile
+  // Safari and some cellular networks silently block WebChannel, which makes
+  // Firestore look permanently "offline" even though plain HTTPS works — this
+  // routes everything (reads, writes, live listeners) over HTTP long-polling.
+  dbInstance = initializeFirestore(app, { experimentalForceLongPolling: true });
 }
 
 export const db = dbInstance;
