@@ -65,6 +65,24 @@ export function learnedCategory(
   return null;
 }
 
+// Does this parsed expense look like one that's already recorded? Same day,
+// same amount, and the same merchant (normalized). Guards against a message
+// arriving twice or an expense that was also added by hand.
+export function isLikelyDuplicate(
+  amount: number,
+  date: string,
+  note: string,
+  existing: { amount: number; date: string; note?: string }[]
+): boolean {
+  const key = normalizeMerchant(note);
+  return existing.some(
+    (t) =>
+      t.date === date &&
+      Math.abs(t.amount - amount) < 0.01 &&
+      (key ? normalizeMerchant(t.note ?? "") === key : true)
+  );
+}
+
 // The smart suggestion: your own learned rules win, otherwise the built-in
 // keyword guess.
 export function suggestCategory(
