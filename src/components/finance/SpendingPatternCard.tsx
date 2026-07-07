@@ -2,11 +2,32 @@
 import { useMemo } from "react";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatAmount, getMainCategory } from "@/lib/utils";
-import { normalizeMerchant } from "@/lib/bankParser";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const ESS = "cat-essentials";
 const LUX = "cat-luxuries";
+
+// Turn a messy transaction note (often bank-SMS text like "شراء إنترنت بـ22 SR"
+// or "مبلغ:15 SAR") into just the merchant/place name for display. Strips
+// amounts, currency tokens, and common transaction verbs/prepositions.
+const NOTE_JUNK = new Set([
+  "شراء", "خصم", "سحب", "دفع", "مبلغ", "purchase", "ب", "بـ", "لدى", "من", "لـ", "في",
+  "at", "@", "sr", "sar", "ريال", "sar.",
+]);
+function cleanMerchant(note: string): string {
+  const s = (note || "").trim();
+  if (!s) return "غير محدّد";
+  const cleaned = s
+    .replace(/ـ/g, "") // tatweel (ـ) that glues prefixes to numbers
+    .replace(/ر\.?\s?س/g, " ")
+    .replace(/[0-9٠-٩][0-9٠-٩.,]*/g, " ") // amounts (latin + arabic digits)
+    .replace(/[:؛;،.\-_/]+/g, " ");
+  const tokens = cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !NOTE_JUNK.has(w.toLowerCase()));
+  return tokens.join(" ").trim() || "غير محدّد";
+}
 
 function sumEssLux(txs: Transaction[], categories: FinanceCategoryDef[]) {
   let ess = 0;
@@ -25,9 +46,9 @@ function prevMonthOf(month: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// "قوت أم تجربة؟" at a glance: how much of this month's lifestyle spend went to
-// essentials vs luxuries, how the luxuries share moved vs last month, and the
-// top places the luxuries went.
+// Essentials vs luxuries at a glance: how much of this month's lifestyle spend
+// went to each, how the luxuries share moved vs last month, and the top places
+// the luxuries went.
 export function SpendingPatternCard({
   transactions,
   categories,
@@ -52,16 +73,17 @@ export function SpendingPatternCard({
     const prevLuxPct = prevTotal ? Math.round((before.lux / prevTotal) * 100) : null;
     const luxDelta = prevLuxPct == null ? null : luxPct - prevLuxPct;
 
-    // Top luxury merchants this month (merged by normalized name).
-    const byMerchant = new Map<string, { label: string; amount: number }>();
+    // Top luxury merchants this month, grouped by cleaned merchant name.
+    const byMerchant = new Map<string, number>();
     for (const t of month) {
       if (getMainCategory(categories, t.category).id !== LUX) continue;
-      const key = normalizeMerchant(t.note ?? "") || "غير محدّد";
-      const cur = byMerchant.get(key) ?? { label: t.note?.trim() || "غير محدّد", amount: 0 };
-      cur.amount += t.amount;
-      byMerchant.set(key, cur);
+      const label = cleanMerchant(t.note ?? "");
+      byMerchant.set(label, (byMerchant.get(label) ?? 0) + t.amount);
     }
-    const topLux = [...byMerchant.values()].sort((a, b) => b.amount - a.amount).slice(0, 3);
+    const topLux = [...byMerchant.entries()]
+      .map(([label, amount]) => ({ label, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
 
     return { ess: now.ess, lux: now.lux, total, essPct, luxPct, luxDelta, topLux };
   }, [transactions, categories, monthFilter]);
@@ -84,7 +106,7 @@ export function SpendingPatternCard({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold text-gray-800">نمط الصرف هذا الشهر</span>
-        <span className="text-[11px] text-gray-400">قوت أم تجربة؟</span>
+        <span className="text-[11px] text-gray-400">الأساسي مقابل الكمالي</span>
       </div>
 
       {/* Split bar */}
