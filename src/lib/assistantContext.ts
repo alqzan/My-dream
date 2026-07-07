@@ -1,34 +1,63 @@
 import type { AppData } from "./types";
 import {
   today,
+  parseDate,
+  toDateStr,
   formatAmount,
   calcStreak,
+  longestStreak,
   getMainCategory,
   computeDailyBudgetStatus,
   getPrayerLog,
   countDayPrayers,
   getPrayerStreak,
+  getMosqueStreak,
+  prayerConsistency,
   getReadingStreak,
+  reserveBalance,
 } from "./utils";
 import { PRAYERS } from "./types";
 
-// Build a compact, human-readable Arabic summary of the user's data to send as
-// grounding context to the assistant. Deliberately bounded (recent items only,
-// truncated journal snippets) so requests stay small and cheap — the model
-// answers about spending, journaling, habits, prayers and reading from this.
+function lastNDates(n: number): string[] {
+  const out: string[] = [];
+  const d = parseDate(today());
+  for (let i = 0; i < n; i++) {
+    out.push(toDateStr(d));
+    d.setDate(d.getDate() - 1);
+  }
+  return out;
+}
+
+function prevMonthPrefix(monthPrefix: string): string {
+  const [y, m] = monthPrefix.split("-").map(Number);
+  const d = new Date(y, m - 2, 1); // m is 1-based; m-2 → previous month
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Build a rich but bounded Arabic summary of the user's data to ground the
+// assistant. Includes history and aggregates (per-prayer consistency, last-7
+// days, month-over-month spend, habit streaks) — not just today — so questions
+// like "كيف صلواتي بشكل عام" have something real to answer from.
 export function buildAssistantContext(d: AppData): string {
   const todayStr = today();
   const monthPrefix = todayStr.slice(0, 7);
-  const lines: string[] = [];
+  const prevPrefix = prevMonthPrefix(monthPrefix);
+  const week = lastNDates(7);
+  const L: string[] = [];
 
-  lines.push(`التاريخ اليوم: ${todayStr}`);
+  L.push(`التاريخ اليوم: ${todayStr} (الشهر ${monthPrefix}).`);
 
   // ---------- Finance ----------
   const monthTx = d.transactions.filter((t) => t.date.startsWith(monthPrefix));
+  const prevTx = d.transactions.filter((t) => t.date.startsWith(prevPrefix));
   const monthTotal = monthTx.reduce((s, t) => s + t.amount, 0);
-  lines.push("");
-  lines.push("== المصاريف ==");
-  lines.push(`إجمالي صرف هذا الشهر: ${formatAmount(monthTotal)} ر.س (${monthTx.length} معاملة).`);
+  const prevTotal = prevTx.reduce((s, t) => s + t.amount, 0);
+  L.push("");
+  L.push("== المصاريف ==");
+  L.push(
+    `صرف هذا الشهر: ${formatAmount(monthTotal)} ر.س (${monthTx.length} معاملة). الشهر الماضي: ${formatAmount(prevTotal)} ر.س.`
+  );
+  if (d.monthlyIncome) L.push(`الدخل الشهري: ${formatAmount(d.monthlyIncome)} ر.س.`);
 
   const byCat = new Map<string, number>();
   for (const t of monthTx) {
@@ -36,73 +65,83 @@ export function buildAssistantContext(d: AppData): string {
     byCat.set(label, (byCat.get(label) ?? 0) + t.amount);
   }
   const catRows = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
-  if (catRows.length) {
-    lines.push("حسب القسم: " + catRows.map(([l, v]) => `${l} ${formatAmount(v)}`).join("، "));
-  }
+  if (catRows.length) L.push("حسب القسم: " + catRows.map(([l, v]) => `${l} ${formatAmount(v)}`).join("، "));
 
   if (d.dailyBudget) {
     const st = computeDailyBudgetStatus(d.dailyBudget, d.transactions);
-    lines.push(
-      `الميزانية اليومية: ${formatAmount(d.dailyBudget.amount)} ر.س/يوم — الرصيد المتراكم ${formatAmount(st.balance)} ر.س ${st.balance < 0 ? "(تجاوز)" : "(فائض)"}.`
+    L.push(
+      `الميزانية اليومية ${formatAmount(d.dailyBudget.amount)} ر.س/يوم — الرصيد المتراكم ${formatAmount(st.balance)} ر.س ${st.balance < 0 ? "(تجاوز)" : "(فائض)"}.`
     );
   }
-  if (d.monthlyIncome) lines.push(`الدخل الشهري المُسجّل: ${formatAmount(d.monthlyIncome)} ر.س.`);
-
-  const recentTx = [...d.transactions].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
-  if (recentTx.length) {
-    lines.push("آخر المعاملات:");
-    for (const t of recentTx) {
-      const label = getMainCategory(d.categories, t.category).label;
-      lines.push(`- ${t.date}: ${formatAmount(t.amount)} ر.س · ${label}${t.note ? ` · ${t.note}` : ""}`);
-    }
+  if (d.reserves.length) {
+    L.push(
+      "الاحتياطي: " +
+        d.reserves.map((f) => `${f.name} ${formatAmount(reserveBalance(f, d.transactions))} ر.س`).join("، ")
+    );
   }
 
-  // ---------- Habits ----------
-  if (d.habits.length) {
-    lines.push("");
-    lines.push("== العادات ==");
-    for (const h of d.habits) {
-      const streak = calcStreak(h.logs);
-      const doneToday = h.logs.includes(todayStr);
-      lines.push(`- ${h.name}: ${doneToday ? "أُنجزت اليوم" : "لم تُنجز اليوم"} · سلسلة ${streak} يوم.`);
+  const recentTx = [...d.transactions].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12);
+  if (recentTx.length) {
+    L.push("آخر المعاملات:");
+    for (const t of recentTx) {
+      const label = getMainCategory(d.categories, t.category).label;
+      L.push(`- ${t.date}: ${formatAmount(t.amount)} · ${label}${t.note ? ` · ${t.note}` : ""}`);
     }
   }
 
   // ---------- Prayers ----------
-  lines.push("");
-  lines.push("== الصلاة ==");
+  L.push("");
+  L.push("== الصلاة ==");
   const todayLog = getPrayerLog(d.prayerLogs, todayStr);
-  const { prayed, mosque } = countDayPrayers(todayLog);
-  lines.push(`اليوم: ${prayed}/5 صُلّيت (${mosque} بالمسجد).`);
-  lines.push(`سلسلة إتمام الصلوات: ${getPrayerStreak(d.prayerLogs)} يوم.`);
-  if (todayLog) {
-    lines.push(
-      "تفصيل اليوم: " + PRAYERS.map((p) => `${p} ${todayLog.prayers[p] ?? "لم"}`).join("، ")
-    );
+  const tCount = countDayPrayers(todayLog);
+  L.push(`اليوم: ${tCount.prayed}/5 صُلّيت (${tCount.mosque} بالمسجد).`);
+  L.push(
+    `سلسلة إتمام الصلوات: ${getPrayerStreak(d.prayerLogs)} يوم · سلسلة المسجد: ${getMosqueStreak(d.prayerLogs)} يوم · أيام مسجّلة: ${d.prayerLogs.length}.`
+  );
+  const cons = prayerConsistency(d.prayerLogs);
+  L.push("نسبة كل صلاة: " + PRAYERS.map((p) => `${p} ${Math.round(cons[p] * 100)}%`).join("، "));
+  const week7 = week.map((day) => {
+    const c = countDayPrayers(getPrayerLog(d.prayerLogs, day));
+    return `${day.slice(5)}=${c.prayed}/5`;
+  });
+  L.push("آخر ٧ أيام (صلوات/يوم): " + week7.join("، "));
+
+  // ---------- Habits ----------
+  if (d.habits.length) {
+    L.push("");
+    L.push("== العادات ==");
+    for (const h of d.habits) {
+      const streak = calcStreak(h.logs);
+      const best = longestStreak(h.logs);
+      const week7Count = week.filter((day) => h.logs.includes(day)).length;
+      L.push(
+        `- ${h.name}: ${h.logs.includes(todayStr) ? "أُنجزت اليوم" : "لم تُنجز اليوم"} · سلسلة ${streak} (أطول ${best}) · ${week7Count}/7 هذا الأسبوع.`
+      );
+    }
   }
 
   // ---------- Reading ----------
-  lines.push("");
-  lines.push("== القراءة ==");
+  L.push("");
+  L.push("== القراءة ==");
   const current = d.books.find((b) => b.status === "أقرأ");
-  if (current) {
-    lines.push(`الكتاب الحالي: «${current.title}» (${current.currentPage}/${current.totalPages} صفحة).`);
-  }
-  const monthPages = d.readingLogs
-    .filter((l) => l.date.startsWith(monthPrefix))
-    .reduce((s, l) => s + l.pagesRead, 0);
-  lines.push(`صفحات هذا الشهر: ${monthPages} · سلسلة القراءة: ${getReadingStreak(d.readingLogs)} يوم.`);
+  if (current) L.push(`الكتاب الحالي: «${current.title}» (${current.currentPage}/${current.totalPages}).`);
+  const finished = d.books.filter((b) => b.status === "أنهيت").length;
+  const monthPages = d.readingLogs.filter((l) => l.date.startsWith(monthPrefix)).reduce((s, l) => s + l.pagesRead, 0);
+  L.push(
+    `الكتب: ${d.books.length} (أنهيت ${finished}) · صفحات هذا الشهر: ${monthPages} · سلسلة القراءة: ${getReadingStreak(d.readingLogs)} يوم.`
+  );
 
   // ---------- Journal ----------
-  lines.push("");
-  lines.push("== المذكرات ==");
-  const journalStreak = calcStreak(d.journalEntries.map((e) => e.date));
-  lines.push(`عدد المذكرات: ${d.journalEntries.length} · سلسلة الكتابة: ${journalStreak} يوم.`);
+  L.push("");
+  L.push("== المذكرات ==");
+  L.push(
+    `عدد المذكرات: ${d.journalEntries.length} · سلسلة الكتابة: ${calcStreak(d.journalEntries.map((e) => e.date))} يوم.`
+  );
   const recentEntries = [...d.journalEntries].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5);
   for (const e of recentEntries) {
-    const snippet = (e.content || "").replace(/\s+/g, " ").trim().slice(0, 180);
-    lines.push(`- ${e.date}${e.title ? ` «${e.title}»` : ""}: ${snippet}${snippet.length >= 180 ? "…" : ""}`);
+    const snippet = (e.content || "").replace(/\s+/g, " ").trim().slice(0, 200);
+    L.push(`- ${e.date}${e.title ? ` «${e.title}»` : ""}: ${snippet}${snippet.length >= 200 ? "…" : ""}`);
   }
 
-  return lines.join("\n");
+  return L.join("\n");
 }
