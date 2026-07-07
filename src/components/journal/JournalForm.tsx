@@ -5,6 +5,7 @@ import type { JournalEntry } from "@/lib/types";
 import { uid, today, parseDate } from "@/lib/utils";
 import { compressImage } from "@/lib/imageUtils";
 import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
+import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles } from "lucide-react";
@@ -62,6 +63,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
+  const [audio, setAudio] = useState<string | undefined>(initial?.audio);
   const [compressing, setCompressing] = useState(false);
   const [showHarakat, setShowHarakat] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -167,6 +169,8 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photos,
         // photo القديم يبقى مرآة لأول صورة للتوافق مع العروض القديمة
         photo: photos[0] ?? "",
+        // قيمة فارغة تمسح الملاحظة الصوتية فعلاً عند إزالتها
+        audio: audio ?? "",
       });
     } else {
       addJournalEntry({
@@ -176,6 +180,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         content: content.trim(),
         ...(answering ? { question } : {}),
         ...(photos.length ? { photos, photo: photos[0] } : {}),
+        ...(audio ? { audio } : {}),
         time: nowHHMM(),
         source: "manual",
       });
@@ -374,6 +379,12 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         {!compressing && photos.length < MAX_PHOTOS && (
           <p className="text-[10px] text-gray-300 mt-1 text-center">أي صورة تُضغط تلقائياً لتوفير المساحة</p>
         )}
+      </div>
+
+      {/* ملاحظة صوتية */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2">ملاحظة صوتية</label>
+        <AudioRecorder value={audio} onChange={setAudio} />
       </div>
 
       <div className="flex gap-2 pt-1">

@@ -103,6 +103,7 @@ export interface JournalEntry {
   tags?: string[];
   photo?: string; // base64 WebP compressed — legacy single photo
   photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
+  audio?: string; // ملاحظة صوتية (base64 data URL) — تُزامَن كمستند وسائط مستقل
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";

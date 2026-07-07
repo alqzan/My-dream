@@ -4,6 +4,7 @@ import { aggregateDay } from "@/lib/dayAggregator";
 import { MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, entryPhotos } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
+import { Photo } from "@/components/ui/Photo";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BookOpen, Wallet, BookMarked, CheckCircle2 } from "lucide-react";
 
@@ -99,7 +100,15 @@ export function DayView({ date, onClose }: DayViewProps) {
         {day.journal ? (
           <Section icon={<BookMarked size={15} />} title="المذكرة" color="text-journal">
             {entryPhotos(day.journal).length > 0 && (
-              <img src={entryPhotos(day.journal)[0]} alt="" className="w-full h-40 object-cover rounded-xl mb-2" />
+              <Photo
+                images={entryPhotos(day.journal)}
+                index={0}
+                className="w-full h-40 object-cover rounded-xl mb-2"
+              />
+            )}
+            {day.journal.audio && (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <audio controls src={day.journal.audio} className="w-full h-10 mb-2" />
             )}
             {day.journal.title && (
               <h3 className="text-base font-black text-gray-900 mb-1">{day.journal.title}</h3>

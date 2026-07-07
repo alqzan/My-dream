@@ -61,9 +61,11 @@ export async function deleteInboxItem(id: string): Promise<void> {
 // cloud. This scales to thousands of photos and syncs them across devices.
 
 // Hashes we believe already exist in the cloud — seeded from the main doc's
-// manifest on load, so a save only uploads new photos and deletes removed
-// ones instead of re-writing everything each time.
+// manifest on load, so a save only uploads new media and deletes removed
+// ones instead of re-writing everything each time. Photos and voice notes
+// each get their own subcollection + manifest.
 let knownCloudHashes = new Set<string>();
+let knownCloudAudioHashes = new Set<string>();
 
 async function photoHash(data: string): Promise<string> {
   const bytes = new TextEncoder().encode(data);
@@ -77,28 +79,42 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-interface CloudEntry extends Omit<JournalEntry, "photo" | "photos"> {
+interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio"> {
   photoRefs?: string[];
+  audioRef?: string;
 }
 
-// Replace each entry's photo bytes with content-hash refs, and collect the
-// hash→data map to persist as individual photo docs.
+// Replace each entry's photo/audio bytes with content-hash refs, and collect
+// the hash→data maps to persist as individual media docs.
 async function prepareForCloud(
   data: AppData
-): Promise<{ main: AppData & { photoManifest: string[] }; photos: Map<string, string> }> {
+): Promise<{
+  main: AppData & { photoManifest: string[]; audioManifest: string[] };
+  photos: Map<string, string>;
+  audios: Map<string, string>;
+}> {
   const photos = new Map<string, string>();
+  const audios = new Map<string, string>();
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e): Promise<CloudEntry> => {
       const imgs = entryPhotos(e);
-      const { photo: _p, photos: _ps, ...rest } = e;
-      if (!imgs.length) return rest;
-      const refs: string[] = [];
-      for (const img of imgs) {
-        const h = await photoHash(img);
-        photos.set(h, img);
-        refs.push(h);
+      const { photo: _p, photos: _ps, audio: _a, ...rest } = e;
+      const out: CloudEntry = rest;
+      if (imgs.length) {
+        const refs: string[] = [];
+        for (const img of imgs) {
+          const h = await photoHash(img);
+          photos.set(h, img);
+          refs.push(h);
+        }
+        out.photoRefs = refs;
       }
-      return { ...rest, photoRefs: refs };
+      if (e.audio) {
+        const h = await photoHash(e.audio);
+        audios.set(h, e.audio);
+        out.audioRef = h;
+      }
+      return out;
     })
   );
   return {
@@ -106,8 +122,10 @@ async function prepareForCloud(
       ...data,
       journalEntries: journalEntries as unknown as JournalEntry[],
       photoManifest: [...photos.keys()],
+      audioManifest: [...audios.keys()],
     },
     photos,
+    audios,
   };
 }
 
@@ -119,10 +137,12 @@ export async function loadUserMain(uid: string): Promise<AppData | null> {
   const snap = await getDoc(doc(db, COLLECTION, uid));
   if (!snap.exists()) {
     knownCloudHashes = new Set();
+    knownCloudAudioHashes = new Set();
     return null;
   }
-  const main = snap.data() as AppData & { photoManifest?: string[] };
+  const main = snap.data() as AppData & { photoManifest?: string[]; audioManifest?: string[] };
   knownCloudHashes = new Set(main.photoManifest ?? []);
+  knownCloudAudioHashes = new Set(main.audioManifest ?? []);
   return main;
 }
 
@@ -132,34 +152,50 @@ export async function loadUserMain(uid: string): Promise<AppData | null> {
 // hydrateCloudPhotos to resolve the images. Returns an unsubscribe function.
 export function subscribeUserMain(
   uid: string,
-  cb: (main: (AppData & { photoManifest?: string[] }) | null) => void
+  cb: (main: (AppData & { photoManifest?: string[]; audioManifest?: string[] }) | null) => void
 ): () => void {
   if (!db) return () => {};
   return onSnapshot(
     doc(db, COLLECTION, uid),
     (snap) => {
       if (!snap.exists()) return cb(null);
-      const main = snap.data() as AppData & { photoManifest?: string[] };
+      const main = snap.data() as AppData & { photoManifest?: string[]; audioManifest?: string[] };
       knownCloudHashes = new Set(main.photoManifest ?? []);
+      knownCloudAudioHashes = new Set(main.audioManifest ?? []);
       cb(main);
     },
     () => cb(null)
   );
 }
 
-// Fetch every photo doc and re-attach the bytes onto the entries' refs.
+// Fetch every media doc (photos + voice notes) and re-attach the bytes onto
+// the entries' refs.
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
-  const snap = await getDocs(collection(db, COLLECTION, uid, "photos"));
-  const map = new Map<string, string>();
-  snap.forEach((d) => map.set(d.id, (d.data() as { data: string }).data));
-  knownCloudHashes = new Set(map.keys());
+  const [photoSnap, audioSnap] = await Promise.all([
+    getDocs(collection(db, COLLECTION, uid, "photos")),
+    getDocs(collection(db, COLLECTION, uid, "audios")),
+  ]);
+  const pmap = new Map<string, string>();
+  photoSnap.forEach((d) => pmap.set(d.id, (d.data() as { data: string }).data));
+  const amap = new Map<string, string>();
+  audioSnap.forEach((d) => amap.set(d.id, (d.data() as { data: string }).data));
+  knownCloudHashes = new Set(pmap.keys());
+  knownCloudAudioHashes = new Set(amap.keys());
   const journalEntries = main.journalEntries.map((e) => {
     const refs = (e as CloudEntry).photoRefs;
-    const { photoRefs: _r, ...rest } = e as CloudEntry;
-    if (!refs?.length) return rest as JournalEntry;
-    const imgs = refs.map((h) => map.get(h)).filter(Boolean) as string[];
-    return { ...rest, photos: imgs, photo: imgs[0] } as JournalEntry;
+    const aref = (e as CloudEntry).audioRef;
+    const { photoRefs: _r, audioRef: _ar, ...rest } = e as CloudEntry;
+    let out = rest as JournalEntry;
+    if (refs?.length) {
+      const imgs = refs.map((h) => pmap.get(h)).filter(Boolean) as string[];
+      out = { ...out, photos: imgs, photo: imgs[0] };
+    }
+    if (aref) {
+      const a = amap.get(aref);
+      if (a) out = { ...out, audio: a };
+    }
+    return out;
   });
   return { ...main, journalEntries };
 }
@@ -171,62 +207,80 @@ export async function loadUserData(uid: string): Promise<AppData | null> {
   return hydrateCloudPhotos(uid, main);
 }
 
-// Re-attach photos kept on this device onto cloud entries that arrived
-// without them (matched by id) — a safety net so a hydrate can never wipe a
-// local photo even if its cloud doc failed to download.
+// Re-attach media kept on this device onto cloud entries that arrived without
+// it (matched by id) — a safety net so a hydrate can never wipe a local photo
+// or voice note even if its cloud doc failed to download.
 export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Partial<AppData> {
   if (!cloud.journalEntries) return cloud;
-  const localPhotos = new Map(
+  const localMedia = new Map(
     local.journalEntries
-      .filter((e) => e.photo || e.photos?.length)
-      .map((e) => [e.id, { photo: e.photo, photos: e.photos }])
+      .filter((e) => e.photo || e.photos?.length || e.audio)
+      .map((e) => [e.id, { photo: e.photo, photos: e.photos, audio: e.audio }])
   );
-  if (!localPhotos.size) return cloud;
+  if (!localMedia.size) return cloud;
   return {
     ...cloud,
     journalEntries: cloud.journalEntries.map((e) => {
-      if (e.photo || e.photos?.length) return e;
-      const kept = localPhotos.get(e.id);
-      return kept ? { ...e, ...kept } : e;
+      const kept = localMedia.get(e.id);
+      if (!kept) return e;
+      const patch: Partial<JournalEntry> = {};
+      if (!(e.photo || e.photos?.length) && (kept.photo || kept.photos?.length)) {
+        patch.photo = kept.photo;
+        patch.photos = kept.photos;
+      }
+      if (!e.audio && kept.audio) patch.audio = kept.audio;
+      return Object.keys(patch).length ? { ...e, ...patch } : e;
     }),
   };
 }
 
-export async function saveUserData(uid: string, data: AppData): Promise<void> {
-  if (!db) return;
-  const { main, photos } = await prepareForCloud(data);
-
-  // 1) main doc (text/numbers + refs + manifest) — always under 1MB.
-  await setDoc(doc(db, COLLECTION, uid), main, { merge: false });
-
-  // 2) photo docs — upload only new hashes, delete only removed ones.
-  //    Non-fatal: a photo that fails to upload or is too big for a single
-  //    Firestore doc is skipped, so it can never break syncing of the core
-  //    data (the app would otherwise flip to "offline" on one bad photo).
-  const desired = new Set(photos.keys());
-  const toUpload = [...desired].filter((h) => !knownCloudHashes.has(h));
-  const toDelete = [...knownCloudHashes].filter((h) => !desired.has(h));
-
+// Upload only new hashes and delete only removed ones for one media
+// subcollection. Non-fatal: a blob that fails or is too big for a single
+// Firestore doc is skipped, so it can never break syncing of the core data.
+// Returns the new set of known hashes (unchanged on failure, so it retries).
+async function syncMediaDocs(
+  uid: string,
+  sub: string,
+  media: Map<string, string>,
+  known: Set<string>
+): Promise<Set<string>> {
+  if (!db) return known;
+  const desired = new Set(media.keys());
+  const toUpload = [...desired].filter((h) => !known.has(h));
+  const toDelete = [...known].filter((h) => !desired.has(h));
   try {
     for (const part of chunk(toUpload, 400)) {
       const batch = writeBatch(db);
       let n = 0;
       for (const h of part) {
-        const val = photos.get(h);
+        const val = media.get(h);
         if (!val || val.length > 1_000_000) continue; // Firestore 1MB doc cap
-        batch.set(doc(db, COLLECTION, uid, "photos", h), { data: val });
+        batch.set(doc(db, COLLECTION, uid, sub, h), { data: val });
         n++;
       }
       if (n) await batch.commit();
     }
     for (const part of chunk(toDelete, 400)) {
       const batch = writeBatch(db);
-      for (const h of part) batch.delete(doc(db, COLLECTION, uid, "photos", h));
+      for (const h of part) batch.delete(doc(db, COLLECTION, uid, sub, h));
       await batch.commit();
     }
-    knownCloudHashes = desired;
+    return desired;
   } catch {
-    // Keep knownCloudHashes as-is so the next save retries the photos; the
-    // core data is already saved above, so sync stays healthy meanwhile.
+    return known;
   }
+}
+
+export async function saveUserData(uid: string, data: AppData): Promise<void> {
+  if (!db) return;
+  const { main, photos, audios } = await prepareForCloud(data);
+
+  // 1) main doc (text/numbers + refs + manifests) — always under 1MB.
+  await setDoc(doc(db, COLLECTION, uid), main, { merge: false });
+
+  // 2) media docs — photos and voice notes, each diffed against what's already
+  //    in the cloud. The core data is already saved above, so a media failure
+  //    never flips sync to "offline".
+  knownCloudHashes = await syncMediaDocs(uid, "photos", photos, knownCloudHashes);
+  knownCloudAudioHashes = await syncMediaDocs(uid, "audios", audios, knownCloudAudioHashes);
 }
