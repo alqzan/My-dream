@@ -68,10 +68,12 @@ interface AppStore extends AppData {
   updateBook: (id: string, updates: Partial<Book>) => void;
   deleteBook: (id: string) => void;
   addReadingLog: (log: ReadingLog) => void;
+  updateReadingLog: (id: string, updates: Partial<ReadingLog>) => void;
   deleteReadingLog: (id: string) => void;
 
   // Habits
   addHabit: (habit: Habit) => void;
+  updateHabit: (id: string, updates: Partial<Habit>) => void;
   toggleHabitLog: (habitId: string, date: string) => void;
   deleteHabit: (id: string) => void;
 
@@ -493,11 +495,24 @@ export const useAppStore = create<AppStore>()(
       addReadingLog: (log) =>
         set((s) => ({ readingLogs: [log, ...s.readingLogs] })),
 
+      // Edits the log record only — the book's currentPage is left as-is
+      // (it stays editable via the book form, and deleteReadingLog likewise
+      // doesn't touch it), so an edit can never double-count page progress.
+      updateReadingLog: (id, updates) =>
+        set((s) => ({
+          readingLogs: s.readingLogs.map((l) => (l.id === id ? { ...l, ...updates } : l)),
+        })),
+
       deleteReadingLog: (id) =>
         set((s) => ({ readingLogs: s.readingLogs.filter((l) => l.id !== id) })),
 
       addHabit: (habit) =>
         set((s) => ({ habits: [...s.habits, habit] })),
+
+      updateHabit: (id, updates) =>
+        set((s) => ({
+          habits: s.habits.map((h) => (h.id === id ? { ...h, ...updates } : h)),
+        })),
 
       toggleHabitLog: (habitId, date) =>
         set((s) => ({

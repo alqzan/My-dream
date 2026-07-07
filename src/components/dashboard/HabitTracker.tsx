@@ -66,9 +66,10 @@ function WeekRing({ done, color, children }: { done: number; color: string; chil
 }
 
 export function HabitTracker() {
-  const { habits, toggleHabitLog, addHabit, deleteHabit } = useAppStore();
+  const { habits, toggleHabitLog, addHabit, updateHabit, deleteHabit } = useAppStore();
   const [showAdd, setShowAdd] = useState(false);
   const [manage, setManage] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null); // habit being edited
   const [newName, setNewName] = useState("");
   const [newIcon, setNewIcon] = useState("⭐");
   const [newColor, setNewColor] = useState(COLORS[0]);
@@ -79,11 +80,42 @@ export function HabitTracker() {
   const allDone = habits.length > 0 && doneToday === habits.length;
   const pct = habits.length ? Math.round((doneToday / habits.length) * 100) : 0;
 
-  function handleAdd() {
-    if (!newName.trim()) return;
-    addHabit({ id: uid(), name: newName.trim(), icon: newIcon, color: newColor, logs: [] });
+  function resetForm() {
     setNewName("");
+    setNewIcon("⭐");
+    setNewColor(COLORS[0]);
+    setEditId(null);
+  }
+
+  // Toggle the add form open; opening it fresh clears any edit state.
+  function toggleAddForm() {
+    if (showAdd) {
+      setShowAdd(false);
+      resetForm();
+    } else {
+      resetForm();
+      setShowAdd(true);
+    }
+  }
+
+  // Open the same form pre-filled to edit an existing habit (from manage mode).
+  function openEdit(habit: { id: string; name: string; icon: string; color: string }) {
+    setEditId(habit.id);
+    setNewName(habit.name);
+    setNewIcon(habit.icon || "⭐");
+    setNewColor(habit.color || COLORS[0]);
+    setShowAdd(true);
+  }
+
+  function handleSave() {
+    if (!newName.trim()) return;
+    if (editId) {
+      updateHabit(editId, { name: newName.trim(), icon: newIcon, color: newColor });
+    } else {
+      addHabit({ id: uid(), name: newName.trim(), icon: newIcon, color: newColor, logs: [] });
+    }
     setShowAdd(false);
+    resetForm();
   }
 
   return (
@@ -113,7 +145,7 @@ export function HabitTracker() {
             </button>
           )}
           <button
-            onClick={() => setShowAdd(!showAdd)}
+            onClick={toggleAddForm}
             className="text-brand-600 hover:text-brand-700 p-1.5 press"
             aria-label="إضافة عادة"
           >
@@ -121,6 +153,10 @@ export function HabitTracker() {
           </button>
         </div>
       </div>
+
+      {manage && habits.length > 0 && (
+        <p className="text-[11px] text-gray-400">اضغط على أي عادة لتعديل اسمها أو أيقونتها أو لونها، أو ✕ لحذفها.</p>
+      )}
 
       {/* Day progress bar */}
       {habits.length > 0 && (
@@ -139,6 +175,9 @@ export function HabitTracker() {
 
       {showAdd && (
         <div className="bg-gray-50 rounded-xl p-3 space-y-2.5 animate-fade-up">
+          {editId && (
+            <div className="text-xs font-semibold text-gray-500">تعديل العادة</div>
+          )}
           <div className="flex items-center gap-2">
             <span className="w-11 h-11 shrink-0 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-2xl">
               {newIcon}
@@ -186,13 +225,13 @@ export function HabitTracker() {
               onChange={(e) => setNewName(e.target.value)}
               placeholder="اسم العادة"
               className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-300"
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
             />
             <button
-              onClick={handleAdd}
+              onClick={handleSave}
               className="bg-brand-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-brand-700 press"
             >
-              إضافة
+              {editId ? "حفظ" : "إضافة"}
             </button>
           </div>
         </div>
@@ -217,7 +256,10 @@ export function HabitTracker() {
             <button
               key={habit.id}
               onClick={() => {
-                if (manage) return;
+                if (manage) {
+                  openEdit(habit);
+                  return;
+                }
                 if (!done) buzz();
                 toggleHabitLog(habit.id, todayStr);
               }}

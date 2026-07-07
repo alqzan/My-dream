@@ -1,29 +1,50 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { Book } from "@/lib/types";
+import type { Book, ReadingLog } from "@/lib/types";
 import { uid, today } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
 interface ReadingLogFormProps {
   books: Book[];
   defaultBookId?: string;
+  initial?: ReadingLog; // when set, the form edits this log instead of adding
   onClose: () => void;
 }
 
-export function ReadingLogForm({ books, defaultBookId, onClose }: ReadingLogFormProps) {
-  const { addReadingLog, updateBook } = useAppStore();
+export function ReadingLogForm({ books, defaultBookId, initial, onClose }: ReadingLogFormProps) {
+  const { addReadingLog, updateReadingLog, updateBook } = useAppStore();
   const activeBooks = books.filter((b) => b.status === "أقرأ");
-  const [bookId, setBookId] = useState(defaultBookId ?? activeBooks[0]?.id ?? "");
-  const [pagesRead, setPagesRead] = useState("");
-  const [minutes, setMinutes] = useState("");
-  const [date, setDate] = useState(today());
+  // When editing, allow the log's own book in the picker even if it's no
+  // longer "أقرأ" (e.g. already finished), so its book can still be shown/kept.
+  const selectableBooks =
+    initial && !activeBooks.some((b) => b.id === initial.bookId)
+      ? [...books.filter((b) => b.id === initial.bookId), ...activeBooks]
+      : activeBooks;
+  const [bookId, setBookId] = useState(initial?.bookId ?? defaultBookId ?? activeBooks[0]?.id ?? "");
+  const [pagesRead, setPagesRead] = useState(initial ? String(initial.pagesRead) : "");
+  const [minutes, setMinutes] = useState(initial?.minutesRead ? String(initial.minutesRead) : "");
+  const [date, setDate] = useState(initial?.date ?? today());
 
   const selectedBook = books.find((b) => b.id === bookId);
 
   function handleSave() {
     const pages = parseInt(pagesRead);
     if (!bookId || !pages || pages <= 0) return;
+
+    if (initial) {
+      // Edit the log record only. The book's currentPage is left untouched
+      // (it was already advanced when the log was first created, and stays
+      // editable via the book form) — re-advancing here would double-count.
+      updateReadingLog(initial.id, {
+        bookId,
+        date,
+        pagesRead: pages,
+        minutesRead: parseInt(minutes) || undefined,
+      });
+      onClose();
+      return;
+    }
 
     addReadingLog({ id: uid(), bookId, date, pagesRead: pages, minutesRead: parseInt(minutes) || undefined });
 
@@ -39,7 +60,7 @@ export function ReadingLogForm({ books, defaultBookId, onClose }: ReadingLogForm
     onClose();
   }
 
-  if (!activeBooks.length) {
+  if (!selectableBooks.length) {
     return (
       <div className="text-center py-6 text-gray-400 text-sm space-y-2">
         <p>لا توجد كتب تقرأها الآن</p>
@@ -57,7 +78,7 @@ export function ReadingLogForm({ books, defaultBookId, onClose }: ReadingLogForm
           onChange={(e) => setBookId(e.target.value)}
           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-reading/40"
         >
-          {activeBooks.map((b) => (
+          {selectableBooks.map((b) => (
             <option key={b.id} value={b.id}>{b.title}</option>
           ))}
         </select>
@@ -110,7 +131,7 @@ export function ReadingLogForm({ books, defaultBookId, onClose }: ReadingLogForm
           className="flex-1"
           style={{ backgroundColor: "#e07b39" }}
         >
-          تسجيل القراءة
+          {initial ? "حفظ التعديل" : "تسجيل القراءة"}
         </Button>
         <Button variant="secondary" onClick={onClose}>إلغاء</Button>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { getReadingStreak } from "@/lib/utils";
+import { getReadingStreak, formatDateShort } from "@/lib/utils";
 import { BookCard } from "@/components/reading/BookCard";
 import { BookForm } from "@/components/reading/BookForm";
 import { ReadingLogForm } from "@/components/reading/ReadingLogForm";
@@ -12,17 +12,24 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import type { Book } from "@/lib/types";
-import { Plus, BookOpen, Flame } from "lucide-react";
+import type { Book, ReadingLog } from "@/lib/types";
+import { Plus, BookOpen, Flame, Pencil, Trash2 } from "lucide-react";
 
 type FilterStatus = "الكل" | "أقرأ" | "أنهيت" | "أريد_قراءة";
 
 export default function ReadingPage() {
-  const { books, readingLogs, deleteBook } = useAppStore();
+  const { books, readingLogs, deleteBook, deleteReadingLog } = useAppStore();
   const [showBookForm, setShowBookForm] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
   const [editBook, setEditBook] = useState<Book | undefined>();
+  const [editLog, setEditLog] = useState<ReadingLog | undefined>();
   const [filter, setFilter] = useState<FilterStatus>("الكل");
+
+  // Most recent reading sessions, newest first — an editable/removable history.
+  const recentLogs = [...readingLogs]
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .slice(0, 15);
+  const bookTitle = (id: string) => books.find((b) => b.id === id)?.title ?? "كتاب";
 
   const streak = getReadingStreak(readingLogs);
   const logDates = readingLogs.map((l) => l.date);
@@ -138,6 +145,39 @@ export default function ReadingPage() {
         </div>
       )}
 
+      {recentLogs.length > 0 && (
+        <Card className="animate-fade-up stagger-3">
+          <div className="flex items-center gap-1.5 mb-3 text-sm font-semibold text-gray-700">
+            <BookOpen size={15} className="text-reading" /> جلسات القراءة
+          </div>
+          <div className="space-y-1.5">
+            {recentLogs.map((log) => (
+              <div key={log.id} className="flex items-center gap-2 text-sm py-1">
+                <span>📖</span>
+                <span className="text-gray-600 flex-1 truncate">{bookTitle(log.bookId)}</span>
+                <span className="text-[11px] text-gray-400">{formatDateShort(log.date)}</span>
+                <span className="text-reading font-semibold">{log.pagesRead} ص</span>
+                {log.minutesRead ? <span className="text-gray-400 text-xs">{log.minutesRead}د</span> : null}
+                <button
+                  onClick={() => setEditLog(log)}
+                  className="p-1 text-gray-300 hover:text-reading press"
+                  aria-label="تعديل الجلسة"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => deleteReadingLog(log.id)}
+                  className="p-1 text-gray-300 hover:text-red-400 press"
+                  aria-label="حذف الجلسة"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Modal
         open={showBookForm || !!editBook}
         onClose={() => { setShowBookForm(false); setEditBook(undefined); }}
@@ -150,13 +190,15 @@ export default function ReadingPage() {
       </Modal>
 
       <Modal
-        open={showLogForm}
-        onClose={() => setShowLogForm(false)}
-        title="سجّل جلسة قراءة"
+        open={showLogForm || !!editLog}
+        onClose={() => { setShowLogForm(false); setEditLog(undefined); }}
+        title={editLog ? "تعديل جلسة القراءة" : "سجّل جلسة قراءة"}
       >
         <ReadingLogForm
+          key={editLog?.id ?? "new"}
           books={books}
-          onClose={() => setShowLogForm(false)}
+          initial={editLog}
+          onClose={() => { setShowLogForm(false); setEditLog(undefined); }}
         />
       </Modal>
     </div>
