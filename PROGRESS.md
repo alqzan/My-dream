@@ -30,8 +30,10 @@ better — see reasons below).
       - Failed debounced saves now retry with exponential backoff (2s→30s cap)
         and surface a one-time warning toast ("فشلت المزامنة — سيُعاد المحاولة")
         via the existing `showToast`. A fresh edit supersedes a pending retry.
-- [ ] **S3. Merge-or-replace choice on backup import** (was item 4)
-      - BackupCard import offers "دمج" (via `mergeAppData`) vs "استبدال".
+- [x] **S3. Merge-or-replace choice on backup import** (was item 4)
+      - After validating a backup, BackupCard now asks "دمج" (union via
+        `mergeAppData`, no deletions) vs "استبدال" (full replace). Both keep the
+        undo. Legacy/partial backups are normalized to a full AppData first.
 
 Then: Gemini-powered in-app chat (free tier) — separate, needs a proxy.
 
