@@ -74,7 +74,13 @@ export default function AssistantPage() {
           message: text,
         }),
       });
-      if (!res.ok || !res.body) throw new Error(`status ${res.status}`);
+      if (!res.ok) {
+        // Surface the worker's own error text (e.g. "GEMINI_API_KEY not set" or
+        // "Gemini error 403: ...") so setup problems are diagnosable.
+        const detail = (await res.text().catch(() => "")).slice(0, 300);
+        throw new Error(`الوسيط ردّ ${res.status}${detail ? ` — ${detail}` : ""}`);
+      }
+      if (!res.body) throw new Error("لا يوجد ردّ من الوسيط");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -96,12 +102,13 @@ export default function AssistantPage() {
           return copy;
         });
       }
-    } catch {
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "";
       setMessages((prev) => {
         const copy = [...prev];
         copy[copy.length - 1] = {
           role: "assistant",
-          content: "تعذّر الاتصال بالمساعد. تأكد من رابط الوسيط والاتصال بالإنترنت.",
+          content: `تعذّر الاتصال بالمساعد.\n${reason || "تأكد من رابط الوسيط ومفتاح Gemini والاتصال بالإنترنت."}`,
         };
         return copy;
       });
