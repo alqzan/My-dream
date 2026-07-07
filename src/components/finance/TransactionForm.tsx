@@ -1,8 +1,10 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Transaction, ReserveSplit } from "@/lib/types";
-import { uid, today, formatAmount, getSubCategories, reserveBalance, cn } from "@/lib/utils";
+import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
+import { suggestCategory } from "@/lib/bankParser";
+import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { PiggyBank } from "lucide-react";
 
@@ -12,7 +14,7 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onClose, initial }: TransactionFormProps) {
-  const { categories, reserves, transactions, addTransaction, updateTransaction, addCategory } = useAppStore();
+  const { categories, reserves, transactions, budgets, monthlyIncome, merchantRules, addTransaction, updateTransaction, addCategory, rememberMerchant } = useAppStore();
   const mains = categories.filter((c) => !c.parentId);
 
   // If editing a transaction whose category is a sub, pre-select its parent
@@ -28,6 +30,27 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const [splits, setSplits] = useState<ReserveSplit[]>(initial?.reserveSplits ?? []);
   const [addingSub, setAddingSub] = useState(false);
   const [newSubName, setNewSubName] = useState("");
+  // Once the user picks a category by hand we stop auto-suggesting from the note.
+  const [touchedCat, setTouchedCat] = useState(false);
+
+  // Auto-classify from the note while adding a new expense: learned merchant
+  // rules first, then keyword guess. Silently pre-selects the section/sub so
+  // it's تلقائي — the user can still tap another to override (which locks it).
+  useEffect(() => {
+    if (initial || touchedCat) return;
+    const n = note.trim();
+    if (!n) return;
+    const id = suggestCategory(n, categories, merchantRules);
+    const cat = categories.find((c) => c.id === id);
+    if (!cat) return;
+    if (cat.parentId) {
+      setMainCat(cat.parentId);
+      setSubCat(cat.id);
+    } else {
+      setMainCat(cat.id);
+      setSubCat("");
+    }
+  }, [note, initial, touchedCat, categories, merchantRules]);
 
   const selectedMain = categories.find((c) => c.id === mainCat);
   const subs = getSubCategories(categories, mainCat);
@@ -76,6 +99,16 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     } else {
       addTransaction(tx);
     }
+    // Learn this merchant → category so the next one is auto-classified.
+    if (note.trim()) rememberMerchant(note, tx.category);
+    // Live budget alert: warn the moment a category crosses 80% / its cap.
+    const w = budgetWarningFor(tx.category, budgets, useAppStore.getState().transactions, categories, monthlyIncome);
+    if (w) {
+      showToast(
+        w.over ? `📛 تجاوزت سقف «${w.label}»` : `⚠️ وصلت ${w.pct}% من سقف «${w.label}»`,
+        "warning"
+      );
+    }
     onClose();
   }
 
@@ -99,7 +132,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           {mains.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setMainCat(cat.id); setSubCat(""); setAddingSub(false); }}
+              onClick={() => { setMainCat(cat.id); setSubCat(""); setAddingSub(false); setTouchedCat(true); }}
               className={`flex flex-col items-center gap-1 py-2 px-2 rounded-xl border text-xs transition-colors ${
                 mainCat === cat.id
                   ? "border-finance bg-finance/5 text-finance font-semibold"
@@ -117,7 +150,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
             <div className="text-[10px] font-medium text-gray-400 mb-1.5">القسم الفرعي (اختياري)</div>
             <div className="flex gap-1.5 flex-wrap items-center">
               <button
-                onClick={() => setSubCat("")}
+                onClick={() => { setSubCat(""); setTouchedCat(true); }}
                 className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
                   !subCat ? "border-finance bg-finance text-white font-semibold" : "border-gray-200 text-gray-500 bg-white"
                 }`}
@@ -127,7 +160,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
               {subs.map((sub) => (
                 <button
                   key={sub.id}
-                  onClick={() => setSubCat(sub.id)}
+                  onClick={() => { setSubCat(sub.id); setTouchedCat(true); }}
                   className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
                     subCat === sub.id ? "border-finance bg-finance text-white font-semibold" : "border-gray-200 text-gray-500 bg-white"
                   }`}

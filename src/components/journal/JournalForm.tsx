@@ -1,10 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
 import { uid, today, parseDate } from "@/lib/utils";
 import { compressImage } from "@/lib/imageUtils";
 import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
+import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles } from "lucide-react";
@@ -49,6 +50,8 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
   return [...new Set(suggestions)].slice(0, 4);
 }
 
+const DRAFT_KEY = "madar-journal-draft";
+
 export function JournalForm({ onClose, initial }: JournalFormProps) {
   const { addJournalEntry, updateJournalEntry } = useAppStore();
   const [date, setDate] = useState(initial?.date ?? today());
@@ -60,7 +63,75 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
+  const [audio, setAudio] = useState<string | undefined>(initial?.audio);
   const [compressing, setCompressing] = useState(false);
+  const [showHarakat, setShowHarakat] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-save a draft of a NEW entry so writing is never lost if you leave
+  // mid-way. Restored on reopen; cleared once the entry is actually saved.
+  // (Photos are excluded — too heavy for localStorage.)
+  useEffect(() => {
+    if (initial) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.title) setTitle(d.title);
+      if (d.content) setContent(d.content);
+      if (d.date) setDate(d.date);
+      if (d.question) setQuestion(d.question);
+      if (typeof d.answering === "boolean") setAnswering(d.answering);
+    } catch {
+      /* ignore corrupt draft */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (initial) return;
+    try {
+      if (title.trim() || content.trim()) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ date, title, content, question, answering }));
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {
+      /* storage full/unavailable — ignore */
+    }
+  }, [initial, date, title, content, question, answering]);
+
+  // Insert an Arabic diacritic at the caret (it attaches to the letter before
+  // it), then keep focus and caret in place.
+  function insertMark(mark: string) {
+    const ta = contentRef.current;
+    const start = ta ? ta.selectionStart : content.length;
+    const end = ta ? ta.selectionEnd : content.length;
+    const next = content.slice(0, start) + mark + content.slice(end);
+    setContent(next);
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(start + mark.length, start + mark.length);
+    });
+  }
+
+  // Strip all harakat, tanwin, shadda, sukun, tatweel and dagger alif.
+  function stripTashkeel() {
+    setContent(content.replace(/[ً-ْٰـ]/g, ""));
+  }
+
+  const HARAKAT: { m: string; t: string }[] = [
+    { m: "َ", t: "فتحة" },
+    { m: "ِ", t: "كسرة" },
+    { m: "ُ", t: "ضمة" },
+    { m: "ّ", t: "شدّة" },
+    { m: "ْ", t: "سكون" },
+    { m: "ً", t: "تنوين فتح" },
+    { m: "ٍ", t: "تنوين كسر" },
+    { m: "ٌ", t: "تنوين ضم" },
+    { m: "ـ", t: "تطويل" },
+  ];
 
   const titleIdeas = useMemo(
     () => suggestTitles(content, date, answering ? question : undefined),
@@ -98,6 +169,8 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photos,
         // photo القديم يبقى مرآة لأول صورة للتوافق مع العروض القديمة
         photo: photos[0] ?? "",
+        // قيمة فارغة تمسح الملاحظة الصوتية فعلاً عند إزالتها
+        audio: audio ?? "",
       });
     } else {
       addJournalEntry({
@@ -107,9 +180,15 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         content: content.trim(),
         ...(answering ? { question } : {}),
         ...(photos.length ? { photos, photo: photos[0] } : {}),
+        ...(audio ? { audio } : {}),
         time: nowHHMM(),
         source: "manual",
       });
+    }
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
     }
     onClose();
   }
@@ -186,11 +265,52 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">
-          ماذا في بالك اليوم؟
-          <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs font-medium text-gray-500">
+            ماذا في بالك اليوم؟
+            {!initial && (title.trim() || content.trim()) ? (
+              <span className="text-finance/80 font-normal"> · يُحفظ تلقائياً ✎</span>
+            ) : (
+              <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
+            )}
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowHarakat((v) => !v)}
+            className={
+              "text-[11px] font-bold rounded-lg px-2 py-1 press shrink-0 " +
+              (showHarakat ? "bg-journal text-white" : "bg-journal/10 text-journal")
+            }
+          >
+            تشكيل
+          </button>
+        </div>
+
+        {showHarakat && (
+          <div className="flex flex-wrap gap-1 mb-2 p-2 bg-journal/5 rounded-xl animate-fade-up">
+            {HARAKAT.map((h) => (
+              <button
+                key={h.t}
+                type="button"
+                title={h.t}
+                onClick={() => insertMark(h.m)}
+                className="min-w-8 h-8 px-2 rounded-lg bg-white border border-gray-200 text-base font-bold text-gray-700 hover:border-journal/40 press"
+              >
+                {"ـ" + h.m}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={stripTashkeel}
+              className="h-8 px-2.5 rounded-lg bg-white border border-gray-200 text-[11px] font-semibold text-gray-500 hover:text-red-400 press"
+            >
+              مسح التشكيل
+            </button>
+          </div>
+        )}
+
         <textarea
+          ref={contentRef}
           value={content}
           onChange={(e) => setContent(expandTimeCommand(e.target.value))}
           rows={8}
@@ -259,6 +379,12 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         {!compressing && photos.length < MAX_PHOTOS && (
           <p className="text-[10px] text-gray-300 mt-1 text-center">أي صورة تُضغط تلقائياً لتوفير المساحة</p>
         )}
+      </div>
+
+      {/* ملاحظة صوتية */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2">ملاحظة صوتية</label>
+        <AudioRecorder value={audio} onChange={setAudio} />
       </div>
 
       <div className="flex gap-2 pt-1">

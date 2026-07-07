@@ -3,42 +3,56 @@ import { create } from "zustand";
 import { useEffect } from "react";
 import { Undo2 } from "lucide-react";
 
+type Tone = "default" | "warning";
+
 interface UndoState {
   label: string | null;
   onUndo: (() => void) | null;
+  tone: Tone;
   seq: number;
-  show: (label: string, onUndo: () => void) => void;
+  show: (label: string, onUndo: (() => void) | null, tone?: Tone) => void;
   clear: () => void;
 }
 
-// A single global "تراجع" snackbar. Deletes stay instant, but the user
-// gets a 5-second window to take them back — no confirmation dialogs.
+// A single global snackbar. Deletes get a 5-second "تراجع" window; other
+// events (e.g. a budget warning) show a plain, tinted message.
 export const useUndoStore = create<UndoState>((set) => ({
   label: null,
   onUndo: null,
+  tone: "default",
   seq: 0,
-  show: (label, onUndo) => set((s) => ({ label, onUndo, seq: s.seq + 1 })),
-  clear: () => set({ label: null, onUndo: null }),
+  show: (label, onUndo, tone = "default") => set((s) => ({ label, onUndo, tone, seq: s.seq + 1 })),
+  clear: () => set({ label: null, onUndo: null, tone: "default" }),
 }));
 
 export function showUndo(label: string, onUndo: () => void) {
-  useUndoStore.getState().show(label, onUndo);
+  useUndoStore.getState().show(label, onUndo, "default");
+}
+
+// Plain message toast (no undo). Use tone "warning" for budget/limit alerts.
+export function showToast(label: string, tone: Tone = "default") {
+  useUndoStore.getState().show(label, null, tone);
 }
 
 export function UndoToast() {
-  const { label, onUndo, seq, clear } = useUndoStore();
+  const { label, onUndo, tone, seq, clear } = useUndoStore();
 
   useEffect(() => {
     if (!label) return;
-    const t = setTimeout(clear, 5000);
+    const t = setTimeout(clear, tone === "warning" ? 6000 : 5000);
     return () => clearTimeout(t);
-  }, [label, seq, clear]);
+  }, [label, seq, tone, clear]);
 
   if (!label) return null;
 
   return (
     <div className="fixed bottom-20 lg:bottom-6 inset-x-0 z-[60] flex justify-center px-4 pointer-events-none">
-      <div className="pointer-events-auto flex items-center gap-3 bg-gray-900/95 dark:bg-[#3a2e1e] text-white text-sm rounded-2xl px-4 py-2.5 shadow-lg animate-fade-up backdrop-blur">
+      <div
+        className={
+          "pointer-events-auto flex items-center gap-3 text-white text-sm rounded-2xl px-4 py-2.5 shadow-lg animate-fade-up backdrop-blur " +
+          (tone === "warning" ? "bg-amber-600/95" : "bg-gray-900/95 dark:bg-[#3a2e1e]")
+        }
+      >
         <span>{label}</span>
         {onUndo && (
           <button

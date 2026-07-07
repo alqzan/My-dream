@@ -311,6 +311,31 @@ export function budgetLimit(b: Budget, monthlyIncome: number | null): number {
   return b.limit ?? 0;
 }
 
+// Live budget check for a category (rolls up to its main): returns a warning
+// once this month's spend hits 80% of the cap, or null. Used to alert the
+// moment an expense is added, not just passively on the dashboard.
+export function budgetWarningFor(
+  categoryId: string,
+  budgets: Budget[],
+  transactions: Transaction[],
+  categories: FinanceCategoryDef[],
+  monthlyIncome: number | null
+): { label: string; over: boolean; pct: number; remaining: number } | null {
+  const mainId = getMainCategory(categories, categoryId).id;
+  const b = budgets.find((x) => x.category === mainId);
+  if (!b) return null;
+  const cap = budgetLimit(b, monthlyIncome);
+  if (!cap) return null;
+  const monthPrefix = today().slice(0, 7);
+  const spent = transactions
+    .filter((t) => t.date.startsWith(monthPrefix) && getMainCategory(categories, t.category).id === mainId)
+    .reduce((s, t) => s + t.amount, 0);
+  const pct = (spent / cap) * 100;
+  if (pct < 80) return null;
+  const info = categories.find((c) => c.id === mainId);
+  return { label: info?.label ?? "قسم", over: spent > cap, pct: Math.round(pct), remaining: cap - spent };
+}
+
 // ===================== Reserve funds & split spending =====================
 
 // Share of a transaction charged to the daily budget (the remainder after

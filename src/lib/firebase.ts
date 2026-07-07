@@ -1,11 +1,10 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { initializeFirestore, type Firestore } from "firebase/firestore";
 
 // Firebase web config for the "my-dream-a" project. These NEXT_PUBLIC_
 // values are safe to ship in client code by design — access is gated by
-// the Firestore security rules (each user reads/writes only their own
-// document) and the Auth authorized-domains list, not by hiding the key.
+// the Firestore security rules (only the one shared space document is
+// reachable), not by hiding the key.
 // Env vars override these so a fork can point at its own project.
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyD9Vg0WsM_5EJtESaRVKZY1H5YcfGs3WkA",
@@ -16,6 +15,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:236145636929:web:3081885cd728006b5038c0",
 };
 
+// A fixed, hard-to-guess space id. All of the owner's devices read/write this
+// single shared document, so opening the link on any device just works — no
+// email, no login. The id acts as the shared secret; keep the link private.
+// Override with NEXT_PUBLIC_SYNC_SPACE if you ever want a fresh space.
+export const SYNC_SPACE_ID =
+  process.env.NEXT_PUBLIC_SYNC_SPACE || "46c68c32b4b569bc4d608302bea012e6271070ce";
+
 // Firebase is "enabled" only when the essential config is present.
 // Without it, the app keeps working fully on localStorage.
 export const isFirebaseEnabled = Boolean(
@@ -23,15 +29,16 @@ export const isFirebaseEnabled = Boolean(
 );
 
 let app: FirebaseApp | null = null;
-let authInstance: Auth | null = null;
 let dbInstance: Firestore | null = null;
 
 if (isFirebaseEnabled) {
   app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  authInstance = getAuth(app);
-  dbInstance = getFirestore(app);
+  // Force long-polling instead of the default WebChannel stream. Mobile
+  // Safari and some cellular networks silently block WebChannel, which makes
+  // Firestore look permanently "offline" even though plain HTTPS works — this
+  // routes everything (reads, writes, live listeners) over HTTP long-polling.
+  dbInstance = initializeFirestore(app, { experimentalForceLongPolling: true });
 }
 
-export const auth = authInstance;
 export const db = dbInstance;
 export { app };

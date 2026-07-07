@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { FinanceSummary } from "@/components/finance/FinanceSummary";
+import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import { FinancePace } from "@/components/finance/FinancePace";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
@@ -22,7 +23,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft } from "lucide-react";
+import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X } from "lucide-react";
+import { getCategoryInfo } from "@/lib/utils";
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function FinancePage() {
@@ -40,16 +42,47 @@ export default function FinancePage() {
   const [showCategories, setShowCategories] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Bank SMS handed in via the URL (?sms=...) — e.g. from the iOS Shortcut
+  // share sheet. Opens the importer pre-filled and auto-previewed.
+  const [importSms, setImportSms] = useState<string | null>(null);
 
   useEffect(() => {
     runRecurring();
   }, [runRecurring]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sms = params.get("sms");
+    if (sms && sms.trim()) {
+      setImportSms(sms);
+      setShowImport(true);
+    } else if (params.get("import") === "1") {
+      // Simple deep-link (from the Shortcut) → just open the importer; the
+      // user taps "استورد من الحافظة" there (clipboard needs a tap on iOS).
+      setShowImport(true);
+    }
+    if (params.has("sms") || params.has("import")) {
+      // Strip the query so a refresh/back doesn't re-import the same messages.
+      const clean = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", clean);
+    }
+  }, []);
+
   const [monthFilter, setMonthFilter] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
+
+  const [txSearch, setTxSearch] = useState("");
+  const q = txSearch.trim().toLowerCase();
+  const shownTx = q
+    ? byMonth.filter((t) => {
+        const label = getCategoryInfo(categories, t.category).label.toLowerCase();
+        return (t.note ?? "").toLowerCase().includes(q) || label.includes(q);
+      })
+    : byMonth;
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
@@ -136,6 +169,10 @@ export default function FinancePage() {
         <FinanceSummary transactions={byMonth} categories={categories} />
       </Card>
 
+      <Card className="animate-fade-up stagger-2">
+        <SpendingPatternCard transactions={transactions} categories={categories} monthFilter={monthFilter} />
+      </Card>
+
       <FinancePace budgets={budgets} monthTransactions={byMonth} categories={categories} monthlyIncome={monthlyIncome} />
 
       <BudgetDisciplineScore
@@ -190,12 +227,36 @@ export default function FinancePage() {
           }
         />
       ) : (
-        <TransactionList
-          transactions={byMonth}
-          categories={categories}
-          onDelete={handleDelete}
-          onEdit={(tx) => setEditTx(tx)}
-        />
+        <div className="space-y-3">
+          <div className="relative">
+            <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              value={txSearch}
+              onChange={(e) => setTxSearch(e.target.value)}
+              placeholder="ابحث في المصاريف (اسم أو قسم)..."
+              className="w-full border border-gray-200 rounded-xl pr-9 pl-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
+            />
+            {txSearch && (
+              <button
+                onClick={() => setTxSearch("")}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
+                aria-label="مسح"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          {shownTx.length === 0 ? (
+            <p className="text-center text-xs text-gray-400 py-6">ما فيه مصاريف تطابق «{txSearch}».</p>
+          ) : (
+            <TransactionList
+              transactions={shownTx}
+              categories={categories}
+              onDelete={handleDelete}
+              onEdit={(tx) => setEditTx(tx)}
+            />
+          )}
+        </div>
       )}
 
       <Modal
@@ -211,11 +272,15 @@ export default function FinancePage() {
 
       <Modal
         open={showImport}
-        onClose={() => setShowImport(false)}
+        onClose={() => { setShowImport(false); setImportSms(null); }}
         title="استيراد بنكي تلقائي 🤖"
       >
-        <BankImport onClose={() => setShowImport(false)} />
+        <BankImport
+          initialSms={importSms ?? undefined}
+          onClose={() => { setShowImport(false); setImportSms(null); }}
+        />
       </Modal>
+
 
       <Modal
         open={showRecurring}

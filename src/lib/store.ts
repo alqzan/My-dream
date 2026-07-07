@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME } from "./types";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2 } from "./utils";
+import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
 interface AppStore extends AppData {
@@ -36,6 +37,8 @@ interface AppStore extends AppData {
   addCategory: (def: FinanceCategoryDef) => void;
   updateCategory: (id: string, updates: Partial<FinanceCategoryDef>) => void;
   deleteCategory: (id: string) => void;
+  moveCategory: (id: string, dir: -1 | 1) => void; // reorder within its siblings
+  rememberMerchant: (note: string, categoryId: string) => void; // learn a rule
 
   // Reserve funds (الاحتياطي)
   addReserve: (fund: ReserveFund) => void;
@@ -127,6 +130,7 @@ export const useAppStore = create<AppStore>()(
       futureLetters: [],
       salaryDay: 27,
       lastSalaryConfirm: null,
+      merchantRules: {},
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
@@ -283,6 +287,37 @@ export const useAppStore = create<AppStore>()(
           // never deleted), they'll just show as "غير مصنف".
           budgets: s.budgets.filter((b) => b.category !== id),
         })),
+
+      // Reorder a category among its siblings (mains among mains, subs among
+      // subs of the same parent) by swapping it with the adjacent one — the
+      // array order is the display order everywhere.
+      moveCategory: (id, dir) =>
+        set((s) => {
+          const cats = [...s.categories];
+          const cat = cats.find((c) => c.id === id);
+          if (!cat) return {};
+          const sameGroup = (c: FinanceCategoryDef) =>
+            cat.parentId ? c.parentId === cat.parentId : !c.parentId;
+          const sibIdx = cats.map((c, i) => (sameGroup(c) ? i : -1)).filter((i) => i >= 0);
+          const here = sibIdx.indexOf(cats.indexOf(cat));
+          const there = here + dir;
+          if (there < 0 || there >= sibIdx.length) return {};
+          const a = sibIdx[here];
+          const b = sibIdx[there];
+          [cats[a], cats[b]] = [cats[b], cats[a]];
+          return { categories: cats };
+        }),
+
+      // Remember "this merchant → this category" from a hand-categorization so
+      // future expenses from the same place are auto-classified the same way.
+      rememberMerchant: (note, categoryId) =>
+        set((s) => {
+          const key = normalizeMerchant(note);
+          const rules = s.merchantRules ?? {};
+          if (!key || !categoryId) return {};
+          if (rules[key] === categoryId) return {};
+          return { merchantRules: { ...rules, [key]: categoryId } };
+        }),
 
       addReserve: (fund) =>
         set((s) => ({ reserves: [...s.reserves, fund] })),
@@ -526,6 +561,7 @@ export const useAppStore = create<AppStore>()(
           futureLetters: data.futureLetters ?? [],
           salaryDay: data.salaryDay ?? 27,
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
+          merchantRules: data.merchantRules ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -547,6 +583,7 @@ export const useAppStore = create<AppStore>()(
           futureLetters: s.futureLetters,
           salaryDay: s.salaryDay,
           lastSalaryConfirm: s.lastSalaryConfirm,
+          merchantRules: s.merchantRules,
           lastUpdated: s.lastUpdated,
         };
       },

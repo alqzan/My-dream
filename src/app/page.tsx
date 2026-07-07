@@ -11,6 +11,8 @@ import {
   hijriDate,
   yearProgress,
 } from "@/lib/utils";
+import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
+import { InstallHint } from "@/components/layout/InstallHint";
 import { DailyPulse } from "@/components/dashboard/DailyPulse";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
 import { SmartInsights } from "@/components/dashboard/SmartInsights";
@@ -80,6 +82,8 @@ export default function Dashboard() {
         </div>
         <YearOrbit pct={yearPct} />
       </div>
+
+      <PendingBankBanner />
 
       <Card className="animate-fade-up stagger-1">
         <PrayerOrbit />
@@ -158,6 +162,8 @@ export default function Dashboard() {
           </div>
         </Link>
       </div>
+
+      <InstallHint />
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
 

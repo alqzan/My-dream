@@ -1,25 +1,33 @@
-import type { Transaction } from "./types";
+import type { Transaction, FinanceCategoryDef } from "./types";
 import { uid, today } from "./utils";
 
 // ========== Smart Categorization ==========
 // Maps to the seeded default category ids (src/lib/types.ts). If the user
 // has since renamed or deleted one of these, the transaction just falls
 // back to "غير مصنف" via getCategoryInfo — it's never lost.
+//
+// Philosophy (the owner's rule): the line is "قوت أم تجربة؟". Buying
+// sustenance = أساسي; paying for an outing/experience = كمالي. So groceries,
+// rent, fuel, health, education are essentials, while eating out, cafes,
+// travel and subscriptions are luxuries.
 const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
-  { keywords: ["سوبرماركت", "هايبر", "بنده", "الدانوب", "لولو", "نون", "أمازون", "جرير", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "ساكو"], category: "cat-essentials" },
-  { keywords: ["مطعم", "برغر", "كنتاكي", "ماكدونالدز", "ستاربكس", "كافيه", "مقهى", "pizza", "كبسه", "مندي", "سشي", "resturant", "restaurant", "cafe", "coffee"], category: "cat-essentials" },
+  { keywords: ["سوبرماركت", "هايبر", "بقاله", "بقالة", "تموينات", "بنده", "الدانوب", "لولو", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "التميمي", "المزرعة", "نستو"], category: "cat-essentials" },
   { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
-  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "fuel", "petrol"], category: "cat-essentials" },
-  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-essentials" },
-  { keywords: ["مستشفى", "عيادة", "صيدلية", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
+  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "ساسكو", "fuel", "petrol"], category: "cat-essentials" },
+  { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "utility"], category: "cat-essentials" },
+  { keywords: ["مستشفى", "عيادة", "صيدلية", "النهدي", "الدواء", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
   { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
-  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal"], category: "cat-luxuries" },
-  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات"], category: "cat-luxuries" },
+  // Eating out & cafes → luxuries (an experience, not sustenance).
+  { keywords: ["مطعم", "برغر", "برجر", "كنتاكي", "ماكدونالدز", "هرفي", "البيك", "ستاربكس", "بارنز", "دانكن", "كافيه", "مقهى", "قهوة", "pizza", "بيتزا", "كبسه", "مندي", "سشي", "شاورما", "restaurant", "resturant", "cafe", "coffee", "burger", "grill", "kitchen", "food"], category: "cat-luxuries" },
+  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal", "booking", "بوكينج"], category: "cat-luxuries" },
+  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات", "ألعاب", "playstation", "بلايستيشن"], category: "cat-luxuries" },
+  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-luxuries" },
   { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity"], category: "cat-charity" },
   { keywords: ["ادخار", "توفير", "saving", "استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "cat-investment" },
 ];
 
-function autoCategory(text: string): string {
+// Built-in keyword guess (main category). Falls back to essentials.
+function keywordCategory(text: string): string {
   const lower = text.toLowerCase();
   for (const { keywords, category } of CATEGORY_KEYWORDS) {
     if (keywords.some((k) => lower.includes(k.toLowerCase()))) return category;
@@ -27,20 +35,67 @@ function autoCategory(text: string): string {
   return "cat-essentials";
 }
 
+// Normalize a merchant/note into a stable key: drop digits & punctuation,
+// collapse spaces. "ستاربكس #١٢٣  الرياض" and "ستاربكس الرياض" map alike.
+export function normalizeMerchant(text: string): string {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[0-9٠-٩]+/g, " ")
+    .replace(/[^\p{L}\p{N} ]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
+// A previously-learned category for this merchant, or null. Exact merchant
+// match wins, then a contained-name match. A rule pointing at a since-deleted
+// category is ignored. This is what powers "the app already knows this one".
+export function learnedCategory(
+  text: string,
+  categories: FinanceCategoryDef[],
+  merchantRules: Record<string, string> | undefined
+): string | null {
+  const exists = (id: string) => categories.some((c) => c.id === id);
+  const key = normalizeMerchant(text);
+  if (!key || !merchantRules) return null;
+  if (merchantRules[key] && exists(merchantRules[key])) return merchantRules[key];
+  for (const [rk, cid] of Object.entries(merchantRules)) {
+    if (rk && cid && exists(cid) && (key.includes(rk) || rk.includes(key))) return cid;
+  }
+  return null;
+}
+
+// Does this parsed expense look like one that's already recorded? Same day,
+// same amount, and the same merchant (normalized). Guards against a message
+// arriving twice or an expense that was also added by hand.
+export function isLikelyDuplicate(
+  amount: number,
+  date: string,
+  note: string,
+  existing: { amount: number; date: string; note?: string }[]
+): boolean {
+  const key = normalizeMerchant(note);
+  return existing.some(
+    (t) =>
+      t.date === date &&
+      Math.abs(t.amount - amount) < 0.01 &&
+      (key ? normalizeMerchant(t.note ?? "") === key : true)
+  );
+}
+
+// The smart suggestion: your own learned rules win, otherwise the built-in
+// keyword guess.
+export function suggestCategory(
+  text: string,
+  categories: FinanceCategoryDef[],
+  merchantRules: Record<string, string> | undefined
+): string {
+  return learnedCategory(text, categories, merchantRules) ?? keywordCategory(text);
+}
+
 // ========== SMS Parser ==========
-// Supports: Al Rajhi, SNB, Riyad Bank, Al Ahli, Al Bilad, Al Inma
-const SMS_PATTERNS = [
-  // Al Rajhi: "شراء بقيمة 150.00 ريال من ماكدونالدز"
-  /(?:شراء|خصم|سحب|دفع).*?(\d[\d,.]+)\s*ريال.*?(?:من|في|لدى|@|at)?\s*([^\n\r.،,]+)/i,
-  // "تم الخصم من حسابكم مبلغ 150.50 ريال"
-  /(?:تم الخصم|تم السحب|خُصم).*?مبلغ\s*(\d[\d,.]+)\s*ريال(?:.*?(?:من|في|لدى)\s*([^\n\r.،,]+))?/i,
-  // "Purchase of SAR 200.00 at AMAZON"
-  /purchase[^S]*sar\s*(\d[\d,.]+)\s*(?:at|from)?\s*([^\n\r.]+)?/i,
-  // Credit: "تم الإيداع في حسابكم مبلغ 5000 ريال"
-  /(?:تم الإيداع|إيداع|دفع لحسابكم|راتب).*?(\d[\d,.]+)\s*ريال/i,
-  // Generic amount extraction fallback
-  /(\d[\d,.]+)\s*(?:ر\.س|ريال|sar)/i,
-];
+// Supports Al Rajhi, SNB, Riyad Bank, Al Ahli, Al Bilad, Al Inma and the
+// newer "شراء ... بـSR 22 ... لـMerchant ... رصيد:.." Apple-Pay style.
 
 export interface SmsParseResult {
   amount: number;
@@ -49,33 +104,43 @@ export interface SmsParseResult {
   date: string;
 }
 
+// Currency tokens seen across Saudi banks: ريال / ر.س / SR / SAR.
+const CUR = "SR|SAR|ر\\.?\\s?س|ريال";
+
 // Returns null both when no amount could be read AND when the message looks
 // like an incoming deposit (income) — this tracker is expense-only, so
 // credits are silently skipped rather than logged as spending.
 export function parseBankSms(smsText: string, date: string): SmsParseResult | null {
   const text = smsText.trim();
-  const isCredit = /(?:إيداع|راتب|حُوّل إليك|تم استلام|credit)/i.test(text);
+  const isCredit = /(?:إيداع|راتب|حوّل إليك|حُوّل إليك|تم استلام|أضيف|credit)/i.test(text);
   if (isCredit) return null;
 
+  // Drop the running-balance figure first, so it's never mistaken for the
+  // spend amount (e.g. "رصيد:3627.96 SR" or "Balance: 3,627.96").
+  const body = text.replace(
+    new RegExp(`(?:رصيد|الرصيد|المتبقّ?ي|available|balance)\\s*[:\\-]?\\s*[\\d.,]+\\s*(?:${CUR})?`, "gi"),
+    " "
+  );
+
   let amount = 0;
-  let merchant = "";
-
-  for (const pattern of SMS_PATTERNS) {
-    const m = text.match(pattern);
-    if (m) {
-      const raw = m[1]?.replace(/,/g, "");
-      amount = parseFloat(raw ?? "0");
-      merchant = m[2]?.trim() ?? "";
-      break;
-    }
-  }
-
+  // Amount with the currency on either side (SR 22 · 22 ريال · 150.00 SAR),
+  // else a bare number right after a purchase keyword.
+  const m =
+    body.match(new RegExp(`(?:${CUR})\\s*(\\d[\\d,]*\\.?\\d*)`, "i")) ||
+    body.match(new RegExp(`(\\d[\\d,]*\\.?\\d*)\\s*(?:${CUR})`, "i")) ||
+    body.match(/(?:شراء|خصم|سحب|دفع|purchase)\D*?(\d[\d,]*\.?\d*)/i);
+  if (m) amount = parseFloat((m[1] ?? "").replace(/,/g, ""));
   if (!amount) return null;
+
+  // Merchant: "لـX" / "من X" / "لدى X" / "at X" / "@X".
+  let merchant = "";
+  const mm = body.match(/(?:لدى|لـ|من|at|@)\s*([^\n\r,،.؛;]+)/i);
+  if (mm) merchant = mm[1].replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim();
 
   return {
     amount,
-    category: autoCategory(text + " " + merchant),
-    note: merchant || text.slice(0, 60),
+    category: keywordCategory(text + " " + merchant),
+    note: merchant || body.replace(/\s+/g, " ").trim().slice(0, 60),
     date: extractSmsDate(text) ?? date,
   };
 }
@@ -188,7 +253,7 @@ export function parseBankCsv(csvText: string): { transactions: Transaction[]; sk
       id: uid(),
       date,
       amount,
-      category: autoCategory(descText),
+      category: keywordCategory(descText),
       note: descText.slice(0, 80),
     });
   }

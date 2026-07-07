@@ -9,6 +9,7 @@ import { DayOneImport } from "@/components/journal/DayOneImport";
 import { FutureLetters } from "@/components/journal/FutureLetters";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { DayView } from "@/components/day/DayView";
+import { Photo } from "@/components/ui/Photo";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -255,9 +256,18 @@ export default function JournalPage() {
             {entryPhotos(viewEntry).length > 0 && (
               <div className="space-y-2">
                 {entryPhotos(viewEntry).map((p, i) => (
-                  <img key={i} src={p} alt="" className="w-full max-h-80 object-cover rounded-2xl" />
+                  <Photo
+                    key={i}
+                    images={entryPhotos(viewEntry)}
+                    index={i}
+                    className="w-full max-h-80 object-cover rounded-2xl"
+                  />
                 ))}
               </div>
+            )}
+            {viewEntry.audio && (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <audio controls src={viewEntry.audio} className="w-full h-10" />
             )}
             <p className="text-sm leading-loose whitespace-pre-line text-gray-800 min-h-[160px]">
               {viewEntry.content}

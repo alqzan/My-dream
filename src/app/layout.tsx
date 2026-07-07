@@ -24,7 +24,8 @@ import { ClientOnly } from "@/components/layout/ClientOnly";
 import { SWRegister } from "@/components/layout/SWRegister";
 import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
-import { AuthProvider } from "@/components/auth/AuthProvider";
+import { SyncProvider } from "@/components/sync/SyncProvider";
+import { PendingInboxWatcher } from "@/components/finance/PendingInboxWatcher";
 
 export const metadata: Metadata = {
   title: "مدار — مساحتك الشخصية",
@@ -71,7 +72,7 @@ export default function RootLayout({
         <ClientOnly>
           <SWRegister bp={bp} />
           <ThemeApplier />
-          <AuthProvider>
+          <SyncProvider>
             <div className="min-h-screen flex">
               <Sidebar />
               <main className="flex-1 min-w-0 lg:mr-56 pb-20 lg:pb-0">
@@ -81,7 +82,8 @@ export default function RootLayout({
             </div>
             <MobileNav />
             <UndoToast />
-          </AuthProvider>
+            <PendingInboxWatcher />
+          </SyncProvider>
         </ClientOnly>
       </body>
     </html>

@@ -1,5 +1,5 @@
 // Compress image using Canvas API — targets ~150KB WebP
-export async function compressImage(file: File, maxKB = 200): Promise<string> {
+export async function compressImage(file: Blob, maxKB = 200): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {

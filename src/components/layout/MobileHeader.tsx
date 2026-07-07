@@ -1,5 +1,5 @@
 "use client";
-import { SyncButton } from "@/components/auth/SyncButton";
+import { SyncStatus } from "@/components/sync/SyncStatus";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { BrandMark } from "@/components/layout/BrandMark";
 
@@ -11,7 +11,7 @@ export function MobileHeader() {
         <span className="text-lg font-bold text-gray-900 dark:text-white">مدار</span>
       </div>
       <div className="flex items-center gap-1">
-        <SyncButton />
+        <SyncStatus />
         <ThemeToggle />
       </div>
     </div>

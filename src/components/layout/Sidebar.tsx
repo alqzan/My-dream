@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
-import { SyncButton } from "@/components/auth/SyncButton";
+import { SyncStatus } from "@/components/sync/SyncStatus";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { BrandMark } from "@/components/layout/BrandMark";
 
@@ -40,7 +40,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="p-3 border-t border-gray-100 dark:border-[#3a2e1e] flex items-center justify-between gap-2">
-        <SyncButton />
+        <SyncStatus />
         <ThemeToggle />
       </div>
     </aside>

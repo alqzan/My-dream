@@ -103,6 +103,7 @@ export interface JournalEntry {
   tags?: string[];
   photo?: string; // base64 WebP compressed — legacy single photo
   photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
+  audio?: string; // ملاحظة صوتية (base64 data URL) — تُزامَن كمستند وسائط مستقل
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";
@@ -234,6 +235,10 @@ export interface AppData {
   futureLetters: FutureLetter[];
   salaryDay: number; // يوم نزول الراتب (افتراضياً 27) — يظهر بعده سؤال «نزل الراتب؟»
   lastSalaryConfirm: string | null; // YYYY-MM-DD لآخر تأكيد «نزل الراتب»
+  // Learned merchant → category id map. When you categorize an expense by
+  // hand, the merchant (from the note) is remembered so the next one from the
+  // same place is auto-classified your way — this is what makes it تلقائي.
+  merchantRules: Record<string, string>;
   lastUpdated: string;
 }
 
