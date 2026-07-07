@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import type { Book } from "@/lib/types";
 import { uid, today } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { Star } from "lucide-react";
 
 const COLORS = [
@@ -73,21 +74,21 @@ export function BookForm({ onClose, initial }: BookFormProps) {
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">عدد الصفحات</label>
-          <input
-            type="number"
+          <NumberInput
             value={totalPages}
-            onChange={(e) => setTotalPages(e.target.value)}
+            onChange={setTotalPages}
             placeholder="0"
+            inputMode="numeric"
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-reading/40"
           />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">الصفحة الحالية</label>
-          <input
-            type="number"
+          <NumberInput
             value={currentPage}
-            onChange={(e) => setCurrentPage(e.target.value)}
+            onChange={setCurrentPage}
             placeholder="0"
+            inputMode="numeric"
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-reading/40"
           />
         </div>

@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent, cn } from "@/lib/utils";
 import type { ReserveFund } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, Trash2, ChevronDown, PiggyBank, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
@@ -158,16 +159,16 @@ function AddFundForm({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">الهدف (اختياري)</label>
-          <input
-            type="number" value={target} onChange={(e) => setTarget(e.target.value)}
+          <NumberInput
+            value={target} onChange={setTarget}
             placeholder="مثلاً 30000" inputMode="decimal"
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-prayer/40"
           />
         </div>
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">رصيد افتتاحي (اختياري)</label>
-          <input
-            type="number" value={initial} onChange={(e) => setInitial(e.target.value)}
+          <NumberInput
+            value={initial} onChange={setInitial}
             placeholder="مثلاً 5000" inputMode="decimal"
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-prayer/40"
           />
@@ -269,8 +270,8 @@ function FundCard({ fund, expanded, onToggle }: { fund: ReserveFund; expanded: b
       {expanded && (
         <div className="mt-3 pt-3 border-t border-gray-100 space-y-2.5 animate-fade-up">
           <div className="flex gap-1.5">
-            <input
-              type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+            <NumberInput
+              value={amount} onChange={setAmount}
               placeholder="المبلغ" inputMode="decimal"
               className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-prayer/40"
             />

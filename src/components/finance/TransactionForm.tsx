@@ -6,6 +6,7 @@ import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarni
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { PiggyBank } from "lucide-react";
 
 interface TransactionFormProps {
@@ -116,10 +117,9 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">المبلغ (ريال)</label>
-        <input
-          type="number"
+        <NumberInput
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={setAmount}
           placeholder="0.00"
           className="w-full border border-gray-200 rounded-xl px-4 py-3 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
           inputMode="decimal"
@@ -284,10 +284,9 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
                         {p === 0 ? "٠" : `${p}%`}
                       </button>
                     ))}
-                    <input
-                      type="number"
+                    <NumberInput
                       value={pct || ""}
-                      onChange={(e) => setSplitPct(fund.id, parseInt(e.target.value) || 0)}
+                      onChange={(v) => setSplitPct(fund.id, parseInt(v) || 0)}
                       placeholder="%"
                       inputMode="numeric"
                       className="w-11 text-[10px] text-center border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-1 focus:ring-prayer/40"

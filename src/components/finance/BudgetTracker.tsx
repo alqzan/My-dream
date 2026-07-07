@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn } from "@/lib/utils";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, X } from "lucide-react";
 
 interface BudgetTrackerProps {
@@ -106,8 +107,8 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
           {mode === "pct" ? (
             <div className="space-y-2">
               {!monthlyIncome && (
-                <input
-                  type="number" value={income} onChange={(e) => setIncome(e.target.value)}
+                <NumberInput
+                  value={income} onChange={setIncome}
                   placeholder="دخلك الشهري (مرة وحدة)" inputMode="decimal"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
                 />
@@ -127,8 +128,8 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
                     {p}٪
                   </button>
                 ))}
-                <input
-                  type="number" value={pct} onChange={(e) => setPct(e.target.value)}
+                <NumberInput
+                  value={pct} onChange={setPct}
                   placeholder="٪" inputMode="numeric" min={1} max={100}
                   className="w-14 text-xs text-center border border-gray-200 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
                   aria-label="نسبة مخصصة"
@@ -141,8 +142,8 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
               )}
             </div>
           ) : (
-            <input
-              type="number" value={limit} onChange={(e) => setLimit(e.target.value)}
+            <NumberInput
+              value={limit} onChange={setLimit}
               placeholder="السقف بالريال" inputMode="decimal"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
             />

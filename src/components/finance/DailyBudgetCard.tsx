@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { Settings2, PiggyBank } from "lucide-react";
 
 type Mode = "fixed" | "income";
@@ -97,8 +98,8 @@ export function DailyBudgetCard() {
 
         {mode === "fixed" ? (
           <div className="flex gap-2">
-            <input
-              type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+            <NumberInput
+              value={amount} onChange={setAmount}
               placeholder="مثلاً 500" inputMode="decimal"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
             />
@@ -110,8 +111,8 @@ export function DailyBudgetCard() {
           <div className="space-y-2.5 animate-fade-up">
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">دخلك الشهري (ريال)</label>
-              <input
-                type="number" value={income} onChange={(e) => setIncome(e.target.value)}
+              <NumberInput
+                value={income} onChange={setIncome}
                 placeholder="مثلاً 10000" inputMode="decimal"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
               />
@@ -133,8 +134,8 @@ export function DailyBudgetCard() {
                     {p}٪
                   </button>
                 ))}
-                <input
-                  type="number" value={pct} onChange={(e) => setPct(e.target.value)}
+                <NumberInput
+                  value={pct} onChange={setPct}
                   placeholder="٪" inputMode="numeric" min={1} max={100}
                   className="w-16 text-xs text-center border border-gray-200 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
                   aria-label="نسبة مخصصة"
@@ -161,8 +162,8 @@ export function DailyBudgetCard() {
 
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">يوم نزول الراتب — يظهر بعده سؤال «نزل الراتب؟» وتتحول البواقي للفوائض</label>
-          <input
-            type="number" value={salaryDayInput} onChange={(e) => setSalaryDayInput(e.target.value)}
+          <NumberInput
+            value={salaryDayInput} onChange={setSalaryDayInput}
             min={1} max={31} inputMode="numeric"
             className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
           />

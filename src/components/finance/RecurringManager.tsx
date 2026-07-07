@@ -5,6 +5,7 @@ import type { RecurringTransaction, RecurringUnit } from "@/lib/types";
 import { RECURRING_PRESETS } from "@/lib/types";
 import { uid, today, getCategoryInfo, formatAmount } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, Trash2, Power } from "lucide-react";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -105,8 +106,8 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+            <NumberInput
+              value={amount} onChange={setAmount}
               placeholder="المبلغ"
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
             />
@@ -149,9 +150,9 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
           {customEvery && (
             <div className="flex items-center gap-2 bg-white rounded-lg p-2 border border-gray-200">
               <span className="text-xs text-gray-500 shrink-0">كل</span>
-              <input
-                type="number" min={1} value={every}
-                onChange={(e) => setEvery(parseInt(e.target.value) || 1)}
+              <NumberInput
+                inputMode="numeric" min={1} value={every}
+                onChange={(v) => setEvery(parseInt(v) || 1)}
                 className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
               />
               <div className="flex gap-1 flex-1">
@@ -189,9 +190,9 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
           ) : (
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1.5">يوم الشهر</label>
-              <input
-                type="number" min={1} max={28} value={dayOfMonth}
-                onChange={(e) => setDayOfMonth(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
+              <NumberInput
+                inputMode="numeric" min={1} max={28} value={dayOfMonth}
+                onChange={(v) => setDayOfMonth(Math.min(28, Math.max(1, parseInt(v) || 1)))}
                 className="w-20 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
               />
             </div>

@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import type { Book, ReadingLog } from "@/lib/types";
 import { uid, today } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { NumberInput } from "@/components/ui/NumberInput";
 
 interface ReadingLogFormProps {
   books: Book[];
@@ -93,10 +94,9 @@ export function ReadingLogForm({ books, defaultBookId, initial, onClose }: Readi
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">صفحات قرأتها</label>
-          <input
-            type="number"
+          <NumberInput
             value={pagesRead}
-            onChange={(e) => setPagesRead(e.target.value)}
+            onChange={setPagesRead}
             placeholder="0"
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-reading/40"
             inputMode="numeric"
@@ -104,10 +104,9 @@ export function ReadingLogForm({ books, defaultBookId, initial, onClose }: Readi
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">دقائق القراءة</label>
-          <input
-            type="number"
+          <NumberInput
             value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
+            onChange={setMinutes}
             placeholder="اختياري"
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-reading/40"
             inputMode="numeric"

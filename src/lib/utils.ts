@@ -19,6 +19,16 @@ export function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// Convert Arabic-Indic (٠-٩) and Persian/Extended (۰-۹) digits — plus the
+// Arabic decimal separator (٫) — to their Latin equivalents, so numbers typed
+// on an Arabic keyboard are accepted and stored as plain ASCII everywhere.
+export function toLatinDigits(s: string): string {
+  return s
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/٫/g, ".");
+}
+
 // ===================== Local-date primitives =====================
 // All date keys in the app are YYYY-MM-DD in the USER'S timezone. Never
 // derive them via toISOString() — that's UTC, and in Riyadh (UTC+3) it
