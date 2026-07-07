@@ -26,9 +26,10 @@ better — see reasons below).
         accepted trade-off vs. silently dropping added data).
       - Wired into SyncProvider: initial load, live subscription, and a
         re-read-before-save step in the debounced push.
-- [ ] **S2. Sync retry with backoff + failure toast** (was item 2)
-      - Reuse the existing `showToast` (UndoToast); retry failed saves with
-        exponential backoff.
+- [x] **S2. Sync retry with backoff + failure toast** (was item 2)
+      - Failed debounced saves now retry with exponential backoff (2s→30s cap)
+        and surface a one-time warning toast ("فشلت المزامنة — سيُعاد المحاولة")
+        via the existing `showToast`. A fresh edit supersedes a pending retry.
 - [ ] **S3. Merge-or-replace choice on backup import** (was item 4)
       - BackupCard import offers "دمج" (via `mergeAppData`) vs "استبدال".
 

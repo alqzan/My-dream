@@ -16,9 +16,13 @@ import {
   subscribeUserMain,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
+import { showToast } from "@/components/ui/UndoToast";
 import type { AppData } from "@/lib/types";
 
 type SyncState = "idle" | "syncing" | "synced" | "offline";
+
+const RETRY_BASE_MS = 2000;
+const RETRY_MAX_MS = 30000;
 
 interface SyncContextValue {
   enabled: boolean;
@@ -68,6 +72,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // the cloud doc; if it advanced past this, another device wrote in the
   // meantime and we merge instead of overwriting.
   const lastCloudUpdatedRef = useRef<string>("");
+  // Failed-save retry with exponential backoff (2s → 4s → … capped at 30s).
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryDelay = useRef(RETRY_BASE_MS);
+  const failNotified = useRef(false); // toast only once per failure streak
 
   const hydrate = useAppStore((s) => s.hydrate);
   const snapshot = useAppStore((s) => s.snapshot);
@@ -174,19 +182,37 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         lastCloudUpdatedRef.current = stamp;
       };
 
+      // Attempt a push; on failure surface a toast (once per streak) and retry
+      // with exponential backoff so a transient outage doesn't leave the edit
+      // stranded on this device until the next manual change.
+      const attemptSave = () => {
+        pushLocal()
+          .then(() => {
+            retryDelay.current = RETRY_BASE_MS;
+            failNotified.current = false;
+            setStatus("synced");
+            setLastSyncedAt(Date.now());
+          })
+          .catch(() => {
+            setStatus("offline");
+            if (!failNotified.current) {
+              failNotified.current = true;
+              showToast("فشلت المزامنة — سيُعاد المحاولة", "warning");
+            }
+            if (retryTimer.current) clearTimeout(retryTimer.current);
+            retryTimer.current = setTimeout(attemptSave, retryDelay.current);
+            retryDelay.current = Math.min(retryDelay.current * 2, RETRY_MAX_MS);
+          });
+      };
+
       // 3) Push local edits up (debounced).
       unsubStore = useAppStore.subscribe(() => {
         if (!hydratedRef.current || applyingRemoteRef.current) return;
         if (saveTimer.current) clearTimeout(saveTimer.current);
+        // A fresh edit supersedes any pending retry — the new snapshot covers it.
+        if (retryTimer.current) clearTimeout(retryTimer.current);
         setStatus("syncing");
-        saveTimer.current = setTimeout(() => {
-          pushLocal()
-            .then(() => {
-              setStatus("synced");
-              setLastSyncedAt(Date.now());
-            })
-            .catch(() => setStatus("offline"));
-        }, 1500);
+        saveTimer.current = setTimeout(attemptSave, 1500);
       });
     })();
 
@@ -195,6 +221,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       unsubStore();
       unsubSnap();
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
     };
   }, [hydrate, snapshot]);
 
