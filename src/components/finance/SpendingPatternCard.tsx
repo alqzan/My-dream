@@ -15,10 +15,14 @@ const NOTE_JUNK = new Set([
   "at", "@", "sr", "sar", "ريال", "sar.",
 ]);
 function cleanMerchant(note: string): string {
-  const s = (note || "").trim();
+  const s = (note || "")
+    // Strip bidi/format control marks (RLM/LRM/ALM, isolates, ZWJ, BOM) and
+    // the tatweel (ـ) — bank SMS wraps amounts/latin in these, which otherwise
+    // stick to tokens like "ب" and "SR" and stop them matching the junk list.
+    .replace(/[\u200B-\u200F\u061C\u202A-\u202E\u2066-\u2069\uFEFF\u0640]/g, "")
+    .trim();
   if (!s) return "غير محدّد";
   const cleaned = s
-    .replace(/ـ/g, "") // tatweel (ـ) that glues prefixes to numbers
     .replace(/ر\.?\s?س/g, " ")
     .replace(/[0-9٠-٩][0-9٠-٩.,]*/g, " ") // amounts (latin + arabic digits)
     .replace(/[:؛;،.\-_/]+/g, " ");
