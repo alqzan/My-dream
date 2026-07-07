@@ -2,7 +2,7 @@
 import type { JournalEntry } from "@/lib/types";
 import { MOOD_LABELS } from "@/lib/types";
 import { formatDate, entryPhotos } from "@/lib/utils";
-import { Trash2, Clock, Images } from "lucide-react";
+import { Trash2, Clock, Images, Mic } from "lucide-react";
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -47,6 +47,7 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
                 {entry.time}
               </span>
             )}
+            {entry.audio && <Mic size={12} className="text-journal" aria-label="ملاحظة صوتية" />}
           </div>
           <div className="flex items-center gap-1">
             {entry.source === "dayOne" && (

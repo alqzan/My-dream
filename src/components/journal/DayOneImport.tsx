@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { parseDayOneJson } from "@/lib/dayOneParser";
+import { parseDayOneJson, parseDayOneZip } from "@/lib/dayOneParser";
+import type { JournalEntry } from "@/lib/types";
 import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
@@ -10,6 +11,8 @@ interface ImportStats {
   added: number;
   duplicates: number;
   skippedEmpty: number;
+  photos: number;
+  audio: number;
 }
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
@@ -20,23 +23,34 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
   const [dragging, setDragging] = useState(false);
 
   async function handleFiles(files: File[]) {
-    const jsonFiles = files.filter((f) => f.name.endsWith(".json") || f.type === "application/json");
-    if (!jsonFiles.length) {
+    const isZip = (f: File) =>
+      f.name.toLowerCase().endsWith(".zip") ||
+      f.type === "application/zip" ||
+      f.type === "application/x-zip-compressed";
+    const isJson = (f: File) => f.name.toLowerCase().endsWith(".json") || f.type === "application/json";
+
+    const chosen = files.filter((f) => isJson(f) || isZip(f));
+    if (!chosen.length) {
       setStatus("error");
-      setMessage("اختر ملف JSON (تصدير Day One).");
+      setMessage("اختر ملف Day One بصيغة ZIP أو JSON.");
       return;
     }
     setStatus("working");
-    const total: ImportStats = { files: 0, added: 0, duplicates: 0, skippedEmpty: 0 };
+    const total: ImportStats = { files: 0, added: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0 };
     try {
-      for (const file of jsonFiles) {
-        const text = await file.text();
-        const result = parseDayOneJson(text);
+      for (const file of chosen) {
+        const result = isZip(file)
+          ? await parseDayOneZip(await file.arrayBuffer())
+          : parseDayOneJson(await file.text());
         const added = importDayOneEntries(result.entries);
+        // Count media only among entries that were actually added (not dupes).
+        const addedSet = new Set<JournalEntry>(result.entries.slice(0, added));
         total.files++;
         total.added += added;
         total.duplicates += result.entries.length - added;
         total.skippedEmpty += result.skippedEmpty;
+        total.photos += [...addedSet].filter((e) => e.photos?.length || e.photo).length;
+        total.audio += [...addedSet].filter((e) => e.audio).length;
       }
       setStats(total);
       setStatus("success");
@@ -57,10 +71,11 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       <div className="text-sm text-gray-500 bg-blue-50 rounded-xl p-3 leading-relaxed">
         <strong className="text-blue-700">كيفية التصدير من Day One:</strong>
         <br />
-        افتح Day One ← File ← Export ← JSON ← فك ضغط الملف وارفع JSON هنا.
+        افتح Day One ← File ← Export ← JSON ← احفظ الملف.
         <br />
         <span className="text-xs opacity-80">
-          نستخرج العنوان والوقت تلقائياً، وننظف النص، ولا نكرر المذكرات المستوردة سابقاً — ارفع أكثر من ملف دفعة واحدة إن أردت.
+          ارفع ملف <strong>ZIP</strong> كما هو لاستيراد الصور والصوت أيضاً، أو ملف JSON للنصوص فقط.
+          نستخرج العنوان والوقت والوسوم تلقائياً، وننظف النص، ولا نكرر المستورد سابقاً — وتقدر ترفع عدة ملفات.
         </span>
       </div>
 
@@ -74,11 +89,11 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           }`}
         >
           <Upload size={28} className="mx-auto text-gray-400 mb-3" />
-          <p className="text-sm font-medium text-gray-700">اسحب ملفات JSON هنا</p>
+          <p className="text-sm font-medium text-gray-700">اسحب ملفات ZIP أو JSON هنا</p>
           <p className="text-xs text-gray-400 mt-1">أو اضغط للاختيار — يمكن اختيار عدة ملفات</p>
           <input
             type="file"
-            accept=".json,application/json"
+            accept=".json,.zip,application/zip,application/json"
             multiple
             className="hidden"
             onChange={(e) => { if (e.target.files?.length) handleFiles([...e.target.files]); }}
@@ -101,8 +116,10 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           </div>
           <div className="text-xs text-green-700/80 space-y-0.5 pr-7">
             {stats.files > 1 && <p>• من {stats.files} ملفات</p>}
+            {stats.photos > 0 && <p>• مع {stats.photos} مذكرة فيها صور</p>}
+            {stats.audio > 0 && <p>• مع {stats.audio} مذكرة فيها صوت</p>}
             {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (بلا تكرار)</p>}
-            {stats.skippedEmpty > 0 && <p>• تجاهلنا {stats.skippedEmpty} مدخلة فارغة (صور/وسائط فقط)</p>}
+            {stats.skippedEmpty > 0 && <p>• تجاهلنا {stats.skippedEmpty} مدخلة فارغة</p>}
           </div>
         </div>
       )}
