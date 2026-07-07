@@ -606,7 +606,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -725,6 +725,26 @@ export const useAppStore = create<AppStore>()(
             ...state,
             transactions: stripBig(state.transactions),
             recurring: stripBig(state.recurring),
+          };
+        }
+
+        // v8 retints the default categories to the app's warm palette. Only
+        // categories still on their old default color are updated, so any color
+        // the owner picked by hand is preserved.
+        if (version < 8) {
+          const RETINT: Record<string, [string, string]> = {
+            // id: [old default color, new color]
+            "cat-essentials": ["#e07b39", "#c1663f"],
+            "cat-luxuries": ["#9b6fcd", "#c9852a"],
+            "cat-investment": ["#256128", "#3d9640"],
+            "cat-others": ["#4a9fbd", "#8a6fb0"],
+          };
+          state = {
+            ...state,
+            categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) => {
+              const pair = RETINT[c.id];
+              return pair && c.color === pair[0] ? { ...c, color: pair[1] } : c;
+            }),
           };
         }
 

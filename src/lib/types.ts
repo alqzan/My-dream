@@ -15,12 +15,14 @@ export interface FinanceCategoryDef {
   allowSubs?: boolean;
 }
 
+// Colors drawn from the app's warm Andalusian palette (terracotta / gold /
+// green / teal / soft purple) so the finance charts sit in the same theme.
 export const DEFAULT_CATEGORIES: FinanceCategoryDef[] = [
-  { id: "cat-essentials", label: "أساسيات", icon: "🧺", color: "#e07b39", allowSubs: true },
-  { id: "cat-luxuries", label: "كماليات", icon: "✨", color: "#9b6fcd", allowSubs: true },
-  { id: "cat-investment", label: "استثمار", icon: "📊", color: "#256128" },
+  { id: "cat-essentials", label: "أساسيات", icon: "🧺", color: "#c1663f", allowSubs: true },
+  { id: "cat-luxuries", label: "كماليات", icon: "✨", color: "#c9852a", allowSubs: true },
+  { id: "cat-investment", label: "استثمار", icon: "📊", color: "#3d9640" },
   { id: "cat-charity", label: "صدقة", icon: "🤲", color: "#1f7a6c" },
-  { id: "cat-others", label: "للآخرين", icon: "🎁", color: "#4a9fbd" },
+  { id: "cat-others", label: "للآخرين", icon: "🎁", color: "#8a6fb0" },
 ];
 
 // Shown for a transaction/budget whose category was since deleted, instead

@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Plus, Trash2, CornerDownLeft, Pencil, ChevronUp, ChevronDown } from "lucide-react";
 
 const ICONS = ["🧺", "✨", "📊", "🤲", "🎁", "🏠", "🚗", "🍽️", "☕", "❤️", "📚", "✈️", "🏦", "💊", "🎓", "👶", "🐾", "🎮", "📱", "⚡", "🧾", "📌"];
-const COLORS = ["#e07b39", "#9b6fcd", "#256128", "#1f7a6c", "#4a9fbd", "#e05555", "#dc9f3c", "#7c6fcd"];
+// Warm Andalusian palette, matching the app's theme (terracotta / gold /
+// green / teal / soft purple / rose).
+const COLORS = ["#c1663f", "#c9852a", "#e07b39", "#3d9640", "#256128", "#1f7a6c", "#8a6fb0", "#c94f6d"];
 
 function firstGrapheme(value: string): string {
   const trimmed = value.trim();
