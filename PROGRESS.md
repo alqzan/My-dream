@@ -35,7 +35,17 @@ better — see reasons below).
         `mergeAppData`, no deletions) vs "استبدال" (full replace). Both keep the
         undo. Legacy/partial backups are normalized to a full AppData first.
 
-Then: Gemini-powered in-app chat (free tier) — separate, needs a proxy.
+## In-app assistant (Gemini, free tier)
+
+- [x] **A1. Assistant chat page** (`/assistant`, added to nav)
+      - `buildAssistantContext` summarizes finance/habits/prayers/reading/journal
+        into a compact grounding blob (recent items only, truncated snippets).
+      - Chat UI streams the reply; worker URL is stored in localStorage and set
+        from an in-app setup card (no keys in the client).
+      - `worker/gemini-proxy.js` + `worker/README.md`: a free Cloudflare Worker
+        that holds GEMINI_API_KEY and streams `gemini-2.0-flash` back as text.
+      - Owner action required: deploy the worker, set GEMINI_API_KEY, paste the
+        worker URL into the assistant page.
 
 ## Reviewed and NOT implemented (owner's decision: do only 11)
 
