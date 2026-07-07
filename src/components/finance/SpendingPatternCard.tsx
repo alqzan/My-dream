@@ -1,37 +1,11 @@
 "use client";
 import { useMemo } from "react";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
-import { formatAmount, getMainCategory } from "@/lib/utils";
+import { formatAmount, getMainCategory, getCategoryInfo } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const ESS = "cat-essentials";
 const LUX = "cat-luxuries";
-
-// Turn a messy transaction note (often bank-SMS text like "شراء إنترنت بـ22 SR"
-// or "مبلغ:15 SAR") into just the merchant/place name for display. Strips
-// amounts, currency tokens, and common transaction verbs/prepositions.
-const NOTE_JUNK = new Set([
-  "شراء", "خصم", "سحب", "دفع", "مبلغ", "purchase", "ب", "بـ", "لدى", "من", "لـ", "في",
-  "at", "@", "sr", "sar", "ريال", "sar.",
-]);
-function cleanMerchant(note: string): string {
-  const s = (note || "")
-    // Strip bidi/format control marks (RLM/LRM/ALM, isolates, ZWJ, BOM) and
-    // the tatweel (ـ) — bank SMS wraps amounts/latin in these, which otherwise
-    // stick to tokens like "ب" and "SR" and stop them matching the junk list.
-    .replace(/[\u200B-\u200F\u061C\u202A-\u202E\u2066-\u2069\uFEFF\u0640]/g, "")
-    .trim();
-  if (!s) return "غير محدّد";
-  const cleaned = s
-    .replace(/ر\.?\s?س/g, " ")
-    .replace(/[0-9٠-٩][0-9٠-٩.,]*/g, " ") // amounts (latin + arabic digits)
-    .replace(/[:؛;،.\-_/]+/g, " ");
-  const tokens = cleaned
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((w) => !NOTE_JUNK.has(w.toLowerCase()));
-  return tokens.join(" ").trim() || "غير محدّد";
-}
 
 function sumEssLux(txs: Transaction[], categories: FinanceCategoryDef[]) {
   let ess = 0;
@@ -77,17 +51,17 @@ export function SpendingPatternCard({
     const prevLuxPct = prevTotal ? Math.round((before.lux / prevTotal) * 100) : null;
     const luxDelta = prevLuxPct == null ? null : luxPct - prevLuxPct;
 
-    // Top luxury merchants this month, grouped by cleaned merchant name.
-    const byMerchant = new Map<string, number>();
+    // Top luxury spend this month, grouped by its category (sub-category when
+    // set, otherwise the main) — cleaner and more reliable than merchant text.
+    const byCat = new Map<string, { label: string; icon: string; amount: number }>();
     for (const t of month) {
       if (getMainCategory(categories, t.category).id !== LUX) continue;
-      const label = cleanMerchant(t.note ?? "");
-      byMerchant.set(label, (byMerchant.get(label) ?? 0) + t.amount);
+      const info = getCategoryInfo(categories, t.category);
+      const cur = byCat.get(info.id) ?? { label: info.label, icon: info.icon, amount: 0 };
+      cur.amount += t.amount;
+      byCat.set(info.id, cur);
     }
-    const topLux = [...byMerchant.entries()]
-      .map(([label, amount]) => ({ label, amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 3);
+    const topLux = [...byCat.values()].sort((a, b) => b.amount - a.amount).slice(0, 3);
 
     return { ess: now.ess, lux: now.lux, total, essPct, luxPct, luxDelta, topLux };
   }, [transactions, categories, monthFilter]);
@@ -150,11 +124,11 @@ export function SpendingPatternCard({
 
       {view.topLux.length > 0 && (
         <div className="pt-1 border-t border-gray-100 dark:border-[#3a2e1e]">
-          <div className="text-[11px] font-semibold text-gray-500 mb-1.5">أكثر الكماليات هذا الشهر</div>
+          <div className="text-[11px] font-semibold text-gray-500 mb-1.5">أكثر تصنيفات الكماليات هذا الشهر</div>
           <div className="space-y-1">
             {view.topLux.map((m, i) => (
               <div key={i} className="flex items-center justify-between text-xs">
-                <span className="text-gray-600 truncate">{i + 1}. {m.label}</span>
+                <span className="text-gray-600 truncate">{i + 1}. {m.icon} {m.label}</span>
                 <span className="font-bold text-gray-700 shrink-0">{formatAmount(m.amount)} ر.س</span>
               </div>
             ))}
