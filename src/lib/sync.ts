@@ -247,6 +247,69 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
   };
 }
 
+// ===================== Multi-device merge =====================
+// Combine a local and a cloud snapshot so neither device's edits are lost to a
+// last-writer-wins overwrite. Every collection is unioned by its id/key; on a
+// conflicting id the snapshot with the newer top-level `lastUpdated` wins that
+// item. Habit logs, reserve deposits, and per-day prayers are unioned so a
+// completion/deposit/prayer recorded on either device survives. Singletons
+// (daily budget, income, salary day) come from the newer snapshot. There are
+// no per-item clocks, so a delete on one device can be undone by the other's
+// still-present copy — an accepted trade-off for never silently dropping data.
+function unionOrdered<T>(primary: T[], secondary: T[], keyOf: (t: T) => string): T[] {
+  const seen = new Set(primary.map(keyOf));
+  return [...primary, ...secondary.filter((it) => !seen.has(keyOf(it)))];
+}
+
+export function mergeAppData(local: AppData, cloud: AppData): AppData {
+  const localNewer = (local.lastUpdated ?? "") >= (cloud.lastUpdated ?? "");
+  const primary = localNewer ? local : cloud;
+  const secondary = localNewer ? cloud : local;
+
+  const byId = <T extends { id: string }>(p: T[], s: T[]) => unionOrdered(p, s, (x) => x.id);
+
+  // Habits: union by id, then union each habit's logged dates from both sides.
+  const habits = byId(primary.habits, secondary.habits).map((h) => {
+    const pLogs = primary.habits.find((x) => x.id === h.id)?.logs ?? [];
+    const sLogs = secondary.habits.find((x) => x.id === h.id)?.logs ?? [];
+    return { ...h, logs: [...new Set([...pLogs, ...sLogs])].sort() };
+  });
+
+  // Reserve funds: union by id, and union each fund's deposits by deposit id.
+  const reserves = byId(primary.reserves, secondary.reserves).map((f) => {
+    const pDep = primary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
+    const sDep = secondary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
+    return { ...f, deposits: unionOrdered(pDep, sDep, (d) => d.id) };
+  });
+
+  // Prayer logs: union by date; on a shared date merge the per-prayer maps
+  // (primary wins per prayer) so a prayer logged only on the other device stays.
+  const prayerLogs = unionOrdered(primary.prayerLogs, secondary.prayerLogs, (p) => p.date).map((pl) => {
+    const sMatch = secondary.prayerLogs.find((x) => x.date === pl.date);
+    return sMatch ? { ...pl, prayers: { ...sMatch.prayers, ...pl.prayers } } : pl;
+  });
+
+  return {
+    transactions: byId(primary.transactions, secondary.transactions),
+    books: byId(primary.books, secondary.books),
+    readingLogs: byId(primary.readingLogs, secondary.readingLogs),
+    journalEntries: byId(primary.journalEntries, secondary.journalEntries),
+    habits,
+    recurring: byId(primary.recurring, secondary.recurring),
+    budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category),
+    categories: unionOrdered(primary.categories, secondary.categories, (c) => c.id),
+    reserves,
+    prayerLogs,
+    dailyBudget: primary.dailyBudget,
+    monthlyIncome: primary.monthlyIncome,
+    futureLetters: byId(primary.futureLetters, secondary.futureLetters),
+    salaryDay: primary.salaryDay,
+    lastSalaryConfirm: primary.lastSalaryConfirm,
+    merchantRules: { ...secondary.merchantRules, ...primary.merchantRules },
+    lastUpdated: (local.lastUpdated ?? "") > (cloud.lastUpdated ?? "") ? local.lastUpdated : cloud.lastUpdated,
+  };
+}
+
 // Upload only new hashes and delete only removed ones for one media
 // subcollection. Non-fatal: a blob that fails or is too big for a single
 // Firestore doc is skipped, so it can never break syncing of the core data.

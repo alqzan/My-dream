@@ -16,6 +16,24 @@ better — see reasons below).
         existing `deleteReadingLog` behavior; `currentPage` stays editable via
         the book form).
 
+## Second round — owner approved the three "sync/backup resilience" items
+
+- [x] **S1. Multi-device merge instead of last-writer-wins** (was item 3)
+      - `mergeAppData(local, cloud)` in sync.ts: unions every collection by
+        id/key, newer top-level `lastUpdated` wins per-item conflicts; habit
+        logs, reserve deposits and per-day prayers are unioned. No per-item
+        clocks (a delete on one device can be undone by the other's copy —
+        accepted trade-off vs. silently dropping added data).
+      - Wired into SyncProvider: initial load, live subscription, and a
+        re-read-before-save step in the debounced push.
+- [ ] **S2. Sync retry with backoff + failure toast** (was item 2)
+      - Reuse the existing `showToast` (UndoToast); retry failed saves with
+        exponential backoff.
+- [ ] **S3. Merge-or-replace choice on backup import** (was item 4)
+      - BackupCard import offers "دمج" (via `mergeAppData`) vs "استبدال".
+
+Then: Gemini-powered in-app chat (free tier) — separate, needs a proxy.
+
 ## Reviewed and NOT implemented (owner's decision: do only 11)
 
 - 1. Firestore 1MB photo risk — SKIPPED. Already solved: photos live in

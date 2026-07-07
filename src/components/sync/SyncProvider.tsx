@@ -12,6 +12,7 @@ import {
   hydrateCloudPhotos,
   saveUserData,
   mergeLocalPhotos,
+  mergeAppData,
   subscribeUserMain,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
@@ -63,6 +64,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // doesn't treat that change as a local edit and echo it straight back.
   const applyingRemoteRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The cloud doc's lastUpdated we last adopted/wrote. Before a save we re-read
+  // the cloud doc; if it advanced past this, another device wrote in the
+  // meantime and we merge instead of overwriting.
+  const lastCloudUpdatedRef = useRef<string>("");
 
   const hydrate = useAppStore((s) => s.hydrate);
   const snapshot = useAppStore((s) => s.snapshot);
@@ -89,11 +94,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
         if (cloudMain && cloudHasData && (!localHasData || cloudNewer)) {
           const full = await hydrateCloudPhotos(space, cloudMain);
+          // Merge rather than blindly adopt the cloud, so local-only edits
+          // made before this device ever synced aren't dropped.
+          const merged = localHasData ? mergeAppData(local, full) : full;
           applyingRemoteRef.current = true;
-          hydrate(mergeLocalPhotos(full, local));
+          hydrate(mergeLocalPhotos(merged, local));
           applyingRemoteRef.current = false;
+          lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
         } else if (localHasData) {
           await saveUserData(space, local);
+          lastCloudUpdatedRef.current = local.lastUpdated ?? "";
+        } else {
+          lastCloudUpdatedRef.current = cloudMain?.lastUpdated ?? "";
         }
         setStatus("synced");
         setLastSyncedAt(Date.now());
@@ -116,11 +128,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           try {
             const full = await hydrateCloudPhotos(space, cloudMain);
             const local = snapshot();
+            // Merge, so unsynced local edits aren't overwritten by the incoming
+            // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
+            const merged = mergeAppData(local, full);
             applyingRemoteRef.current = true;
-            hydrate(mergeLocalPhotos(full, local));
+            hydrate(mergeLocalPhotos(merged, local));
             setTimeout(() => {
               applyingRemoteRef.current = false;
             }, 0);
+            lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
             setStatus("synced");
             setLastSyncedAt(Date.now());
           } catch {
@@ -129,20 +145,42 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         })();
       });
 
+      // Push the local snapshot up. Before overwriting, re-read the cloud doc;
+      // if another device wrote since we last synced, merge its data in first
+      // so a concurrent edit is never clobbered by last-writer-wins.
+      const pushLocal = async () => {
+        let toSave = snapshot();
+        const cloudMain = await loadUserMain(space);
+        if (
+          cloudMain &&
+          hasData(cloudMain) &&
+          (cloudMain.lastUpdated ?? "") > lastCloudUpdatedRef.current
+        ) {
+          const full = await hydrateCloudPhotos(space, cloudMain);
+          const merged = mergeAppData(toSave, full);
+          applyingRemoteRef.current = true;
+          hydrate(mergeLocalPhotos(merged, toSave));
+          applyingRemoteRef.current = false;
+          toSave = merged;
+        }
+        const stamp = new Date().toISOString();
+        toSave = { ...toSave, lastUpdated: stamp };
+        // Reflect the stamp locally (guarded) so the echoed snapshot is a
+        // no-op instead of triggering another save.
+        applyingRemoteRef.current = true;
+        useAppStore.setState({ lastUpdated: stamp });
+        applyingRemoteRef.current = false;
+        await saveUserData(space, toSave);
+        lastCloudUpdatedRef.current = stamp;
+      };
+
       // 3) Push local edits up (debounced).
       unsubStore = useAppStore.subscribe(() => {
         if (!hydratedRef.current || applyingRemoteRef.current) return;
         if (saveTimer.current) clearTimeout(saveTimer.current);
         setStatus("syncing");
         saveTimer.current = setTimeout(() => {
-          const stamp = new Date().toISOString();
-          const data = { ...snapshot(), lastUpdated: stamp };
-          // Reflect the stamp locally (guarded) so the echoed snapshot is a
-          // no-op instead of triggering another save.
-          applyingRemoteRef.current = true;
-          useAppStore.setState({ lastUpdated: stamp });
-          applyingRemoteRef.current = false;
-          saveUserData(space, data)
+          pushLocal()
             .then(() => {
               setStatus("synced");
               setLastSyncedAt(Date.now());
