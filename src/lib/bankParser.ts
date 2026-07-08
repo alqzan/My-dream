@@ -107,11 +107,55 @@ export interface SmsParseResult {
 // Currency tokens seen across Saudi banks: ريال / ر.س / SR / SAR.
 const CUR = "SR|SAR|ر\\.?\\s?س|ريال";
 
+// Saudi banks sometimes send Arabic-Indic digits (٧٢٠٫٣٦). Fold them to Latin
+// so amounts and dates parse regardless of the numeral system.
+function normalizeDigits(s: string): string {
+  return s
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/٫/g, ".")
+    .replace(/٬/g, ",");
+}
+
+// Messages that are never a transaction, whatever else they say: one-time
+// passwords and declined/failed operations.
+const NON_TRANSACTION = [
+  /رمز التحقق|الرمز السري|كلمة (?:المرور|السر)|\bOTP\b|verification code/i,
+  /مرفوضة|تم رفض|رفضت|فشلت|لم تتم|غير ناجحة|declined|failed/i,
+];
+
+// Statement / bill-reminder vocabulary — skipped unless the message also
+// reports a completed payment ("تم سداد المبلغ المستحق...").
+const STATEMENT = [
+  /المبلغ (?:ال[إا]جمالي )?المستحق|[إا]جمالي المستحق|مبلغ مستحق/i,
+  /الحد الأدنى (?:للسداد|المستحق)|minimum (?:amount )?due/i,
+  /تاريخ الاستحقاق|due date/i,
+  /كشف (?:ال)?حساب/i,
+];
+const COMPLETED_OP = /تم(?:ت)?\s+(?:عملية\s+)?(?:ال)?(?:سداد|دفع|خصم|شراء|تحويل|إيداع)/i;
+
+// An actual money-movement keyword — tells a real transaction from a bare
+// balance notification ("الرصيد المتاح: 4279 ريال").
+const TXN_KEYWORD =
+  /شراء|خصم|سحب|دفع|سداد|إيداع|ايداع|تحويل|حوالة|استرداد|purchase|\bpos\b|transfer|refund|withdraw|deposit/i;
+const BALANCE_ONLY = /الرصيد|رصيدك|رصيد الحساب|available balance|\bbalance\b/i;
+
+// True when a message carries no real money movement and should be dropped
+// before parsing: OTPs, declines, statement reminders, balance-only alerts.
+function isNonTransaction(text: string): boolean {
+  if (NON_TRANSACTION.some((p) => p.test(text))) return true;
+  if (STATEMENT.some((p) => p.test(text)) && !COMPLETED_OP.test(text)) return true;
+  if (BALANCE_ONLY.test(text) && !TXN_KEYWORD.test(text)) return true;
+  return false;
+}
+
 // Returns null both when no amount could be read AND when the message looks
 // like an incoming deposit (income) — this tracker is expense-only, so
 // credits are silently skipped rather than logged as spending.
 export function parseBankSms(smsText: string, date: string): SmsParseResult | null {
-  const text = smsText.trim();
+  const text = normalizeDigits(smsText.trim());
+  // Drop OTPs, declines, statement reminders and balance-only alerts so they
+  // never turn into bogus transactions.
+  if (isNonTransaction(text)) return null;
   const isCredit = /(?:إيداع|راتب|حوّل إليك|حُوّل إليك|تم استلام|أضيف|credit)/i.test(text);
   if (isCredit) return null;
 
@@ -170,9 +214,25 @@ export function parseBankSmsBulk(
 
   // First try splitting on blank lines (typical when copying several SMS).
   let chunks = text.split(/\n\s*\n+/).map((c) => c.trim()).filter(Boolean);
-  // If that didn't separate them, fall back to one message per line.
+  // No blank lines: a line only starts a new message when it carries its own
+  // operation/alert keyword. Otherwise this is one multi-line SMS (e.g. Al
+  // Rajhi's field-per-line format) and splitting it would turn its amount and
+  // balance lines into bogus separate transactions — so keep it whole.
   if (chunks.length <= 1) {
-    chunks = text.split(/\r?\n/).map((c) => c.trim()).filter(Boolean);
+    const lines = text.split(/\r?\n/).map((c) => c.trim()).filter(Boolean);
+    const startsChunk = (l: string) =>
+      TXN_KEYWORD.test(l) ||
+      NON_TRANSACTION.some((p) => p.test(l)) ||
+      STATEMENT.some((p) => p.test(l)) ||
+      BALANCE_ONLY.test(l);
+    if (lines.filter(startsChunk).length > 1) {
+      const grouped: string[] = [];
+      for (const line of lines) {
+        if (startsChunk(line) || grouped.length === 0) grouped.push(line);
+        else grouped[grouped.length - 1] += "\n" + line;
+      }
+      chunks = grouped;
+    }
   }
 
   const isCreditRe = /(?:إيداع|راتب|حُوّل إليك|تم استلام|credit)/i;
@@ -207,7 +267,7 @@ function parseDate(raw: string): string {
 }
 
 function parseAmount(raw: string): number {
-  return parseFloat(raw.replace(/[,،\s]/g, "")) || 0;
+  return parseFloat(normalizeDigits(raw).replace(/[,،\s]/g, "")) || 0;
 }
 
 export function parseBankCsv(csvText: string): { transactions: Transaction[]; skippedIncome: number } {

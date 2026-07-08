@@ -17,6 +17,7 @@ import { DailyPulse } from "@/components/dashboard/DailyPulse";
 import { HabitTracker } from "@/components/dashboard/HabitTracker";
 import { SmartInsights } from "@/components/dashboard/SmartInsights";
 import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
+import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
@@ -88,6 +89,10 @@ export default function Dashboard() {
       <Card className="animate-fade-up stagger-1">
         <PrayerOrbit />
       </Card>
+
+      <div className="animate-fade-up stagger-2">
+        <HikmaCard />
+      </div>
 
       <div className="animate-fade-up stagger-2">
         <DailyPulse
