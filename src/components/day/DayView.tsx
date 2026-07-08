@@ -3,6 +3,7 @@ import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
 import { MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, entryPhotos } from "@/lib/utils";
+import { renderMarkdown } from "@/lib/markdown";
 import { Modal } from "@/components/ui/Modal";
 import { Photo } from "@/components/ui/Photo";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
@@ -113,9 +114,11 @@ export function DayView({ date, onClose }: DayViewProps) {
             {day.journal.title && (
               <h3 className="text-base font-black text-gray-900 mb-1">{day.journal.title}</h3>
             )}
-            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line line-clamp-6">
-              {day.journal.content}
-            </p>
+            <div
+              className="prose-journal text-sm text-gray-700 leading-relaxed line-clamp-6"
+              dir="auto"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(day.journal.content) }}
+            />
           </Section>
         ) : (
           <EmptyHint text="لا توجد مذكرة لهذا اليوم" />

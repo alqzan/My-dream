@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos } from "@/lib/utils";
+import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
 import { JournalForm } from "@/components/journal/JournalForm";
@@ -146,7 +147,7 @@ export default function JournalPage() {
                     قبل {years === 1 ? "سنة" : years === 2 ? "سنتين" : `${years} سنوات`} — {formatDate(m.date)}
                   </p>
                   {m.title && <p className="text-sm font-bold text-gray-800 mb-0.5">{m.title}</p>}
-                  <p className="text-xs text-gray-500 line-clamp-1">{m.content}</p>
+                  <p className="text-xs text-gray-500 line-clamp-1">{stripMarkdown(m.content)}</p>
                 </button>
               );
             })}
@@ -269,9 +270,11 @@ export default function JournalPage() {
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <audio controls src={viewEntry.audio} className="w-full h-10" />
             )}
-            <p className="text-sm leading-loose whitespace-pre-line text-gray-800 min-h-[160px]">
-              {viewEntry.content}
-            </p>
+            <div
+              className="prose-journal text-[15px] leading-loose text-gray-800 min-h-[160px]"
+              dir="auto"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(viewEntry.content) }}
+            />
             <div className="flex gap-2 pt-2">
               <Button
                 variant="secondary"
