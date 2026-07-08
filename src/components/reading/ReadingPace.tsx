@@ -25,7 +25,7 @@ export function ReadingPace({ book, logs }: ReadingPaceProps) {
   const daysLeft = avgPerDay > 0 ? Math.ceil(remaining / avgPerDay) : null;
 
   const finishDate = daysLeft
-    ? new Date(Date.now() + daysLeft * 86400000).toLocaleDateString("ar-SA", {
+    ? new Date(Date.now() + daysLeft * 86400000).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
         month: "long",
         day: "numeric",
       })
