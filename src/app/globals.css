@@ -105,6 +105,11 @@ body::before {
 .dark .bg-purple-50 { background-color: rgba(138, 111, 176, 0.20) !important; }
 .dark .bg-brand-50  { background-color: rgba(201, 133, 42, 0.20) !important; }
 .dark .bg-gray-200  { background-color: #443723 !important; }
+/* Opacity variants of the neutral surfaces (sub-category panels, muted rows)
+   aren't caught by the solid remaps above, so they'd stay a glaring light
+   patch on the dark parchment — remap them to the same dark tint. */
+.dark .bg-gray-50\/70 { background-color: rgba(44, 35, 24, 0.7) !important; }
+.dark .bg-gray-50\/50 { background-color: rgba(44, 35, 24, 0.5) !important; }
 .dark .bg-white\/60 { background-color: rgba(255, 255, 255, 0.08) !important; }
 .dark .bg-white\/70 { background-color: rgba(255, 255, 255, 0.07) !important; }
 
