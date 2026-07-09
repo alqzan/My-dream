@@ -57,6 +57,27 @@ function hasData(d: Partial<AppData>): boolean {
   return nonEmpty || habitsLogged;
 }
 
+// True when the cloud snapshot carries any id/date-keyed item this device
+// doesn't have locally. Used so a lagging top-level `lastUpdated` (e.g. the
+// other device's clock runs a few minutes behind) can never hide a genuinely
+// new entry written elsewhere — we pull on unseen content, not just on a newer
+// timestamp.
+function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean {
+  const has = (localItems: { id: string }[], cloudItems?: { id: string }[]) => {
+    const ids = new Set(localItems.map((i) => i.id));
+    return (cloudItems ?? []).some((i) => !ids.has(i.id));
+  };
+  const localDates = new Set(local.prayerLogs.map((p) => p.date));
+  return (
+    has(local.journalEntries, cloud.journalEntries) ||
+    has(local.transactions, cloud.transactions) ||
+    has(local.books, cloud.books) ||
+    has(local.readingLogs, cloud.readingLogs) ||
+    has(local.futureLetters, cloud.futureLetters) ||
+    (cloud.prayerLogs ?? []).some((p) => !localDates.has(p.date))
+  );
+}
+
 // Login-free sync: every device shares one Firestore document keyed by a
 // fixed secret space id, so opening the app just works — no email, no login.
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -98,18 +119,32 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const local = snapshot();
         const cloudHasData = !!cloudMain && hasData(cloudMain);
         const localHasData = hasData(local);
-        const cloudNewer = (cloudMain?.lastUpdated ?? "") > (local.lastUpdated ?? "");
 
-        if (cloudMain && cloudHasData && (!localHasData || cloudNewer)) {
+        if (cloudMain && cloudHasData && localHasData) {
+          // Both sides hold data. ALWAYS union them — never let the device with
+          // the newer top-level stamp overwrite the other, or an entry written
+          // on one device is silently dropped when the other's clock/stamp
+          // happens to be ahead (the bug: iPad journal entries vanished on the
+          // iPhone). mergeAppData keeps every entry and resolves per-item
+          // conflicts by the newer stamp.
           const full = await hydrateCloudPhotos(space, cloudMain);
-          // Merge rather than blindly adopt the cloud, so local-only edits
-          // made before this device ever synced aren't dropped.
-          const merged = localHasData ? mergeAppData(local, full) : full;
+          const merged = mergeAppData(local, full);
           applyingRemoteRef.current = true;
           hydrate(mergeLocalPhotos(merged, local));
           applyingRemoteRef.current = false;
+          // Push the union back up so the cloud gains any entries that lived
+          // only on this device; other devices then pull them.
+          await saveUserData(space, merged);
+          lastCloudUpdatedRef.current = merged.lastUpdated ?? cloudMain.lastUpdated ?? "";
+        } else if (cloudMain && cloudHasData) {
+          // Only the cloud has data → adopt it wholesale onto this fresh device.
+          const full = await hydrateCloudPhotos(space, cloudMain);
+          applyingRemoteRef.current = true;
+          hydrate(mergeLocalPhotos(full, local));
+          applyingRemoteRef.current = false;
           lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
         } else if (localHasData) {
+          // Only this device has data → seed the cloud from it.
           await saveUserData(space, local);
           lastCloudUpdatedRef.current = local.lastUpdated ?? "";
         } else {
@@ -130,8 +165,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         // lingering "offline" state even when there's nothing new to apply.
         setStatus("synced");
         setLastSyncedAt(Date.now());
-        const localUpdated = useAppStore.getState().lastUpdated ?? "";
-        if ((cloudMain.lastUpdated ?? "") <= localUpdated) return;
+        const state = useAppStore.getState();
+        const localUpdated = state.lastUpdated ?? "";
+        const cloudNewer = (cloudMain.lastUpdated ?? "") > localUpdated;
+        // Apply when the cloud is newer OR when it holds items we haven't seen
+        // yet — a stale top-level stamp (device clocks drift) must never hide a
+        // real new entry written on another device.
+        if (!cloudNewer && !cloudHasUnseen(cloudMain, state)) return;
         (async () => {
           try {
             const full = await hydrateCloudPhotos(space, cloudMain);
