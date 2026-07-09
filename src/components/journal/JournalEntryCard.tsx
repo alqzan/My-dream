@@ -2,6 +2,7 @@
 import type { JournalEntry } from "@/lib/types";
 import { MOOD_LABELS } from "@/lib/types";
 import { formatDate, entryPhotos } from "@/lib/utils";
+import { stripMarkdown } from "@/lib/markdown";
 import { Trash2, Clock, Images, Mic } from "lucide-react";
 
 interface JournalEntryCardProps {
@@ -12,7 +13,8 @@ interface JournalEntryCardProps {
 
 export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardProps) {
   const mood = entry.mood ? MOOD_LABELS[entry.mood] : null;
-  const preview = entry.content.slice(0, 180) + (entry.content.length > 180 ? "..." : "");
+  const plain = stripMarkdown(entry.content);
+  const preview = plain.slice(0, 180) + (plain.length > 180 ? "..." : "");
   const photos = entryPhotos(entry);
 
   return (

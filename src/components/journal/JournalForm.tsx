@@ -8,7 +8,7 @@ import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions
 import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles } from "lucide-react";
+import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Check } from "lucide-react";
 
 interface JournalFormProps {
   onClose: () => void;
@@ -53,7 +53,7 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
 const DRAFT_KEY = "madar-journal-draft";
 
 export function JournalForm({ onClose, initial }: JournalFormProps) {
-  const { addJournalEntry, updateJournalEntry } = useAppStore();
+  const { addJournalEntry, updateJournalEntry, deleteJournalEntry } = useAppStore();
   const [date, setDate] = useState(initial?.date ?? today());
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
@@ -66,7 +66,15 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [audio, setAudio] = useState<string | undefined>(initial?.audio);
   const [compressing, setCompressing] = useState(false);
   const [showHarakat, setShowHarakat] = useState(false);
+  const [showFormat, setShowFormat] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
   const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-save plumbing. Once an entry exists (editing, or a new one we have
+  // already auto-created), savedId points at the row we keep updating.
+  const savedId = useRef<string | undefined>(initial?.id);
+  const firstRun = useRef(true);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // Auto-save a draft of a NEW entry so writing is never lost if you leave
   // mid-way. Restored on reopen; cleared once the entry is actually saved.
@@ -89,7 +97,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   }, []);
 
   useEffect(() => {
-    if (initial) return;
+    if (initial || savedId.current) return;
     try {
       if (title.trim() || content.trim()) {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ date, title, content, question, answering }));
@@ -100,6 +108,105 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       /* storage full/unavailable — ignore */
     }
   }, [initial, date, title, content, question, answering]);
+
+  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audio);
+
+  // Persist the current state — create the entry on first save, update it
+  // afterwards. This is what makes writing auto-save with no "save" tap.
+  function persist() {
+    if (!hasSomething()) return;
+    if (savedId.current) {
+      updateJournalEntry(savedId.current, {
+        date,
+        title: title.trim(),
+        content: content.trim(),
+        question: answering ? question : "",
+        photos,
+        photo: photos[0] ?? "",
+        audio: audio ?? "",
+      });
+    } else {
+      const id = uid();
+      addJournalEntry({
+        id,
+        date,
+        title: title.trim(),
+        content: content.trim(),
+        ...(answering ? { question } : {}),
+        ...(photos.length ? { photos, photo: photos[0] } : {}),
+        ...(audio ? { audio } : {}),
+        time: nowHHMM(),
+        source: "manual",
+      });
+      savedId.current = id;
+    }
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setSaveState("saved");
+  }
+
+  // Debounced auto-save: fires ~700ms after the last edit to any field.
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    if (!hasSomething()) return;
+    setSaveState("saving");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(persist, 700);
+    return () => clearTimeout(saveTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, title, content, question, answering, photos, audio]);
+
+  // "تم" — flush any pending save immediately and close.
+  function handleDone() {
+    clearTimeout(saveTimer.current);
+    persist();
+    onClose();
+  }
+
+  // "إلغاء" — undo this session: revert an edited entry to its original, or
+  // remove a new one we auto-created, so cancel still means cancel.
+  function handleCancel() {
+    clearTimeout(saveTimer.current);
+    if (initial) {
+      updateJournalEntry(initial.id, {
+        date: initial.date,
+        title: initial.title ?? "",
+        content: initial.content,
+        question: initial.question ?? "",
+        photos: initial.photos ?? (initial.photo ? [initial.photo] : []),
+        photo: initial.photo ?? "",
+        audio: initial.audio ?? "",
+      });
+    } else if (savedId.current) {
+      deleteJournalEntry(savedId.current);
+    }
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    onClose();
+  }
+
+  // Markdown helpers for the formatting toolbar — wrap the selection
+  // (bold/italic) or prefix the current line (heading/list/quote).
+  function wrapSelection(before: string, after = before) {
+    const ta = contentRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const sel = content.slice(s, e) || "نص";
+    setContent(content.slice(0, s) + before + sel + after + content.slice(e));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(s + before.length, s + before.length + sel.length);
+    });
+  }
+  function prefixLine(token: string) {
+    const ta = contentRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart;
+    const lineStart = content.lastIndexOf("\n", s - 1) + 1;
+    setContent(content.slice(0, lineStart) + token + content.slice(lineStart));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(s + token.length, s + token.length);
+    });
+  }
 
   // Insert an Arabic diacritic at the caret (it attaches to the letter before
   // it), then keep focus and caret in place.
@@ -153,44 +260,6 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     } finally {
       setCompressing(false);
     }
-  }
-
-  function handleSave() {
-    if (!content.trim() && !title.trim()) return;
-
-    if (initial) {
-      // قيم فارغة (وليست undefined) حتى تُمسح الحقول فعلاً عند إزالتها
-      // ولا يرى تزامن Firestore قيم undefined.
-      updateJournalEntry(initial.id, {
-        date,
-        title: title.trim(),
-        content: content.trim(),
-        question: answering ? question : "",
-        photos,
-        // photo القديم يبقى مرآة لأول صورة للتوافق مع العروض القديمة
-        photo: photos[0] ?? "",
-        // قيمة فارغة تمسح الملاحظة الصوتية فعلاً عند إزالتها
-        audio: audio ?? "",
-      });
-    } else {
-      addJournalEntry({
-        id: uid(),
-        date,
-        title: title.trim(),
-        content: content.trim(),
-        ...(answering ? { question } : {}),
-        ...(photos.length ? { photos, photo: photos[0] } : {}),
-        ...(audio ? { audio } : {}),
-        time: nowHHMM(),
-        source: "manual",
-      });
-    }
-    try {
-      localStorage.removeItem(DRAFT_KEY);
-    } catch {
-      /* ignore */
-    }
-    onClose();
   }
 
   return (
@@ -268,23 +337,59 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         <div className="flex items-center justify-between mb-1">
           <label className="text-xs font-medium text-gray-500">
             ماذا في بالك اليوم؟
-            {!initial && (title.trim() || content.trim()) ? (
-              <span className="text-finance/80 font-normal"> · يُحفظ تلقائياً ✎</span>
+            {saveState === "saving" ? (
+              <span className="text-gray-400 font-normal"> · يُحفظ…</span>
+            ) : saveState === "saved" ? (
+              <span className="text-finance/80 font-normal"> · حُفظ ✓</span>
             ) : (
               <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
             )}
           </label>
-          <button
-            type="button"
-            onClick={() => setShowHarakat((v) => !v)}
-            className={
-              "text-[11px] font-bold rounded-lg px-2 py-1 press shrink-0 " +
-              (showHarakat ? "bg-journal text-white" : "bg-journal/10 text-journal")
-            }
-          >
-            تشكيل
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowFormat((v) => !v)}
+              className={
+                "text-[11px] font-bold rounded-lg px-2 py-1 press " +
+                (showFormat ? "bg-journal text-white" : "bg-journal/10 text-journal")
+              }
+            >
+              تنسيق
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHarakat((v) => !v)}
+              className={
+                "text-[11px] font-bold rounded-lg px-2 py-1 press " +
+                (showHarakat ? "bg-journal text-white" : "bg-journal/10 text-journal")
+              }
+            >
+              تشكيل
+            </button>
+          </div>
         </div>
+
+        {showFormat && (
+          <div className="flex flex-wrap gap-1 mb-2 p-2 bg-journal/5 rounded-xl animate-fade-up">
+            {[
+              { icon: Bold, t: "عريض", fn: () => wrapSelection("**") },
+              { icon: Italic, t: "مائل", fn: () => wrapSelection("_") },
+              { icon: Heading, t: "عنوان", fn: () => prefixLine("## ") },
+              { icon: List, t: "قائمة", fn: () => prefixLine("- ") },
+              { icon: Quote, t: "اقتباس", fn: () => prefixLine("> ") },
+            ].map((b) => (
+              <button
+                key={b.t}
+                type="button"
+                title={b.t}
+                onClick={b.fn}
+                className="min-w-8 h-8 px-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:border-journal/40 hover:text-journal press flex items-center justify-center"
+              >
+                <b.icon size={15} />
+              </button>
+            ))}
+          </div>
+        )}
 
         {showHarakat && (
           <div className="flex flex-wrap gap-1 mb-2 p-2 bg-journal/5 rounded-xl animate-fade-up">
@@ -387,12 +492,16 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         <AudioRecorder value={audio} onChange={setAudio} />
       </div>
 
-      <div className="flex gap-2 pt-1">
-        <Button onClick={handleSave} className="flex-1 bg-journal hover:bg-journal/90">
-          {initial ? "حفظ التعديلات" : "إضافة مذكرة"}
-        </Button>
-        <Button variant="secondary" onClick={onClose}>
+      <div className="flex items-center gap-2 pt-1">
+        <span className="flex items-center gap-1 text-[11px] text-gray-400 ml-auto">
+          {saveState === "saving" && <><Loader2 size={12} className="animate-spin" /> يُحفظ…</>}
+          {saveState === "saved" && <><Check size={12} className="text-finance" /> محفوظ تلقائياً</>}
+        </span>
+        <Button variant="secondary" onClick={handleCancel}>
           إلغاء
+        </Button>
+        <Button onClick={handleDone} className="bg-journal hover:bg-journal/90">
+          تم
         </Button>
       </div>
 
