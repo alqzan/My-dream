@@ -215,14 +215,14 @@ export default function SpendInsightsPage() {
       </div>
 
       {/* Period segmented control */}
-      <div className="flex bg-gray-100 dark:bg-[#14513f] rounded-xl p-1 animate-fade-up stagger-1">
+      <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-1">
         {(["أسبوع", "شهر", "سنة"] as Period[]).map((p) => (
           <button
             key={p}
             onClick={() => { setPeriod(p); setExpandedCat(null); }}
             className={cn(
               "flex-1 text-sm font-semibold py-2 rounded-lg transition-all",
-              period === p ? "bg-white dark:bg-[#114a3b] text-finance shadow-sm" : "text-gray-400"
+              period === p ? "bg-white dark:bg-[#241c12] text-finance shadow-sm" : "text-gray-400"
             )}
           >
             {p === "أسبوع" ? "أسبوعي" : p === "شهر" ? "شهري" : "سنوي"}
@@ -361,7 +361,7 @@ export default function SpendInsightsPage() {
                             {formatAmount(catTotal)} <span className="font-normal text-gray-400">ر.س · {pct}٪</span>
                           </span>
                         </div>
-                        <div className="h-2 bg-gray-100 dark:bg-[#195a46] rounded-full overflow-hidden mt-1">
+                        <div className="h-2 bg-gray-100 dark:bg-[#382c1d] rounded-full overflow-hidden mt-1">
                           <div
                             className="h-full rounded-full transition-all duration-700"
                             style={{ width: `${pct}%`, backgroundColor: main.color }}
@@ -377,7 +377,7 @@ export default function SpendInsightsPage() {
                   {expanded && (
                     <div className="mt-1.5 mr-10 space-y-1 animate-fade-up">
                       {subs.map(({ info, isMainItself, amt }) => (
-                        <div key={info?.id ?? "unknown"} className="flex items-center justify-between text-[11px] bg-gray-50 dark:bg-[#14513f] rounded-lg px-2.5 py-1.5">
+                        <div key={info?.id ?? "unknown"} className="flex items-center justify-between text-[11px] bg-gray-50 dark:bg-[#2c2318] rounded-lg px-2.5 py-1.5">
                           <span className="text-gray-500">
                             {isMainItself ? "（عام）" : `${info?.icon ?? "📌"} ${info?.label ?? "غير مصنف"}`}
                           </span>
@@ -405,7 +405,7 @@ export default function SpendInsightsPage() {
           </div>
           <div className="space-y-2">
             {insights.map((line, i) => (
-              <p key={i} className="text-xs text-gray-600 leading-relaxed bg-gray-50 dark:bg-[#14513f] rounded-xl px-3 py-2">
+              <p key={i} className="text-xs text-gray-600 leading-relaxed bg-gray-50 dark:bg-[#2c2318] rounded-xl px-3 py-2">
                 {line}
               </p>
             ))}

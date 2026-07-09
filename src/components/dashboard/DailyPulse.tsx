@@ -53,7 +53,7 @@ export function DailyPulse({ masterStreak, rows }: DailyPulseProps) {
         </div>
       </div>
 
-      <div className="bg-white/95 dark:bg-[#114a3b]/95 backdrop-blur rounded-t-2xl divide-y divide-gray-100 dark:divide-[#1c5544]">
+      <div className="bg-white/95 dark:bg-[#241c12]/95 backdrop-blur rounded-t-2xl divide-y divide-gray-100 dark:divide-[#3a2e1e]">
         {rows.map((row) => (
           <Link
             key={row.href}
