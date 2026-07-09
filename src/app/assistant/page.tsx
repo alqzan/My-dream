@@ -133,7 +133,7 @@ export default function AssistantPage() {
             واحدة (Cloudflare Worker) يحفظ مفتاح Gemini بأمان — لا يوضع المفتاح في التطبيق.
           </p>
           <p className="text-xs text-gray-400 leading-relaxed">
-            خطوات النشر في مجلد <code className="bg-gray-100 dark:bg-[#382c1d] px-1 rounded">worker/</code> بالمستودع.
+            خطوات النشر في مجلد <code className="bg-gray-100 dark:bg-[#195a46] px-1 rounded">worker/</code> بالمستودع.
             بعد نشره الصق رابط الـWorker هنا:
           </p>
           <input
@@ -196,7 +196,7 @@ export default function AssistantPage() {
               className={`max-w-[80%] text-sm leading-relaxed rounded-2xl px-3.5 py-2 whitespace-pre-line ${
                 m.role === "user"
                   ? "bg-brand-600 text-white"
-                  : "bg-gray-100 dark:bg-[#382c1d] text-gray-700"
+                  : "bg-gray-100 dark:bg-[#195a46] text-gray-700"
               }`}
             >
               {m.content || (busy ? "…" : "")}
