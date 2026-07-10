@@ -16,6 +16,7 @@ interface AppStore extends AppData {
   updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
   importDayOneEntries: (entries: JournalEntry[]) => number; // returns count actually added
+  deleteDayOneImports: () => number; // يحذف كل المذكرات المستوردة من Day One؛ يرجع العدد
 
   // Finance
   addTransaction: (tx: Transaction) => void;
@@ -169,6 +170,16 @@ export const useAppStore = create<AppStore>()(
           return { journalEntries: [...newEntries, ...s.journalEntries] };
         });
         return added;
+      },
+
+      deleteDayOneImports: () => {
+        let removed = 0;
+        set((s) => {
+          const kept = s.journalEntries.filter((e) => e.source !== "dayOne");
+          removed = s.journalEntries.length - kept.length;
+          return { journalEntries: kept };
+        });
+        return removed;
       },
 
       addTransaction: (tx) =>

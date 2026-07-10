@@ -292,21 +292,27 @@ export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
     throw new Error("تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
   }
 
-  // Locate the journal JSON (root-level *.json, preferring the shortest path).
-  const jsonPath = Object.keys(files)
-    .filter((p) => p.toLowerCase().endsWith(".json") && !p.startsWith("__MACOSX"))
-    .sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0];
-  if (!jsonPath) throw new Error("لم يُعثر على ملف JSON داخل الأرشيف");
+  // Merge EVERY journal JSON in the archive — an "all journals" export puts
+  // each journal in its own <Name>.json, so reading only one dropped most
+  // entries (e.g. 130 of 800). Non-entry JSONs are skipped harmlessly.
+  const jsonPaths = Object.keys(files).filter(
+    (p) => p.toLowerCase().endsWith(".json") && !p.startsWith("__MACOSX")
+  );
+  if (!jsonPaths.length) throw new Error("لم يُعثر على ملف JSON داخل الأرشيف");
 
-  let data: DayOneExport;
-  try {
-    data = JSON.parse(new TextDecoder().decode(files[jsonPath])) as DayOneExport;
-  } catch {
-    throw new Error("ملف JSON داخل الأرشيف غير صالح");
+  const allEntries: DayOneEntry[] = [];
+  for (const jp of jsonPaths) {
+    try {
+      const d = JSON.parse(new TextDecoder().decode(files[jp])) as DayOneExport;
+      if (d.entries && Array.isArray(d.entries)) allEntries.push(...d.entries);
+    } catch {
+      /* skip a JSON that isn't a Day One journal */
+    }
   }
-  if (!data.entries || !Array.isArray(data.entries)) {
+  if (!allEntries.length) {
     throw new Error("لم يتم العثور على مدخلات Day One في الأرشيف");
   }
+  const data: DayOneExport = { entries: allEntries };
 
   const photoIndex = indexFolder(files, "photos");
   const audioIndex = indexFolder(files, "audios");

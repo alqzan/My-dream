@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseDayOneJson, parseDayOneZip } from "@/lib/dayOneParser";
 import type { JournalEntry } from "@/lib/types";
-import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 interface ImportStats {
@@ -16,11 +16,21 @@ interface ImportStats {
 }
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
-  const { importDayOneEntries } = useAppStore();
+  const { importDayOneEntries, deleteDayOneImports, journalEntries } = useAppStore();
   const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [stats, setStats] = useState<ImportStats | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletedCount, setDeletedCount] = useState<number | null>(null);
+
+  const dayOneCount = journalEntries.filter((e) => e.source === "dayOne").length;
+
+  function handleDeleteImports() {
+    const n = deleteDayOneImports();
+    setConfirmDelete(false);
+    setDeletedCount(n);
+  }
 
   async function handleFiles(files: File[]) {
     const isZip = (f: File) =>
@@ -128,6 +138,45 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-3 bg-red-50 text-red-700 rounded-xl p-4">
           <AlertCircle size={20} />
           <p className="text-sm">{message}</p>
+        </div>
+      )}
+
+      {deletedCount !== null && (
+        <div className="flex items-center gap-2 bg-gray-50 text-gray-600 rounded-xl p-3 text-sm">
+          <CheckCircle size={18} className="text-finance shrink-0" />
+          {deletedCount > 0
+            ? `تم حذف ${deletedCount} مذكرة مستوردة من Day One. تقدر تستورد من جديد.`
+            : "ما فيه مذكرات مستوردة من Day One لحذفها."}
+        </div>
+      )}
+
+      {dayOneCount > 0 && status !== "working" && deletedCount === null && (
+        <div className="border-t border-gray-100 pt-3">
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-600 press"
+            >
+              <Trash2 size={13} /> حذف كل ما استوردته من Day One ({dayOneCount} مذكرة)
+            </button>
+          ) : (
+            <div className="bg-red-50 rounded-xl p-3 space-y-2">
+              <p className="text-xs text-red-700 leading-relaxed">
+                متأكد؟ سيُحذف {dayOneCount} مذكرة مستوردة من Day One نهائياً (مذكراتك المكتوبة يدوياً تبقى). مفيد لو تبي تعيد الاستيراد من الصفر.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setConfirmDelete(false)} className="flex-1">
+                  تراجع
+                </Button>
+                <button
+                  onClick={handleDeleteImports}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl py-2 press"
+                >
+                  نعم، احذف الكل
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
