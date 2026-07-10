@@ -46,10 +46,10 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 text-white space-y-3">
+    <div className="bg-gradient-to-br from-[#4a3320] via-[#6b4629] to-[#8a5a24] rounded-2xl p-4 text-white space-y-3 card-shadow shine">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-400 font-medium">حصيلة الأسبوع</p>
+          <p className="text-xs text-white/55 font-medium">حصيلة الأسبوع</p>
           <p className="text-base font-bold mt-0.5">هذا ما أنجزته 🏆</p>
         </div>
         {dominantMood && <span className="text-3xl">{moodEmoji[dominantMood]}</span>}
@@ -74,13 +74,13 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
           const score = [hasJ, hasR].filter(Boolean).length;
           return (
             <div key={d} className="flex flex-col items-center gap-1">
-              <div className="text-[10px] text-gray-500">
+              <div className="text-[10px] text-white/45">
                 {["أح","إث","ثل","أر","خم","جم","سب"][parseDate(d).getDay()]}
               </div>
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"
                 style={{
-                  backgroundColor: score === 2 ? "#f97316" : score === 1 ? "#d4a017" : "#222",
+                  backgroundColor: score === 2 ? "#f97316" : score === 1 ? "#d4a017" : "rgba(255,255,255,0.12)",
                 }}
               >
                 {score === 2 ? "🔥" : score > 0 ? score : "·"}
@@ -96,7 +96,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
 function StatPill({ icon, label, value, color }: { icon: string; label: string; value: string; color: string }) {
   return (
     <div className="bg-white/10 rounded-xl px-3 py-2">
-      <div className="text-xs text-gray-400">{icon} {label}</div>
+      <div className="text-xs text-white/55">{icon} {label}</div>
       <div className={`text-base font-bold ${color} mt-0.5`}>{value}</div>
     </div>
   );

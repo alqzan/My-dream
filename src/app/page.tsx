@@ -2,10 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import {
-  getJournalStreak,
-  getReadingStreak,
   getDailyCompletionDates,
-  calcStreak,
   today,
   formatDate,
   hijriDate,
@@ -13,10 +10,8 @@ import {
 } from "@/lib/utils";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { InstallHint } from "@/components/layout/InstallHint";
-import { DailyPulse } from "@/components/dashboard/DailyPulse";
-import { HabitTracker } from "@/components/dashboard/HabitTracker";
+import { DailyHabits } from "@/components/dashboard/DailyHabits";
 import { SmartInsights } from "@/components/dashboard/SmartInsights";
-import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { DayView } from "@/components/day/DayView";
@@ -48,10 +43,7 @@ export default function Dashboard() {
   }, [runRecurring]);
 
   const todayStr = today();
-  const journalStreak = getJournalStreak(journalEntries);
-  const readingStreak = getReadingStreak(readingLogs);
   const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
-  const masterStreak = calcStreak(completionDates);
 
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
@@ -66,7 +58,6 @@ export default function Dashboard() {
     setCelebrate(true);
   }, [allDoneToday, todayStr]);
 
-  const currentBook = books.find((b) => b.status === "أقرأ");
   const yearPct = yearProgress();
 
   return (
@@ -86,43 +77,13 @@ export default function Dashboard() {
 
       <PendingBankBanner />
 
-      <Card className="animate-fade-up stagger-1">
-        <PrayerOrbit />
-      </Card>
-
-      <div className="animate-fade-up stagger-2">
+      <div className="animate-fade-up stagger-1">
         <HikmaCard />
       </div>
 
       <div className="animate-fade-up stagger-2">
-        <DailyPulse
-          masterStreak={masterStreak}
-          rows={[
-            {
-              href: "/journal",
-              icon: "📓",
-              label: "مذكرة اليوم",
-              sub: hasTodayJournal ? "كتبتها — عوّد على المزيد" : "اكتب الآن",
-              done: hasTodayJournal,
-              streak: journalStreak,
-              color: "#8a6fb0",
-            },
-            {
-              href: "/reading",
-              icon: "📚",
-              label: "اقرأ شيئاً",
-              sub: currentBook ? currentBook.title : "أضف كتاباً",
-              done: hasTodayReading,
-              streak: readingStreak,
-              color: "#c1663f",
-            },
-          ]}
-        />
+        <DailyHabits />
       </div>
-
-      <Card className="animate-fade-up stagger-3">
-        <HabitTracker />
-      </Card>
 
       <div className="animate-fade-up stagger-3">
         <SmartInsights />
