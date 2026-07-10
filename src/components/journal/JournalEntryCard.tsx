@@ -1,7 +1,7 @@
 "use client";
 import type { JournalEntry } from "@/lib/types";
 import { MOOD_LABELS } from "@/lib/types";
-import { formatDate, entryPhotos } from "@/lib/utils";
+import { formatDate, entryPhotos, entryAudios } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/markdown";
 import { Trash2, Clock, Images, Mic, Film } from "lucide-react";
 
@@ -49,7 +49,12 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
                 {entry.time}
               </span>
             )}
-            {entry.audio && <Mic size={12} className="text-journal" aria-label="ملاحظة صوتية" />}
+            {entryAudios(entry).length > 0 && (
+              <span className="flex items-center gap-0.5 text-journal" aria-label="ملاحظة صوتية">
+                <Mic size={12} />
+                {entryAudios(entry).length > 1 && <span className="text-[10px]">{entryAudios(entry).length}</span>}
+              </span>
+            )}
             {entry.videoRefs && entry.videoRefs.length > 0 && (
               <span className="flex items-center gap-0.5 text-reading" aria-label="مقطع فيديو">
                 <Film size={12} />

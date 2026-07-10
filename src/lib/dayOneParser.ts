@@ -333,17 +333,20 @@ export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
       je.photo = imgs[0];
     }
 
-    // First voice memo → base64 data URL (synced as a media doc).
-    const firstAudio = entry.audios?.[0];
-    if (firstAudio) {
-      const media = findMedia(audioIndex, firstAudio);
-      if (media) {
-        const mime =
-          AUDIO_MIME[(firstAudio.format || media.ext || "").toLowerCase()] ||
-          AUDIO_MIME[media.ext] ||
-          "audio/mp4";
-        je.audio = bytesToDataUrl(media.bytes, mime);
-      }
+    // All voice memos → base64 data URLs (each synced as a media doc).
+    const auds: string[] = [];
+    for (const a of entry.audios ?? []) {
+      const media = findMedia(audioIndex, a);
+      if (!media) continue;
+      const mime =
+        AUDIO_MIME[(a.format || media.ext || "").toLowerCase()] ||
+        AUDIO_MIME[media.ext] ||
+        "audio/mp4";
+      auds.push(bytesToDataUrl(media.bytes, mime));
+    }
+    if (auds.length) {
+      je.audios = auds;
+      je.audio = auds[0];
     }
 
     if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) entries.push(je);

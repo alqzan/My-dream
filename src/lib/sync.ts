@@ -3,7 +3,7 @@ import {
 } from "firebase/firestore";
 import { db, SYNC_SPACE_ID } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
-import { entryPhotos } from "./utils";
+import { entryPhotos, entryAudios } from "./utils";
 
 const COLLECTION = "userData";
 
@@ -92,9 +92,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio"> {
+interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio" | "audios"> {
   photoRefs?: string[];
-  audioRef?: string;
+  audioRefs?: string[];
 }
 
 // Replace each entry's photo/audio bytes with content-hash refs, and collect
@@ -111,7 +111,8 @@ async function prepareForCloud(
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e): Promise<CloudEntry> => {
       const imgs = entryPhotos(e);
-      const { photo: _p, photos: _ps, audio: _a, ...rest } = e;
+      const auds = entryAudios(e);
+      const { photo: _p, photos: _ps, audio: _a, audios: _as, ...rest } = e;
       const out: CloudEntry = rest;
       if (imgs.length) {
         const refs: string[] = [];
@@ -122,10 +123,14 @@ async function prepareForCloud(
         }
         out.photoRefs = refs;
       }
-      if (e.audio) {
-        const h = await photoHash(e.audio);
-        audios.set(h, e.audio);
-        out.audioRef = h;
+      if (auds.length) {
+        const refs: string[] = [];
+        for (const a of auds) {
+          const h = await photoHash(a);
+          audios.set(h, a);
+          refs.push(h);
+        }
+        out.audioRefs = refs;
       }
       return out;
     })
@@ -196,17 +201,19 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
   knownCloudHashes = new Set(pmap.keys());
   knownCloudAudioHashes = new Set(amap.keys());
   const journalEntries = main.journalEntries.map((e) => {
-    const refs = (e as CloudEntry).photoRefs;
-    const aref = (e as CloudEntry).audioRef;
-    const { photoRefs: _r, audioRef: _ar, ...rest } = e as CloudEntry;
+    const ce = e as CloudEntry & { audioRef?: string };
+    const refs = ce.photoRefs;
+    // Back-compat: older docs stored a single audioRef; newer store audioRefs.
+    const arefs = ce.audioRefs ?? (ce.audioRef ? [ce.audioRef] : []);
+    const { photoRefs: _r, audioRefs: _ars, audioRef: _ar, ...rest } = ce;
     let out = rest as JournalEntry;
     if (refs?.length) {
       const imgs = refs.map((h) => pmap.get(h)).filter(Boolean) as string[];
       out = { ...out, photos: imgs, photo: imgs[0] };
     }
-    if (aref) {
-      const a = amap.get(aref);
-      if (a) out = { ...out, audio: a };
+    if (arefs.length) {
+      const auds = arefs.map((h) => amap.get(h)).filter(Boolean) as string[];
+      if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
     }
     return out;
   });
@@ -227,8 +234,8 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
   if (!cloud.journalEntries) return cloud;
   const localMedia = new Map(
     local.journalEntries
-      .filter((e) => e.photo || e.photos?.length || e.audio)
-      .map((e) => [e.id, { photo: e.photo, photos: e.photos, audio: e.audio }])
+      .filter((e) => e.photo || e.photos?.length || e.audio || e.audios?.length)
+      .map((e) => [e.id, { photo: e.photo, photos: e.photos, audio: e.audio, audios: e.audios }])
   );
   if (!localMedia.size) return cloud;
   return {
@@ -241,7 +248,10 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
         patch.photo = kept.photo;
         patch.photos = kept.photos;
       }
-      if (!e.audio && kept.audio) patch.audio = kept.audio;
+      if (!(e.audio || e.audios?.length) && (kept.audio || kept.audios?.length)) {
+        patch.audio = kept.audio;
+        patch.audios = kept.audios;
+      }
       return Object.keys(patch).length ? { ...e, ...patch } : e;
     }),
   };

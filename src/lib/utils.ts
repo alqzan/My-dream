@@ -293,6 +293,12 @@ export function entryPhotos(e: JournalEntry): string[] {
   return e.photo ? [e.photo] : [];
 }
 
+// كل الملاحظات الصوتية للمذكرة — الحقل الجديد audios أولاً، مع التوافق مع audio.
+export function entryAudios(e: { audio?: string; audios?: string[] }): string[] {
+  if (e.audios?.length) return e.audios;
+  return e.audio ? [e.audio] : [];
+}
+
 export function getReadingStreak(logs: ReadingLog[]): number {
   return calcStreak(logs.map((l) => l.date));
 }

@@ -2,7 +2,7 @@
 import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
 import { MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
-import { formatDate, formatAmount, getCategoryInfo, entryPhotos } from "@/lib/utils";
+import { formatDate, formatAmount, getCategoryInfo, entryPhotos, entryAudios } from "@/lib/utils";
 import { renderMarkdown } from "@/lib/markdown";
 import { Modal } from "@/components/ui/Modal";
 import { Photo } from "@/components/ui/Photo";
@@ -107,10 +107,10 @@ export function DayView({ date, onClose }: DayViewProps) {
                 className="w-full h-40 object-cover rounded-xl mb-2"
               />
             )}
-            {day.journal.audio && (
+            {entryAudios(day.journal).map((a, i) => (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <audio controls src={day.journal.audio} className="w-full h-10 mb-2" />
-            )}
+              <audio key={i} controls src={a} className="w-full h-10 mb-2" />
+            ))}
             {day.journal.videoRefs && day.journal.videoRefs.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2" title="المقاطع لا تُخزَّن في التطبيق (كبيرة الحجم) — تجدها في أرشيف Day One الأصلي">
                 {day.journal.videoRefs.map((v, i) => (
