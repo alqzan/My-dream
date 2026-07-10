@@ -5,7 +5,6 @@ import { useAppStore } from "@/lib/store";
 import {
   today, calcStreak, uid, cn, toDateStr, buzz,
   getJournalStreak, getReadingStreak, getDailyCompletionDates,
-  getPrayerStreak, getPrayerLog, countDayPrayers,
 } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Plus, Check, Settings2, X, Flame, ChevronLeft } from "lucide-react";
@@ -118,7 +117,7 @@ function TileBody({
 // prayer orbit, and habit tracker so the day lives in one nice place.
 export function DailyHabits() {
   const {
-    habits, journalEntries, readingLogs, prayerLogs, books,
+    habits, journalEntries, readingLogs, books,
     toggleHabitLog, addHabit, updateHabit, deleteHabit,
   } = useAppStore();
   const [showAdd, setShowAdd] = useState(false);
@@ -134,10 +133,6 @@ export function DailyHabits() {
   // Core rituals as tiles (dates each was "kept", today's done, streak).
   const journalDates = new Set(journalEntries.map((e) => e.date));
   const readingDates = new Set(readingLogs.map((l) => l.date));
-  const prayerFullDates = new Set(
-    prayerLogs.filter((l) => countDayPrayers(l).prayed === 5).map((l) => l.date)
-  );
-  const todayPrayed = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed;
   const currentBook = books.find((b) => b.status === "أقرأ");
 
   const core = [
@@ -150,11 +145,6 @@ export function DailyHabits() {
       href: "/reading", icon: "📚", name: currentBook ? currentBook.title : "القراءة", color: "#c1663f",
       done: readingDates.has(todayStr), weekKept: readingDates,
       statusLine: (() => { const s = getReadingStreak(readingLogs); return s > 0 ? `${s} يوم متواصل` : "اقرأ اليوم"; })(),
-    },
-    {
-      href: "/prayers", icon: "🕌", name: "الصلاة", color: "#1f7a6c",
-      done: todayPrayed === 5, weekKept: prayerFullDates,
-      statusLine: (() => { const s = getPrayerStreak(prayerLogs); return todayPrayed > 0 ? `اليوم ${todayPrayed}/5` : s > 0 ? `${s} يوم متواصل` : "صلِّ اليوم"; })(),
     },
   ];
 

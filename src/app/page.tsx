@@ -11,6 +11,7 @@ import {
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { InstallHint } from "@/components/layout/InstallHint";
 import { DailyHabits } from "@/components/dashboard/DailyHabits";
+import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { SmartInsights } from "@/components/dashboard/SmartInsights";
 import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
@@ -77,7 +78,11 @@ export default function Dashboard() {
 
       <PendingBankBanner />
 
-      <div className="animate-fade-up stagger-1">
+      <Card className="animate-fade-up stagger-1">
+        <PrayerOrbit />
+      </Card>
+
+      <div className="animate-fade-up stagger-2">
         <HikmaCard />
       </div>
 
