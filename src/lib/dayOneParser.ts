@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { Unzip, UnzipInflate } from "fflate";
 import type { JournalEntry } from "./types";
 import { uid, today } from "./utils";
 import { compressImage } from "./imageUtils";
@@ -10,8 +10,9 @@ interface DayOneRichText {
 interface DayOneMedia {
   identifier?: string;
   md5?: string;
-  type?: string; // photos: jpeg/png/heic…
+  type?: string; // photos: jpeg/png/heic… ; videos: mov/mp4…
   format?: string; // audios: m4a/aac…
+  duration?: number; // audios/videos: seconds
 }
 
 interface DayOneEntry {
@@ -25,6 +26,7 @@ interface DayOneEntry {
   starred?: boolean;
   photos?: DayOneMedia[];
   audios?: DayOneMedia[];
+  videos?: DayOneMedia[];
 }
 
 interface DayOneExport {
@@ -134,6 +136,12 @@ function baseEntry(entry: DayOneEntry): JournalEntry {
   const { date, time } = extractDateTime(entry);
   const { title, body } = cleanDayOneText(extractText(entry));
   const tags = normalizeTags(entry.tags);
+  // Videos are never stored (too big to sync) — keep only a lightweight ref
+  // (type + duration) so the entry still shows it once had a clip.
+  const videoRefs = (entry.videos ?? []).map((v) => ({
+    ...(v.type ? { type: v.type } : {}),
+    ...(typeof v.duration === "number" ? { duration: v.duration } : {}),
+  }));
   return {
     id: uid(),
     date,
@@ -141,6 +149,7 @@ function baseEntry(entry: DayOneEntry): JournalEntry {
     ...(title ? { title } : {}),
     ...(tags.length ? { tags } : {}),
     content: body,
+    ...(videoRefs.length ? { videoRefs } : {}),
     source: "dayOne",
     dayOneUUID: entry.uuid,
   };
@@ -166,7 +175,7 @@ export function parseDayOneJson(jsonString: string): DayOneParseResult {
 
   const entries = data.entries
     .map((entry) => baseEntry(entry))
-    .filter((e) => e.content.length > 0 || e.title);
+    .filter((e) => e.content.length > 0 || e.title || (e.videoRefs?.length ?? 0) > 0);
 
   return {
     entries,
@@ -227,10 +236,58 @@ function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
   return `data:${mime};base64,${btoa(binary)}`;
 }
 
-export async function parseDayOneZip(buffer: ArrayBuffer): Promise<DayOneParseResult> {
+// Video files are huge and never stored (only a ref is kept), so we skip their
+// bytes entirely while unzipping — that's most of a large export's size.
+const VIDEO_EXT = new Set(["mov", "mp4", "m4v", "avi", "mkv", "webm", "hevc", "3gp", "wmv"]);
+function isVideoPath(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (lower.startsWith("videos/") || lower.includes("/videos/")) return true;
+  const dot = lower.lastIndexOf(".");
+  return dot >= 0 && VIDEO_EXT.has(lower.slice(dot + 1));
+}
+
+// Stream the ZIP instead of loading it whole: a Day One export can be several
+// GB (well past the ~2GB single-ArrayBuffer limit that made big files fail).
+// We read the file in chunks and keep only the JSON + photos + audios — video
+// bytes are dropped as they stream by, so peak memory stays modest.
+async function streamZipEntries(file: Blob): Promise<Record<string, Uint8Array>> {
+  const files: Record<string, Uint8Array> = {};
+  const unzip = new Unzip();
+  unzip.register(UnzipInflate);
+  unzip.onfile = (f) => {
+    if (f.name.startsWith("__MACOSX") || isVideoPath(f.name)) return; // skip (never .start())
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    f.ondata = (err, chunk, final) => {
+      if (err) return;
+      if (chunk && chunk.length) {
+        chunks.push(chunk);
+        size += chunk.length;
+      }
+      if (final) {
+        const out = new Uint8Array(size);
+        let o = 0;
+        for (const c of chunks) { out.set(c, o); o += c.length; }
+        files[f.name] = out;
+        chunks.length = 0;
+      }
+    };
+    f.start();
+  };
+  const reader = file.stream().getReader();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    unzip.push(value, false);
+  }
+  unzip.push(new Uint8Array(0), true);
+  return files;
+}
+
+export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(new Uint8Array(buffer));
+    files = await streamZipEntries(file);
   } catch {
     throw new Error("تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
   }
@@ -289,7 +346,7 @@ export async function parseDayOneZip(buffer: ArrayBuffer): Promise<DayOneParseRe
       }
     }
 
-    if (je.content.length > 0 || je.title || je.photos?.length || je.audio) entries.push(je);
+    if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) entries.push(je);
   }
 
   return {

@@ -106,6 +106,9 @@ export interface JournalEntry {
   photo?: string; // base64 WebP compressed — legacy single photo
   photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
   audio?: string; // ملاحظة صوتية (base64 data URL) — تُزامَن كمستند وسائط مستقل
+  // إشارات مقاطع فيديو مستوردة من Day One — لا يُخزَّن الملف نفسه (كبير ولا
+  // يتزامن)، فقط تذكير بأن التدوينة فيها مقطع (النوع + المدة إن وُجدت).
+  videoRefs?: { type?: string; duration?: number }[];
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";

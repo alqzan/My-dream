@@ -40,7 +40,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
     try {
       for (const file of chosen) {
         const result = isZip(file)
-          ? await parseDayOneZip(await file.arrayBuffer())
+          ? await parseDayOneZip(file)
           : parseDayOneJson(await file.text());
         const added = importDayOneEntries(result.entries);
         // Count media only among entries that were actually added (not dupes).

@@ -3,7 +3,7 @@ import type { JournalEntry } from "@/lib/types";
 import { MOOD_LABELS } from "@/lib/types";
 import { formatDate, entryPhotos } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/markdown";
-import { Trash2, Clock, Images, Mic } from "lucide-react";
+import { Trash2, Clock, Images, Mic, Film } from "lucide-react";
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
@@ -50,6 +50,12 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
               </span>
             )}
             {entry.audio && <Mic size={12} className="text-journal" aria-label="ملاحظة صوتية" />}
+            {entry.videoRefs && entry.videoRefs.length > 0 && (
+              <span className="flex items-center gap-0.5 text-reading" aria-label="مقطع فيديو">
+                <Film size={12} />
+                {entry.videoRefs.length > 1 && <span className="text-[10px]">{entry.videoRefs.length}</span>}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             {entry.source === "dayOne" && (

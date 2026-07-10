@@ -111,6 +111,17 @@ export function DayView({ date, onClose }: DayViewProps) {
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <audio controls src={day.journal.audio} className="w-full h-10 mb-2" />
             )}
+            {day.journal.videoRefs && day.journal.videoRefs.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2" title="المقاطع لا تُخزَّن في التطبيق (كبيرة الحجم) — تجدها في أرشيف Day One الأصلي">
+                {day.journal.videoRefs.map((v, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 text-[11px] text-reading bg-reading-light rounded-full px-2 py-1">
+                    🎬 مقطع فيديو
+                    {typeof v.duration === "number" && v.duration > 0 &&
+                      ` · ${Math.floor(v.duration / 60)}:${String(Math.round(v.duration % 60)).padStart(2, "0")}`}
+                  </span>
+                ))}
+              </div>
+            )}
             {day.journal.title && (
               <h3 className="text-base font-black text-gray-900 mb-1">{day.journal.title}</h3>
             )}
