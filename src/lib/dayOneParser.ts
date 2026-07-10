@@ -1,7 +1,7 @@
 import { Unzip, UnzipInflate } from "fflate";
 import type { JournalEntry } from "./types";
 import { uid, today } from "./utils";
-import { compressImage } from "./imageUtils";
+import { compressImageSmart } from "./imageUtils";
 
 interface DayOneRichText {
   contents?: Array<{ text?: string; attributes?: Record<string, unknown> }>;
@@ -329,7 +329,7 @@ export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
       const mime =
         IMG_MIME[(p.type || media.ext || "").toLowerCase()] || IMG_MIME[media.ext] || "image/jpeg";
       try {
-        imgs.push(await compressImage(new Blob([media.bytes as BlobPart], { type: mime }), 140));
+        imgs.push(await compressImageSmart(new Blob([media.bytes as BlobPart], { type: mime }), 140));
       } catch {
         /* skip an image the browser can't decode (e.g. some HEIC) */
       }

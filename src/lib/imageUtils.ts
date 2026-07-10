@@ -44,6 +44,34 @@ export async function compressImage(file: Blob, maxKB = 200): Promise<string> {
   });
 }
 
+// Lazy-loaded HEIC→JPEG decoder. iPhone photos are usually HEIC, which Chrome
+// (and many browsers) can't draw to a canvas — so those photos silently got
+// dropped on import. We convert HEIC to JPEG first, loading the heavy decoder
+// only when a HEIC actually appears (dynamic import → separate chunk).
+let heicLoader: Promise<(opts: { blob: Blob; toType?: string; quality?: number }) => Promise<Blob | Blob[]>> | null = null;
+function loadHeic() {
+  if (!heicLoader) heicLoader = import("heic2any").then((m) => (m.default ?? m) as never);
+  return heicLoader;
+}
+
+// Compress any image, transparently decoding HEIC/HEIF first so it works in
+// every browser. Falls back to the raw blob if conversion fails (Safari can
+// often decode HEIC natively).
+export async function compressImageSmart(blob: Blob, maxKB = 200): Promise<string> {
+  const type = (blob.type || "").toLowerCase();
+  let input = blob;
+  if (type.includes("heic") || type.includes("heif")) {
+    try {
+      const heic2any = await loadHeic();
+      const out = await heic2any({ blob, toType: "image/jpeg", quality: 0.9 });
+      input = Array.isArray(out) ? out[0] : out;
+    } catch {
+      input = blob; // let compressImage try the original (works on Safari)
+    }
+  }
+  return compressImage(input, maxKB);
+}
+
 export function estimateSize(dataUrl: string): string {
   const bytes = (dataUrl.length * 3) / 4;
   return bytes < 1024 * 1024

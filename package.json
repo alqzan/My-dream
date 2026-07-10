@@ -13,6 +13,7 @@
     "date-fns": "^3.6.0",
     "fflate": "^0.8.3",
     "firebase": "^12.15.0",
+    "heic2any": "^0.0.4",
     "idb-keyval": "^6.2.6",
     "lucide-react": "^0.468.0",
     "next": "15.1.0",
