@@ -1,7 +1,8 @@
 import {
-  doc, getDoc, setDoc, getDocs, collection, writeBatch, onSnapshot, deleteDoc,
+  doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
 } from "firebase/firestore";
-import { db, SYNC_SPACE_ID } from "./firebase";
+import { ref as storageRef, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
+import { db, storage, SYNC_SPACE_ID } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
 
@@ -52,26 +53,41 @@ export async function deleteInboxItem(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTION, SYNC_SPACE_ID, INBOX, id));
 }
 
-// ===================== Photo cloud sync =====================
-// Firestore caps a single document at 1MB, so we can't cram every journal
-// photo into the one userData doc. Instead each photo lives in its own doc
-// under userData/{uid}/photos/{hash} (keyed by content hash → automatic
-// dedup), the main doc carries only lightweight `photoRefs` (hashes) on
-// each entry plus a `photoManifest` listing every hash currently in the
-// cloud. This scales to thousands of photos and syncs them across devices.
+// ===================== Media cloud sync (Cloud Storage) =====================
+// Photos and voice notes live in Cloud Storage at userData/{uid}/photos/{hash}
+// and .../audios/{hash} (keyed by content hash → automatic dedup). The main
+// Firestore doc keeps only lightweight refs (hashes) per entry plus a manifest
+// of every hash in the cloud. Storage has far more room than Firestore and no
+// per-file size limit, and other devices display media straight from its
+// download URL so they don't have to keep every photo on-device.
 
 // Hashes we believe already exist in the cloud — seeded from the main doc's
-// manifest on load, so a save only uploads new media and deletes removed
-// ones instead of re-writing everything each time. Photos and voice notes
-// each get their own subcollection + manifest.
+// manifest on load, so a save only uploads new media and deletes removed ones.
 let knownCloudHashes = new Set<string>();
 let knownCloudAudioHashes = new Set<string>();
 
+// hash → Storage download URL, so each object's URL is resolved at most once.
+const urlCache = new Map<string, string>();
+
+function mediaPath(uid: string, sub: string, hash: string): string {
+  return `${COLLECTION}/${uid}/${sub}/${hash}`;
+}
+
+// A media string is either a local `data:` URL (needs uploading) or a Storage
+// download URL already in the cloud (reuse its hash, don't re-upload).
+function isStorageUrl(s: string): boolean {
+  return /^https?:\/\//.test(s) && s.includes("/o/");
+}
+function hashFromStorageUrl(url: string): string | null {
+  const m = url.match(/\/o\/([^?]+)/);
+  if (!m) return null;
+  const last = decodeURIComponent(m[1]).split("/").pop();
+  return last || null;
+}
+
 // A photo's bytes are immutable, so its content hash never changes. Memoize
-// data→hash so a save re-hashes only genuinely new images instead of every
-// photo of every entry on every (debounced, ~1.5s) save — the SHA-256 pass
-// over hundreds of base64 images was pure wasted CPU on each keystroke-driven
-// save. Bounded so a very long session can't grow it without limit.
+// data→hash so a save re-hashes only genuinely new images. Bounded so a very
+// long session can't grow it without limit.
 const hashCache = new Map<string, string>();
 const HASH_CACHE_LIMIT = 4000;
 
@@ -86,28 +102,48 @@ async function photoHash(data: string): Promise<string> {
   return hex;
 }
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
 interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio" | "audios"> {
   photoRefs?: string[];
   audioRefs?: string[];
 }
 
-// Replace each entry's photo/audio bytes with content-hash refs, and collect
-// the hash→data maps to persist as individual media docs.
+// Replace each entry's photo/audio bytes with content-hash refs. Collects the
+// new (`data:`) media to upload and the full set of referenced hashes (for the
+// manifest and to know what to keep vs. delete in Storage).
 async function prepareForCloud(
   data: AppData
 ): Promise<{
   main: AppData & { photoManifest: string[]; audioManifest: string[] };
-  photos: Map<string, string>;
-  audios: Map<string, string>;
+  newPhotos: Map<string, string>;
+  newAudios: Map<string, string>;
+  photoRefs: Set<string>;
+  audioRefs: Set<string>;
 }> {
-  const photos = new Map<string, string>();
-  const audios = new Map<string, string>();
+  const newPhotos = new Map<string, string>();
+  const newAudios = new Map<string, string>();
+  const photoRefs = new Set<string>();
+  const audioRefs = new Set<string>();
+
+  const attach = async (
+    items: string[],
+    newMap: Map<string, string>,
+    allRefs: Set<string>
+  ): Promise<string[]> => {
+    const refs: string[] = [];
+    for (const it of items) {
+      let h: string | null;
+      if (isStorageUrl(it)) {
+        h = hashFromStorageUrl(it);
+        if (h) urlCache.set(h, it); // already in the cloud
+      } else {
+        h = await photoHash(it);
+        newMap.set(h, it); // a local data: URL to upload
+      }
+      if (h) { refs.push(h); allRefs.add(h); }
+    }
+    return refs;
+  };
+
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e): Promise<CloudEntry> => {
       const imgs = entryPhotos(e);
@@ -115,22 +151,12 @@ async function prepareForCloud(
       const { photo: _p, photos: _ps, audio: _a, audios: _as, ...rest } = e;
       const out: CloudEntry = rest;
       if (imgs.length) {
-        const refs: string[] = [];
-        for (const img of imgs) {
-          const h = await photoHash(img);
-          photos.set(h, img);
-          refs.push(h);
-        }
-        out.photoRefs = refs;
+        const refs = await attach(imgs, newPhotos, photoRefs);
+        if (refs.length) out.photoRefs = refs;
       }
       if (auds.length) {
-        const refs: string[] = [];
-        for (const a of auds) {
-          const h = await photoHash(a);
-          audios.set(h, a);
-          refs.push(h);
-        }
-        out.audioRefs = refs;
+        const refs = await attach(auds, newAudios, audioRefs);
+        if (refs.length) out.audioRefs = refs;
       }
       return out;
     })
@@ -139,11 +165,13 @@ async function prepareForCloud(
     main: {
       ...data,
       journalEntries: journalEntries as unknown as JournalEntry[],
-      photoManifest: [...photos.keys()],
-      audioManifest: [...audios.keys()],
+      photoManifest: [...photoRefs],
+      audioManifest: [...audioRefs],
     },
-    photos,
-    audios,
+    newPhotos,
+    newAudios,
+    photoRefs,
+    audioRefs,
   };
 }
 
@@ -186,37 +214,46 @@ export function subscribeUserMain(
   );
 }
 
-// Fetch every media doc (photos + voice notes) and re-attach the bytes onto
-// the entries' refs.
+// Resolve each entry's refs to a displayable source: a Storage download URL
+// (cached), falling back to the pre-migration Firestore media doc (base64) so
+// photos saved before the Storage move still appear until they're re-uploaded.
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
-  const [photoSnap, audioSnap] = await Promise.all([
-    getDocs(collection(db, COLLECTION, uid, "photos")),
-    getDocs(collection(db, COLLECTION, uid, "audios")),
-  ]);
-  const pmap = new Map<string, string>();
-  photoSnap.forEach((d) => pmap.set(d.id, (d.data() as { data: string }).data));
-  const amap = new Map<string, string>();
-  audioSnap.forEach((d) => amap.set(d.id, (d.data() as { data: string }).data));
-  knownCloudHashes = new Set(pmap.keys());
-  knownCloudAudioHashes = new Set(amap.keys());
-  const journalEntries = main.journalEntries.map((e) => {
-    const ce = e as CloudEntry & { audioRef?: string };
-    const refs = ce.photoRefs;
-    // Back-compat: older docs stored a single audioRef; newer store audioRefs.
-    const arefs = ce.audioRefs ?? (ce.audioRef ? [ce.audioRef] : []);
-    const { photoRefs: _r, audioRefs: _ars, audioRef: _ar, ...rest } = ce;
-    let out = rest as JournalEntry;
-    if (refs?.length) {
-      const imgs = refs.map((h) => pmap.get(h)).filter(Boolean) as string[];
-      out = { ...out, photos: imgs, photo: imgs[0] };
+  const resolve = async (h: string, sub: string): Promise<string | null> => {
+    const cached = urlCache.get(h);
+    if (cached) return cached;
+    if (storage) {
+      try {
+        const url = await getDownloadURL(storageRef(storage, mediaPath(uid, sub, h)));
+        urlCache.set(h, url);
+        return url;
+      } catch { /* not in Storage yet — try the legacy Firestore doc */ }
     }
-    if (arefs.length) {
-      const auds = arefs.map((h) => amap.get(h)).filter(Boolean) as string[];
-      if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
-    }
-    return out;
-  });
+    try {
+      const snap = await getDoc(doc(db!, COLLECTION, uid, sub, h));
+      if (snap.exists()) return (snap.data() as { data: string }).data;
+    } catch { /* ignore */ }
+    return null;
+  };
+  const journalEntries = await Promise.all(
+    main.journalEntries.map(async (e) => {
+      const ce = e as CloudEntry & { audioRef?: string };
+      const refs = ce.photoRefs;
+      // Back-compat: older docs stored a single audioRef; newer store audioRefs.
+      const arefs = ce.audioRefs ?? (ce.audioRef ? [ce.audioRef] : []);
+      const { photoRefs: _r, audioRefs: _ars, audioRef: _ar, ...rest } = ce;
+      let out = rest as JournalEntry;
+      if (refs?.length) {
+        const imgs = (await Promise.all(refs.map((h) => resolve(h, "photos")))).filter(Boolean) as string[];
+        if (imgs.length) out = { ...out, photos: imgs, photo: imgs[0] };
+      }
+      if (arefs.length) {
+        const auds = (await Promise.all(arefs.map((h) => resolve(h, "audios")))).filter(Boolean) as string[];
+        if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
+      }
+      return out;
+    })
+  );
   return { ...main, journalEntries };
 }
 
@@ -320,59 +357,49 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   };
 }
 
-// Upload only new hashes and delete only removed ones for one media
-// subcollection. Non-fatal: a blob that fails or is too big for a single
-// Firestore doc is skipped, so it can never break syncing of the core data.
-// Returns the new set of known hashes (unchanged on failure, so it retries).
-async function syncMediaDocs(
+// Upload new media to Storage and delete any no longer referenced. Non-fatal:
+// a file that fails to upload just isn't added to the returned set, so the
+// manifest stays honest and it's retried on the next save. No per-file size
+// limit (Storage), so long voice notes now sync too.
+async function syncMediaToStorage(
   uid: string,
   sub: string,
-  media: Map<string, string>,
+  toUpload: Map<string, string>,
+  allRefs: Set<string>,
   known: Set<string>
 ): Promise<Set<string>> {
-  if (!db) return known;
-  const desired = new Set(media.keys());
-  const toUpload = [...desired].filter((h) => !known.has(h));
-  const toDelete = [...known].filter((h) => !desired.has(h));
+  if (!storage) return known;
+  const uploaded = new Set(known);
   try {
-    for (const part of chunk(toUpload, 400)) {
-      const batch = writeBatch(db);
-      let n = 0;
-      for (const h of part) {
-        const val = media.get(h);
-        if (!val || val.length > 1_000_000) continue; // Firestore 1MB doc cap
-        batch.set(doc(db, COLLECTION, uid, sub, h), { data: val });
-        n++;
+    for (const [h, dataUrl] of toUpload) {
+      await uploadString(storageRef(storage, mediaPath(uid, sub, h)), dataUrl, "data_url");
+      uploaded.add(h);
+      urlCache.delete(h); // a fresh download URL will be fetched on next resolve
+    }
+    // Delete media that's in the cloud but no longer referenced by any entry.
+    for (const h of [...known]) {
+      if (!allRefs.has(h)) {
+        try { await deleteObject(storageRef(storage, mediaPath(uid, sub, h))); } catch { /* already gone */ }
       }
-      if (n) await batch.commit();
     }
-    for (const part of chunk(toDelete, 400)) {
-      const batch = writeBatch(db);
-      for (const h of part) batch.delete(doc(db, COLLECTION, uid, sub, h));
-      await batch.commit();
-    }
-    return desired;
+    return new Set(allRefs); // everything referenced is now present
   } catch {
-    return known;
+    return uploaded; // honest partial progress → failed ones retried next save
   }
 }
 
 export async function saveUserData(uid: string, data: AppData): Promise<void> {
   if (!db) return;
-  const { main, photos, audios } = await prepareForCloud(data);
+  const { main, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
 
-  // 1) Upload media FIRST (photos + voice notes), each diffed against what's
-  //    already in the cloud. For text-only edits there's nothing new here, so
-  //    this is a no-op and stays fast.
-  knownCloudHashes = await syncMediaDocs(uid, "photos", photos, knownCloudHashes);
-  knownCloudAudioHashes = await syncMediaDocs(uid, "audios", audios, knownCloudAudioHashes);
+  // 1) Upload new media to Storage first. Text-only edits have none, so this is
+  //    a no-op and stays fast.
+  knownCloudHashes = await syncMediaToStorage(uid, "photos", newPhotos, photoRefs, knownCloudHashes);
+  knownCloudAudioHashes = await syncMediaToStorage(uid, "audios", newAudios, audioRefs, knownCloudAudioHashes);
 
-  // 2) Write the main doc with a manifest listing ONLY the media that actually
-  //    reached the cloud. Writing the manifest optimistically (before upload)
-  //    left failed uploads permanently marked as "present": neither this device
-  //    re-uploaded them nor did other devices find them — so photos never
-  //    synced. An honest manifest means any that didn't make it are retried on
-  //    the next save.
+  // 2) Write the main doc with a manifest of only what actually reached the
+  //    cloud, so any media that didn't upload is retried on the next save
+  //    instead of being marked present and stranded.
   const honestMain = {
     ...main,
     photoManifest: [...knownCloudHashes],
@@ -381,10 +408,23 @@ export async function saveUserData(uid: string, data: AppData): Promise<void> {
   await setDoc(doc(db, COLLECTION, uid), honestMain, { merge: false });
 }
 
+// Seed the hash→URL cache from media already stored locally as Storage URLs, so
+// a hydrate reuses them instead of re-fetching every download URL from scratch.
+export function primeUrlCache(entries: JournalEntry[]): void {
+  for (const e of entries) {
+    for (const u of [...(e.photos ?? []), e.photo, ...(e.audios ?? []), e.audio]) {
+      if (u && isStorageUrl(u)) {
+        const h = hashFromStorageUrl(u);
+        if (h) urlCache.set(h, u);
+      }
+    }
+  }
+}
+
 // Force a full media re-upload: forget what we think is already in the cloud so
-// the next save re-uploads every photo/voice note (idempotent — existing docs
+// the next save re-uploads every photo/voice note (idempotent — existing files
 // are just overwritten). Recovers media stranded by an older optimistic
-// manifest (photos that showed on one device but never reached the others).
+// manifest, and migrates local photos up to Cloud Storage.
 export async function reuploadAllMedia(uid: string, data: AppData): Promise<void> {
   knownCloudHashes = new Set();
   knownCloudAudioHashes = new Set();

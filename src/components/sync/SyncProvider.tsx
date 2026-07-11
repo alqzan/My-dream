@@ -14,6 +14,7 @@ import {
   mergeLocalPhotos,
   mergeAppData,
   subscribeUserMain,
+  primeUrlCache,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
 import { showToast } from "@/components/ui/UndoToast";
@@ -110,6 +111,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let unsubSnap: () => void = () => {};
 
     (async () => {
+      // Reuse any Storage URLs we already hold locally so hydrate doesn't
+      // re-fetch every media download URL from scratch.
+      primeUrlCache(snapshot().journalEntries);
+
       // 1) Initial merge. Adopt the cloud when this device is empty (so a
       //    fresh device pulls the owner's existing data) OR when the cloud is
       //    genuinely newer. Only push local up when it actually has data, so a

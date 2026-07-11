@@ -1,5 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { initializeFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // Firebase web config for the "my-dream-a" project. These NEXT_PUBLIC_
 // values are safe to ship in client code by design — access is gated by
@@ -30,6 +31,7 @@ export const isFirebaseEnabled = Boolean(
 
 let app: FirebaseApp | null = null;
 let dbInstance: Firestore | null = null;
+let storageInstance: FirebaseStorage | null = null;
 
 if (isFirebaseEnabled) {
   app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
@@ -38,7 +40,11 @@ if (isFirebaseEnabled) {
   // Firestore look permanently "offline" even though plain HTTPS works — this
   // routes everything (reads, writes, live listeners) over HTTP long-polling.
   dbInstance = initializeFirestore(app, { experimentalForceLongPolling: true });
+  // Media (photos, voice notes) live in Cloud Storage — far more room than
+  // Firestore and no per-file size limit — while the main doc keeps only refs.
+  storageInstance = getStorage(app);
 }
 
 export const db = dbInstance;
+export const storage = storageInstance;
 export { app };
