@@ -361,12 +361,22 @@ export async function saveUserData(uid: string, data: AppData): Promise<void> {
   if (!db) return;
   const { main, photos, audios } = await prepareForCloud(data);
 
-  // 1) main doc (text/numbers + refs + manifests) — always under 1MB.
-  await setDoc(doc(db, COLLECTION, uid), main, { merge: false });
-
-  // 2) media docs — photos and voice notes, each diffed against what's already
-  //    in the cloud. The core data is already saved above, so a media failure
-  //    never flips sync to "offline".
+  // 1) Upload media FIRST (photos + voice notes), each diffed against what's
+  //    already in the cloud. For text-only edits there's nothing new here, so
+  //    this is a no-op and stays fast.
   knownCloudHashes = await syncMediaDocs(uid, "photos", photos, knownCloudHashes);
   knownCloudAudioHashes = await syncMediaDocs(uid, "audios", audios, knownCloudAudioHashes);
+
+  // 2) Write the main doc with a manifest listing ONLY the media that actually
+  //    reached the cloud. Writing the manifest optimistically (before upload)
+  //    left failed uploads permanently marked as "present": neither this device
+  //    re-uploaded them nor did other devices find them — so photos never
+  //    synced. An honest manifest means any that didn't make it are retried on
+  //    the next save.
+  const honestMain = {
+    ...main,
+    photoManifest: [...knownCloudHashes],
+    audioManifest: [...knownCloudAudioHashes],
+  };
+  await setDoc(doc(db, COLLECTION, uid), honestMain, { merge: false });
 }
