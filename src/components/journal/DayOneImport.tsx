@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseDayOneJson, parseDayOneZip } from "@/lib/dayOneParser";
 import type { JournalEntry } from "@/lib/types";
-import { Upload, CheckCircle, AlertCircle, Loader2, Trash2 } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { isFirebaseEnabled, SYNC_SPACE_ID } from "@/lib/firebase";
+import { reuploadAllMedia } from "@/lib/sync";
 
 interface ImportStats {
   files: number;
@@ -16,15 +18,27 @@ interface ImportStats {
 }
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
-  const { importDayOneEntries, deleteDayOneImports, journalEntries } = useAppStore();
+  const { importDayOneEntries, deleteDayOneImports, journalEntries, snapshot } = useAppStore();
   const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [stats, setStats] = useState<ImportStats | null>(null);
   const [dragging, setDragging] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletedCount, setDeletedCount] = useState<number | null>(null);
+  const [reupload, setReupload] = useState<"idle" | "working" | "done" | "error">("idle");
 
   const dayOneCount = journalEntries.filter((e) => e.source === "dayOne").length;
+  const photoCount = journalEntries.filter((e) => e.photos?.length || e.photo).length;
+
+  async function handleReupload() {
+    setReupload("working");
+    try {
+      await reuploadAllMedia(SYNC_SPACE_ID, snapshot());
+      setReupload("done");
+    } catch {
+      setReupload("error");
+    }
+  }
 
   function handleDeleteImports() {
     const n = deleteDayOneImports();
@@ -138,6 +152,34 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-3 bg-red-50 text-red-700 rounded-xl p-4">
           <AlertCircle size={20} />
           <p className="text-sm">{message}</p>
+        </div>
+      )}
+
+      {isFirebaseEnabled && photoCount > 0 && status !== "working" && (
+        <div className="border-t border-gray-100 pt-3">
+          {reupload === "done" ? (
+            <div className="flex items-center gap-2 bg-green-50 text-green-700 rounded-xl p-3 text-sm">
+              <CheckCircle size={18} className="shrink-0" />
+              بدأ رفع الصور للسحابة. افتح التطبيق على أجهزتك الأخرى بعد قليل لتنزل الصور.
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={handleReupload}
+                disabled={reupload === "working"}
+                className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 press disabled:opacity-60"
+              >
+                {reupload === "working" ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />}
+                {reupload === "working" ? "جارٍ إعادة رفع الصور…" : `أعد رفع كل الصور للسحابة (${photoCount})`}
+              </button>
+              <p className="text-[11px] text-gray-400 mt-1">
+                لو صورك ما وصلت لأجهزتك الأخرى — يجبر رفعها من جديد.
+              </p>
+              {reupload === "error" && (
+                <p className="text-xs text-red-500 mt-1">تعذّرت إعادة الرفع — تأكد من الاتصال وحاول مجدداً.</p>
+              )}
+            </>
+          )}
         </div>
       )}
 

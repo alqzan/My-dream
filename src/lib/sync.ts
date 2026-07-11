@@ -380,3 +380,13 @@ export async function saveUserData(uid: string, data: AppData): Promise<void> {
   };
   await setDoc(doc(db, COLLECTION, uid), honestMain, { merge: false });
 }
+
+// Force a full media re-upload: forget what we think is already in the cloud so
+// the next save re-uploads every photo/voice note (idempotent — existing docs
+// are just overwritten). Recovers media stranded by an older optimistic
+// manifest (photos that showed on one device but never reached the others).
+export async function reuploadAllMedia(uid: string, data: AppData): Promise<void> {
+  knownCloudHashes = new Set();
+  knownCloudAudioHashes = new Set();
+  await saveUserData(uid, data);
+}

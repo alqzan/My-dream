@@ -195,38 +195,6 @@ const AUDIO_MIME: Record<string, string> = {
   wav: "audio/wav", ogg: "audio/ogg", webm: "audio/webm",
 };
 
-// Index every file under a folder by both its basename and its extension-less
-// name, so a media item can be matched by md5 or by identifier.
-function indexFolder(
-  files: Record<string, Uint8Array>,
-  folder: string
-): Map<string, { bytes: Uint8Array; ext: string }> {
-  const map = new Map<string, { bytes: Uint8Array; ext: string }>();
-  for (const path of Object.keys(files)) {
-    const idx = path.indexOf(`${folder}/`);
-    if (idx === -1) continue;
-    const base = path.slice(idx + folder.length + 1);
-    if (!base || base.includes("/")) continue;
-    const dot = base.lastIndexOf(".");
-    const name = dot >= 0 ? base.slice(0, dot) : base;
-    const ext = dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
-    const rec = { bytes: files[path], ext };
-    map.set(base, rec);
-    map.set(name, rec);
-  }
-  return map;
-}
-
-function findMedia(
-  index: Map<string, { bytes: Uint8Array; ext: string }>,
-  item: DayOneMedia
-): { bytes: Uint8Array; ext: string } | undefined {
-  for (const key of [item.md5, item.identifier]) {
-    if (key && index.has(key)) return index.get(key);
-  }
-  return undefined;
-}
-
 function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
   let binary = "";
   const step = 0x8000;
@@ -246,16 +214,22 @@ function isVideoPath(name: string): boolean {
   return dot >= 0 && VIDEO_EXT.has(lower.slice(dot + 1));
 }
 
-// Stream the ZIP instead of loading it whole: a Day One export can be several
-// GB (well past the ~2GB single-ArrayBuffer limit that made big files fail).
-// We read the file in chunks and keep only the JSON + photos + audios — video
-// bytes are dropped as they stream by, so peak memory stays modest.
-async function streamZipEntries(file: Blob): Promise<Record<string, Uint8Array>> {
-  const files: Record<string, Uint8Array> = {};
+// One streaming pass over the ZIP. `want(name)` picks which files to read;
+// `onFile` gets each wanted file's decompressed bytes and may be async. We drain
+// (process + release) completed files after every chunk, so peak memory stays
+// bounded by a single media file — not the whole archive. Video bytes and
+// unwanted files are never decompressed. A Day One export can be tens of GB,
+// well past the ~2GB single-ArrayBuffer limit that made big files fail.
+async function streamZip(
+  file: Blob,
+  want: (name: string) => boolean,
+  onFile: (name: string, bytes: Uint8Array) => void | Promise<void>
+): Promise<void> {
   const unzip = new Unzip();
   unzip.register(UnzipInflate);
+  const queue: { name: string; bytes: Uint8Array }[] = [];
   unzip.onfile = (f) => {
-    if (f.name.startsWith("__MACOSX") || isVideoPath(f.name)) return; // skip (never .start())
+    if (f.name.startsWith("__MACOSX") || isVideoPath(f.name) || !want(f.name)) return;
     const chunks: Uint8Array[] = [];
     let size = 0;
     f.ondata = (err, chunk, final) => {
@@ -268,99 +242,123 @@ async function streamZipEntries(file: Blob): Promise<Record<string, Uint8Array>>
         const out = new Uint8Array(size);
         let o = 0;
         for (const c of chunks) { out.set(c, o); o += c.length; }
-        files[f.name] = out;
         chunks.length = 0;
+        queue.push({ name: f.name, bytes: out });
       }
     };
     f.start();
+  };
+  const drain = async () => {
+    while (queue.length) {
+      const it = queue.shift()!;
+      await onFile(it.name, it.bytes); // process then let the bytes be GC'd
+    }
   };
   const reader = file.stream().getReader();
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
     unzip.push(value, false);
+    await drain(); // backpressure: finish current media before reading more
   }
   unzip.push(new Uint8Array(0), true);
-  return files;
+  await drain();
+}
+
+// Day One names each media file by its md5 or identifier (which the JSON
+// references) → the base name minus extension is the lookup key.
+function mediaInfo(path: string): { key: string; ext: string } {
+  const slash = path.lastIndexOf("/");
+  const base = slash >= 0 ? path.slice(slash + 1) : path;
+  const dot = base.lastIndexOf(".");
+  return {
+    key: dot >= 0 ? base.slice(0, dot) : base,
+    ext: dot >= 0 ? base.slice(dot + 1).toLowerCase() : "",
+  };
 }
 
 export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
-  let files: Record<string, Uint8Array>;
+  // Pass 1 — read ONLY the JSON(s) to learn the entries and which media to keep.
+  // Merge EVERY journal JSON: an "all journals" export splits into one JSON per
+  // journal, and reading only one dropped most entries (e.g. 130 of 800).
+  const jsonFiles: Record<string, Uint8Array> = {};
   try {
-    files = await streamZipEntries(file);
+    await streamZip(
+      file,
+      (n) => n.toLowerCase().endsWith(".json"),
+      (name, bytes) => { jsonFiles[name] = bytes; }
+    );
   } catch {
     throw new Error("تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
   }
-
-  // Merge EVERY journal JSON in the archive — an "all journals" export puts
-  // each journal in its own <Name>.json, so reading only one dropped most
-  // entries (e.g. 130 of 800). Non-entry JSONs are skipped harmlessly.
-  const jsonPaths = Object.keys(files).filter(
-    (p) => p.toLowerCase().endsWith(".json") && !p.startsWith("__MACOSX")
-  );
-  if (!jsonPaths.length) throw new Error("لم يُعثر على ملف JSON داخل الأرشيف");
+  if (!Object.keys(jsonFiles).length) throw new Error("لم يُعثر على ملف JSON داخل الأرشيف");
 
   const allEntries: DayOneEntry[] = [];
-  for (const jp of jsonPaths) {
+  for (const jp of Object.keys(jsonFiles)) {
     try {
-      const d = JSON.parse(new TextDecoder().decode(files[jp])) as DayOneExport;
+      const d = JSON.parse(new TextDecoder().decode(jsonFiles[jp])) as DayOneExport;
       if (d.entries && Array.isArray(d.entries)) allEntries.push(...d.entries);
     } catch {
       /* skip a JSON that isn't a Day One journal */
     }
   }
-  if (!allEntries.length) {
-    throw new Error("لم يتم العثور على مدخلات Day One في الأرشيف");
+  if (!allEntries.length) throw new Error("لم يتم العثور على مدخلات Day One في الأرشيف");
+
+  // Which media does any entry reference? (matched by md5 and by identifier)
+  const photoKeys = new Set<string>();
+  const audioKeys = new Set<string>();
+  for (const e of allEntries) {
+    for (const p of e.photos ?? []) { if (p.md5) photoKeys.add(p.md5); if (p.identifier) photoKeys.add(p.identifier); }
+    for (const a of e.audios ?? []) { if (a.md5) audioKeys.add(a.md5); if (a.identifier) audioKeys.add(a.identifier); }
   }
-  const data: DayOneExport = { entries: allEntries };
 
-  const photoIndex = indexFolder(files, "photos");
-  const audioIndex = indexFolder(files, "audios");
+  // Pass 2 — stream the media, compressing each photo the moment it arrives and
+  // releasing its raw bytes, so a huge library never sits in memory all at once.
+  const photoData = new Map<string, string>();
+  const audioData = new Map<string, string>();
+  if (photoKeys.size || audioKeys.size) {
+    await streamZip(
+      file,
+      (n) => { const { key } = mediaInfo(n); return photoKeys.has(key) || audioKeys.has(key); },
+      async (name, bytes) => {
+        const { key, ext } = mediaInfo(name);
+        const isAudio = /(?:^|\/)audios\//i.test(name) || (audioKeys.has(key) && !photoKeys.has(key));
+        if (isAudio) {
+          audioData.set(key, bytesToDataUrl(bytes, AUDIO_MIME[ext] || "audio/mp4"));
+        } else {
+          try {
+            const url = await compressImageSmart(new Blob([bytes as BlobPart], { type: IMG_MIME[ext] || "image/jpeg" }), 140);
+            photoData.set(key, url);
+          } catch {
+            /* skip an image the browser can't decode */
+          }
+        }
+      }
+    );
+  }
 
+  // Build entries, attaching the processed media by key.
   const entries: JournalEntry[] = [];
-  for (const entry of data.entries) {
+  for (const entry of allEntries) {
     const je = baseEntry(entry);
-
-    // Photos → compressed WebP data URLs (synced as media docs).
     const imgs: string[] = [];
     for (const p of entry.photos ?? []) {
-      const media = findMedia(photoIndex, p);
-      if (!media) continue;
-      const mime =
-        IMG_MIME[(p.type || media.ext || "").toLowerCase()] || IMG_MIME[media.ext] || "image/jpeg";
-      try {
-        imgs.push(await compressImageSmart(new Blob([media.bytes as BlobPart], { type: mime }), 140));
-      } catch {
-        /* skip an image the browser can't decode (e.g. some HEIC) */
-      }
+      const url = (p.md5 && photoData.get(p.md5)) || (p.identifier && photoData.get(p.identifier));
+      if (url) imgs.push(url);
     }
-    if (imgs.length) {
-      je.photos = imgs;
-      je.photo = imgs[0];
-    }
-
-    // All voice memos → base64 data URLs (each synced as a media doc).
+    if (imgs.length) { je.photos = imgs; je.photo = imgs[0]; }
     const auds: string[] = [];
     for (const a of entry.audios ?? []) {
-      const media = findMedia(audioIndex, a);
-      if (!media) continue;
-      const mime =
-        AUDIO_MIME[(a.format || media.ext || "").toLowerCase()] ||
-        AUDIO_MIME[media.ext] ||
-        "audio/mp4";
-      auds.push(bytesToDataUrl(media.bytes, mime));
+      const url = (a.md5 && audioData.get(a.md5)) || (a.identifier && audioData.get(a.identifier));
+      if (url) auds.push(url);
     }
-    if (auds.length) {
-      je.audios = auds;
-      je.audio = auds[0];
-    }
-
+    if (auds.length) { je.audios = auds; je.audio = auds[0]; }
     if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) entries.push(je);
   }
 
   return {
     entries,
-    totalInFile: data.entries.length,
-    skippedEmpty: data.entries.length - entries.length,
+    totalInFile: allEntries.length,
+    skippedEmpty: allEntries.length - entries.length,
   };
 }
