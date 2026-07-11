@@ -160,16 +160,41 @@ export const useAppStore = create<AppStore>()(
         })),
 
       importDayOneEntries: (entries) => {
-        let added = 0;
+        let touched = 0;
         set((s) => {
-          const existingIds = new Set(s.journalEntries.map((e) => e.dayOneUUID).filter(Boolean));
-          const newEntries = entries.filter(
-            (e) => !e.dayOneUUID || !existingIds.has(e.dayOneUUID)
+          const byUuid = new Map(
+            s.journalEntries
+              .filter((e) => e.dayOneUUID)
+              .map((e) => [e.dayOneUUID as string, e] as const)
           );
-          added = newEntries.length;
-          return { journalEntries: [...newEntries, ...s.journalEntries] };
+          const toAdd: JournalEntry[] = [];
+          const patches = new Map<string, Partial<JournalEntry>>();
+          for (const e of entries) {
+            const existing = e.dayOneUUID ? byUuid.get(e.dayOneUUID) : undefined;
+            if (!existing) {
+              toAdd.push(e);
+              continue;
+            }
+            // إعادة الاستيراد تُكمّل الوسائط الناقصة لمذكرة موجودة (مثلاً صور
+            // سقطت في استيراد سابق قبل دعم HEIC) بدل تخطّيها كمكرر.
+            const patch: Partial<JournalEntry> = {};
+            if (!(existing.photos?.length || existing.photo) && (e.photos?.length || e.photo)) {
+              patch.photos = e.photos;
+              patch.photo = e.photo;
+            }
+            if (!(existing.audios?.length || existing.audio) && (e.audios?.length || e.audio)) {
+              patch.audios = e.audios;
+              patch.audio = e.audio;
+            }
+            if (Object.keys(patch).length) patches.set(existing.id, patch);
+          }
+          touched = toAdd.length + patches.size;
+          const updated = s.journalEntries.map((en) =>
+            patches.has(en.id) ? { ...en, ...patches.get(en.id) } : en
+          );
+          return { journalEntries: [...toAdd, ...updated] };
         });
-        return added;
+        return touched;
       },
 
       deleteDayOneImports: () => {
