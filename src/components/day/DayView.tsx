@@ -1,7 +1,7 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
-import { MOOD_LABELS, PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, entryPhotos, entryAudios } from "@/lib/utils";
 import { renderMarkdown } from "@/lib/markdown";
 import { Modal } from "@/components/ui/Modal";
@@ -20,7 +20,6 @@ export function DayView({ date, onClose }: DayViewProps) {
   if (!date) return null;
 
   const day = aggregateDay(date, { transactions, journalEntries, readingLogs, books, habits, prayerLogs });
-  const mood = day.mood ? MOOD_LABELS[day.mood] : null;
 
   return (
     <Modal open={!!date} onClose={onClose} title={formatDate(date)} className="sm:max-w-xl">
@@ -28,7 +27,7 @@ export function DayView({ date, onClose }: DayViewProps) {
         {/* Completion ring */}
         <div className="flex items-center justify-center gap-2">
           {[
-            { done: !!day.journal, icon: "📓", label: "مذكرة" },
+            { done: day.journalEntries.length > 0, icon: "📓", label: "مذكرة" },
             { done: day.transactions.length > 0, icon: "💰", label: "مالي" },
             { done: day.readingLogs.length > 0, icon: "📚", label: "قراءة" },
           ].map((item) => (
@@ -43,12 +42,6 @@ export function DayView({ date, onClose }: DayViewProps) {
               {item.done && <CheckCircle2 size={12} />}
             </div>
           ))}
-          {mood && (
-            <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-journal/10 text-journal text-xs">
-              <span>{mood.icon}</span>
-              <span>{mood.label}</span>
-            </div>
-          )}
           <div
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
               day.prayersCount > 0 ? "bg-prayer/10 text-prayer" : "bg-gray-100 text-gray-400"
@@ -97,39 +90,49 @@ export function DayView({ date, onClose }: DayViewProps) {
           </div>
         )}
 
-        {/* Journal */}
-        {day.journal ? (
-          <Section icon={<BookMarked size={15} />} title="المذكرة" color="text-journal">
-            {entryPhotos(day.journal).length > 0 && (
-              <Photo
-                images={entryPhotos(day.journal)}
-                index={0}
-                className="w-full h-40 object-cover rounded-xl mb-2"
-              />
-            )}
-            {entryAudios(day.journal).map((a, i) => (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
-              <audio key={i} controls src={a} className="w-full h-10 mb-2" />
-            ))}
-            {day.journal.videoRefs && day.journal.videoRefs.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2" title="المقاطع لا تُخزَّن في التطبيق (كبيرة الحجم) — تجدها في أرشيف Day One الأصلي">
-                {day.journal.videoRefs.map((v, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 text-[11px] text-reading bg-reading-light rounded-full px-2 py-1">
-                    🎬 مقطع فيديو
-                    {typeof v.duration === "number" && v.duration > 0 &&
-                      ` · ${Math.floor(v.duration / 60)}:${String(Math.round(v.duration % 60)).padStart(2, "0")}`}
-                  </span>
-                ))}
-              </div>
-            )}
-            {day.journal.title && (
-              <h3 className="text-base font-black text-gray-900 mb-1">{day.journal.title}</h3>
-            )}
-            <div
-              className="prose-journal text-sm text-gray-700 leading-relaxed line-clamp-6"
-              dir="auto"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(day.journal.content) }}
-            />
+        {/* Journal — day may hold more than one entry */}
+        {day.journalEntries.length > 0 ? (
+          <Section
+            icon={<BookMarked size={15} />}
+            title={day.journalEntries.length > 1 ? `المذكرات (${day.journalEntries.length})` : "المذكرة"}
+            color="text-journal"
+          >
+            <div className="space-y-3 divide-y divide-gray-100">
+              {day.journalEntries.map((entry, idx) => (
+                <div key={entry.id} className={idx > 0 ? "pt-3" : ""}>
+                  {entryPhotos(entry).length > 0 && (
+                    <Photo
+                      images={entryPhotos(entry)}
+                      index={0}
+                      className="w-full h-40 object-cover rounded-xl mb-2"
+                    />
+                  )}
+                  {entryAudios(entry).map((a, i) => (
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    <audio key={i} controls src={a} className="w-full h-10 mb-2" />
+                  ))}
+                  {entry.videoRefs && entry.videoRefs.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2" title="المقاطع لا تُخزَّن في التطبيق (كبيرة الحجم) — تجدها في أرشيف Day One الأصلي">
+                      {entry.videoRefs.map((v, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 text-[11px] text-reading bg-reading-light rounded-full px-2 py-1">
+                          🎬 مقطع فيديو
+                          {typeof v.duration === "number" && v.duration > 0 &&
+                            ` · ${Math.floor(v.duration / 60)}:${String(Math.round(v.duration % 60)).padStart(2, "0")}`}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {entry.title && (
+                    <h3 className="text-base font-black text-gray-900 mb-1">{entry.title}</h3>
+                  )}
+                  <div
+                    className="prose-journal text-sm text-gray-700 leading-relaxed line-clamp-6"
+                    dir="auto"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.content) }}
+                  />
+                </div>
+              ))}
+            </div>
           </Section>
         ) : (
           <EmptyHint text="لا توجد مذكرة لهذا اليوم" />

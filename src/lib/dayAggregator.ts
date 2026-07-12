@@ -3,13 +3,13 @@ import { countDayPrayers } from "./utils";
 
 export interface DaySummary {
   date: string;
-  journal?: JournalEntry;
+  // كل مذكرات هذا اليوم — قد يكون فيها أكثر من مذكرة واحدة.
+  journalEntries: JournalEntry[];
   transactions: Transaction[];
   expense: number;
   readingLogs: { log: ReadingLog; book?: Book }[];
   pagesRead: number;
   habitsCompleted: { name: string; icon: string }[];
-  mood?: JournalEntry["mood"];
   completionScore: number; // 0-2 (مذكرة + قراءة)
   prayerLog?: PrayerLog;
   prayersCount: number; // 0-5
@@ -27,7 +27,7 @@ export function aggregateDay(
     prayerLogs: PrayerLog[];
   }
 ): DaySummary {
-  const journal = data.journalEntries.find((e) => e.date === date);
+  const journalEntries = data.journalEntries.filter((e) => e.date === date);
   const transactions = data.transactions.filter((t) => t.date === date);
   const expense = transactions.reduce((s, t) => s + t.amount, 0);
 
@@ -42,7 +42,7 @@ export function aggregateDay(
     .filter((h) => h.logs.includes(date))
     .map((h) => ({ name: h.name, icon: h.icon }));
 
-  const hasJournal = !!journal;
+  const hasJournal = journalEntries.length > 0;
   const hasReading = dayLogs.length > 0;
   // السلسلة تحسب المذكرة والقراءة فقط — المالية خارجها.
   const completionScore = [hasJournal, hasReading].filter(Boolean).length;
@@ -52,13 +52,12 @@ export function aggregateDay(
 
   return {
     date,
-    journal,
+    journalEntries,
     transactions,
     expense,
     readingLogs,
     pagesRead,
     habitsCompleted,
-    mood: journal?.mood,
     completionScore,
     prayerLog,
     prayersCount,

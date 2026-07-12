@@ -13,7 +13,6 @@ import {
   arabicMonthName,
   today,
 } from "@/lib/utils";
-import { MOOD_LABELS } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { BackupCard } from "@/components/settings/BackupCard";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
@@ -129,16 +128,6 @@ export default function StatsPage() {
   }, [readingLogs]);
   const hasReadingData = readingMonthly.some((m) => m.صفحات > 0);
 
-  // ---------- Mood distribution ----------
-  const moodCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    journalEntries.forEach((e) => {
-      if (e.mood) counts[e.mood] = (counts[e.mood] || 0) + 1;
-    });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [journalEntries]);
-  const moodTotal = moodCounts.reduce((s, [, c]) => s + c, 0);
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="animate-fade-up">
@@ -252,40 +241,6 @@ export default function StatsPage() {
               yWidth={36}
               format={(v) => `${formatAmount(v)} صفحة`}
             />
-          </div>
-        </Card>
-      )}
-
-      {/* Mood distribution */}
-      {moodTotal > 0 && (
-        <Card className="animate-fade-up stagger-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-base">😊</span>
-            <span className="text-sm font-semibold text-gray-700">مزاجك في المذكرات</span>
-          </div>
-          <div className="space-y-2.5">
-            {moodCounts.map(([mood, count]) => {
-              const info = MOOD_LABELS[mood as keyof typeof MOOD_LABELS];
-              const pct = Math.round((count / moodTotal) * 100);
-              return (
-                <div key={mood} className="flex items-center gap-3">
-                  <span className="text-lg w-7 text-center shrink-0">{info?.icon ?? "❔"}</span>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-600">{info?.label ?? mood}</span>
-                      <span className="text-gray-400">{pct}%</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-l from-brand-400 to-brand-600 transition-all duration-700"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-gray-500 w-8 text-left shrink-0">{count}</span>
-                </div>
-              );
-            })}
           </div>
         </Card>
       )}

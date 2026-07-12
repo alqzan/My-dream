@@ -101,7 +101,6 @@ export interface JournalEntry {
   time?: string; // HH:MM وقت الكتابة
   question?: string; // سؤال اليوم الذي كُتبت حوله المذكرة
   content: string;
-  mood?: "ممتاز" | "جيد" | "محايد" | "سيء" | "سيء_جداً";
   tags?: string[];
   photo?: string; // base64 WebP compressed — legacy single photo
   photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
@@ -247,11 +246,3 @@ export interface AppData {
   merchantRules: Record<string, string>;
   lastUpdated: string;
 }
-
-export const MOOD_LABELS = {
-  ممتاز: { label: "ممتاز", icon: "😄" },
-  جيد: { label: "جيد", icon: "😊" },
-  محايد: { label: "محايد", icon: "😐" },
-  سيء: { label: "سيء", icon: "😔" },
-  سيء_جداً: { label: "سيء جداً", icon: "😞" },
-};

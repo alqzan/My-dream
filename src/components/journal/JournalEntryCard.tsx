@@ -1,6 +1,5 @@
 "use client";
 import type { JournalEntry } from "@/lib/types";
-import { MOOD_LABELS } from "@/lib/types";
 import { formatDate, entryPhotos, entryAudios } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/markdown";
 import { Trash2, Clock, Images, Mic, Film } from "lucide-react";
@@ -12,7 +11,6 @@ interface JournalEntryCardProps {
 }
 
 export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardProps) {
-  const mood = entry.mood ? MOOD_LABELS[entry.mood] : null;
   const plain = stripMarkdown(entry.content);
   const preview = plain.slice(0, 180) + (plain.length > 180 ? "..." : "");
   const photos = entryPhotos(entry);
@@ -41,7 +39,6 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs text-gray-400">
-            {mood && <span className="text-base">{mood.icon}</span>}
             <span className="font-medium">{formatDate(entry.date)}</span>
             {entry.time && (
               <span className="flex items-center gap-0.5">

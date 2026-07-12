@@ -228,26 +228,6 @@ export function generateInsights(data: InsightData): Insight[] {
     });
   }
 
-  // المزاج مقابل الصرف (من المذكرات القديمة التي فيها حالة مزاجية)
-  const moodDays = journalEntries.filter((e) => e.mood);
-  if (moodDays.length >= 6) {
-    const avgFor = (moods: string[]) => {
-      const days = moodDays.filter((e) => moods.includes(e.mood!));
-      if (!days.length) return 0;
-      const total = days.reduce((s, e) =>
-        s + transactions.filter((t) => t.date === e.date).reduce((x, t) => x + t.amount, 0), 0);
-      return total / days.length;
-    };
-    const bad = avgFor(["سيء", "سيء_جداً"]);
-    const good = avgFor(["جيد", "ممتاز"]);
-    if (bad > 0 && good > 0 && bad > good * 1.3) {
-      out.push({
-        icon: "🧠", tone: "tip", priority: 50,
-        text: `لاحظنا أنك تصرف ${Math.round(((bad - good) / good) * 100)}% أكثر في أيامك الصعبة — انتبه للشراء العاطفي.`,
-      });
-    }
-  }
-
   /* ---------- المذكرات ---------- */
 
   const jStreak = getJournalStreak(journalEntries);

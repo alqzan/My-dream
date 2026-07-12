@@ -33,26 +33,11 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, books }:
   const journalDays = weekJournal.length;
   const readingDays = new Set(weekLogs.map((l) => l.date)).size;
 
-  const topMood = weekJournal
-    .filter((e) => e.mood)
-    .reduce<Record<string, number>>((acc, e) => {
-      if (e.mood) acc[e.mood] = (acc[e.mood] || 0) + 1;
-      return acc;
-    }, {});
-  const dominantMood = Object.entries(topMood).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-  const moodEmoji: Record<string, string> = {
-    ممتاز: "😄", جيد: "😊", محايد: "😐", سيء: "😔", سيء_جداً: "😞",
-  };
-
   return (
     <div className="bg-gradient-to-br from-[#4a3320] via-[#6b4629] to-[#8a5a24] rounded-2xl p-4 text-white space-y-3 card-shadow shine">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-white/55 font-medium">حصيلة الأسبوع</p>
-          <p className="text-base font-bold mt-0.5">هذا ما أنجزته 🏆</p>
-        </div>
-        {dominantMood && <span className="text-3xl">{moodEmoji[dominantMood]}</span>}
+      <div>
+        <p className="text-xs text-white/55 font-medium">حصيلة الأسبوع</p>
+        <p className="text-base font-bold mt-0.5">هذا ما أنجزته 🏆</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
