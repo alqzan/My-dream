@@ -26,34 +26,37 @@ body {
   color: #2c2418;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  /* Warm Andalusian parchment: cream base with gold + terracotta washes,
-     evoking Alhambra stucco and Córdoba's warm stone. */
+  /* Warm Andalusian parchment: cream base with layered gold + terracotta +
+     violet washes and a soft top highlight (lit-from-above), evoking Alhambra
+     stucco and Córdoba's warm stone. */
   background-color: #f3ecdd;
   background-image:
-    radial-gradient(at 88% -6%, rgba(201, 133, 42, 0.28) 0px, transparent 55%),
-    radial-gradient(at 6% 4%, rgba(193, 102, 63, 0.16) 0px, transparent 46%),
-    radial-gradient(at 12% 100%, rgba(138, 111, 176, 0.12) 0px, transparent 44%),
-    radial-gradient(at 95% 96%, rgba(61, 150, 64, 0.10) 0px, transparent 44%);
+    radial-gradient(at 82% -10%, rgba(201, 133, 42, 0.30) 0px, transparent 46%),
+    radial-gradient(at 10% -4%, rgba(193, 102, 63, 0.18) 0px, transparent 40%),
+    radial-gradient(at 50% 116%, rgba(138, 111, 176, 0.16) 0px, transparent 52%),
+    radial-gradient(at 100% 100%, rgba(61, 150, 64, 0.11) 0px, transparent 40%),
+    linear-gradient(180deg, rgba(255, 251, 242, 0.6) 0%, rgba(255, 251, 242, 0) 26%);
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
 
-/* Andalusian Islamic geometric pattern: eight-pointed star (khatim) within
-   an octagon, tessellated and fixed behind the content — warm ink. */
+/* Andalusian Islamic geometric lattice: an interlaced eight-pointed star
+   (najmah — two overlapping squares with a small centre boss), finely
+   tessellated and fixed behind the content — warm ink, whisper-soft. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='%235c3d21' stroke-width='1'%3E%3Cpolygon points='17.6,0 42.4,0 60,17.6 60,42.4 42.4,60 17.6,60 0,42.4 0,17.6'/%3E%3Cpath d='M17.6,0 L60,42.4 L0,42.4 L42.4,0 L42.4,60 L0,17.6 L60,17.6 L17.6,60 Z'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 60px 60px;
-  opacity: 0.08;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cg fill='none' stroke='%236b4a25' stroke-width='.9'%3E%3Crect x='8' y='8' width='28' height='28'/%3E%3Crect x='8' y='8' width='28' height='28' transform='rotate(45 22 22)'/%3E%3Ccircle cx='22' cy='22' r='3.2'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 44px 44px;
+  opacity: 0.07;
 }
 
 .dark body::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='%23e8b15a' stroke-width='1'%3E%3Cpolygon points='17.6,0 42.4,0 60,17.6 60,42.4 42.4,60 17.6,60 0,42.4 0,17.6'/%3E%3Cpath d='M17.6,0 L60,42.4 L0,42.4 L42.4,0 L42.4,60 L0,17.6 L60,17.6 L17.6,60 Z'/%3E%3C/g%3E%3C/svg%3E");
-  opacity: 0.08;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cg fill='none' stroke='%23e8b15a' stroke-width='.9'%3E%3Crect x='8' y='8' width='28' height='28'/%3E%3Crect x='8' y='8' width='28' height='28' transform='rotate(45 22 22)'/%3E%3Ccircle cx='22' cy='22' r='3.2'/%3E%3C/g%3E%3C/svg%3E");
+  opacity: 0.09;
 }
 
 /* ===================== Dark mode ===================== */
@@ -68,9 +71,11 @@ body::before {
   color: #ece2d0;
   background-color: #161009;
   background-image:
-    radial-gradient(at 88% -6%, rgba(201, 133, 42, 0.18) 0px, transparent 55%),
-    radial-gradient(at 6% 4%, rgba(193, 102, 63, 0.12) 0px, transparent 46%),
-    radial-gradient(at 12% 100%, rgba(138, 111, 176, 0.10) 0px, transparent 44%);
+    radial-gradient(at 82% -10%, rgba(214, 150, 60, 0.20) 0px, transparent 46%),
+    radial-gradient(at 10% -4%, rgba(200, 110, 70, 0.14) 0px, transparent 40%),
+    radial-gradient(at 50% 116%, rgba(150, 120, 190, 0.14) 0px, transparent 52%),
+    radial-gradient(at 100% 100%, rgba(70, 160, 74, 0.10) 0px, transparent 40%),
+    linear-gradient(180deg, rgba(60, 45, 25, 0.30) 0%, rgba(60, 45, 25, 0) 24%);
 }
 
 .dark .bg-white { background-color: #241c12 !important; }
@@ -236,7 +241,17 @@ body::before {
   transform-origin: 50% 85%;
 }
 
-/* Sliding light reflection over gradient banners */
+/* Sliding light reflection over gradient banners.
+   The base rule is load-bearing: `.shine::after` sweeps to translateX(240%),
+   so its container MUST establish a positioning context AND clip, or the
+   sweep spills far past the card and gives the whole page a phantom
+   horizontal scroll (sideways drag/jank on mobile). Enforcing it on the
+   class itself makes every banner safe even if the markup forgets
+   `relative overflow-hidden`. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
 .shine::after {
   content: "";
   position: absolute;

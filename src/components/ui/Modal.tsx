@@ -15,6 +15,14 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // Keep the latest onClose in a ref so the focus/keydown effect below can
+  // depend on `open` ALONE. If it depended on onClose (a fresh arrow on every
+  // parent render), any re-render — e.g. the journal auto-save touching the
+  // store — would re-run the effect and yank focus back to the first field,
+  // dismissing the mobile keyboard mid-typing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
@@ -43,7 +51,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     (focusables()[0] ?? panel)?.focus();
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") { onClose(); return; }
+      if (e.key === "Escape") { onCloseRef.current(); return; }
       if (e.key !== "Tab" || !panel) return;
       const items = focusables();
       if (!items.length) { e.preventDefault(); return; }
@@ -58,7 +66,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       window.removeEventListener("keydown", onKey);
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
