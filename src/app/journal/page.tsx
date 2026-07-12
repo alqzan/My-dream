@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
 import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos, normalizeArabic } from "@/lib/utils";
@@ -45,6 +45,16 @@ export default function JournalPage() {
   // cards — and their images — all at once. A search shows all its matches.
   const PAGE = 40;
   const [visibleCount, setVisibleCount] = useState(PAGE);
+
+  // PWA shortcut: "مذكرة جديدة" launches with ?new=1 — open the composer
+  // immediately and drop the param so a later reload doesn't reopen it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") === "1") {
+      setShowForm(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const todayStr = today();
   const streak = getJournalStreak(journalEntries);

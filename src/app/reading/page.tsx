@@ -37,7 +37,8 @@ export default function ReadingPage() {
   const totalPagesRead = readingLogs.reduce((s, l) => s + l.pagesRead, 0);
   const totalMinutes = readingLogs.reduce((s, l) => s + (l.minutesRead ?? 0), 0);
   const booksFinished = books.filter((b) => b.status === "أنهيت").length;
-  const currentBook = books.find((b) => b.status === "أقرأ");
+  // كل الكتب الجارية — قد تقرأ أكثر من كتاب بالتوازي، فكل واحد يستحق بطاقة وتيرة.
+  const currentBooks = books.filter((b) => b.status === "أقرأ");
 
   const filtered =
     filter === "الكل" ? books : books.filter((b) => b.status === filter);
@@ -101,8 +102,12 @@ export default function ReadingPage() {
         <StreakCalendar markedDates={logDates} color="#e07b39" />
       </Card>
 
-      {currentBook && (
-        <ReadingPace book={currentBook} logs={readingLogs} />
+      {currentBooks.length > 0 && (
+        <div className="space-y-2">
+          {currentBooks.map((b) => (
+            <ReadingPace key={b.id} book={b} logs={readingLogs} />
+          ))}
+        </div>
       )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">

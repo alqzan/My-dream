@@ -30,6 +30,16 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow the question box with its content (capped by max-h-32 in the
+  // className below) instead of staying pinned at one line and scrolling.
+  useEffect(() => {
+    const ta = inputRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }, [input]);
 
   useEffect(() => {
     try {
@@ -207,6 +217,7 @@ export default function AssistantPage() {
 
       <div className="flex items-end gap-2 pt-2 border-t border-gray-100 dark:border-[#3a2e1e]">
         <textarea
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -217,7 +228,7 @@ export default function AssistantPage() {
           }}
           rows={1}
           placeholder="اكتب سؤالك..."
-          className="flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300 max-h-32"
+          className="flex-1 resize-none overflow-y-auto border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300 max-h-32"
         />
         <button
           onClick={send}

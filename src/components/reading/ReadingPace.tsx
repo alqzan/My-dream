@@ -13,7 +13,7 @@ export function ReadingPace({ book, logs }: ReadingPaceProps) {
   if (bookLogs.length < 2) {
     return (
       <div className="bg-reading/5 rounded-xl p-3 text-xs text-reading text-center">
-        سجّل يومين متواصلين لحساب وتيرة القراءة 📖
+        «{book.title}» — سجّل يومين متواصلين لحساب وتيرة القراءة 📖
       </div>
     );
   }
@@ -33,7 +33,7 @@ export function ReadingPace({ book, logs }: ReadingPaceProps) {
 
   return (
     <div className="bg-reading/5 rounded-xl p-3 space-y-2">
-      <p className="text-xs font-semibold text-reading">وتيرة قراءتك</p>
+      <p className="text-xs font-semibold text-reading">وتيرة قراءتك — «{book.title}»</p>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
           <div className="text-base font-bold text-gray-800">{Math.round(avgPerDay)}</div>

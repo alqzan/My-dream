@@ -28,7 +28,7 @@ import { getCategoryInfo, normalizeArabic } from "@/lib/utils";
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function FinancePage() {
-  const { transactions, budgets, recurring, categories, dailyBudget, monthlyIncome, deleteTransaction, addTransaction, runRecurring } = useAppStore();
+  const { transactions, budgets, recurring, categories, dailyBudget, monthlyIncome, deleteTransaction, addTransaction } = useAppStore();
 
   // Instant delete + 5s undo window.
   function handleDelete(id: string) {
@@ -45,10 +45,6 @@ export default function FinancePage() {
   // Bank SMS handed in via the URL (?sms=...) — e.g. from the iOS Shortcut
   // share sheet. Opens the importer pre-filled and auto-previewed.
   const [importSms, setImportSms] = useState<string | null>(null);
-
-  useEffect(() => {
-    runRecurring();
-  }, [runRecurring]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

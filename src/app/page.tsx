@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import {
   getDailyCompletionDates,
   today,
+  toDateStr,
   formatDate,
   hijriDate,
   yearProgress,
@@ -33,15 +34,10 @@ import { ChevronLeft, BarChart3, TrendingDown, Plus } from "lucide-react";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, runRecurring } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
-
-  // Auto-generate due recurring transactions on app open
-  useEffect(() => {
-    runRecurring();
-  }, [runRecurring]);
 
   const todayStr = today();
   const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
@@ -50,14 +46,36 @@ export default function Dashboard() {
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
   const allDoneToday = hasTodayJournal && hasTodayReading;
 
-  // One confetti celebration per completed day.
+  // One confetti celebration per completed day. Also sweeps out celebration
+  // keys older than 30 days — one gets written every completed day forever
+  // otherwise, and localStorage never reclaims them on its own.
   useEffect(() => {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      const cutoffKey = `madar-celebrated-${toDateStr(cutoffDate)}`;
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("madar-celebrated-") && k < cutoffKey) localStorage.removeItem(k);
+      }
+    } catch { /* storage unavailable — skip cleanup */ }
+
     if (!allDoneToday) return;
     const key = `madar-celebrated-${todayStr}`;
     if (localStorage.getItem(key)) return;
     localStorage.setItem(key, "1");
     setCelebrate(true);
   }, [allDoneToday, todayStr]);
+
+  // PWA shortcut: "مصروف سريع" launches with ?quick=expense — open the sheet
+  // immediately and drop the param so a later reload doesn't reopen it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quick") === "expense") {
+      setQuickExpense(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const yearPct = yearProgress();
 
