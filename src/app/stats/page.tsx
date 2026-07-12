@@ -18,15 +18,13 @@ import { Card } from "@/components/ui/Card";
 import { BackupCard } from "@/components/settings/BackupCard";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { YearHeatmap } from "@/components/stats/YearHeatmap";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+import dynamic from "next/dynamic";
+// Charts (recharts) load on demand so the stats shell paints without waiting
+// on ~90KB of charting code. The placeholder keeps the card height stable.
+const MonthlyBars = dynamic(
+  () => import("@/components/stats/MonthlyBars").then((m) => m.MonthlyBars),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-gray-100 rounded-xl" /> }
+);
 import { Flame, Trophy, BookOpen, Wallet, BookMarked, CalendarCheck } from "lucide-react";
 
 export default function StatsPage() {
@@ -141,14 +139,6 @@ export default function StatsPage() {
   }, [journalEntries]);
   const moodTotal = moodCounts.reduce((s, [, c]) => s + c, 0);
 
-  const tooltipStyle = {
-    borderRadius: 12,
-    border: "none",
-    fontSize: 12,
-    boxShadow: "0 8px 24px rgba(92,61,33,0.18)",
-    direction: "rtl" as const,
-  };
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="animate-fade-up">
@@ -234,19 +224,14 @@ export default function StatsPage() {
             <span className="text-sm font-semibold text-gray-700">مصاريفك — آخر ٦ أشهر</span>
           </div>
           <div className="h-52" dir="ltr">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={financeMonthly} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(92,61,33,0.08)" />
-                <XAxis dataKey="name" reversed tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={44} />
-                <Tooltip
-                  formatter={(v: number) => [`${formatAmount(v)} ر.س`, ""]}
-                  contentStyle={tooltipStyle}
-                  cursor={{ fill: "rgba(201,133,42,0.06)" }}
-                />
-                <Bar dataKey="مصاريف" fill="#d96a4a" radius={[6, 6, 0, 0]} maxBarSize={26} />
-              </BarChart>
-            </ResponsiveContainer>
+            <MonthlyBars
+              data={financeMonthly}
+              dataKey="مصاريف"
+              color="#d96a4a"
+              cursorFill="rgba(201,133,42,0.06)"
+              yWidth={44}
+              format={(v) => `${formatAmount(v)} ر.س`}
+            />
           </div>
         </Card>
       )}
@@ -259,19 +244,14 @@ export default function StatsPage() {
             <span className="text-sm font-semibold text-gray-700">صفحات القراءة — آخر ٦ أشهر</span>
           </div>
           <div className="h-44" dir="ltr">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={readingMonthly}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(92,61,33,0.08)" />
-                <XAxis dataKey="name" reversed tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
-                <Tooltip
-                  formatter={(v: number) => [`${v.toLocaleString("ar-SA-u-nu-latn")} صفحة`, ""]}
-                  contentStyle={tooltipStyle}
-                  cursor={{ fill: "rgba(193,102,63,0.06)" }}
-                />
-                <Bar dataKey="صفحات" fill="#c1663f" radius={[6, 6, 0, 0]} maxBarSize={26} />
-              </BarChart>
-            </ResponsiveContainer>
+            <MonthlyBars
+              data={readingMonthly}
+              dataKey="صفحات"
+              color="#c1663f"
+              cursorFill="rgba(193,102,63,0.06)"
+              yWidth={36}
+              format={(v) => `${formatAmount(v)} صفحة`}
+            />
           </div>
         </Card>
       )}

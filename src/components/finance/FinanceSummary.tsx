@@ -1,7 +1,13 @@
 "use client";
+import dynamic from "next/dynamic";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatAmount, getMainCategory } from "@/lib/utils";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+
+// Defer recharts — the total + legend render instantly, the donut fills in.
+const ExpensePie = dynamic(() => import("./ExpensePie").then((m) => m.ExpensePie), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse bg-gray-100 rounded-full" />,
+});
 
 interface FinanceSummaryProps {
   transactions: Transaction[];
@@ -38,28 +44,7 @@ export function FinanceSummary({ transactions, categories }: FinanceSummaryProps
         <div>
           <p className="text-xs font-medium text-gray-500 mb-3">توزيع المصاريف</p>
           <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={40}
-                  outerRadius={65}
-                  dataKey="value"
-                  strokeWidth={2}
-                  stroke="#fff"
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(v: number) => [`${formatAmount(v)} ر.س`, ""]}
-                  contentStyle={{ borderRadius: 12, border: "none", fontSize: 12 }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <ExpensePie data={pieData} />
           </div>
           <div className="space-y-1.5 mt-2">
             {pieData.slice(0, 5).map((d) => (

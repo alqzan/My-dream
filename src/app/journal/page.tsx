@@ -1,12 +1,18 @@
 "use client";
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos, normalizeArabic } from "@/lib/utils";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
 import { JournalForm } from "@/components/journal/JournalForm";
-import { DayOneImport } from "@/components/journal/DayOneImport";
+// Day One import pulls in the ZIP decoder (fflate) — load it only when the
+// import sheet is actually opened, keeping it out of the journal page bundle.
+const DayOneImport = dynamic(
+  () => import("@/components/journal/DayOneImport").then((m) => m.DayOneImport),
+  { ssr: false, loading: () => <div className="py-10 text-center text-sm text-gray-400">…جارٍ التحميل</div> }
+);
 import { FutureLetters } from "@/components/journal/FutureLetters";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { DayView } from "@/components/day/DayView";
@@ -34,6 +40,11 @@ export default function JournalPage() {
   const [search, setSearch] = useState("");
   const [viewEntry, setViewEntry] = useState<JournalEntry | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Render the newest page of entries first; "عرض المزيد" reveals more. Keeps
+  // a big archive (e.g. after a Day One import) from mounting hundreds of
+  // cards — and their images — all at once. A search shows all its matches.
+  const PAGE = 40;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
 
   const todayStr = today();
   const streak = getJournalStreak(journalEntries);
@@ -50,20 +61,30 @@ export default function JournalPage() {
   }, [journalEntries, todayStr]);
 
   const filtered = useMemo(() => {
-    const list = journalEntries.filter(
-      (e) =>
-        !search ||
-        e.content.includes(search) ||
-        e.title?.includes(search) ||
-        e.question?.includes(search)
-    );
+    const q = normalizeArabic(search.trim());
+    const list = journalEntries.filter((e) => {
+      if (!q) return true;
+      return (
+        normalizeArabic(e.content).includes(q) ||
+        normalizeArabic(e.title ?? "").includes(q) ||
+        normalizeArabic(e.question ?? "").includes(q)
+      );
+    });
     return [...list].sort((a, b) => b.date.localeCompare(a.date));
   }, [journalEntries, search]);
+
+  // Browsing is paged; an active search shows all its matches.
+  const searching = search.trim().length > 0;
+  const visible = useMemo(
+    () => (searching ? filtered : filtered.slice(0, visibleCount)),
+    [filtered, searching, visibleCount]
+  );
+  const hasMore = !searching && filtered.length > visible.length;
 
   // تجميع حسب الشهر — عرض أجمل للمذكرات القديمة والرجوع لها
   const grouped = useMemo(() => {
     const groups: { key: string; label: string; entries: JournalEntry[] }[] = [];
-    for (const entry of filtered) {
+    for (const entry of visible) {
       const key = entry.date.slice(0, 7);
       let group = groups[groups.length - 1];
       if (!group || group.key !== key) {
@@ -74,7 +95,7 @@ export default function JournalPage() {
       group.entries.push(entry);
     }
     return groups;
-  }, [filtered]);
+  }, [visible]);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
@@ -201,6 +222,14 @@ export default function JournalPage() {
             ))}
           </div>
         ))}
+        {hasMore && (
+          <button
+            onClick={() => setVisibleCount((c) => c + PAGE)}
+            className="w-full py-3 text-sm font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-2xl transition-colors press"
+          >
+            عرض المزيد ({filtered.length - visible.length})
+          </button>
+        )}
       </div>
 
       <Modal

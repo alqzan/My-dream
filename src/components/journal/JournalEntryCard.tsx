@@ -24,7 +24,7 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
     >
       {photos.length > 0 && (
         <div className="relative">
-          <img src={photos[0]} alt="صورة اليوم" className="w-full h-36 object-cover" />
+          <img src={photos[0]} alt="صورة اليوم" loading="lazy" decoding="async" className="w-full h-36 object-cover" />
           {photos.length > 1 && (
             <span className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/55 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
               <Images size={11} />
@@ -71,6 +71,7 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
             {onDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+                aria-label="حذف المذكرة"
                 className="p-1 text-gray-300 hover:text-red-400 rounded-lg press"
               >
                 <Trash2 size={14} />

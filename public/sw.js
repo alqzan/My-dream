@@ -3,7 +3,10 @@
 // with a cache fallback for offline; static assets are cache-first.
 // All user data lives in IndexedDB, so caching the shell is enough for
 // the whole app to work with no connection.
-const CACHE = "madar-v1";
+// v2: bounded cache — old hashed chunks used to accumulate forever; now the
+// runtime cache is trimmed to MAX_ENTRIES so app storage stays lean over time.
+const CACHE = "madar-v2";
+const MAX_ENTRIES = 100;
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -18,6 +21,21 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Keep the runtime cache from growing without bound. cache.keys() preserves
+// insertion order, so the oldest entries (typically stale hashed chunks from
+// past deploys) are the first evicted. A still-referenced asset that gets
+// trimmed is simply re-fetched on next need — cache-first falls back to network.
+async function putAndTrim(req, res) {
+  const cache = await caches.open(CACHE);
+  await cache.put(req, res);
+  const keys = await cache.keys();
+  if (keys.length > MAX_ENTRIES) {
+    for (const old of keys.slice(0, keys.length - MAX_ENTRIES)) {
+      await cache.delete(old);
+    }
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -28,8 +46,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          putAndTrim(req, res.clone());
           return res;
         })
         .catch(async () => {
@@ -50,8 +67,7 @@ self.addEventListener("fetch", (event) => {
         cached ||
         fetch(req).then((res) => {
           if (res.ok && (res.type === "basic" || res.type === "default")) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
+            putAndTrim(req, res.clone());
           }
           return res;
         })

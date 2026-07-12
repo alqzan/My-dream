@@ -16,7 +16,27 @@ export function round2(n: number): number {
 }
 
 export function uid() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  // Prefer a real UUID (collision-proof for big Day One imports); fall back to
+  // the old scheme where crypto.randomUUID is unavailable (non-secure context).
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+}
+
+// توحيد النص العربي للبحث: يحذف التشكيل والتطويل ويوحّد الهمزات والألف
+// والياء والتاء المربوطة، فيطابق البحث «احمد» مع «أحمد»، والمكتوب بلا تشكيل
+// مع المشكَّل. يُطبَّق على طرفي المقارنة (النص والكلمة المبحوثة).
+export function normalizeArabic(s: string): string {
+  return (s || "")
+    .replace(/[ً-ْٰـ]/g, "") // حركات + شدّة + تطويل + ألف خنجرية
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .toLowerCase();
 }
 
 // Convert Arabic-Indic (٠-٩) and Persian/Extended (۰-۹) digits — plus the
@@ -50,20 +70,27 @@ export function today() {
   return toDateStr(new Date());
 }
 
-// Force Gregorian calendar + Latin digits so server (build) and client render
+// Intl formatters are expensive to construct, so build each once at module
+// level and reuse it — with hundreds of journal/finance cards rendering, a
+// fresh formatter per call was a measurable chunk of render time.
+// Gregorian calendar + Latin digits so server (build) and client render
 // identically — avoids hydration mismatches from ar-SA's Hijri default.
+const gregLongFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+const gregShortFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  month: "short",
+  day: "numeric",
+});
+
 export function formatDate(dateStr: string) {
-  const d = parseDate(dateStr);
-  return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return gregLongFmt.format(parseDate(dateStr));
 }
 
 export function formatDateShort(dateStr: string) {
-  const d = parseDate(dateStr);
-  return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric" });
+  return gregShortFmt.format(parseDate(dateStr));
 }
 
 // Hijri (Umm al-Qura) date, e.g. "15 محرم 1448 هـ".
@@ -236,11 +263,13 @@ export function yearProgress(now = new Date()): number {
   return Math.round(((now.getTime() - start) / (end - start)) * 100);
 }
 
+const amountFmt = new Intl.NumberFormat("ar-SA-u-nu-latn", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 export function formatAmount(amount: number) {
-  return amount.toLocaleString("ar-SA-u-nu-latn", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
+  return amountFmt.format(amount);
 }
 
 export function calcStreak(dates: string[]): number {

@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X } from "lucide-react";
-import { getCategoryInfo } from "@/lib/utils";
+import { getCategoryInfo, normalizeArabic } from "@/lib/utils";
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function FinancePage() {
@@ -76,11 +76,11 @@ export default function FinancePage() {
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
 
   const [txSearch, setTxSearch] = useState("");
-  const q = txSearch.trim().toLowerCase();
+  const q = normalizeArabic(txSearch.trim());
   const shownTx = q
     ? byMonth.filter((t) => {
-        const label = getCategoryInfo(categories, t.category).label.toLowerCase();
-        return (t.note ?? "").toLowerCase().includes(q) || label.includes(q);
+        const label = normalizeArabic(getCategoryInfo(categories, t.category).label);
+        return normalizeArabic(t.note ?? "").includes(q) || label.includes(q);
       })
     : byMonth;
 

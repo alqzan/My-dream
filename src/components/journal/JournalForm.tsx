@@ -65,10 +65,18 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   );
   const [audio, setAudio] = useState<string | undefined>(initial?.audio);
   const [compressing, setCompressing] = useState(false);
-  const [showHarakat, setShowHarakat] = useState(false);
-  const [showFormat, setShowFormat] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
   const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow the writing area to fit its content so there's no cramped inner
+  // scrollbar — you just keep writing and the sheet scrolls. Runs on every
+  // content change (typing, formatting buttons, restored draft).
+  useEffect(() => {
+    const ta = contentRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }, [content]);
 
   // Auto-save plumbing. Once an entry exists (editing, or a new one we have
   // already auto-created), savedId points at the row we keep updating.
@@ -155,9 +163,15 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, title, content, question, answering, photos, audio]);
 
-  // "تم" — flush any pending save immediately and close.
+  // "تم" — flush any pending save immediately and close. If the entry was
+  // emptied out, treat it as a cancel: delete the auto-created row (or revert
+  // an edited one) instead of leaving a blank/stale entry behind.
   function handleDone() {
     clearTimeout(saveTimer.current);
+    if (!hasSomething()) {
+      handleCancel();
+      return;
+    }
     persist();
     onClose();
   }
@@ -207,38 +221,6 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       ta.setSelectionRange(s + token.length, s + token.length);
     });
   }
-
-  // Insert an Arabic diacritic at the caret (it attaches to the letter before
-  // it), then keep focus and caret in place.
-  function insertMark(mark: string) {
-    const ta = contentRef.current;
-    const start = ta ? ta.selectionStart : content.length;
-    const end = ta ? ta.selectionEnd : content.length;
-    const next = content.slice(0, start) + mark + content.slice(end);
-    setContent(next);
-    requestAnimationFrame(() => {
-      if (!ta) return;
-      ta.focus();
-      ta.setSelectionRange(start + mark.length, start + mark.length);
-    });
-  }
-
-  // Strip all harakat, tanwin, shadda, sukun, tatweel and dagger alif.
-  function stripTashkeel() {
-    setContent(content.replace(/[ً-ْٰـ]/g, ""));
-  }
-
-  const HARAKAT: { m: string; t: string }[] = [
-    { m: "َ", t: "فتحة" },
-    { m: "ِ", t: "كسرة" },
-    { m: "ُ", t: "ضمة" },
-    { m: "ّ", t: "شدّة" },
-    { m: "ْ", t: "سكون" },
-    { m: "ً", t: "تنوين فتح" },
-    { m: "ٍ", t: "تنوين كسر" },
-    { m: "ٌ", t: "تنوين ضم" },
-    { m: "ـ", t: "تطويل" },
-  ];
 
   const titleIdeas = useMemo(
     () => suggestTitles(content, date, answering ? question : undefined),
@@ -334,43 +316,17 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs font-medium text-gray-500">
-            ماذا في بالك اليوم؟
-            {saveState === "saving" ? (
-              <span className="text-gray-400 font-normal"> · يُحفظ…</span>
-            ) : saveState === "saved" ? (
-              <span className="text-finance/80 font-normal"> · حُفظ ✓</span>
-            ) : (
-              <span className="text-gray-300 font-normal"> — اكتب /الوقت لإدراج الساعة</span>
-            )}
-          </label>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowFormat((v) => !v)}
-              className={
-                "text-[11px] font-bold rounded-lg px-2 py-1 press " +
-                (showFormat ? "bg-journal text-white" : "bg-journal/10 text-journal")
-              }
-            >
-              تنسيق
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowHarakat((v) => !v)}
-              className={
-                "text-[11px] font-bold rounded-lg px-2 py-1 press " +
-                (showHarakat ? "bg-journal text-white" : "bg-journal/10 text-journal")
-              }
-            >
-              تشكيل
-            </button>
-          </div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-medium text-gray-500">ماذا في بالك اليوم؟</label>
+          <span className="text-[11px] font-normal h-4">
+            {saveState === "saving" && <span className="text-gray-400">يُحفظ…</span>}
+            {saveState === "saved" && <span className="text-finance/80">حُفظ ✓</span>}
+          </span>
         </div>
 
-        {showFormat && (
-          <div className="flex flex-wrap gap-1 mb-2 p-2 bg-journal/5 rounded-xl animate-fade-up">
+        {/* محرّر النص: شريط تنسيق ثابت (بلمسة واحدة) + مساحة تتمدّد مع الكتابة */}
+        <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden transition-colors focus-within:border-journal/50 focus-within:ring-2 focus-within:ring-journal/20">
+          <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-100 bg-gray-50/70">
             {[
               { icon: Bold, t: "عريض", fn: () => wrapSelection("**") },
               { icon: Italic, t: "مائل", fn: () => wrapSelection("_") },
@@ -382,47 +338,31 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
                 key={b.t}
                 type="button"
                 title={b.t}
+                aria-label={b.t}
                 onClick={b.fn}
-                className="min-w-8 h-8 px-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:border-journal/40 hover:text-journal press flex items-center justify-center"
+                className="w-8 h-8 rounded-lg text-gray-500 hover:bg-journal/10 hover:text-journal press flex items-center justify-center"
               >
-                <b.icon size={15} />
+                <b.icon size={16} />
               </button>
             ))}
+            <span className="ms-auto text-[10px] text-gray-300 pe-1.5 select-none">اكتب /الوقت للساعة</span>
           </div>
-        )}
-
-        {showHarakat && (
-          <div className="flex flex-wrap gap-1 mb-2 p-2 bg-journal/5 rounded-xl animate-fade-up">
-            {HARAKAT.map((h) => (
-              <button
-                key={h.t}
-                type="button"
-                title={h.t}
-                onClick={() => insertMark(h.m)}
-                className="min-w-8 h-8 px-2 rounded-lg bg-white border border-gray-200 text-base font-bold text-gray-700 hover:border-journal/40 press"
-              >
-                {"ـ" + h.m}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={stripTashkeel}
-              className="h-8 px-2.5 rounded-lg bg-white border border-gray-200 text-[11px] font-semibold text-gray-500 hover:text-red-400 press"
-            >
-              مسح التشكيل
-            </button>
-          </div>
-        )}
-
-        <textarea
-          ref={contentRef}
-          value={content}
-          onChange={(e) => setContent(expandTimeCommand(e.target.value))}
-          rows={8}
-          placeholder="اكتب مذكرتك هنا..."
-          className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-journal/40 resize-none"
-          dir="auto"
-        />
+          <textarea
+            ref={contentRef}
+            value={content}
+            onChange={(e) => setContent(expandTimeCommand(e.target.value))}
+            placeholder="اكتب مذكرتك هنا…"
+            className="w-full min-h-[220px] block bg-transparent px-4 py-3.5 text-[15px] leading-loose focus:outline-none resize-none"
+            dir="auto"
+          />
+        </div>
+        <div className="flex justify-end mt-1 h-3">
+          {content.trim() && (
+            <span className="text-[10px] text-gray-300">
+              {content.trim().split(/\s+/).length} كلمة
+            </span>
+          )}
+        </div>
       </div>
 
       {/* الصور: من الكاميرا أو الاستديو، حتى 6 صور — تُضغط تلقائياً */}
