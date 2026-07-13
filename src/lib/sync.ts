@@ -5,6 +5,7 @@ import { ref as storageRef, uploadString, getDownloadURL, deleteObject } from "f
 import { db, storage, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
+import { showToast } from "@/components/ui/UndoToast";
 
 const COLLECTION = "userData";
 
@@ -407,7 +408,27 @@ export async function saveUserData(uid: string, data: AppData): Promise<void> {
     photoManifest: [...knownCloudHashes],
     audioManifest: [...knownCloudAudioHashes],
   };
+  warnIfDocSizeNearLimit(honestMain);
   await setDoc(doc(db, COLLECTION, uid), honestMain, { merge: false });
+}
+
+// The whole main doc (all journal text, transactions, etc. — media is stored
+// separately in Cloud Storage) lives under Firestore's hard 1MB-per-document
+// cap. A large text-only import (e.g. Day One) can approach it well before
+// media ever would, and crossing it breaks sync outright. Warn early, once per
+// session, instead of failing silently on the next save.
+const DOC_SIZE_WARN_BYTES = 650 * 1024;
+const DOC_SIZE_LIMIT_BYTES = 1024 * 1024;
+let docSizeWarned = false;
+
+function warnIfDocSizeNearLimit(main: unknown): void {
+  if (docSizeWarned) return;
+  const size = new Blob([JSON.stringify(main)]).size;
+  if (size < DOC_SIZE_WARN_BYTES) return;
+  docSizeWarned = true;
+  const kb = Math.round(size / 1024);
+  const pct = Math.round((size / DOC_SIZE_LIMIT_BYTES) * 100);
+  showToast(`مساحة المزامنة ${kb}KB من حد 1MB (${pct}%) — قارب الامتلاء`, "warning");
 }
 
 // Seed the hash→URL cache from media already stored locally as Storage URLs, so
