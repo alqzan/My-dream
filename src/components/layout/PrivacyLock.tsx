@@ -13,6 +13,7 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
   const [locked, setLocked] = useState(false);
   const [digits, setDigits] = useState("");
   const [error, setError] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (hasPin() && !isUnlocked()) setLocked(true);
@@ -100,9 +101,19 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
         </button>
       </div>
 
-      <p className="text-[11px] text-gray-400 mt-8 text-center leading-relaxed max-w-xs">
-        الرمز محفوظ على جهازك فقط ولا يُزامَن. لو نسيته، يمكن مسحه بمسح بيانات الموقع.
-      </p>
+      <button
+        onClick={() => setShowHelp((v) => !v)}
+        className="text-[12px] text-gray-500 hover:text-gray-700 mt-8 press underline underline-offset-4"
+      >
+        نسيت الرمز؟
+      </button>
+      {showHelp && (
+        <p className="text-[11px] text-gray-400 mt-3 text-center leading-relaxed max-w-xs animate-fade-up">
+          لا تقلق — القفل يخفي الشاشة فقط ولا يشفّر بياناتك، فلا شيء يضيع.
+          امسح بيانات الموقع من إعدادات المتصفح ثم افتح مدار وأعد إدخال مفتاح
+          المزامنة، فترجع كل بياناتك من السحابة كما هي. (أو استعِد من نسختك الاحتياطية.)
+        </p>
+      )}
     </div>
   );
 }

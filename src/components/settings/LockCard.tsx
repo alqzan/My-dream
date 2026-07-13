@@ -71,10 +71,14 @@ export function LockCard() {
 
       {step === "idle" ? (
         <>
-          <p className="text-xs text-gray-400 leading-relaxed mb-3">
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
             {enabled
               ? "التطبيق مقفل برمز يُطلب عند كل فتح. الرمز على جهازك فقط ولا يُزامَن."
               : `اقفل مذكراتك وبياناتك برمز من ${PIN_LENGTH} أرقام يُطلب عند فتح التطبيق.`}
+          </p>
+          <p className="text-[11px] text-gray-400/90 bg-gray-50 rounded-lg px-2.5 py-2 leading-relaxed mb-3">
+            🛡️ القفل يخفي الشاشة فقط ولا يشفّر بياناتك — فحتى لو نسيت الرمز لا تضيع
+            بياناتك: تعود من المزامنة السحابية أو من نسختك الاحتياطية.
           </p>
           {enabled ? (
             <div className="flex items-center gap-2">
