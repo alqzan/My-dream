@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos, entryAudios, normalizeArabic } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, entryPhotos, entryAudios, normalizeArabic } from "@/lib/utils";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
@@ -22,11 +22,11 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { JournalEntry } from "@/lib/types";
-import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine } from "lucide-react";
+import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine, ChevronRight, ChevronLeft, Star } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function JournalPage() {
-  const { journalEntries, deleteJournalEntry, addJournalEntry } = useAppStore();
+  const { journalEntries, deleteJournalEntry, addJournalEntry, updateJournalEntry } = useAppStore();
 
   // Instant delete + 5s undo window instead of a confirm dialog.
   function handleDelete(id: string) {
@@ -34,17 +34,31 @@ export default function JournalPage() {
     deleteJournalEntry(id);
     if (entry) showUndo("حذفت المذكرة", () => addJournalEntry(entry));
   }
+  function handleToggleStar(id: string) {
+    const entry = journalEntries.find((e) => e.id === id);
+    if (entry) updateJournalEntry(id, { starred: !entry.starred });
+  }
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editEntry, setEditEntry] = useState<JournalEntry | undefined>();
   const [search, setSearch] = useState("");
-  const [viewEntry, setViewEntry] = useState<JournalEntry | undefined>();
+  const [selectedYear, setSelectedYear] = useState("الكل");
+  const [onlyStarred, setOnlyStarred] = useState(false);
+  // Viewing an entry from the filtered list keeps its index so the viewer can
+  // step to the prev/next one; viewing one from outside it (memories, random
+  // memory) that the current filters happen to exclude falls back to a plain
+  // one-off view with no prev/next.
+  const [viewIndex, setViewIndex] = useState<number | null>(null);
+  const [adhocEntry, setAdhocEntry] = useState<JournalEntry | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "gallery">("list");
   // Render the newest page of entries first; "عرض المزيد" reveals more. Keeps
   // a big archive (e.g. after a Day One import) from mounting hundreds of
   // cards — and their images — all at once. A search shows all its matches.
   const PAGE = 40;
   const [visibleCount, setVisibleCount] = useState(PAGE);
+  const GALLERY_PAGE = 60;
+  const [galleryCount, setGalleryCount] = useState(GALLERY_PAGE);
 
   // PWA shortcut: "مذكرة جديدة" launches with ?new=1 — open the composer
   // immediately and drop the param so a later reload doesn't reopen it.
@@ -70,9 +84,17 @@ export default function JournalPage() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [journalEntries, todayStr]);
 
+  // كل السنوات الموجودة في الأرشيف — لشريط رقائق السنوات فوق القائمة.
+  const years = useMemo(() => {
+    const set = new Set(journalEntries.map((e) => e.date.slice(0, 4)));
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [journalEntries]);
+
   const filtered = useMemo(() => {
     const q = normalizeArabic(search.trim());
     const list = journalEntries.filter((e) => {
+      if (selectedYear !== "الكل" && !e.date.startsWith(selectedYear)) return false;
+      if (onlyStarred && !e.starred) return false;
       if (!q) return true;
       return (
         normalizeArabic(e.content).includes(q) ||
@@ -81,7 +103,64 @@ export default function JournalPage() {
       );
     });
     return [...list].sort((a, b) => b.date.localeCompare(a.date));
-  }, [journalEntries, search]);
+  }, [journalEntries, search, selectedYear, onlyStarred]);
+
+  function selectYear(y: string) {
+    setSelectedYear(y);
+    setVisibleCount(PAGE);
+  }
+  function toggleStarredFilter() {
+    setOnlyStarred((v) => !v);
+    setVisibleCount(PAGE);
+  }
+
+  // Open the viewer at this entry's position in the current filtered list (so
+  // prev/next can step through it); if the entry isn't in it (e.g. opened from
+  // "في مثل هذا اليوم" while a search/filter hides it), fall back to a plain
+  // one-off view with no prev/next.
+  function openViewer(entry: JournalEntry) {
+    const idx = filtered.findIndex((e) => e.id === entry.id);
+    if (idx >= 0) {
+      setViewIndex(idx);
+      setAdhocEntry(undefined);
+    } else {
+      setViewIndex(null);
+      setAdhocEntry(entry);
+    }
+  }
+  function closeViewer() {
+    setViewIndex(null);
+    setAdhocEntry(undefined);
+  }
+  const viewEntry = viewIndex !== null ? filtered[viewIndex] : adhocEntry;
+  function stepViewer(delta: number) {
+    if (viewIndex === null) return;
+    const next = viewIndex + delta;
+    if (next < 0 || next >= filtered.length) return;
+    setViewIndex(next);
+  }
+
+  useEffect(() => {
+    if (viewIndex === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "ArrowRight") stepViewer(1);
+      else if (e.key === "ArrowLeft") stepViewer(-1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewIndex, filtered.length]);
+
+  // 🎲 ذكرى عشوائية — مذكرة عمرها أكثر من ٣٠ يوماً، أو أي مذكرة إن كان الأرشيف صغيراً.
+  function openRandomMemory() {
+    if (!journalEntries.length) return;
+    const cutoffDate = parseDate(todayStr);
+    cutoffDate.setDate(cutoffDate.getDate() - 30);
+    const cutoff = toDateStr(cutoffDate);
+    const pool = journalEntries.filter((e) => e.date < cutoff);
+    const list = pool.length > 0 ? pool : journalEntries;
+    openViewer(list[Math.floor(Math.random() * list.length)]);
+  }
 
   // Browsing is paged; an active search shows all its matches.
   const searching = search.trim().length > 0;
@@ -107,11 +186,32 @@ export default function JournalPage() {
     return groups;
   }, [visible]);
 
+  // تبويب المعرض — كل صور المذكرات المطابقة للفلاتر الحالية، أحدث أولاً.
+  const galleryPhotos = useMemo(() => {
+    const items: { entry: JournalEntry; url: string }[] = [];
+    for (const entry of filtered) {
+      for (const url of entryPhotos(entry)) items.push({ entry, url });
+    }
+    return items;
+  }, [filtered]);
+  const visibleGallery = galleryPhotos.slice(0, galleryCount);
+  const hasMoreGallery = galleryPhotos.length > visibleGallery.length;
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">المذكرات</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">المذكرات</h1>
+            {journalEntries.length > 0 && (
+              <button
+                onClick={openRandomMemory}
+                className="text-xs font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-full px-2.5 py-1 press"
+              >
+                🎲 ذكرى عشوائية
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <Flame size={14} className={streak > 0 ? "text-orange-500 animate-flame" : "text-gray-300"} />
             <span className="text-sm text-gray-500">
@@ -167,15 +267,15 @@ export default function JournalPage() {
           </div>
           <div className="space-y-2">
             {memories.slice(0, 3).map((m) => {
-              const years = parseInt(todayStr) - parseInt(m.date);
+              const yearsAgo = parseInt(todayStr) - parseInt(m.date);
               return (
                 <button
                   key={m.id}
-                  onClick={() => setViewEntry(m)}
+                  onClick={() => openViewer(m)}
                   className="w-full text-right bg-white/70 dark:bg-white/5 rounded-xl px-3 py-2.5 hover:bg-white transition-colors press"
                 >
                   <p className="text-[11px] font-bold text-brand-600 mb-0.5">
-                    قبل {years === 1 ? "سنة" : years === 2 ? "سنتين" : `${years} سنوات`} — {formatDate(m.date)}
+                    قبل {yearsAgo === 1 ? "سنة" : yearsAgo === 2 ? "سنتين" : `${yearsAgo} سنوات`} — {formatDate(m.date)}
                   </p>
                   {m.title && <p className="text-sm font-bold text-gray-800 mb-0.5">{m.title}</p>}
                   <p className="text-xs text-gray-500 line-clamp-1">{stripMarkdown(m.content)}</p>
@@ -200,47 +300,135 @@ export default function JournalPage() {
         />
       </div>
 
-      <div className="space-y-4 animate-fade-up stagger-4">
-        {filtered.length === 0 && (
-          <EmptyState
-            emoji="📓"
-            title="لا توجد مذكرات بعد"
-            subtitle="ابدأ بكتابة أول مذكرة أو استورد مذكراتك من Day One"
-            action={
-              <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5 bg-journal hover:bg-journal/90">
-                <Plus size={14} /> اكتب أول مذكرة
-              </Button>
-            }
-          />
-        )}
-        {grouped.map((group) => (
-          <div key={group.key} className="space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black text-journal bg-journal/10 px-3 py-1 rounded-full">
-                {group.label}
-              </span>
-              <div className="flex-1 h-px bg-gray-100" />
-              <span className="text-[10px] text-gray-300">{group.entries.length}</span>
-            </div>
-            {group.entries.map((entry) => (
-              <JournalEntryCard
-                key={entry.id}
-                entry={entry}
-                onDelete={handleDelete}
-                onClick={() => setViewEntry(entry)}
-              />
-            ))}
-          </div>
-        ))}
-        {hasMore && (
+      {/* شريط السنوات + فلتر المفضلة */}
+      <div className="flex gap-2 overflow-x-auto pb-1 animate-fade-up stagger-3">
+        <button
+          onClick={() => selectYear("الكل")}
+          className={`shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
+            selectedYear === "الكل" ? "bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
+          }`}
+        >
+          الكل
+        </button>
+        {years.map((y) => (
           <button
-            onClick={() => setVisibleCount((c) => c + PAGE)}
-            className="w-full py-3 text-sm font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-2xl transition-colors press"
+            key={y}
+            onClick={() => selectYear(y)}
+            className={`shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
+              selectedYear === y ? "bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
+            }`}
           >
-            عرض المزيد ({filtered.length - visible.length})
+            {y}
           </button>
-        )}
+        ))}
+        <button
+          onClick={toggleStarredFilter}
+          className={`shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
+            onlyStarred ? "bg-amber-400 text-white border-amber-400" : "bg-white border-gray-200 text-gray-500"
+          }`}
+        >
+          ⭐ المفضلة
+        </button>
       </div>
+
+      {/* تبديل قائمة/معرض */}
+      <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-4">
+        <button
+          onClick={() => setView("list")}
+          className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
+            view === "list" ? "bg-white dark:bg-[#241c12] text-journal shadow-sm" : "text-gray-400"
+          }`}
+        >
+          المذكرات
+        </button>
+        <button
+          onClick={() => setView("gallery")}
+          className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
+            view === "gallery" ? "bg-white dark:bg-[#241c12] text-journal shadow-sm" : "text-gray-400"
+          }`}
+        >
+          معرض 🖼️
+        </button>
+      </div>
+
+      {view === "list" ? (
+        <div className="space-y-4 animate-fade-up stagger-4">
+          {filtered.length === 0 && (
+            <EmptyState
+              emoji="📓"
+              title="لا توجد مذكرات بعد"
+              subtitle="ابدأ بكتابة أول مذكرة أو استورد مذكراتك من Day One"
+              action={
+                <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5 bg-journal hover:bg-journal/90">
+                  <Plus size={14} /> اكتب أول مذكرة
+                </Button>
+              }
+            />
+          )}
+          {grouped.map((group) => (
+            <div key={group.key} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-black text-journal bg-journal/10 px-3 py-1 rounded-full">
+                  {group.label}
+                </span>
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-[10px] text-gray-300">{group.entries.length}</span>
+              </div>
+              {group.entries.map((entry) => (
+                <JournalEntryCard
+                  key={entry.id}
+                  entry={entry}
+                  onDelete={handleDelete}
+                  onToggleStar={handleToggleStar}
+                  onClick={() => openViewer(entry)}
+                />
+              ))}
+            </div>
+          ))}
+          {hasMore && (
+            <button
+              onClick={() => setVisibleCount((c) => c + PAGE)}
+              className="w-full py-3 text-sm font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-2xl transition-colors press"
+            >
+              عرض المزيد ({filtered.length - visible.length})
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3 animate-fade-up stagger-4">
+          {galleryPhotos.length === 0 ? (
+            <EmptyState emoji="🖼️" title="لا صور بعد" subtitle="الصور المرفقة بمذكراتك تظهر هنا" />
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-1">
+                {visibleGallery.map((item, i) => (
+                  <button
+                    key={`${item.entry.id}-${i}`}
+                    onClick={() => openViewer(item.entry)}
+                    className="aspect-square overflow-hidden rounded-lg press"
+                  >
+                    <img
+                      src={item.url}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+              {hasMoreGallery && (
+                <button
+                  onClick={() => setGalleryCount((c) => c + GALLERY_PAGE)}
+                  className="w-full py-3 text-sm font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-2xl transition-colors press"
+                >
+                  عرض المزيد ({galleryPhotos.length - visibleGallery.length})
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <Modal
         open={showForm || !!editEntry}
@@ -264,7 +452,7 @@ export default function JournalPage() {
       {/* عرض المذكرة — العنوان فوق بخط أكبر وغامق */}
       <Modal
         open={!!viewEntry}
-        onClose={() => setViewEntry(undefined)}
+        onClose={closeViewer}
         className="sm:max-w-2xl"
       >
         {viewEntry && (
@@ -287,6 +475,13 @@ export default function JournalPage() {
                   Day One
                 </span>
               )}
+              <button
+                onClick={() => handleToggleStar(viewEntry.id)}
+                aria-label={viewEntry.starred ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+                className={`p-1 rounded-lg press ${viewEntry.starred ? "text-amber-400" : "text-gray-300 hover:text-amber-400"}`}
+              >
+                <Star size={16} fill={viewEntry.starred ? "currentColor" : "none"} />
+              </button>
             </div>
             {viewEntry.question && (
               <p className="text-xs text-journal bg-journal/10 rounded-xl px-3 py-2 leading-relaxed">
@@ -314,11 +509,32 @@ export default function JournalPage() {
               dir="auto"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(viewEntry.content) }}
             />
+            {viewIndex !== null && filtered.length > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                <button
+                  onClick={() => stepViewer(1)}
+                  disabled={viewIndex >= filtered.length - 1}
+                  aria-label="التالي"
+                  className="flex items-center gap-1 text-xs font-bold text-gray-500 disabled:opacity-30 press"
+                >
+                  <ChevronRight size={16} /> التالي
+                </button>
+                <span className="text-[11px] text-gray-400">{viewIndex + 1} / {filtered.length}</span>
+                <button
+                  onClick={() => stepViewer(-1)}
+                  disabled={viewIndex <= 0}
+                  aria-label="السابق"
+                  className="flex items-center gap-1 text-xs font-bold text-gray-500 disabled:opacity-30 press"
+                >
+                  السابق <ChevronLeft size={16} />
+                </button>
+              </div>
+            )}
             <div className="flex gap-2 pt-2">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setEditEntry(viewEntry); setViewEntry(undefined); }}
+                onClick={() => { setEditEntry(viewEntry); closeViewer(); }}
                 className="flex-1"
               >
                 تعديل
@@ -326,7 +542,7 @@ export default function JournalPage() {
               <Button
                 variant="danger"
                 size="sm"
-                onClick={() => { handleDelete(viewEntry.id); setViewEntry(undefined); }}
+                onClick={() => { handleDelete(viewEntry.id); closeViewer(); }}
               >
                 حذف
               </Button>

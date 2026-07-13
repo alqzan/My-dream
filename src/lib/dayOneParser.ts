@@ -150,6 +150,7 @@ function baseEntry(entry: DayOneEntry): JournalEntry {
     ...(tags.length ? { tags } : {}),
     content: body,
     ...(videoRefs.length ? { videoRefs } : {}),
+    ...(entry.starred === true ? { starred: true } : {}),
     source: "dayOne",
     dayOneUUID: entry.uuid,
   };

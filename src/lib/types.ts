@@ -113,6 +113,7 @@ export interface JournalEntry {
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";
   dayOneUUID?: string;
+  starred?: boolean;
 }
 
 export interface Habit {

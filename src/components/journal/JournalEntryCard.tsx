@@ -2,15 +2,16 @@
 import type { JournalEntry } from "@/lib/types";
 import { formatDate, entryPhotos, entryAudios } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/markdown";
-import { Trash2, Clock, Images, Mic, Film } from "lucide-react";
+import { Trash2, Clock, Images, Mic, Film, Star } from "lucide-react";
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
   onDelete?: (id: string) => void;
   onClick?: () => void;
+  onToggleStar?: (id: string) => void;
 }
 
-export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardProps) {
+export function JournalEntryCard({ entry, onDelete, onClick, onToggleStar }: JournalEntryCardProps) {
   const plain = stripMarkdown(entry.content);
   const preview = plain.slice(0, 180) + (plain.length > 180 ? "..." : "");
   const photos = entryPhotos(entry);
@@ -64,6 +65,15 @@ export function JournalEntryCard({ entry, onDelete, onClick }: JournalEntryCardP
               <span className="text-[10px] bg-purple-50 text-purple-500 px-2 py-0.5 rounded-full font-medium">
                 Day One
               </span>
+            )}
+            {onToggleStar && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleStar(entry.id); }}
+                aria-label={entry.starred ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+                className={`p-1 rounded-lg press ${entry.starred ? "text-amber-400" : "text-gray-300 hover:text-amber-400"}`}
+              >
+                <Star size={14} fill={entry.starred ? "currentColor" : "none"} />
+              </button>
             )}
             {onDelete && (
               <button
