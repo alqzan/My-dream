@@ -4,10 +4,16 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
 
+// Static export uses trailingSlash, so usePathname() returns "/journal/" while
+// the nav hrefs are "/journal" — strip a trailing slash before comparing, or
+// the active tab (and its sliding indicator) only ever lights up on the home
+// route.
+const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
+
 export function MobileNav() {
-  const pathname = usePathname();
+  const pathname = normPath(usePathname());
   const count = NAV_ITEMS.length;
-  const activeIndex = NAV_ITEMS.findIndex((item) => item.href === pathname);
+  const activeIndex = NAV_ITEMS.findIndex((item) => normPath(item.href) === pathname);
   const slot = 100 / count;
 
   return (
@@ -25,7 +31,7 @@ export function MobileNav() {
           }}
         />
         {NAV_ITEMS.map((item) => {
-          const active = pathname === item.href;
+          const active = normPath(item.href) === pathname;
           return (
             <Link
               key={item.href}

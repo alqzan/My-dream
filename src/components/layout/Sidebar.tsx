@@ -7,8 +7,11 @@ import { SyncStatus } from "@/components/sync/SyncStatus";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { BrandMark } from "@/components/layout/BrandMark";
 
+// trailingSlash export → usePathname() is "/journal/" but hrefs are "/journal".
+const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
+
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = normPath(usePathname());
 
   return (
     <aside className="hidden lg:flex flex-col w-56 bg-white border-l border-gray-100 min-h-screen fixed right-0 top-0 z-40">
@@ -21,7 +24,7 @@ export function Sidebar() {
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {NAV_ITEMS.map((item) => {
-          const active = pathname === item.href;
+          const active = normPath(item.href) === pathname;
           return (
             <Link
               key={item.href}
