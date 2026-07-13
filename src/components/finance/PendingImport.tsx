@@ -69,7 +69,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
 
   async function handleAdd() {
     for (const r of chosen) {
-      const tx: Transaction = { id: Math.random().toString(36).slice(2), date: r.date, amount: r.amount, category: r.catId, note: r.note };
+      const tx: Transaction = { id: uid(), date: r.date, amount: r.amount, category: r.catId, note: r.note };
       addTransaction(tx);
       if (r.note.trim()) rememberMerchant(r.note, r.catId);
     }

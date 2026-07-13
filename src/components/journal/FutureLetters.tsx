@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { FutureLetter } from "@/lib/types";
-import { uid, today, formatDate } from "@/lib/utils";
+import { uid, today, formatDate, toDateStr } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Mail, MailOpen, Lock, Trash2, Send, Hourglass } from "lucide-react";
@@ -10,7 +10,7 @@ import { Mail, MailOpen, Lock, Trash2, Send, Hourglass } from "lucide-react";
 function addMonths(dateStr: string, months: number): string {
   const d = new Date(dateStr + "T12:00:00");
   d.setMonth(d.getMonth() + months);
-  return d.toISOString().split("T")[0];
+  return toDateStr(d);
 }
 
 function daysBetween(a: string, b: string): number {

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos, normalizeArabic } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, arabicMonthName, entryPhotos, entryAudios, normalizeArabic } from "@/lib/utils";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
@@ -305,10 +305,10 @@ export default function JournalPage() {
                 ))}
               </div>
             )}
-            {viewEntry.audio && (
+            {entryAudios(viewEntry).map((a, i) => (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <audio controls src={viewEntry.audio} className="w-full h-10" />
-            )}
+              <audio key={i} controls src={a} className="w-full h-10" />
+            ))}
             <div
               className="prose-journal text-[15px] leading-loose text-gray-800 min-h-[160px]"
               dir="auto"

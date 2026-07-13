@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, parseBankCsv, suggestCategory } from "@/lib/bankParser";
-import { today, getCategoryInfo, formatAmount } from "@/lib/utils";
+import { today, getCategoryInfo, formatAmount, uid } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
 import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
@@ -60,7 +60,7 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
       return;
     }
     const txs: Transaction[] = results.map((r) =>
-      classify({ id: Math.random().toString(36).slice(2), ...r })
+      classify({ id: uid(), ...r })
     );
     setPreview(txs);
     setSkippedIncome(skipped);
