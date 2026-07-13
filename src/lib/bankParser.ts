@@ -133,6 +133,13 @@ const STATEMENT = [
 ];
 const COMPLETED_OP = /تم(?:ت)?\s+(?:عملية\s+)?(?:ال)?(?:سداد|دفع|خصم|شراء|تحويل|إيداع)/i;
 
+// A live point-of-sale / Apple-Pay / mada purchase alert. Credit-card purchase
+// notifications ALSO quote "المبلغ الإجمالي المستحق" (total due) and "الرصيد
+// المتوفر" as context — which used to trip the statement/balance heuristics and
+// make the whole (real) purchase get discarded. A clear purchase signal
+// overrides those, so a genuine POS purchase is never mistaken for a bill.
+const PURCHASE_SIGNAL = /نقاط البيع|عملية شراء|شراء عبر|شراء بـ?|point of sale|\bpos\b|purchase|apple\s?pay|mada/i;
+
 // An actual money-movement keyword — tells a real transaction from a bare
 // balance notification ("الرصيد المتاح: 4279 ريال").
 const TXN_KEYWORD =
@@ -143,7 +150,14 @@ const BALANCE_ONLY = /الرصيد|رصيدك|رصيد الحساب|available ba
 // before parsing: OTPs, declines, statement reminders, balance-only alerts.
 function isNonTransaction(text: string): boolean {
   if (NON_TRANSACTION.some((p) => p.test(text))) return true;
-  if (STATEMENT.some((p) => p.test(text)) && !COMPLETED_OP.test(text)) return true;
+  // A statement/bill reminder — but NOT when the message is a completed
+  // operation or a live purchase/POS alert that merely cites the amount due.
+  if (
+    STATEMENT.some((p) => p.test(text)) &&
+    !COMPLETED_OP.test(text) &&
+    !PURCHASE_SIGNAL.test(text)
+  )
+    return true;
   if (BALANCE_ONLY.test(text) && !TXN_KEYWORD.test(text)) return true;
   return false;
 }
@@ -174,12 +188,16 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
   const isCredit = /(?:إيداع|راتب|حوّل إليك|حُوّل إليك|تم استلام|أضيف|credit)/i.test(text);
   if (isCredit) return null;
 
-  // Drop the running-balance figure first, so it's never mistaken for the
-  // spend amount (e.g. "رصيد:3627.96 SR" or "Balance: 3,627.96").
-  const body = text.replace(
-    new RegExp(`(?:رصيد|الرصيد|المتبقّ?ي|available|balance)\\s*[:\\-]?\\s*[\\d.,]+\\s*(?:${CUR})?`, "gi"),
-    " "
-  );
+  // Drop the running-balance and any "total due" figures first, so neither is
+  // mistaken for the spend amount. A credit-card purchase alert quotes both the
+  // available balance ("الرصيد المتوفر: SAR 2673.04") and the outstanding total
+  // ("المبلغ الإجمالي المستحق SAR 2326.96") alongside the real purchase amount —
+  // an optional descriptor word (المتوفر/المتاح/الحالي…) may sit between the
+  // keyword and the number, and the currency may lead or trail it.
+  const numTail = `\\s*[:\\-]?\\s*(?:${CUR})?\\s*[\\d.,]+\\s*(?:${CUR})?`;
+  const body = text
+    .replace(new RegExp(`(?:رصيد|الرصيد|المتبقّ?ي|available|balance)(?:\\s+\\S+)?${numTail}`, "gi"), " ")
+    .replace(new RegExp(`(?:المبلغ (?:ال[إا]جمالي )?المستحق|[إا]جمالي المستحق|مبلغ مستحق|رسوم العملية)${numTail}`, "gi"), " ");
 
   let amount = 0;
   // Amount with the currency on either side (SR 22 · 22 ريال · 150.00 SAR),
