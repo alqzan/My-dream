@@ -4,7 +4,7 @@ import { Modal } from "@/components/ui/Modal";
 import { PendingImport } from "@/components/finance/PendingImport";
 import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import { loadInbox, deleteInboxItem } from "@/lib/sync";
-import { parseBankSmsBulk } from "@/lib/bankParser";
+import { parseBankSmsBulk, isNoiseMessage } from "@/lib/bankParser";
 import { today } from "@/lib/utils";
 import { usePending } from "@/lib/pending";
 
@@ -23,15 +23,29 @@ export function PendingInboxWatcher() {
       try {
         const inbox = await loadInbox();
         if (cancelled || !inbox.length) return;
-        const count = inbox.reduce(
-          (n, it) => n + parseBankSmsBulk(it.text, today()).transactions.length,
-          0
-        );
-        if (count > 0) {
-          setItems(inbox, count);
+        // Classify each message so nothing an expense could hide in is ever
+        // dropped unseen. Only confirmed noise (OTP, balance-only alert,
+        // decline, statement, incoming credit) is deleted silently. A message
+        // that isn't noise but the parser couldn't read is KEPT and surfaced
+        // for manual review — previously these were deleted, so a bank format
+        // we didn't recognise made the expense vanish with no trace.
+        const readable: typeof inbox = [];
+        const unreadable: typeof inbox = [];
+        const noise: typeof inbox = [];
+        let count = 0;
+        for (const it of inbox) {
+          const n = parseBankSmsBulk(it.text, today()).transactions.length;
+          if (n > 0) { readable.push(it); count += n; }
+          else if (isNoiseMessage(it.text)) noise.push(it);
+          else { unreadable.push(it); count += 1; }
+        }
+        if (noise.length) {
+          await Promise.all(noise.map((it) => deleteInboxItem(it.id).catch(() => {})));
+        }
+        const toReview = [...readable, ...unreadable];
+        if (toReview.length) {
+          setItems(toReview, count);
           openReview();
-        } else {
-          await Promise.all(inbox.map((it) => deleteInboxItem(it.id).catch(() => {})));
         }
       } catch {
         /* offline — try again next launch */

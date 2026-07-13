@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate } from "@/lib/bankParser";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
-import { today, formatAmount, getCategoryInfo, budgetWarningFor, cn, uid } from "@/lib/utils";
+import { today, formatAmount, getCategoryInfo, budgetWarningFor, cn, uid, toLatinDigits } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { Sparkles, BrainCircuit, Check, Copy, Plus, X } from "lucide-react";
@@ -18,6 +18,12 @@ interface Pending {
   learned: boolean;
   dup: boolean;       // looks already-recorded
   included: boolean;  // will be added on confirm
+  manual?: boolean;   // parser couldn't read it — user types the amount
+}
+
+// Tidy a raw bank SMS into a short readable note for a manual row.
+function rawNote(text: string): string {
+  return (text || "").replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
 // Review queue for bank messages that arrived automatically (via the iOS
@@ -32,6 +38,23 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     const out: Pending[] = [];
     for (const item of items) {
       const { transactions: parsed } = parseBankSmsBulk(item.text, today());
+      if (parsed.length === 0) {
+        // Unreadable message the watcher chose to surface rather than drop —
+        // show it as a manual row (raw text + an amount to fill in) so no
+        // expense is ever lost to a format we didn't recognise.
+        out.push({
+          key: `${item.id}-m`,
+          amount: 0,
+          note: rawNote(item.text),
+          date: today(),
+          catId: suggestCategory(item.text, categories, merchantRules),
+          learned: false,
+          dup: false,
+          included: false, // can't include until an amount is entered
+          manual: true,
+        });
+        continue;
+      }
       parsed.forEach((r, i) => {
         const known = learnedCategory(r.note ?? "", categories, merchantRules);
         const dup = isLikelyDuplicate(r.amount, r.date, r.note ?? "", transactions);
@@ -65,7 +88,14 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, included: !r.included } : r)));
   }
 
-  const chosen = rows.filter((r) => r.included);
+  // Manual (unreadable) rows: user types the amount; auto-include once it's > 0.
+  function setAmount(key: string, val: string) {
+    const n = parseFloat(toLatinDigits(val).replace(/[^\d.]/g, "")) || 0;
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, amount: n, included: n > 0 } : r)));
+  }
+
+  const chosen = rows.filter((r) => r.included && r.amount > 0);
+  const unreadableCount = rows.filter((r) => r.manual).length;
 
   async function handleAdd() {
     for (const r of chosen) {
@@ -114,6 +144,16 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
         <Sparkles size={15} /> وصلتك {rows.length} معاملة — علّم اللي تبي تضيفه. المكرّر مستبعَد تلقائياً.
       </div>
 
+      {unreadableCount > 0 && (
+        <div className="flex items-start gap-2 bg-amber-50 text-amber-700 rounded-xl px-3 py-2 text-[11px] leading-relaxed">
+          <span className="shrink-0">📩</span>
+          <span>
+            {unreadableCount} رسالة ما قدرت أقرأ مبلغها تلقائياً — اكتب المبلغ يدوياً وتُضاف،
+            أو تجاهلها. (ما عادت تختفي بصمت.)
+          </span>
+        </div>
+      )}
+
       <div className="max-h-[52vh] overflow-y-auto space-y-2 pr-0.5">
         {rows.map((r) => {
           const info = getCategoryInfo(categories, r.catId);
@@ -141,6 +181,11 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-semibold text-gray-700 truncate">{r.note || "مصروف"}</span>
+                    {r.manual && (
+                      <span className="text-[9px] font-bold text-amber-600 bg-amber-100 rounded-full px-1.5 py-0.5 shrink-0">
+                        ما قدرت أقرأه
+                      </span>
+                    )}
                     {r.dup && (
                       <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-100 rounded-full px-1.5 py-0.5 shrink-0">
                         <Copy size={9} /> مكرّر؟
@@ -154,7 +199,18 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
                   </div>
                   <div className="text-[10px] text-gray-400">{r.date}</div>
                 </div>
-                <span className="text-sm font-bold text-red-500 shrink-0">-{formatAmount(r.amount)}</span>
+                {r.manual ? (
+                  <input
+                    value={r.amount ? String(r.amount) : ""}
+                    onChange={(e) => setAmount(r.key, e.target.value)}
+                    inputMode="decimal"
+                    placeholder="المبلغ"
+                    aria-label="اكتب المبلغ"
+                    className="w-20 shrink-0 text-sm text-left border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-finance/40"
+                  />
+                ) : (
+                  <span className="text-sm font-bold text-red-500 shrink-0">-{formatAmount(r.amount)}</span>
+                )}
               </div>
               {addingFor === r.key ? (
                 <NewCategoryInline

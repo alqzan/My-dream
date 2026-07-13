@@ -148,6 +148,21 @@ function isNonTransaction(text: string): boolean {
   return false;
 }
 
+const CREDIT_RE = /(?:إيداع|راتب|حوّل إليك|حُوّل إليك|تم استلام|أضيف|credit)/i;
+
+// A message that parsed to no expense but is nonetheless just *noise* —
+// an OTP, a decline, a statement/bill reminder, a bare balance alert, or an
+// incoming credit (income). These are safe to drop silently. Anything else
+// that failed to parse might be a real expense in a format we didn't catch, so
+// the inbox must surface it for manual review instead of deleting it.
+export function isNoiseMessage(smsText: string): boolean {
+  const text = normalizeDigits((smsText || "").trim());
+  if (!text) return true;
+  if (isNonTransaction(text)) return true;
+  if (CREDIT_RE.test(text)) return true;
+  return false;
+}
+
 // Returns null both when no amount could be read AND when the message looks
 // like an incoming deposit (income) — this tracker is expense-only, so
 // credits are silently skipped rather than logged as spending.
