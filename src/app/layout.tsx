@@ -44,6 +44,7 @@ export const metadata: Metadata = {
     title: "مدار",
     statusBarStyle: "default",
   },
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {

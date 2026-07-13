@@ -8,6 +8,7 @@ export function SWRegister({ bp }: { bp: string }) {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register(`${bp}/sw.js`, { scope: `${bp}/` }).catch(() => {});
+    navigator.storage?.persist?.().catch(() => {});
   }, [bp]);
   return null;
 }
