@@ -6,8 +6,9 @@ import { mergeAppData } from "@/lib/sync";
 import { DEFAULT_CATEGORIES } from "@/lib/types";
 import type { AppData, JournalEntry } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
-import { Download, Upload, ShieldCheck, GitMerge, Replace, Loader2 } from "lucide-react";
+import { Download, Upload, ShieldCheck, GitMerge, Replace, Loader2, Lock, KeyRound } from "lucide-react";
 import { showUndo, showToast } from "@/components/ui/UndoToast";
+import { encryptJson, decryptJson, isEncryptedBackup, type EncryptedBackup } from "@/lib/backupCrypto";
 
 // Journal media is either a local `data:` URL or (since the move to Cloud
 // Storage) an `https://` download URL — the doc keeps only a lightweight
@@ -86,6 +87,7 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     futureLetters: g("futureLetters", []),
     salaryDay: g("salaryDay", 27),
     lastSalaryConfirm: g("lastSalaryConfirm", null),
+    readingGoal: g("readingGoal", null),
     merchantRules: g("merchantRules", {}),
     lastUpdated: g("lastUpdated", new Date().toISOString()),
   };
@@ -102,20 +104,30 @@ export function BackupCard() {
   // A validated backup waiting for the user to choose merge vs. replace.
   const [pending, setPending] = useState<AppData | null>(null);
   const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
+  // Optional export encryption.
+  const [encrypt, setEncrypt] = useState(false);
+  const [exportPassword, setExportPassword] = useState("");
+  // An imported encrypted file waiting for its password.
+  const [encPending, setEncPending] = useState<EncryptedBackup | null>(null);
+  const [importPassword, setImportPassword] = useState("");
 
   async function exportJson() {
     const raw = snapshot();
     setExporting({ done: 0, total: raw.journalEntries.length });
     const { data, allEmbedded } = await embedAllMedia(raw, (done, total) => setExporting({ done, total }));
+    const useEnc = encrypt && exportPassword.trim().length > 0;
+    const payload = useEnc ? await encryptJson(data, exportPassword.trim()) : JSON.stringify(data);
     setExporting(null);
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `madar-backup-${today()}.json`;
+    a.download = `madar-backup-${today()}${useEnc ? "-مشفّر" : ""}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    if (!allEmbedded) {
+    if (useEnc) {
+      showToast("صُدّرت نسخة مشفّرة — احفظ كلمة المرور، لا يمكن استرجاعها بدونها", "warning");
+    } else if (!allEmbedded) {
       showToast("صُدّرت النسخة — بعض الصور بقيت روابط (تعذّر تنزيلها، تحقق من الاتصال)", "warning");
     }
     // تغذية تذكير النسخ الدوري في التوصيات الذكية
@@ -125,8 +137,15 @@ export function BackupCard() {
   async function importJson(file: File) {
     setError("");
     setPending(null);
+    setEncPending(null);
+    setImportPassword("");
     try {
       const parsed = JSON.parse(await file.text());
+      // Encrypted backup → ask for its password before we can read it.
+      if (isEncryptedBackup(parsed)) {
+        setEncPending(parsed);
+        return;
+      }
       if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.transactions)) {
         throw new Error("bad shape");
       }
@@ -134,6 +153,22 @@ export function BackupCard() {
       setPending(normalizeBackup(parsed));
     } catch {
       setError("الملف غير صالح — تأكد أنه نسخة مدار الاحتياطية");
+    }
+  }
+
+  async function decryptPending() {
+    if (!encPending || !importPassword) return;
+    setError("");
+    try {
+      const obj = await decryptJson(encPending, importPassword);
+      if (!obj || typeof obj !== "object" || !Array.isArray((obj as { transactions?: unknown }).transactions)) {
+        throw new Error("bad shape");
+      }
+      setEncPending(null);
+      setImportPassword("");
+      setPending(normalizeBackup(obj as Record<string, unknown>));
+    } catch {
+      setError("كلمة المرور غير صحيحة أو الملف تالف");
     }
   }
 
@@ -190,7 +225,63 @@ export function BackupCard() {
           e.target.value = "";
         }}
       />
+
+      {/* تشفير التصدير بكلمة مرور (اختياري) */}
+      <div className="mt-3">
+        <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={encrypt}
+            onChange={(e) => setEncrypt(e.target.checked)}
+            className="accent-prayer w-3.5 h-3.5"
+          />
+          <Lock size={12} /> تشفير الملف بكلمة مرور
+        </label>
+        {encrypt && (
+          <input
+            type="password"
+            value={exportPassword}
+            onChange={(e) => setExportPassword(e.target.value)}
+            placeholder="كلمة مرور التشفير"
+            className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-prayer/40"
+          />
+        )}
+      </div>
+
       {error && <p className="text-[11px] text-red-500 mt-2">{error}</p>}
+
+      {/* استعادة نسخة مشفّرة — طلب كلمة المرور */}
+      {encPending && (
+        <div className="mt-3 rounded-xl bg-gray-50 p-3 animate-fade-up">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-2">
+            <KeyRound size={13} /> هذه نسخة مشفّرة — أدخل كلمة المرور
+          </div>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="password"
+              value={importPassword}
+              onChange={(e) => setImportPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") decryptPending(); }}
+              placeholder="كلمة المرور"
+              className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-prayer/40"
+            />
+            <button
+              onClick={decryptPending}
+              disabled={!importPassword}
+              className="text-sm font-medium text-prayer bg-prayer/10 rounded-xl px-3 press disabled:opacity-50"
+            >
+              فتح
+            </button>
+          </div>
+          <button
+            onClick={() => { setEncPending(null); setImportPassword(""); setError(""); }}
+            className="w-full text-[11px] text-gray-400 mt-2 press"
+          >
+            إلغاء
+          </button>
+        </div>
+      )}
 
       {pending && (
         <div className="mt-3 rounded-xl bg-gray-50 p-3 animate-fade-up">

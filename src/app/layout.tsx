@@ -21,6 +21,10 @@ const thamaniah = localFont({
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { ClientOnly } from "@/components/layout/ClientOnly";
+import { PageTransition } from "@/components/layout/PageTransition";
+import { PrivacyLock } from "@/components/layout/PrivacyLock";
+import { AppBadge } from "@/components/layout/AppBadge";
+import { MilestoneWatcher } from "@/components/dashboard/MilestoneWatcher";
 import { SWRegister } from "@/components/layout/SWRegister";
 import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
@@ -74,19 +78,23 @@ export default function RootLayout({
         <ClientOnly>
           <SWRegister bp={bp} />
           <ThemeApplier />
-          <SyncProvider>
-            <div className="min-h-screen flex">
-              <Sidebar />
-              <main className="flex-1 min-w-0 lg:mr-56 pb-20 lg:pb-0">
-                <MobileHeader />
-                {children}
-              </main>
-            </div>
-            <MobileNav />
-            <UndoToast />
-            <PendingInboxWatcher />
-            <RecurringRunner />
-          </SyncProvider>
+          <PrivacyLock>
+            <SyncProvider>
+              <div className="min-h-screen flex">
+                <Sidebar />
+                <main className="flex-1 min-w-0 lg:mr-56 pb-20 lg:pb-0">
+                  <MobileHeader />
+                  <PageTransition>{children}</PageTransition>
+                </main>
+              </div>
+              <MobileNav />
+              <UndoToast />
+              <PendingInboxWatcher />
+              <RecurringRunner />
+              <AppBadge />
+              <MilestoneWatcher />
+            </SyncProvider>
+          </PrivacyLock>
         </ClientOnly>
       </body>
     </html>

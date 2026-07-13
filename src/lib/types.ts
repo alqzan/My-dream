@@ -241,6 +241,7 @@ export interface AppData {
   futureLetters: FutureLetter[];
   salaryDay: number; // يوم نزول الراتب (افتراضياً 27) — يظهر بعده سؤال «نزل الراتب؟»
   lastSalaryConfirm: string | null; // YYYY-MM-DD لآخر تأكيد «نزل الراتب»
+  readingGoal: number | null; // هدف عدد الكتب المُنهاة هذا العام (null = بلا هدف)
   // Learned merchant → category id map. When you categorize an expense by
   // hand, the merchant (from the note) is remembered so the next one from the
   // same place is auto-classified your way — this is what makes it تلقائي.

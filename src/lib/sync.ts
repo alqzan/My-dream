@@ -355,6 +355,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     futureLetters: byId(primary.futureLetters, secondary.futureLetters),
     salaryDay: primary.salaryDay,
     lastSalaryConfirm: primary.lastSalaryConfirm,
+    readingGoal: primary.readingGoal ?? secondary.readingGoal ?? null,
     merchantRules: { ...secondary.merchantRules, ...primary.merchantRules },
     lastUpdated: (local.lastUpdated ?? "") > (cloud.lastUpdated ?? "") ? local.lastUpdated : cloud.lastUpdated,
   };

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { sunTimes, getCachedCoords, GEO_KEY } from "@/lib/utils";
 import { Moon, Sun, SunMoon } from "lucide-react";
@@ -19,6 +19,10 @@ function isNightNow(): boolean {
 export function ThemeApplier() {
   const theme = useAppStore((s) => s.theme);
   const [, setTick] = useState(0);
+  // Tracks the last-applied dark state so we only ease the colour change on an
+  // actual flip (not on the first paint, and not on every minute-tick that
+  // leaves the theme unchanged).
+  const wasDark = useRef<boolean | null>(null);
 
   // Ask for the real location once (silently) so sunset matches the user's
   // city; the cheap fallback is Riyadh.
@@ -42,14 +46,28 @@ export function ThemeApplier() {
 
   useEffect(() => {
     const root = document.documentElement;
+    let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
     function apply() {
       const dark = theme === "dark" || (theme === "auto" && isNightNow());
+      // Ease the colour change only on a genuine flip — skip the very first
+      // apply (wasDark === null) so the initial paint doesn't animate.
+      const flipping = wasDark.current !== null && wasDark.current !== dark;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (flipping && !reduce) {
+        root.classList.add("theme-transition");
+        if (cleanupTimer) clearTimeout(cleanupTimer);
+        cleanupTimer = setTimeout(() => root.classList.remove("theme-transition"), 700);
+      }
       root.classList.toggle("dark", dark);
+      wasDark.current = dark;
     }
     apply();
-    if (theme !== "auto") return;
+    if (theme !== "auto") return () => { if (cleanupTimer) clearTimeout(cleanupTimer); };
     const id = setInterval(apply, 60 * 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      if (cleanupTimer) clearTimeout(cleanupTimer);
+    };
   }, [theme]);
 
   return null;

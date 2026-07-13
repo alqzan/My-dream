@@ -64,6 +64,9 @@ interface AppStore extends AppData {
   openFutureLetter: (id: string) => void;
   deleteFutureLetter: (id: string) => void;
 
+  // هدف القراءة السنوي (عدد كتب) — null يعني بلا هدف
+  setReadingGoal: (goal: number | null) => void;
+
   // Reading
   addBook: (book: Book) => void;
   updateBook: (id: string, updates: Partial<Book>) => void;
@@ -133,6 +136,7 @@ export const useAppStore = create<AppStore>()(
       futureLetters: [],
       salaryDay: 27,
       lastSalaryConfirm: null,
+      readingGoal: null,
       merchantRules: {},
       theme: "auto",
       lastUpdated: new Date().toISOString(),
@@ -415,6 +419,9 @@ export const useAppStore = create<AppStore>()(
       setSalaryDay: (day) =>
         set(() => ({ salaryDay: Math.min(Math.max(Math.round(day) || 27, 1), 31) })),
 
+      setReadingGoal: (goal) =>
+        set(() => ({ readingGoal: goal && goal > 0 ? Math.round(goal) : null })),
+
       // «نزل الراتب»: باقي الميزانية اليومية المتراكمة يتحول لصندوق
       // «الفوائض» (يُنشأ تلقائياً إن لم يوجد)، ويبدأ عدّاد اليومية من جديد.
       confirmSalary: () => {
@@ -612,6 +619,7 @@ export const useAppStore = create<AppStore>()(
           futureLetters: data.futureLetters ?? [],
           salaryDay: data.salaryDay ?? 27,
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
+          readingGoal: data.readingGoal ?? null,
           merchantRules: data.merchantRules ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
@@ -634,6 +642,7 @@ export const useAppStore = create<AppStore>()(
           futureLetters: s.futureLetters,
           salaryDay: s.salaryDay,
           lastSalaryConfirm: s.lastSalaryConfirm,
+          readingGoal: s.readingGoal,
           merchantRules: s.merchantRules,
           lastUpdated: s.lastUpdated,
         };
@@ -642,7 +651,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 8,
+      version: 9,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -782,6 +791,11 @@ export const useAppStore = create<AppStore>()(
               return pair && c.color === pair[0] ? { ...c, color: pair[1] } : c;
             }),
           };
+        }
+
+        // v9 adds an optional annual reading goal (عدد الكتب المُنهاة هذا العام).
+        if (version < 9) {
+          state = { ...state, readingGoal: state.readingGoal ?? null };
         }
 
         return state as unknown as AppData;

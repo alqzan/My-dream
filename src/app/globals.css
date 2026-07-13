@@ -217,6 +217,42 @@ body::before {
   100% { transform: scale(1); }
 }
 
+@keyframes pageFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.45s ease-in-out;
+}
+
+/* Whole-page cross-fade on client navigation — the wrapper is keyed on the
+   route so it re-runs on every tab change, softening the jump between pages
+   (the per-card fade-up still layers on top for the staggered entrance). */
+.page-fade {
+  animation: pageFade 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Sunset/sunrise: when the theme flips (auto at المغرب/الصباح, or a manual
+   toggle) a short-lived class on <html> eases the colour change so the whole
+   UI dissolves into night instead of snapping. Removed right after, so normal
+   interactions never carry this transition. */
+.theme-transition,
+.theme-transition *:not(.press):not(.shine) {
+  transition:
+    background-color 0.6s ease,
+    border-color 0.6s ease,
+    color 0.6s ease !important;
+}
+
 .animate-fade-up {
   animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -291,12 +327,18 @@ body::before {
   .animate-fade-up,
   .animate-pop-in,
   .animate-flame,
+  .page-fade,
   .shine::after {
     animation: none;
   }
-  .animate-fade-up {
+  .animate-fade-up,
+  .page-fade {
     opacity: 1;
     transform: none;
+  }
+  .theme-transition,
+  .theme-transition * {
+    transition: none !important;
   }
 }
 

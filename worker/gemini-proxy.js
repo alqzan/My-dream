@@ -5,16 +5,42 @@
 // Workers' free tier, using Google's free Gemini tier.
 //
 // Deploy: see worker/README.md. Required secret: GEMINI_API_KEY.
-// Optional var: GEMINI_MODEL (default "gemini-2.0-flash").
+// Optional vars: GEMINI_MODEL (default "gemini-2.0-flash"),
+//   ALLOWED_ORIGINS (comma-separated list of site origins allowed to call this
+//   worker, e.g. "https://alqzan.github.io"). When set, requests from other
+//   origins are refused and the CORS header echoes only an allowed origin —
+//   so a leaked worker URL can't be used to burn your Gemini quota from an
+//   arbitrary site. Unset keeps the old permissive "*" behaviour.
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "content-type",
-};
+// Build the CORS headers for a given request: echo the caller's origin when it
+// is on the allow-list (or when no list is configured), else deny.
+function corsHeaders(request, env) {
+  const base = {
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
+    Vary: "Origin",
+  };
+  const allowed = (env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const origin = request.headers.get("Origin") || "";
+  if (!allowed.length) return { ...base, "Access-Control-Allow-Origin": "*" };
+  if (origin && allowed.includes(origin)) return { ...base, "Access-Control-Allow-Origin": origin };
+  return { ...base, "Access-Control-Allow-Origin": allowed[0], __denied: origin || "unknown" };
+}
 
 export default {
   async fetch(request, env) {
+    const CORS = corsHeaders(request, env);
+    // An origin allow-list is configured and this request isn't on it → refuse
+    // before doing any work or touching the API key.
+    if (CORS.__denied !== undefined) {
+      delete CORS.__denied;
+      if (request.method === "OPTIONS") return new Response(null, { status: 403, headers: CORS });
+      return new Response("origin not allowed", { status: 403, headers: CORS });
+    }
+    delete CORS.__denied;
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
     if (request.method !== "POST") return new Response("POST only", { status: 405, headers: CORS });
     if (!env.GEMINI_API_KEY) return new Response("GEMINI_API_KEY not set", { status: 500, headers: CORS });

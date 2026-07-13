@@ -143,6 +143,39 @@ export function hijriMonthLabel(year: number, month: number): string {
   }
 }
 
+// Numeric Hijri (Umm al-Qura) month/day/year for a date — Ramadan is month 9.
+// Uses the Latin-numeral Islamic calendar so parsing the parts back to numbers
+// is reliable regardless of locale digit shaping.
+const hijriPartsFmt =
+  typeof Intl !== "undefined"
+    ? new Intl.DateTimeFormat("en-US-u-ca-islamic-umalqura", {
+        day: "numeric",
+        month: "numeric",
+        year: "numeric",
+      })
+    : null;
+
+export function hijriParts(date = new Date()): { day: number; month: number; year: number } | null {
+  try {
+    if (!hijriPartsFmt) return null;
+    const parts = hijriPartsFmt.formatToParts(date);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const day = get("day");
+    const month = get("month");
+    const year = get("year");
+    if (!day || !month || !year) return null;
+    return { day, month, year };
+  } catch {
+    return null;
+  }
+}
+
+// True during the Hijri month of رمضان (month 9). Drives the seasonal card,
+// which renders only then and leaves no footprint the rest of the year.
+export function isRamadan(date = new Date()): boolean {
+  return hijriParts(date)?.month === 9;
+}
+
 // ===================== Sun & prayer times =====================
 
 // NOAA-simplified solar position for a date + location. Shared by
@@ -277,8 +310,13 @@ export function calcStreak(dates: string[]): number {
   const logged = new Set(dates);
   const current = parseDate(today());
 
+  // A streak can never be longer than the number of distinct logged days, so
+  // bound the walk by that (plus a little slack for the "today not logged yet"
+  // step that moves back without counting). This lets a genuinely long run —
+  // more than a year — keep counting instead of freezing at a fixed 365 cap.
+  const maxSteps = logged.size + 2;
   let streak = 0;
-  for (let i = 0; i < 365; i++) {
+  for (let i = 0; i < maxSteps; i++) {
     const dateStr = toDateStr(current);
     if (logged.has(dateStr)) {
       streak++;

@@ -9,11 +9,12 @@ import { NumberInput } from "@/components/ui/NumberInput";
 interface ReadingLogFormProps {
   books: Book[];
   defaultBookId?: string;
+  defaultMinutes?: number; // prefill دقائق القراءة (من مؤقّت الجلسة)
   initial?: ReadingLog; // when set, the form edits this log instead of adding
   onClose: () => void;
 }
 
-export function ReadingLogForm({ books, defaultBookId, initial, onClose }: ReadingLogFormProps) {
+export function ReadingLogForm({ books, defaultBookId, defaultMinutes, initial, onClose }: ReadingLogFormProps) {
   const { addReadingLog, updateReadingLog, updateBook } = useAppStore();
   const activeBooks = books.filter((b) => b.status === "أقرأ");
   // When editing, allow the log's own book in the picker even if it's no
@@ -24,7 +25,9 @@ export function ReadingLogForm({ books, defaultBookId, initial, onClose }: Readi
       : activeBooks;
   const [bookId, setBookId] = useState(initial?.bookId ?? defaultBookId ?? activeBooks[0]?.id ?? "");
   const [pagesRead, setPagesRead] = useState(initial ? String(initial.pagesRead) : "");
-  const [minutes, setMinutes] = useState(initial?.minutesRead ? String(initial.minutesRead) : "");
+  const [minutes, setMinutes] = useState(
+    initial?.minutesRead ? String(initial.minutesRead) : defaultMinutes ? String(defaultMinutes) : ""
+  );
   const [date, setDate] = useState(initial?.date ?? today());
 
   const selectedBook = books.find((b) => b.id === bookId);

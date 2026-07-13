@@ -1,79 +1,64 @@
 # PROGRESS
 
-Owner-approved scope after the Stage 0 review. The owner chose to implement
-**only item 11**; everything else was reviewed and deliberately left out
-(most of the "critical" items were already implemented, differently or
-better — see reasons below).
+سجل موجز لأهم ما أُنجز في المشروع. الحالة العامة: البناء أخضر (`npm run build`)
+والتطبيق يعمل بالكامل على الجهاز مع مزامنة سحابية اختيارية.
 
-## Approved / in scope
+## المزامنة والنسخ الاحتياطي
 
-- [ ] **11. Edit habits and reading logs**
-      - Add `updateHabit` and `updateReadingLog` store actions.
-      - Habits: edit name/icon/color from the "manage" mode in HabitTracker.
-      - Reading logs: a reading-sessions list on the reading page with
-        edit + delete; ReadingLogForm gains an edit mode. Editing a log does
-        not re-advance the book's `currentPage` (kept decoupled, matching the
-        existing `deleteReadingLog` behavior; `currentPage` stays editable via
-        the book form).
+- [x] دمج متعدد الأجهزة بدل «آخر كاتب يفوز» (`mergeAppData` في `sync.ts`): توحيد كل
+      المجموعات بالمعرّف/المفتاح، والأحدث يفوز في تعارض العنصر؛ سجلات العادات
+      وإيداعات الاحتياطي وصلوات اليوم تُوحَّد بلا فقد.
+- [x] إعادة محاولة المزامنة بتراجع أسّي (2s→30s) مع تنبيه واحد عند الفشل.
+- [x] حارس حجم مستند Firestore قبل حد 1MB (تنبيه مبكر مرة واحدة).
+- [x] وسائط سحابية في Cloud Storage (صور/صوت بمفتاح تجزئة + manifest)، والمستند
+      الرئيسي يحمل مراجع خفيفة فقط.
+- [x] نسخة احتياطية JSON: تصدير بكل الصور مضمّنة + استيراد مُتحقَّق منه مع اختيار
+      «دمج» أو «استبدال» وتراجع.
+- [x] **تصدير مشفّر اختياري** بكلمة مرور (AES-GCM + PBKDF2) — يُكتشف تلقائياً عند
+      الاستيراد ويطلب كلمة المرور (`lib/backupCrypto.ts`).
+- [x] إخراج معرّف مساحة المزامنة السري من الكود (`getSyncSpace()`؛ يُحفظ لكل جهاز
+      عبر بطاقة «مفتاح المزامنة»).
 
-## Second round — owner approved the three "sync/backup resilience" items
+## المساعد (Gemini، الطبقة المجانية)
 
-- [x] **S1. Multi-device merge instead of last-writer-wins** (was item 3)
-      - `mergeAppData(local, cloud)` in sync.ts: unions every collection by
-        id/key, newer top-level `lastUpdated` wins per-item conflicts; habit
-        logs, reserve deposits and per-day prayers are unioned. No per-item
-        clocks (a delete on one device can be undone by the other's copy —
-        accepted trade-off vs. silently dropping added data).
-      - Wired into SyncProvider: initial load, live subscription, and a
-        re-read-before-save step in the debounced push.
-- [x] **S2. Sync retry with backoff + failure toast** (was item 2)
-      - Failed debounced saves now retry with exponential backoff (2s→30s cap)
-        and surface a one-time warning toast ("فشلت المزامنة — سيُعاد المحاولة")
-        via the existing `showToast`. A fresh edit supersedes a pending retry.
-- [x] **S3. Merge-or-replace choice on backup import** (was item 4)
-      - After validating a backup, BackupCard now asks "دمج" (union via
-        `mergeAppData`, no deletions) vs "استبدال" (full replace). Both keep the
-        undo. Legacy/partial backups are normalized to a full AppData first.
+- [x] صفحة محادثة `/assistant` تبثّ الرد عبر وسيط Cloudflare Worker (المفتاح خارج
+      المتصفح). `buildAssistantContext` يلخّص البيانات كسياق مضغوط.
+- [x] **أسئلة جاهزة (chips) + حفظ المحادثة محلياً** واستعادتها، وزر «محادثة جديدة».
+- [x] **تحصين الوسيط**: متغيّر `ALLOWED_ORIGINS` يقصر القبول على نطاق الموقع
+      (يرفض من يعرف الرابط) — انظر `worker/README.md`.
 
-## In-app assistant (Gemini, free tier)
+## المذكرات والقراءة
 
-- [x] **A1. Assistant chat page** (`/assistant`, added to nav)
-      - `buildAssistantContext` summarizes finance/habits/prayers/reading/journal
-        into a compact grounding blob (recent items only, truncated snippets).
-      - Chat UI streams the reply; worker URL is stored in localStorage and set
-        from an in-app setup card (no keys in the client).
-      - `worker/gemini-proxy.js` + `worker/README.md`: a free Cloudflare Worker
-        that holds GEMINI_API_KEY and streams `gemini-2.0-flash` back as text.
-      - Owner action required: deploy the worker, set GEMINI_API_KEY, paste the
-        worker URL into the assistant page.
+- [x] تجربة تحرير غنية (تنسيق، حفظ تلقائي، مسودّة، صور متعددة، صوت)، شريط سنوات،
+      مفضلة، تنقّل، ذكرى عشوائية، معرض، و«في مثل هذا اليوم».
+- [x] **وسوم للمذكرات**: إدخالها في النموذج وفلترة بضغطة على شريط الوسوم وعرضها في
+      القارئ.
+- [x] تعديل/حذف جلسات القراءة (لا يُعاد احتساب `currentPage`).
+- [x] **مؤقّت جلسة قراءة** يملأ الدقائق تلقائياً، و**هدف قراءة سنوي** مع مؤشر وتيرة.
 
-## Reviewed and NOT implemented (owner's decision: do only 11)
+## لمسات واجهة
 
-- 1. Firestore 1MB photo risk — SKIPPED. Already solved: photos live in
-     per-hash docs under `userData/{space}/photos/{hash}` with a manifest;
-     the main doc stays small. A Firebase Storage migration would regress the
-     login-free model.
-- 2. Surface sync errors (toast + retry) — DEFERRED. Errors are caught and
-     shown as an "offline" indicator; toast + backoff not added.
-- 3. Multi-device merge before save — DEFERRED. Live subscription + hasData
-     guard already reduce the risk; per-collection id merge not added.
-- 4. JSON backup — SKIPPED. Already implemented in BackupCard (export +
-     validated import + undo); only a merge-vs-replace choice is missing.
-- 5. Mood cleanup — DEFERRED. Form no longer writes mood; display/analytics
-     leftovers remain but are harmless.
-- 6. Local-time date strings — SKIPPED. Already implemented app-wide
-     (`toDateStr`/`parseDate`/`today`/`calcStreak`/`getMonthDates`).
-- 7. Recurring (yearly month / dayOfMonth up to 31) — DEFERRED. Backfill of
-     all missed periods already works; day cap and yearly month picker not added.
-- 8. Dark mode audit — SKIPPED. Handled centrally via `.dark` remaps in
-     globals.css; per-component `dark:` variants unnecessary.
-- 9. Service worker — SKIPPED. Already present (public/sw.js + SWRegister,
-     basePath-scoped).
-- 10. uid → crypto.randomUUID — DEFERRED. Cosmetic; current uid is fine.
-- 12. Vitest + CI — DEFERRED.
-- 13. bankParser (Arabic digits) — DEFERRED. Thousands separators already
-      handled; Arabic-Indic digit amounts still unsupported.
-- 14. Journal filter chips — DEFERRED. Text search + month grouping exist.
-- 15. Income-vs-expense chart — DROPPED. App is expense-only; no income data
-      to chart.
-- 16. README — DEFERRED.
+- [x] انتقال ناعم بين الصفحات (`PageTransition`)، مؤشر منزلق في الشريط السفلي،
+      هيدر/شريط زجاجي (`backdrop-blur`).
+- [x] تحوّل تدريجي للألوان عند انقلاب الوضع الليلي (الغروب/الشروق أو التبديل اليدوي).
+- [x] احتفالات المعالم (سلسلة 7/30/100…، إنهاء الكتب) بكونفيتي مرة واحدة لكل معلم.
+- [x] رسوم الحالات الفارغة بطابع أندلسي (نجمة ثمانية).
+- [x] مشاركة «حصيلة الأسبوع» كصورة PNG (canvas، بلا مكتبات).
+
+## خصوصية
+
+- [x] قفل رمز محلي (PIN من 4 أرقام، SHA-256، لا يُزامن) يُطلب عند فتح التطبيق —
+      يُفعّل/يُلغى من الإعدادات (`LockCard`).
+- [x] شارة على أيقونة التطبيق (Badging API) حين يكون اليوم ناقصاً.
+
+## أعراف مثبّتة (انظر CLAUDE.md)
+
+- تواريخ محلية `YYYY-MM-DD` عبر `toDateStr/parseDate/today` (لا `toISOString`).
+- أرقام لاتينية عبر `formatAmount`؛ حساب مالي مُقرَّب بـ`round2`؛ ميزانية يومية
+      تراكمية مع `carryAdjust`.
+- الوضع الليلي مركزي في `globals.css`؛ التنقّل من مصدر واحد `lib/nav.ts`.
+- عدّاد السلسلة (`calcStreak`) لم يعد محدوداً بسنة — يُحسب حتى أول انقطاع فعلي.
+
+## مؤجَّل بقرار المالك
+
+- README عام، واختبارات Vitest/CI، وتصدير مصاريف CSV.

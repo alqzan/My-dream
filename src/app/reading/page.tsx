@@ -6,6 +6,8 @@ import { BookCard } from "@/components/reading/BookCard";
 import { BookForm } from "@/components/reading/BookForm";
 import { ReadingLogForm } from "@/components/reading/ReadingLogForm";
 import { ReadingPace } from "@/components/reading/ReadingPace";
+import { ReadingGoalCard } from "@/components/reading/ReadingGoalCard";
+import { ReadingTimer } from "@/components/reading/ReadingTimer";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -24,6 +26,13 @@ export default function ReadingPage() {
   const [editBook, setEditBook] = useState<Book | undefined>();
   const [editLog, setEditLog] = useState<ReadingLog | undefined>();
   const [filter, setFilter] = useState<FilterStatus>("الكل");
+  // دقائق ممرَّرة من مؤقّت الجلسة لتعبئة نموذج التسجيل تلقائياً.
+  const [timerMinutes, setTimerMinutes] = useState<number | undefined>();
+
+  function finishTimer(minutes: number) {
+    setTimerMinutes(minutes);
+    setShowLogForm(true);
+  }
 
   // Most recent reading sessions, newest first — an editable/removable history.
   const recentLogs = [...readingLogs]
@@ -96,6 +105,14 @@ export default function ReadingPage() {
           <div className="text-xl font-bold text-orange-500 tabular-nums"><AnimatedNumber value={totalPagesRead} /></div>
           <div className="text-[11px] text-gray-500 mt-0.5">صفحة قرأت</div>
         </div>
+      </div>
+
+      <div className="animate-fade-up stagger-1">
+        <ReadingTimer onFinish={finishTimer} />
+      </div>
+
+      <div className="animate-fade-up stagger-2">
+        <ReadingGoalCard />
       </div>
 
       <Card className="animate-fade-up stagger-2">
@@ -196,14 +213,15 @@ export default function ReadingPage() {
 
       <Modal
         open={showLogForm || !!editLog}
-        onClose={() => { setShowLogForm(false); setEditLog(undefined); }}
+        onClose={() => { setShowLogForm(false); setEditLog(undefined); setTimerMinutes(undefined); }}
         title={editLog ? "تعديل جلسة القراءة" : "سجّل جلسة قراءة"}
       >
         <ReadingLogForm
-          key={editLog?.id ?? "new"}
+          key={editLog?.id ?? `new-${timerMinutes ?? ""}`}
           books={books}
           initial={editLog}
-          onClose={() => { setShowLogForm(false); setEditLog(undefined); }}
+          defaultMinutes={editLog ? undefined : timerMinutes}
+          onClose={() => { setShowLogForm(false); setEditLog(undefined); setTimerMinutes(undefined); }}
         />
       </Modal>
     </div>

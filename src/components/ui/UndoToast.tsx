@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { useEffect } from "react";
 import { Undo2 } from "lucide-react";
 
-type Tone = "default" | "warning";
+type Tone = "default" | "warning" | "success";
 
 interface UndoState {
   label: string | null;
@@ -29,7 +29,8 @@ export function showUndo(label: string, onUndo: () => void) {
   useUndoStore.getState().show(label, onUndo, "default");
 }
 
-// Plain message toast (no undo). Use tone "warning" for budget/limit alerts.
+// Plain message toast (no undo). "warning" for budget/limit alerts,
+// "success" for celebrations (milestones).
 export function showToast(label: string, tone: Tone = "default") {
   useUndoStore.getState().show(label, null, tone);
 }
@@ -39,7 +40,7 @@ export function UndoToast() {
 
   useEffect(() => {
     if (!label) return;
-    const t = setTimeout(clear, tone === "warning" ? 6000 : 5000);
+    const t = setTimeout(clear, tone === "default" ? 5000 : 6000);
     return () => clearTimeout(t);
   }, [label, seq, tone, clear]);
 
@@ -50,7 +51,11 @@ export function UndoToast() {
       <div
         className={
           "pointer-events-auto flex items-center gap-3 text-white text-sm rounded-2xl px-4 py-2.5 shadow-lg animate-fade-up backdrop-blur " +
-          (tone === "warning" ? "bg-amber-600/95" : "bg-gray-900/95 dark:bg-[#3a2e1e]")
+          (tone === "warning"
+            ? "bg-amber-600/95"
+            : tone === "success"
+            ? "bg-finance/95"
+            : "bg-gray-900/95 dark:bg-[#3a2e1e]")
         }
       >
         <span>{label}</span>

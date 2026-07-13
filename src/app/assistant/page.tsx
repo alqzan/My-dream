@@ -4,9 +4,19 @@ import { useAppStore } from "@/lib/store";
 import { buildAssistantContext } from "@/lib/assistantContext";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Sparkles, Send, Settings2, User } from "lucide-react";
+import { Sparkles, Send, Settings2, User, MessageSquarePlus } from "lucide-react";
 
 const ENDPOINT_KEY = "madar-assistant-endpoint";
+const HISTORY_KEY = "madar-assistant-history";
+
+// أسئلة جاهزة تظهر كرقائق عند فتح المحادثة — لمسة تُسهّل البدء.
+const SUGGESTIONS = [
+  "كم صرفت هذا الشهر مقارنة بالماضي؟",
+  "لخّص أسبوعي",
+  "كيف عاداتي هذا الأسبوع؟",
+  "ما أكثر أقسام صرفي؟",
+  "كيف التزامي بالصلوات؟",
+];
 
 // The assistant's role. Kept short — the grounding data arrives separately as
 // context so this can stay cached-friendly and cheap.
@@ -46,8 +56,27 @@ export default function AssistantPage() {
       const saved = localStorage.getItem(ENDPOINT_KEY) ?? "";
       setEndpoint(saved);
       setEndpointInput(saved);
+      // استعادة آخر محادثة حتى لا تضيع عند إغلاق التطبيق.
+      const rawHistory = localStorage.getItem(HISTORY_KEY);
+      if (rawHistory) {
+        const parsed = JSON.parse(rawHistory);
+        if (Array.isArray(parsed)) setMessages(parsed);
+      }
     } catch {}
   }, []);
+
+  // حفظ المحادثة محلياً مع كل تغيّر (بلا مزامنة — خاصة بالجهاز).
+  useEffect(() => {
+    try {
+      if (messages.length) localStorage.setItem(HISTORY_KEY, JSON.stringify(messages));
+      else localStorage.removeItem(HISTORY_KEY);
+    } catch {}
+  }, [messages]);
+
+  function clearChat() {
+    setMessages([]);
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -62,10 +91,10 @@ export default function AssistantPage() {
     setEditingEndpoint(false);
   }
 
-  async function send() {
-    const text = input.trim();
+  async function send(preset?: string) {
+    const text = (preset ?? input).trim();
     if (!text || busy || !endpoint) return;
-    setInput("");
+    if (!preset) setInput("");
 
     const history = messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
@@ -176,21 +205,46 @@ export default function AssistantPage() {
           <Sparkles size={20} className="text-brand-600" />
           <h1 className="text-xl font-bold text-gray-900">المساعد</h1>
         </div>
-        <button
-          onClick={() => { setEndpointInput(endpoint); setEditingEndpoint(true); }}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 press"
-          aria-label="إعداد الوسيط"
-        >
-          <Settings2 size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              onClick={clearChat}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 press"
+              aria-label="محادثة جديدة"
+              title="محادثة جديدة"
+            >
+              <MessageSquarePlus size={17} />
+            </button>
+          )}
+          <button
+            onClick={() => { setEndpointInput(endpoint); setEditingEndpoint(true); }}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 press"
+            aria-label="إعداد الوسيط"
+          >
+            <Settings2 size={16} />
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pb-3">
         {messages.length === 0 && (
-          <div className="text-center text-sm text-gray-400 py-10 space-y-2">
-            <Sparkles size={28} className="mx-auto text-brand-300" />
-            <p>اسألني عن مصاريفك، مذكراتك، عاداتك، صلواتك أو قراءتك.</p>
-            <p className="text-xs">مثال: «كم صرفت هذا الشهر؟» · «كيف عاداتي هالأسبوع؟»</p>
+          <div className="text-center text-sm text-gray-400 py-10 space-y-4">
+            <div className="space-y-2">
+              <Sparkles size={28} className="mx-auto text-brand-300" />
+              <p>اسألني عن مصاريفك، مذكراتك، عاداتك، صلواتك أو قراءتك.</p>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center px-2">
+              {SUGGESTIONS.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => send(q)}
+                  disabled={busy}
+                  className="text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-full px-3 py-1.5 press disabled:opacity-50"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
@@ -231,7 +285,7 @@ export default function AssistantPage() {
           className="flex-1 resize-none overflow-y-auto border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300 max-h-32"
         />
         <button
-          onClick={send}
+          onClick={() => send()}
           disabled={busy || !input.trim()}
           className="shrink-0 w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center press disabled:opacity-40"
           aria-label="إرسال"

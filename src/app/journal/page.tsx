@@ -44,6 +44,7 @@ export default function JournalPage() {
   const [search, setSearch] = useState("");
   const [selectedYear, setSelectedYear] = useState("الكل");
   const [onlyStarred, setOnlyStarred] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   // Viewing an entry from the filtered list keeps its index so the viewer can
   // step to the prev/next one; viewing one from outside it (memories, random
   // memory) that the current filters happen to exclude falls back to a plain
@@ -90,20 +91,31 @@ export default function JournalPage() {
     return [...set].sort((a, b) => b.localeCompare(a));
   }, [journalEntries]);
 
+  // كل الوسوم المستخدمة، مرتّبة حسب التكرار (الأكثر استخداماً أولاً).
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of journalEntries) {
+      for (const t of e.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+  }, [journalEntries]);
+
   const filtered = useMemo(() => {
     const q = normalizeArabic(search.trim());
     const list = journalEntries.filter((e) => {
       if (selectedYear !== "الكل" && !e.date.startsWith(selectedYear)) return false;
       if (onlyStarred && !e.starred) return false;
+      if (selectedTag && !(e.tags ?? []).includes(selectedTag)) return false;
       if (!q) return true;
       return (
         normalizeArabic(e.content).includes(q) ||
         normalizeArabic(e.title ?? "").includes(q) ||
-        normalizeArabic(e.question ?? "").includes(q)
+        normalizeArabic(e.question ?? "").includes(q) ||
+        (e.tags ?? []).some((t) => normalizeArabic(t).includes(q))
       );
     });
     return [...list].sort((a, b) => b.date.localeCompare(a.date));
-  }, [journalEntries, search, selectedYear, onlyStarred]);
+  }, [journalEntries, search, selectedYear, onlyStarred, selectedTag]);
 
   function selectYear(y: string) {
     setSelectedYear(y);
@@ -111,6 +123,10 @@ export default function JournalPage() {
   }
   function toggleStarredFilter() {
     setOnlyStarred((v) => !v);
+    setVisibleCount(PAGE);
+  }
+  function selectTag(t: string) {
+    setSelectedTag((cur) => (cur === t ? null : t));
     setVisibleCount(PAGE);
   }
 
@@ -331,6 +347,23 @@ export default function JournalPage() {
         </button>
       </div>
 
+      {/* شريط الوسوم — فلترة بضغطة */}
+      {allTags.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 animate-fade-up stagger-3">
+          {allTags.map((t) => (
+            <button
+              key={t}
+              onClick={() => selectTag(t)}
+              className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                selectedTag === t ? "bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
+              }`}
+            >
+              #{t}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* تبديل قائمة/معرض */}
       <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-4">
         <button
@@ -487,6 +520,19 @@ export default function JournalPage() {
               <p className="text-xs text-journal bg-journal/10 rounded-xl px-3 py-2 leading-relaxed">
                 💭 {viewEntry.question}
               </p>
+            )}
+            {(viewEntry.tags?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {viewEntry.tags!.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { selectTag(t); closeViewer(); }}
+                    className="text-[11px] font-medium bg-journal/10 text-journal px-2.5 py-1 rounded-full hover:bg-journal/20 press"
+                  >
+                    #{t}
+                  </button>
+                ))}
+              </div>
             )}
             {entryPhotos(viewEntry).length > 0 && (
               <div className="space-y-2">

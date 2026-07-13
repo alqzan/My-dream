@@ -16,6 +16,7 @@ import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { SmartInsights } from "@/components/dashboard/SmartInsights";
 import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
+import { RamadanCard } from "@/components/dashboard/RamadanCard";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -95,6 +96,10 @@ export default function Dashboard() {
       </div>
 
       <PendingBankBanner />
+
+      <div className="animate-fade-up stagger-1">
+        <RamadanCard />
+      </div>
 
       <Card className="animate-fade-up stagger-1">
         <PrayerOrbit />

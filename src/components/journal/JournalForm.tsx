@@ -8,7 +8,7 @@ import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions
 import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Check } from "lucide-react";
+import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Check, Tag } from "lucide-react";
 
 interface JournalFormProps {
   onClose: () => void;
@@ -64,6 +64,8 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
   const [audio, setAudio] = useState<string | undefined>(initial?.audio);
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
   const [compressing, setCompressing] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -117,7 +119,18 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     }
   }, [initial, date, title, content, question, answering]);
 
-  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audio);
+  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audio || tags.length);
+
+  // إضافة وسم: تشذيب، بلا تكرار، وحد أقصى معقول للعدد والطول.
+  function addTag(raw: string) {
+    const t = raw.trim().replace(/^#/, "").slice(0, 24);
+    if (!t) return;
+    setTags((prev) => (prev.includes(t) || prev.length >= 12 ? prev : [...prev, t]));
+    setTagInput("");
+  }
+  function removeTag(t: string) {
+    setTags((prev) => prev.filter((x) => x !== t));
+  }
 
   // Persist the current state — create the entry on first save, update it
   // afterwards. This is what makes writing auto-save with no "save" tap.
@@ -132,6 +145,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photos,
         photo: photos[0] ?? "",
         audio: audio ?? "",
+        tags,
       });
     } else {
       const id = uid();
@@ -143,6 +157,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         ...(answering ? { question } : {}),
         ...(photos.length ? { photos, photo: photos[0] } : {}),
         ...(audio ? { audio } : {}),
+        ...(tags.length ? { tags } : {}),
         time: nowHHMM(),
         source: "manual",
       });
@@ -161,7 +176,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     saveTimer.current = setTimeout(persist, 700);
     return () => clearTimeout(saveTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, title, content, question, answering, photos, audio]);
+  }, [date, title, content, question, answering, photos, audio, tags]);
 
   // "تم" — flush any pending save immediately and close. If the entry was
   // emptied out, treat it as a cancel: delete the auto-created row (or revert
@@ -189,6 +204,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photos: initial.photos ?? (initial.photo ? [initial.photo] : []),
         photo: initial.photo ?? "",
         audio: initial.audio ?? "",
+        tags: initial.tags ?? [],
       });
     } else if (savedId.current) {
       deleteJournalEntry(savedId.current);
@@ -430,6 +446,50 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">ملاحظة صوتية</label>
         <AudioRecorder value={audio} onChange={setAudio} />
+      </div>
+
+      {/* وسوم — للتصنيف والفلترة لاحقاً */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+          <Tag size={12} /> وسوم
+          {tags.length > 0 && <span className="text-gray-300 font-normal">— {tags.length}</span>}
+        </label>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="flex items-center gap-1 text-[11px] font-medium bg-journal/10 text-journal px-2.5 py-1 rounded-full"
+              >
+                #{t}
+                <button
+                  onClick={() => removeTag(t)}
+                  className="hover:text-red-500 press"
+                  aria-label={`حذف الوسم ${t}`}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {tags.length < 12 && (
+          <input
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addTag(tagInput);
+              } else if (e.key === "Backspace" && !tagInput && tags.length) {
+                removeTag(tags[tags.length - 1]);
+              }
+            }}
+            onBlur={() => addTag(tagInput)}
+            placeholder="أضف وسماً واضغط Enter (مثل: سفر، عائلة)"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-journal/40"
+          />
+        )}
       </div>
 
       <div className="flex items-center gap-2 pt-1">
