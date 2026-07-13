@@ -133,6 +133,23 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Floating action button (+). Its bottom offset stacks the bottom-nav height
+   (~69px) AND the device safe-area inset, so it always floats with the same
+   clean gap above the tab bar — on a plain screen and on a phone with a home
+   indicator alike (a fixed offset overlapped the taller safe-area nav). On
+   desktop there's no bottom bar, so it sits near the corner. */
+.fab {
+  position: fixed;
+  left: 1rem;
+  bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+}
+@media (min-width: 1024px) {
+  .fab {
+    bottom: 2rem;
+  }
+}
+
 /* ===================== Motion & micro-interactions ===================== */
 
 ::selection {

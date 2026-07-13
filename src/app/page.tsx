@@ -165,7 +165,7 @@ export default function Dashboard() {
           taps away instead of a trip through the الأموال tab. */}
       <button
         onClick={() => setQuickExpense(true)}
-        className="fixed bottom-24 lg:bottom-8 left-4 z-40 p-4 rounded-full bg-finance text-white shadow-lg shadow-finance/30 press"
+        className="fab p-4 rounded-full bg-finance text-white shadow-lg shadow-finance/30 press"
         aria-label="سجّل مصروف سريع"
       >
         <Plus size={22} />

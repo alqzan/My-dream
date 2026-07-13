@@ -602,7 +602,7 @@ export default function JournalPage() {
       {/* زر عائم لكتابة مذكرة سريعة — مثل زر المصروف السريع في الرئيسية */}
       <button
         onClick={() => setShowForm(true)}
-        className="fixed bottom-24 lg:bottom-8 left-4 z-40 p-4 rounded-full bg-journal text-white shadow-lg shadow-journal/30 press"
+        className="fab p-4 rounded-full bg-journal text-white shadow-lg shadow-journal/30 press"
         aria-label="اكتب مذكرة جديدة"
       >
         <Plus size={22} />
