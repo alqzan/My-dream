@@ -17,9 +17,13 @@ import {
 import type { Transaction } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, ReferenceLine,
-} from "recharts";
+import dynamic from "next/dynamic";
+// recharts (~90KB) loads on demand so the insights shell paints without
+// waiting on it. The placeholder keeps the card height stable.
+const InsightsChart = dynamic(
+  () => import("@/components/finance/InsightsChart").then((m) => m.InsightsChart),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-gray-100 rounded-xl" /> }
+);
 import { TrendingDown, TrendingUp, ChevronDown, Sparkles } from "lucide-react";
 
 type Period = "أسبوع" | "شهر" | "سنة";
@@ -278,42 +282,13 @@ export default function SpendInsightsPage() {
           )}
         </div>
         <div className="h-44" dir="ltr">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 8, left: 0, right: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e5e0d5" strokeOpacity={0.5} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 9, fill: "#a2947a" }}
-                axisLine={false}
-                tickLine={false}
-                interval={period === "شهر" ? 4 : 0}
-              />
-              <YAxis hide domain={[0, Math.max(maxBar, dailyBudget && period !== "سنة" ? dailyBudget.amount * 1.15 : 0)]} />
-              <Tooltip
-                cursor={{ fill: "#00000008" }}
-                formatter={(v: number) => [`${formatAmount(v)} ر.س`, "الصرف"]}
-                contentStyle={{ borderRadius: 12, border: "none", fontSize: 12, direction: "rtl", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}
-              />
-              {dailyBudget && period !== "سنة" && (
-                <ReferenceLine y={dailyBudget.amount} stroke="#c9852a" strokeDasharray="4 4" strokeWidth={1.5} />
-              )}
-              <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={period === "شهر" ? 8 : 22}>
-                {chartData.map((d) => (
-                  <Cell
-                    key={d.key}
-                    fill={
-                      dailyBudget && period !== "سنة" && d.daily > dailyBudget.amount
-                        ? "#e05555"
-                        : d.isNow
-                        ? "#1d5c20"
-                        : "#3d9640"
-                    }
-                    fillOpacity={d.value === 0 ? 0.15 : 1}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <InsightsChart
+            data={chartData}
+            period={period}
+            maxBar={maxBar}
+            dailyBudgetAmount={dailyBudget && period !== "سنة" ? dailyBudget.amount : undefined}
+            format={formatAmount}
+          />
         </div>
         {dailyBudget && period !== "سنة" && (
           <div className="flex items-center justify-center gap-3 text-[10px] text-gray-400 pt-2">
