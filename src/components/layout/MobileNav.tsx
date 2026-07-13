@@ -17,7 +17,7 @@ export function MobileNav() {
   const slot = 100 / count;
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f3ecdd]/85 dark:bg-[#161009]/85 backdrop-blur-md border-t border-gray-100/80 pb-safe">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f4eee2]/85 dark:bg-[#171009]/85 backdrop-blur-lg border-t border-gray-100/70 pb-safe">
       <div className="relative flex items-stretch py-2 px-0.5">
         {/* المؤشر المنزلق — يتحرك خلف التبويب النشط بحركة ناعمة. RTL: التبويب
             الأول على اليمين، فنحسب الإزاحة من اليمين. */}

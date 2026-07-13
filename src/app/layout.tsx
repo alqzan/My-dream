@@ -62,8 +62,8 @@ export const viewport: Viewport = {
   // السفلي تحت مؤشر الهوم (المستهلك: .pb-safe في الشريط السفلي).
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f3ecdd" },
-    { media: "(prefers-color-scheme: dark)", color: "#161009" },
+    { media: "(prefers-color-scheme: light)", color: "#f4eee2" },
+    { media: "(prefers-color-scheme: dark)", color: "#171009" },
   ],
 };
 
