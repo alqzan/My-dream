@@ -29,9 +29,17 @@ export async function compressImage(file: Blob, maxKB = 200): Promise<string> {
         let quality = 0.85;
         let dataUrl = canvas.toDataURL("image/webp", quality);
 
+        // Safari and Firefox can't encode WebP from canvas — they silently
+        // return a PNG instead regardless of the requested type, and PNG
+        // ignores the quality argument entirely, so the photo stays huge
+        // with no real compression. Detect that and re-encode as JPEG
+        // (quality-aware, universally supported) instead.
+        const mimeType = dataUrl.startsWith("data:image/webp") ? "image/webp" : "image/jpeg";
+        if (mimeType !== "image/webp") dataUrl = canvas.toDataURL(mimeType, quality);
+
         while (dataUrl.length / 1024 > maxKB * 1.37 && quality > 0.3) {
           quality -= 0.1;
-          dataUrl = canvas.toDataURL("image/webp", quality);
+          dataUrl = canvas.toDataURL(mimeType, quality);
         }
 
         resolve(dataUrl);
