@@ -4,11 +4,16 @@ service firebase.storage {
     // Login-free personal sync — same shared secret space id as Firestore.
     // Media lives at userData/{space}/photos/{hash} and .../audios/{hash}.
     // Only that exact space is reachable, so knowing the project alone is not
-    // enough — keep the link private. Uploads are capped and must be an image
-    // or audio; deletes (request.resource == null) are allowed within the space.
+    // enough. Uploads are capped and must be an image or audio; deletes
+    // (request.resource == null) are allowed within the space.
+    //
+    // The placeholder below is intentionally not the real space id — these
+    // rules are informational only. The rules actually enforced in production
+    // are edited and published from the Firebase Console directly, never from
+    // this repo, so the real secret never touches version control.
     match /userData/{space}/{allPaths=**} {
-      allow read: if space == "46c68c32b4b569bc4d608302bea012e6271070ce";
-      allow write: if space == "46c68c32b4b569bc4d608302bea012e6271070ce"
+      allow read: if space == "REPLACED_IN_FIREBASE_CONSOLE";
+      allow write: if space == "REPLACED_IN_FIREBASE_CONSOLE"
         && (request.resource == null
             || (request.resource.size < 25 * 1024 * 1024
                 && request.resource.contentType.matches('(image|audio)/.*')));

@@ -48,3 +48,17 @@
   — عدّل المسمّيات هناك.
 - **تعديلات المتجر** تختم `lastUpdated` تلقائياً (غلاف `set` في
   `src/lib/store.ts`)؛ استخدم `rawSet` فقط للكتابة المحلية بالجهاز/الترطيب.
+
+## مفتاح المزامنة (سري — ليس في الكود)
+
+معرّف مساحة المزامنة (`SYNC_SPACE_ID` سابقاً) لم يعد قيمة ثابتة في
+`src/lib/firebase.ts` — كان مكشوفاً نصاً في مستودع عام. النموذج الآن:
+`getSyncSpace()` في `src/lib/firebase.ts` تُرجع `NEXT_PUBLIC_SYNC_SPACE` إن
+وُجد (بناء خاص)، وإلا تقرأ `localStorage["madar-sync-space"]` (بحارس
+`typeof window`) — تُكتب مرة واحدة لكل جهاز عبر بطاقة «مفتاح المزامنة»
+(`src/components/settings/SyncKeyCard.tsx`) ثم `location.reload()`.
+كل استخدام لمعرّف المساحة (`sync.ts`, `SyncProvider`, `DayOneImport`,
+`PendingInboxWatcher`) يستدعي `getSyncSpace()` ويتعطّل بهدوء (لا يزامن) عند
+غيابه. `firestore.rules` و`storage.rules` في المستودع تحمل قيمة شكلية
+(`REPLACED_IN_FIREBASE_CONSOLE`) — القواعد الفعلية تُنشر من Firebase Console
+حصراً ولا تُكتب هنا أبداً.

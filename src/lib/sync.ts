@@ -2,7 +2,7 @@ import {
   doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
 } from "firebase/firestore";
 import { ref as storageRef, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
-import { db, storage, SYNC_SPACE_ID } from "./firebase";
+import { db, storage, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
 
@@ -40,8 +40,9 @@ function decodeInboxText(data: Record<string, unknown>): string {
 }
 
 export async function loadInbox(): Promise<InboxItem[]> {
-  if (!db) return [];
-  const snap = await getDocs(collection(db, COLLECTION, SYNC_SPACE_ID, INBOX));
+  const space = getSyncSpace();
+  if (!db || !space) return [];
+  const snap = await getDocs(collection(db, COLLECTION, space, INBOX));
   return snap.docs.map((d) => {
     const data = d.data() as Record<string, unknown>;
     return { id: d.id, text: decodeInboxText(data), ts: typeof data.ts === "string" ? data.ts : undefined };
@@ -49,8 +50,9 @@ export async function loadInbox(): Promise<InboxItem[]> {
 }
 
 export async function deleteInboxItem(id: string): Promise<void> {
-  if (!db) return;
-  await deleteDoc(doc(db, COLLECTION, SYNC_SPACE_ID, INBOX, id));
+  const space = getSyncSpace();
+  if (!db || !space) return;
+  await deleteDoc(doc(db, COLLECTION, space, INBOX, id));
 }
 
 // ===================== Media cloud sync (Cloud Storage) =====================

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { isFirebaseEnabled, SYNC_SPACE_ID } from "@/lib/firebase";
+import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import {
   loadUserMain,
   hydrateCloudPhotos,
@@ -82,7 +82,9 @@ function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean {
 // Login-free sync: every device shares one Firestore document keyed by a
 // fixed secret space id, so opening the app just works — no email, no login.
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<SyncState>(isFirebaseEnabled ? "syncing" : "idle");
+  const spaceId = getSyncSpace();
+  const syncEnabled = isFirebaseEnabled && !!spaceId;
+  const [status, setStatus] = useState<SyncState>(syncEnabled ? "syncing" : "idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   const hydratedRef = useRef(false);
@@ -103,8 +105,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const snapshot = useAppStore((s) => s.snapshot);
 
   useEffect(() => {
-    if (!isFirebaseEnabled) return;
-    const space = SYNC_SPACE_ID;
+    const space = getSyncSpace();
+    if (!isFirebaseEnabled || !space) return;
 
     let cancelled = false;
     let unsubStore: () => void = () => {};
@@ -271,7 +273,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [hydrate, snapshot]);
 
   return (
-    <SyncContext.Provider value={{ enabled: isFirebaseEnabled, status, lastSyncedAt }}>
+    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt }}>
       {children}
     </SyncContext.Provider>
   );

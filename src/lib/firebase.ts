@@ -16,12 +16,22 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:236145636929:web:3081885cd728006b5038c0",
 };
 
-// A fixed, hard-to-guess space id. All of the owner's devices read/write this
-// single shared document, so opening the link on any device just works — no
-// email, no login. The id acts as the shared secret; keep the link private.
-// Override with NEXT_PUBLIC_SYNC_SPACE if you ever want a fresh space.
-export const SYNC_SPACE_ID =
-  process.env.NEXT_PUBLIC_SYNC_SPACE || "46c68c32b4b569bc4d608302bea012e6271070ce";
+// The sync space id is the shared secret that gates access to the owner's
+// single Firestore document — it must never be baked into the repo (this is a
+// public codebase). It comes from NEXT_PUBLIC_SYNC_SPACE (a private build-time
+// override) or, normally, from localStorage — set once per device via the
+// settings UI (BackupCard/SyncKeyCard) and never sent anywhere but Firestore.
+export const SYNC_SPACE_STORAGE_KEY = "madar-sync-space";
+
+export function getSyncSpace(): string | null {
+  if (process.env.NEXT_PUBLIC_SYNC_SPACE) return process.env.NEXT_PUBLIC_SYNC_SPACE;
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(SYNC_SPACE_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
 
 // Firebase is "enabled" only when the essential config is present.
 // Without it, the app keeps working fully on localStorage.

@@ -15,6 +15,7 @@ import {
 } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { BackupCard } from "@/components/settings/BackupCard";
+import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { YearHeatmap } from "@/components/stats/YearHeatmap";
 import dynamic from "next/dynamic";
@@ -245,8 +246,9 @@ export default function StatsPage() {
         </Card>
       )}
 
-      <div className="animate-fade-up">
+      <div className="animate-fade-up space-y-5">
         <BackupCard />
+        <SyncKeyCard />
       </div>
     </div>
   );

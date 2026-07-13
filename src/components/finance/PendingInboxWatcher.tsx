@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PendingImport } from "@/components/finance/PendingImport";
-import { isFirebaseEnabled } from "@/lib/firebase";
+import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import { loadInbox, deleteInboxItem } from "@/lib/sync";
 import { parseBankSmsBulk } from "@/lib/bankParser";
 import { today } from "@/lib/utils";
@@ -17,7 +17,7 @@ export function PendingInboxWatcher() {
   const { items, reviewing, setItems, openReview, closeReview, clear } = usePending();
 
   useEffect(() => {
-    if (!isFirebaseEnabled) return;
+    if (!isFirebaseEnabled || !getSyncSpace()) return;
     let cancelled = false;
     (async () => {
       try {

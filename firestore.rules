@@ -2,13 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Login-free personal sync: every device reads/writes one shared space
-    // whose id is a hard-to-guess secret baked into the app, plus everything
-    // nested under it (the photos subcollection lives at
-    // userData/{space}/photos/{hash}). The {document=**} wildcard extends the
-    // rule down into that subcollection. Only that exact space is reachable,
-    // so knowing the project id alone is not enough — keep the link private.
+    // whose id is a secret the owner holds (see src/lib/firebase.ts's
+    // getSyncSpace), plus everything nested under it (the photos subcollection
+    // lives at userData/{space}/photos/{hash}). The {document=**} wildcard
+    // extends the rule down into that subcollection. Only that exact space is
+    // reachable, so knowing the project id alone is not enough.
+    //
+    // The placeholder below is intentionally not the real space id — these
+    // rules are informational only. The rules actually enforced in production
+    // are edited and published from the Firebase Console directly, never from
+    // this repo, so the real secret never touches version control.
     match /userData/{space}/{document=**} {
-      allow read, write: if space == "46c68c32b4b569bc4d608302bea012e6271070ce";
+      allow read, write: if space == "REPLACED_IN_FIREBASE_CONSOLE";
     }
   }
 }

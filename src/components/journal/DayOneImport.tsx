@@ -5,7 +5,7 @@ import { parseDayOneJson, parseDayOneZip } from "@/lib/dayOneParser";
 import type { JournalEntry } from "@/lib/types";
 import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { isFirebaseEnabled, SYNC_SPACE_ID } from "@/lib/firebase";
+import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import { reuploadAllMedia } from "@/lib/sync";
 
 interface ImportStats {
@@ -29,11 +29,13 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
 
   const dayOneCount = journalEntries.filter((e) => e.source === "dayOne").length;
   const photoCount = journalEntries.filter((e) => e.photos?.length || e.photo).length;
+  const syncSpace = getSyncSpace();
 
   async function handleReupload() {
+    if (!syncSpace) return;
     setReupload("working");
     try {
-      await reuploadAllMedia(SYNC_SPACE_ID, snapshot());
+      await reuploadAllMedia(syncSpace, snapshot());
       setReupload("done");
     } catch {
       setReupload("error");
@@ -155,7 +157,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {isFirebaseEnabled && photoCount > 0 && status !== "working" && (
+      {isFirebaseEnabled && syncSpace && photoCount > 0 && status !== "working" && (
         <div className="border-t border-gray-100 pt-3">
           {reupload === "done" ? (
             <div className="flex items-center gap-2 bg-green-50 text-green-700 rounded-xl p-3 text-sm">
