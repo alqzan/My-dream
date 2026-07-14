@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
@@ -9,6 +9,61 @@ import { Settings2, PiggyBank } from "lucide-react";
 type Mode = "fixed" | "income";
 
 const PCT_PRESETS = [10, 20, 30, 50];
+
+// «الساعة المائية / إناء اليوم» — إناء يمتلئ بمقدار المتبقّي من يومية اليوم
+// ويفرغ مع الصرف. المستوى = المتبقّي ÷ المتاح (مقصوص بين ٠ و١) بنفس قيم
+// computeDailyBudgetStatus — تمثيل بصري فقط، بلا أي حساب جديد. الحدّ من ذهبٍ
+// رفيع كأخوات الأداة (PrayerOrbit)، والتعبئة خضراء ماليّة تتحوّل لعنبريّ دافئ
+// حين تقارب النفاد، وإناء فارغ بلمسة حمراء عند السالب.
+function BudgetVessel({ frac, over }: { frac: number; over: boolean }) {
+  const [lvl, setLvl] = useState(0);
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setLvl(frac));
+    return () => cancelAnimationFrame(t);
+  }, [frac]);
+  // مستوى الماء داخل الإناء: ممتلئ ≈ y24، فارغ ≈ y112.
+  const top = 112 - lvl * 88;
+  const grad = over ? "vgLow" : frac < 0.25 ? "vgLow" : "vgOk";
+  return (
+    <svg width={92} height={112} viewBox="0 0 100 124" className="shrink-0" aria-hidden="true">
+      <defs>
+        <linearGradient id="vgOk" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#5cb85f" />
+          <stop offset="100%" stopColor="#2f7a33" />
+        </linearGradient>
+        <linearGradient id="vgLow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#e8b15a" />
+          <stop offset="100%" stopColor="#d76a2e" />
+        </linearGradient>
+        <clipPath id="vClip">
+          <path d="M26,22 C26,17 74,17 74,22 L74,95 C74,109 60,114 50,114 C40,114 26,109 26,95 Z" />
+        </clipPath>
+      </defs>
+      {!over ? (
+        <g clipPath="url(#vClip)">
+          <g className="vessel-water" style={{ transform: `translateY(${top}px)` }}>
+            <g className="vessel-wave-anim">
+              <path
+                d="M-50,5 q25,-5 50,0 t50,0 t50,0 t50,0 t50,0 V132 H-50 Z"
+                fill={`url(#${grad})`}
+              />
+            </g>
+          </g>
+        </g>
+      ) : (
+        <g clipPath="url(#vClip)">
+          <rect x="0" y="106" width="100" height="10" fill="#e05555" opacity="0.28" />
+        </g>
+      )}
+      {/* حدّ الإناء الذهبي الرفيع */}
+      <path
+        d="M22,20 C22,14 78,14 78,20 L78,96 C78,112 62,118 50,118 C38,118 22,112 22,96 Z"
+        fill="none" stroke={over ? "#d98a3a" : "#c9852a"} strokeWidth="2" strokeLinejoin="round"
+      />
+      <ellipse cx="50" cy="20" rx="28" ry="5.5" fill="none" stroke="#c9852a" strokeWidth="2" />
+    </svg>
+  );
+}
 
 // A cumulative daily allowance instead of a monthly cap: spend less than
 // the daily rate today and it cushions tomorrow, spend more and it eats
@@ -185,6 +240,13 @@ export function DailyBudgetCard() {
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
   const over = status.balance < 0;
+  // نسبة امتلاء الإناء = المتبقّي ÷ المتاح (نفس قيم البطاقة، بلا حساب جديد).
+  const frac =
+    status.allowance > 0
+      ? Math.min(1, Math.max(0, status.balance / status.allowance))
+      : over
+      ? 0
+      : 1;
 
   return (
     <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-finance/5"}`}>
@@ -194,11 +256,14 @@ export function DailyBudgetCard() {
           <Settings2 size={15} />
         </button>
       </div>
-      <div className="text-center py-1">
-        <div className={`text-3xl font-bold ${over ? "text-red-500" : "text-finance"}`}>
-          {over ? "-" : "+"}{formatAmount(Math.abs(status.balance))}
+      <div className="flex items-center justify-center gap-4 py-1">
+        <BudgetVessel frac={frac} over={over} />
+        <div className="text-center">
+          <div className={`text-3xl font-bold ${over ? "text-red-500" : "text-finance"}`}>
+            {over ? "-" : "+"}{formatAmount(Math.abs(status.balance))}
+          </div>
+          <div className="text-[11px] text-gray-400 mt-0.5">ر.س {over ? "بالسالب" : "رصيدك متراكم"}</div>
         </div>
-        <div className="text-[11px] text-gray-400 mt-0.5">ر.س {over ? "بالسالب" : "رصيدك متراكم"}</div>
       </div>
       {status.days === 0 ? (
         <p className="text-xs text-gray-500 text-center leading-relaxed">

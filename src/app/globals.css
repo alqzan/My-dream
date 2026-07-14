@@ -396,3 +396,13 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* الساعة المائية / إناء اليوم — سطح ماء متموّج داخل إناء الميزانية اليومية.
+   يحترم prefers-reduced-motion: عند التقليل يثبت المستوى بلا تموّج ولا انزلاق. */
+@keyframes vessel-wave { from { transform: translateX(0); } to { transform: translateX(-100px); } }
+.vessel-wave-anim { animation: vessel-wave 3.6s linear infinite; }
+.vessel-water { transition: transform 1.3s cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .vessel-wave-anim { animation: none; }
+  .vessel-water { transition: none; }
+}
