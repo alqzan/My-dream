@@ -3,9 +3,6 @@
 @tailwind utilities;
 
 :root {
-  --color-journal: #7c6fcd;
-  --color-finance: #3d9640;
-  --color-reading: #e07b39;
   /* Year heatmap intensity scale (٠..٣) — overridden in .dark below since
      these are used via inline styles that a `dark:` class variant can't reach. */
   --heat-0: rgba(92, 61, 33, 0.08);
