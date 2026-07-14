@@ -324,20 +324,38 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
 // conflicting id the snapshot with the newer top-level `lastUpdated` wins that
 // item. Habit logs, reserve deposits, and per-day prayers are unioned so a
 // completion/deposit/prayer recorded on either device survives. Singletons
-// (daily budget, income, salary day) come from the newer snapshot. There are
-// no per-item clocks, so a delete on one device can be undone by the other's
-// still-present copy — an accepted trade-off for never silently dropping data.
+// (daily budget, income, salary day) come from the newer snapshot. Deletions
+// are tracked as tombstones (`deleted`: id → ts) and filtered out of the union
+// below, so a delete on one device is no longer undone by the other's
+// still-present copy.
 function unionOrdered<T>(primary: T[], secondary: T[], keyOf: (t: T) => string): T[] {
   const seen = new Set(primary.map(keyOf));
   return [...primary, ...secondary.filter((it) => !seen.has(keyOf(it)))];
 }
+
+// Keep tombstones for a wide window so every device has time to converge, then
+// drop them so the map can't grow without bound.
+const TOMBSTONE_TTL_MS = 120 * 24 * 60 * 60 * 1000; // 120 days
 
 export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const localNewer = (local.lastUpdated ?? "") >= (cloud.lastUpdated ?? "");
   const primary = localNewer ? local : cloud;
   const secondary = localNewer ? cloud : local;
 
-  const byId = <T extends { id: string }>(p: T[], s: T[]) => unionOrdered(p, s, (x) => x.id);
+  // Union both tombstone maps (newest deletedAt per id), then prune old ones.
+  const deleted: Record<string, number> = { ...(cloud.deleted ?? {}) };
+  for (const [id, ts] of Object.entries(local.deleted ?? {})) {
+    deleted[id] = Math.max(deleted[id] ?? 0, ts);
+  }
+  const cutoff = Date.now() - TOMBSTONE_TTL_MS;
+  for (const id of Object.keys(deleted)) {
+    if (deleted[id] < cutoff) delete deleted[id];
+  }
+  // Drop any id-keyed item that carries a live tombstone — this is what stops a
+  // resurrected copy from a second device.
+  const alive = <T extends { id: string }>(arr: T[]) => arr.filter((x) => !(x.id in deleted));
+  const byId = <T extends { id: string }>(p: T[], s: T[]) =>
+    alive(unionOrdered(p, s, (x) => x.id));
 
   // Habits: union by id, then union each habit's logged dates from both sides.
   const habits = byId(primary.habits, secondary.habits).map((h) => {
@@ -368,7 +386,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     habits,
     recurring: byId(primary.recurring, secondary.recurring),
     budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category),
-    categories: unionOrdered(primary.categories, secondary.categories, (c) => c.id),
+    categories: alive(unionOrdered(primary.categories, secondary.categories, (c) => c.id)),
     reserves,
     prayerLogs,
     dailyBudget: primary.dailyBudget,
@@ -378,6 +396,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     lastSalaryConfirm: primary.lastSalaryConfirm,
     readingGoal: primary.readingGoal ?? secondary.readingGoal ?? null,
     merchantRules: { ...secondary.merchantRules, ...primary.merchantRules },
+    deleted,
     lastUpdated: (local.lastUpdated ?? "") > (cloud.lastUpdated ?? "") ? local.lastUpdated : cloud.lastUpdated,
   };
 }

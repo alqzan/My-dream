@@ -246,5 +246,9 @@ export interface AppData {
   // hand, the merchant (from the note) is remembered so the next one from the
   // same place is auto-classified your way — this is what makes it تلقائي.
   merchantRules: Record<string, string>;
+  // Tombstones: id → deletedAt (ms). A deleted item is recorded here so the
+  // multi-device union-merge can't resurrect it from a device that still holds
+  // a copy. Pruned after a wide window so the map can't grow forever.
+  deleted?: Record<string, number>;
   lastUpdated: string;
 }

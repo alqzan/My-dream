@@ -10,6 +10,13 @@ import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudget
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
+// Id-keyed collections whose deletions must be tombstoned (see the `set`
+// wrapper) so cloud sync can't resurrect a removed item from another device.
+const ID_COLLECTIONS = [
+  "transactions", "books", "readingLogs", "journalEntries",
+  "recurring", "reserves", "habits", "futureLetters", "categories",
+] as const;
+
 interface AppStore extends AppData {
   // Journal
   addJournalEntry: (entry: JournalEntry) => void;
@@ -109,11 +116,31 @@ export const useAppStore = create<AppStore>()(
     // use `rawSet`: hydrate must keep the cloud's own timestamp, and the theme
     // is a device-local preference that should not trigger a cloud push.
     const set: typeof rawSet = ((partial, replace) => {
+      const prev = get();
       const next = typeof partial === "function"
-        ? (partial as (s: AppStore) => Partial<AppStore>)(get())
+        ? (partial as (s: AppStore) => Partial<AppStore>)(prev)
         : partial;
       if (!next || Object.keys(next).length === 0) return; // real no-op
-      rawSet({ ...next, lastUpdated: new Date().toISOString() }, replace as false);
+
+      // Auto-tombstone: any id-keyed item this change removes is recorded in
+      // `deleted` (id → ts). Without this, the cloud union-merge resurrects a
+      // deleted entry from any device that still holds a copy — so a delete
+      // "came back" after reopening once a second device re-seeded it.
+      let removed: Record<string, number> | undefined;
+      for (const key of ID_COLLECTIONS) {
+        if (!(key in next)) continue;
+        const before = prev[key] as { id: string }[] | undefined;
+        const after = (next as Record<string, unknown>)[key] as { id: string }[] | undefined;
+        if (!Array.isArray(before) || !Array.isArray(after)) continue;
+        const afterIds = new Set(after.map((x) => x.id));
+        for (const item of before) {
+          if (item && !afterIds.has(item.id)) (removed ??= {})[item.id] = Date.now();
+        }
+      }
+
+      const patch: Record<string, unknown> = { ...next, lastUpdated: new Date().toISOString() };
+      if (removed) patch.deleted = { ...prev.deleted, ...removed };
+      rawSet(patch as Partial<AppStore>, replace as false);
     }) as typeof rawSet;
 
     return {
@@ -138,6 +165,7 @@ export const useAppStore = create<AppStore>()(
       lastSalaryConfirm: null,
       readingGoal: null,
       merchantRules: {},
+      deleted: {},
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
@@ -621,6 +649,7 @@ export const useAppStore = create<AppStore>()(
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
           readingGoal: data.readingGoal ?? null,
           merchantRules: data.merchantRules ?? {},
+          deleted: data.deleted ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -644,6 +673,7 @@ export const useAppStore = create<AppStore>()(
           lastSalaryConfirm: s.lastSalaryConfirm,
           readingGoal: s.readingGoal,
           merchantRules: s.merchantRules,
+          deleted: s.deleted ?? {},
           lastUpdated: s.lastUpdated,
         };
       },
