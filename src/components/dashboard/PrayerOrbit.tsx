@@ -32,6 +32,17 @@ interface PrayerOrbitProps {
   size?: "default" | "large";
 }
 
+// At "large" the station columns grow (~81px tall) while the arc geometry
+// still scales with width, so on phones العشاء's circle painted over the
+// tail of المغرب's time label. These retuned stylised angles (large only)
+// lift المغرب and settle the two arc ends slightly lower, giving every
+// label vertical clearance; the dashboard keeps PRAYER_META's angles.
+const LARGE_ANGLES: Partial<Record<PrayerName, number>> = {
+  الفجر: 174,
+  المغرب: 45,
+  العشاء: 6,
+};
+
 export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
   const large = size === "large";
   const { prayerLogs, cyclePrayerStatus } = useAppStore();
@@ -95,9 +106,9 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
           )}
         </svg>
 
-        {PRAYERS.map((prayer) => {
+        {PRAYERS.map((prayer, i) => {
           const meta = PRAYER_META[prayer];
-          const { x, y } = point(meta.angle);
+          const { x, y } = point(large ? LARGE_ANGLES[prayer] ?? meta.angle : meta.angle);
           const status = log?.prayers[prayer] ?? "لم";
           const statusMeta = PRAYER_STATUS_META[status];
           const isNext = prayer === nextPrayer;
@@ -106,7 +117,10 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
               key={prayer}
               onClick={() => { buzz(); cyclePrayerStatus(todayStr, prayer); }}
               className="absolute flex flex-col items-center gap-1 -translate-x-1/2 -translate-y-1/2 group"
-              style={{ left: `${x}%`, top: `${(y / VB_H) * 100}%` }}
+              // Descending z-order (large only): on very narrow screens, if a
+              // label still brushes the next station's circle it paints over
+              // it instead of disappearing behind it.
+              style={{ left: `${x}%`, top: `${(y / VB_H) * 100}%`, zIndex: large ? PRAYERS.length - i : undefined }}
               title={`${prayer} — ${statusMeta.label}`}
             >
               <span
