@@ -89,7 +89,7 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
       const doy = dayOfYear(entry.date);
       const jitter = (hashFrac(key, 0x811c9dc5) - 0.5) * 7; // ±3.5°
       const angle = Math.max(8, Math.min(172, baseAngle(doy) + jitter));
-      const f = 0.34 + hashFrac(key, 0x1000193) * 0.62; // radius fraction
+      const f = 0.36 + hashFrac(key, 0x1000193) * 0.64; // radius fraction
       const { x, y } = domePoint(angle, f);
       const hasPhoto = entryPhotos(entry).length > 0;
       const starred = !!entry.starred;
@@ -127,9 +127,11 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
     if (!memories.length) return null;
     const target = memories[0];
     const doy = dayOfYear(target.date);
-    const head = domePoint(baseAngle(doy), 0.92);
-    // Tail trails up-and-outward, behind the direction of travel.
-    const tail = { x: head.x + 15, y: head.y - 13 };
+    const head = domePoint(baseAngle(doy), 0.9);
+    // Tail trails down-and-inward so it (and its label) always stay inside the
+    // dome regardless of where today falls on the ring. The head is the bright
+    // end (current-day position); the tail fades out behind it.
+    const tail = { x: head.x + 15, y: head.y + 13 };
     return { target, head, tail };
   }, [memories]);
 
@@ -238,9 +240,9 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
           <div
             className="absolute z-10 pointer-events-none"
             style={{
-              left: `${(comet.tail.x / VB_W) * 100}%`,
-              top: `${(comet.tail.y / VB_H) * 100}%`,
-              transform: "translate(-100%, -120%)",
+              left: `${(comet.head.x / VB_W) * 100}%`,
+              top: `${(comet.head.y / VB_H) * 100}%`,
+              transform: "translate(-98%, 58%)",
             }}
           >
             <span className="whitespace-nowrap text-[10px] font-bold text-[#f4d488]">في مثل هذا اليوم 🕰️</span>
