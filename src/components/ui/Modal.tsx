@@ -72,66 +72,80 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    // The OVERLAY scrolls as one unit (not the panel). On a short laptop
-    // viewport a tall modal used to get its bottom cut flush against the
-    // screen edge — no scrollbar, no hint — so the confirm/save button looked
-    // unreachable. Here the whole overlay scrolls: long modals push past the
-    // fold with backdrop showing above/below (obvious "there's more"), and a
-    // wheel/trackpad gesture anywhere scrolls to every button. `min-h-full`
-    // centres short modals (desktop) and pins the bottom sheet (mobile).
+    // Panel = a flex COLUMN capped to the safe viewport: a fixed header/close
+    // that is ALWAYS visible, and a body that scrolls INSIDE. Earlier the whole
+    // overlay scrolled with a sticky header — but on a tall screen (iPad in
+    // landscape) the form outgrows the viewport, and the sticky header then
+    // pins to the very top, tucked UNDER the device status bar → the close X
+    // becomes unreachable and the top looks cut off. Here the header can never
+    // scroll away, and the wrapper's safe-area padding keeps the whole card
+    // clear of the status bar / home indicator / rounded corners on every
+    // device. The card visibly floats in the backdrop, so its inner scroll is
+    // obvious (the original "looks cut off on a short laptop" complaint too).
     <div className="fixed inset-0 z-50">
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm"
         style={{ animation: "backdropIn 0.25s ease both" }}
         aria-hidden
       />
-      <div className="fixed inset-0 overflow-y-auto overscroll-contain">
+      <div
+        className={cn(
+          "fixed inset-0 flex items-end justify-center sm:items-center",
+          // Clear the device safe areas on every side. Mobile bottom-sheet
+          // stays flush to the bottom edge (its content pads for the home
+          // indicator); tablets/desktop get a real margin all around.
+          "pt-[max(0.5rem,env(safe-area-inset-top))]",
+          "pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]",
+          "sm:pt-[max(1.5rem,env(safe-area-inset-top))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+          "sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]"
+        )}
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
         <div
-          className="flex min-h-full items-end sm:items-center justify-center sm:p-6"
-          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={title ? titleId : undefined}
+          tabIndex={-1}
+          className={cn(
+            "relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl focus:outline-none",
+            "flex flex-col max-h-full overflow-hidden",
+            "max-sm:[animation:sheetUp_0.35s_cubic-bezier(0.16,1,0.3,1)_both]",
+            "sm:[animation:scaleIn_0.25s_cubic-bezier(0.16,1,0.3,1)_both]",
+            className
+          )}
         >
-          <div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={title ? titleId : undefined}
-            tabIndex={-1}
-            className={cn(
-              "relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl focus:outline-none",
-              "max-sm:[animation:sheetUp_0.35s_cubic-bezier(0.16,1,0.3,1)_both]",
-              "sm:[animation:scaleIn_0.25s_cubic-bezier(0.16,1,0.3,1)_both]",
-              className
-            )}
-          >
-            {/* Drag-handle hint on mobile bottom sheet */}
-            <div className="sm:hidden pt-2.5 flex justify-center">
-              <div className="w-10 h-1 rounded-full bg-gray-200" />
+          {/* Drag-handle hint on mobile bottom sheet */}
+          <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
+            <div className="w-10 h-1 rounded-full bg-gray-200" />
+          </div>
+          {title ? (
+            <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 id={titleId} className="text-lg font-bold text-gray-900">{title}</h2>
+              <button
+                onClick={onClose}
+                aria-label="إغلاق"
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 press"
+              >
+                <X size={18} />
+              </button>
             </div>
-            {title ? (
-              <div className="flex items-center justify-between p-5 pb-4 border-b border-gray-100 sticky top-0 bg-white z-10 rounded-t-3xl">
-                <h2 id={titleId} className="text-lg font-bold text-gray-900">{title}</h2>
-                <button
-                  onClick={onClose}
-                  aria-label="إغلاق"
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 press"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            ) : (
-              // Zero-height sticky wrapper keeps the close button pinned to the
-              // top even when the content scrolls (long journal entries).
-              <div className="sticky top-0 z-10 h-0 overflow-visible">
-                <button
-                  onClick={onClose}
-                  className="absolute top-4 left-4 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 press"
-                  aria-label="إغلاق"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            )}
-            <div className="p-5">{children}</div>
+          ) : (
+            // No title bar (e.g. the journal viewer): a floating close button
+            // over the panel's top-left corner. It sits on the non-scrolling
+            // panel, so it stays put while the body scrolls beneath it.
+            <div className="shrink-0 h-0 z-10 overflow-visible">
+              <button
+                onClick={onClose}
+                className="absolute top-3 left-3 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 press"
+                aria-label="إغلاق"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          )}
+          <div className="overflow-y-auto overscroll-contain px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            {children}
           </div>
         </div>
       </div>
