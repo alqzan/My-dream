@@ -1,6 +1,7 @@
 "use client";
 import { SyncStatus } from "@/components/sync/SyncStatus";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { SettingsButton } from "@/components/layout/SettingsButton";
 import { BrandMark } from "@/components/layout/BrandMark";
 
 export function MobileHeader() {
@@ -12,6 +13,7 @@ export function MobileHeader() {
       </div>
       <div className="flex items-center gap-1">
         <SyncStatus />
+        <SettingsButton />
         <ThemeToggle />
       </div>
     </div>

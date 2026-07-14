@@ -183,7 +183,7 @@ export function BackupCard() {
   return (
     <Card>
       <div className="flex items-center gap-2 mb-3">
-        <ShieldCheck size={16} className="text-prayer" />
+        <ShieldCheck size={16} className="text-brand-600" />
         <span className="text-sm font-semibold text-gray-700">النسخ الاحتياطي</span>
       </div>
       <p className="text-xs text-gray-400 leading-relaxed mb-3">
@@ -193,7 +193,7 @@ export function BackupCard() {
         <button
           onClick={exportJson}
           disabled={!!exporting}
-          className="flex items-center justify-center gap-2 text-sm font-medium text-prayer bg-prayer/10 rounded-xl py-2.5 press disabled:opacity-60"
+          className="flex items-center justify-center gap-2 text-sm font-medium text-brand-600 bg-brand-50 rounded-xl py-2.5 press disabled:opacity-60"
         >
           {exporting ? (
             <>
@@ -233,7 +233,7 @@ export function BackupCard() {
             type="checkbox"
             checked={encrypt}
             onChange={(e) => setEncrypt(e.target.checked)}
-            className="accent-prayer w-3.5 h-3.5"
+            className="accent-brand-600 w-3.5 h-3.5"
           />
           <Lock size={12} /> تشفير الملف بكلمة مرور
         </label>
@@ -243,7 +243,7 @@ export function BackupCard() {
             value={exportPassword}
             onChange={(e) => setExportPassword(e.target.value)}
             placeholder="كلمة مرور التشفير"
-            className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-prayer/40"
+            className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
           />
         )}
       </div>
@@ -264,12 +264,12 @@ export function BackupCard() {
               onChange={(e) => setImportPassword(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") decryptPending(); }}
               placeholder="كلمة المرور"
-              className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-prayer/40"
+              className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
             />
             <button
               onClick={decryptPending}
               disabled={!importPassword}
-              className="text-sm font-medium text-prayer bg-prayer/10 rounded-xl px-3 press disabled:opacity-50"
+              className="text-sm font-medium text-brand-600 bg-brand-50 rounded-xl px-3 press disabled:opacity-50"
             >
               فتح
             </button>
@@ -292,7 +292,7 @@ export function BackupCard() {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => applyRestore("merge")}
-              className="flex items-center justify-center gap-2 text-sm font-medium text-prayer bg-prayer/10 rounded-xl py-2.5 press"
+              className="flex items-center justify-center gap-2 text-sm font-medium text-brand-600 bg-brand-50 rounded-xl py-2.5 press"
             >
               <GitMerge size={15} /> دمج
             </button>

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
 import { SyncStatus } from "@/components/sync/SyncStatus";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { SettingsButton } from "@/components/layout/SettingsButton";
 import { BrandMark } from "@/components/layout/BrandMark";
 
 // trailingSlash export → usePathname() is "/journal/" but hrefs are "/journal".
@@ -44,7 +45,10 @@ export function Sidebar() {
       </nav>
       <div className="p-3 border-t border-gray-100 dark:border-[#3a2e1e] flex items-center justify-between gap-2">
         <SyncStatus />
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <SettingsButton />
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
   );
