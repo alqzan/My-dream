@@ -36,23 +36,46 @@ function last7Days(): string[] {
   return days;
 }
 
-// Ring around a tile's icon showing how many of the last 7 days were kept.
-function WeekRing({ done, color, children }: { done: number; color: string; children: React.ReactNode }) {
+// Ring around a tile's icon, split into 7 arc segments — one per day of the
+// last week (oldest first). A kept day glows in the tile's colour, a missed
+// day stays a faint track, and today's own segment is lifted while it's still
+// open. This single segmented ring replaces the old progress ring plus the
+// separate week strip that used to sit under each tile (both showed the same
+// last-7-days data).
+function WeekRing({
+  week, weekKept, todayStr, color, children,
+}: {
+  week: string[]; weekKept: Set<string>; todayStr: string;
+  color: string; children: React.ReactNode;
+}) {
   const size = 46;
-  const stroke = 3;
+  const stroke = 3.5;
   const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const on = (c * done) / 7;
+  // Normalise the circumference to 7 units (one per day) so a day is always a
+  // single segment regardless of radius; `gap` carves a little space between
+  // neighbouring segments so they read as seven distinct arcs, not a solid ring.
+  const gap = 0.16;
+  const seg = 1 - gap;
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} className="absolute inset-0">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color + "22"} strokeWidth={stroke} />
-        <circle
-          cx={size / 2} cy={size / 2} r={r} fill="none"
-          stroke={color} strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={`${on} ${c - on}`}
-          style={{ transition: "stroke-dasharray 0.5s cubic-bezier(0.16,1,0.3,1)" }}
-        />
+        {week.map((d, i) => {
+          const kept = weekKept.has(d);
+          const isToday = d === todayStr;
+          // kept → full colour; today-but-open → a lifted tint; else faint track.
+          const segColor = kept ? color : isToday ? color + "55" : color + "22";
+          return (
+            <circle
+              key={d}
+              cx={size / 2} cy={size / 2} r={r} fill="none"
+              stroke={segColor} strokeWidth={stroke} strokeLinecap="butt"
+              pathLength={7}
+              strokeDasharray={`${seg} ${7 - seg}`}
+              strokeDashoffset={-i}
+              style={{ transition: "stroke 0.4s ease" }}
+            />
+          );
+        })}
       </svg>
       <div className="absolute inset-[5px] rounded-full flex items-center justify-center text-xl" style={{ backgroundColor: color + "14" }}>
         {children}
@@ -61,7 +84,9 @@ function WeekRing({ done, color, children }: { done: number; color: string; chil
   );
 }
 
-// Shared tile body — icon ring + name + status line + last-7-days strip.
+// Shared tile body — the segmented week ring (icon inside) + name + status
+// line. The ring itself now carries the whole last-7-days story, so the old
+// separate strip beneath the tile is gone and each tile is more compact.
 function TileBody({
   icon, name, color, done, weekKept, statusLine,
 }: {
@@ -70,43 +95,27 @@ function TileBody({
 }) {
   const week = last7Days();
   const todayStr = today();
-  const weekDone = week.filter((d) => weekKept.has(d)).length;
   return (
-    <>
-      <div className="flex items-center gap-2.5">
-        <WeekRing done={weekDone} color={color}>{icon}</WeekRing>
-        <div className="flex-1 min-w-0">
-          <div className={cn("text-sm font-bold truncate", done ? "" : "text-gray-700")} style={done ? { color } : undefined}>
-            {name}
-          </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <Flame size={11} className={done ? "text-orange-500" : "text-gray-300"} />
-            <span className="text-[11px] text-gray-400 font-medium">{statusLine}</span>
-          </div>
+    <div className="flex items-center gap-2.5">
+      <WeekRing week={week} weekKept={weekKept} todayStr={todayStr} color={color}>{icon}</WeekRing>
+      <div className="flex-1 min-w-0">
+        <div className={cn("text-sm font-bold truncate", done ? "" : "text-gray-700")} style={done ? { color } : undefined}>
+          {name}
         </div>
-        {done && (
-          <span
-            className="w-5 h-5 rounded-full flex items-center justify-center text-white animate-pop-in shrink-0"
-            style={{ backgroundColor: color }}
-          >
-            <Check size={12} strokeWidth={3} />
-          </span>
-        )}
+        <div className="flex items-center gap-1 mt-0.5">
+          <Flame size={11} className={done ? "text-orange-500" : "text-gray-300"} />
+          <span className="text-[11px] text-gray-400 font-medium">{statusLine}</span>
+        </div>
       </div>
-      <div className="flex gap-1 mt-2.5 justify-between px-0.5">
-        {week.map((d) => {
-          const kept = weekKept.has(d);
-          const isToday = d === todayStr;
-          return (
-            <span
-              key={d}
-              className={cn("h-1.5 rounded-full flex-1 transition-colors", isToday && !kept && "ring-1")}
-              style={{ backgroundColor: kept ? color : color + "1a", ["--tw-ring-color" as string]: color + "66" }}
-            />
-          );
-        })}
-      </div>
-    </>
+      {done && (
+        <span
+          className="w-5 h-5 rounded-full flex items-center justify-center text-white animate-pop-in shrink-0"
+          style={{ backgroundColor: color }}
+        >
+          <Check size={12} strokeWidth={3} />
+        </span>
+      )}
+    </div>
   );
 }
 
