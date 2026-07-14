@@ -18,7 +18,7 @@ export function JournalEntryCard({ entry, onDelete, onClick, onToggleStar }: Jou
 
   return (
     <div
-      className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-sm transition-shadow cursor-pointer"
+      className="bg-white rounded-2xl border border-gray-100 overflow-hidden card-shadow cursor-pointer"
       onClick={onClick}
     >
       {photos.length > 0 && (
