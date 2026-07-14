@@ -186,7 +186,7 @@ export function DailyHabits() {
           "flex items-center justify-between p-4 pb-3 text-white",
           masterStreak > 0 || allDone
             ? "bg-gradient-to-br from-[#a85a2c] via-[#c0842b] to-[#dca63f] shine"
-            : "bg-gradient-to-br from-[#8a7a62] to-[#b3a48a]"
+            : "bg-gradient-to-br from-[#8a7a62] to-[#b3a48a] dark:from-[#453b2c] dark:to-[#5a5040]"
         )}
       >
         <div>

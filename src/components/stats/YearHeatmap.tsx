@@ -7,12 +7,14 @@ interface YearHeatmapProps {
   scores: Record<string, number>;
 }
 
-// Warm gold scale matching the Andalusian theme.
+// Warm gold scale matching the Andalusian theme. Values live as CSS custom
+// properties (globals.css) so the .dark block can swap them for tones that
+// stay legible on the dark parchment background.
 const LEVEL_COLORS = [
-  "rgba(92, 61, 33, 0.08)", // 0 — empty
-  "#f0d9a8", // 1
-  "#dfa74e", // 2
-  "#b56a1e", // 3 — full day
+  "var(--heat-0)", // 0 — empty
+  "var(--heat-1)", // 1
+  "var(--heat-2)", // 2
+  "var(--heat-3)", // 3 — full day
 ];
 
 const DAY_LABELS = ["أح", "", "ثل", "", "خم", "", "سب"];

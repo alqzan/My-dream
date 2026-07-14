@@ -6,6 +6,12 @@
   --color-journal: #7c6fcd;
   --color-finance: #3d9640;
   --color-reading: #e07b39;
+  /* Year heatmap intensity scale (٠..٣) — overridden in .dark below since
+     these are used via inline styles that a `dark:` class variant can't reach. */
+  --heat-0: rgba(92, 61, 33, 0.08);
+  --heat-1: #f0d9a8;
+  --heat-2: #dfa74e;
+  --heat-3: #b56a1e;
 }
 
 * {
@@ -42,6 +48,14 @@ body {
    Brand colours (finance/journal/reading) are left untouched. */
 .dark {
   color-scheme: dark;
+  /* Empty cells were a brown tuned for the cream light background
+     (rgba(92,61,33,0.08)) — nearly invisible on the dark parchment card, so
+     the whole year grid vanished. Brighten the scale so it still reads as
+     four steps against #241c12/#171009. */
+  --heat-0: rgba(236, 226, 208, 0.08);
+  --heat-1: rgba(224, 158, 60, 0.32);
+  --heat-2: rgba(224, 158, 60, 0.62);
+  --heat-3: #e8b563;
 }
 
 .dark body {
