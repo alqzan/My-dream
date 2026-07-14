@@ -169,12 +169,15 @@ export function YearHeatmap({ scores }: YearHeatmapProps) {
           {/* day marks */}
           {marks.map((mk) => {
             const isToday = mk.date === todayStr;
+            // Days with activity get a slightly fuller mark so the year's
+            // rhythm reads at a glance; empty/future days stay quiet dots.
+            const faint = mk.future || mk.score === 0;
             return (
               <circle
                 key={mk.date}
                 cx={mk.x}
                 cy={mk.y}
-                r={isToday ? 2.9 : 2.5}
+                r={isToday ? 3 : faint ? 2.1 : 2.6}
                 fill={mk.future ? "var(--heat-0)" : LEVEL_COLORS[mk.score]}
                 fillOpacity={mk.future ? 0.4 : 1}
                 className="cursor-pointer"
@@ -195,8 +198,8 @@ export function YearHeatmap({ scores }: YearHeatmapProps) {
                 r={4.6}
                 fill="none"
                 stroke="currentColor"
-                strokeOpacity={0.9}
-                strokeWidth={1.3}
+                strokeOpacity={0.95}
+                strokeWidth={1.5}
               >
                 {!reduceMotion && (
                   <animate
