@@ -26,6 +26,7 @@ import { PrivacyLock } from "@/components/layout/PrivacyLock";
 import { AppBadge } from "@/components/layout/AppBadge";
 import { MilestoneWatcher } from "@/components/dashboard/MilestoneWatcher";
 import { SWRegister } from "@/components/layout/SWRegister";
+import { ViewportWatcher } from "@/components/layout/ViewportWatcher";
 import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { SyncProvider } from "@/components/sync/SyncProvider";
@@ -77,6 +78,7 @@ export default function RootLayout({
       <body>
         <ClientOnly>
           <SWRegister bp={bp} />
+          <ViewportWatcher />
           <ThemeApplier />
           <PrivacyLock>
             <SyncProvider>

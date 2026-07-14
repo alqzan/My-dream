@@ -69,6 +69,28 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     };
   }, [open]);
 
+  // When a field inside the sheet gains focus, glide it to the centre of the
+  // visible area once the keyboard has settled — so you never type behind it.
+  // The wrapper is already sized to the visual viewport, so this scrolls the
+  // body (not the locked page) and lands the field comfortably above the keys.
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const typing =
+        t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
+      if (!typing) return;
+      window.setTimeout(() => {
+        t.scrollIntoView({ block: "center", behavior: "smooth" });
+      }, 300);
+    };
+    panel.addEventListener("focusin", onFocusIn);
+    return () => panel.removeEventListener("focusin", onFocusIn);
+  }, [open]);
+
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
@@ -90,7 +112,12 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       />
       <div
         className={cn(
-          "fixed inset-0 flex items-end justify-center sm:items-center",
+          "fixed left-0 right-0 flex items-end justify-center sm:items-center",
+          // Follow the VISUAL viewport (space above the on-screen keyboard) via
+          // vars from ViewportWatcher, so an open keyboard never buries the
+          // focused field or the buttons — the card glides up to sit above it.
+          // Falls back to the full dynamic viewport before the vars are set.
+          "transition-[height,transform] duration-200 ease-out",
           // Clear the device safe areas on every side. Mobile bottom-sheet
           // stays flush to the bottom edge (its content pads for the home
           // indicator); tablets/desktop get a real margin all around.
@@ -99,6 +126,10 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
           "sm:pt-[max(1.5rem,env(safe-area-inset-top))] sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]",
           "sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]"
         )}
+        style={{
+          top: "var(--vvo, 0px)",
+          height: "var(--vvh, 100dvh)",
+        }}
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
         <div
