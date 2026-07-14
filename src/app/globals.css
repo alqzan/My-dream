@@ -336,7 +336,9 @@ body {
   .animate-pop-in,
   .animate-flame,
   .page-fade,
-  .shine::after {
+  .shine::after,
+  .sky-star,
+  .sky-comet-head {
     animation: none;
   }
   .animate-fade-up,
@@ -349,6 +351,19 @@ body {
     transition: none !important;
   }
 }
+
+/* سماء الذكريات — تلألؤ النجوم وذيل المذنّب. حركات لطيفة تُعطَّل عند
+   تفضيل تقليل الحركة (انظر كتلة prefers-reduced-motion أدناه). */
+@keyframes skyTwinkle {
+  0%, 100% { opacity: var(--star-o, 0.9); }
+  50% { opacity: calc(var(--star-o, 0.9) * 0.35); }
+}
+@keyframes skyCometGlow {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+.sky-star { animation: skyTwinkle 3.6s ease-in-out infinite; }
+.sky-comet-head { animation: skyCometGlow 2.4s ease-in-out infinite; transform-origin: center; }
 
 /* Scrollbar */
 ::-webkit-scrollbar {

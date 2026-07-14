@@ -15,6 +15,7 @@ const DayOneImport = dynamic(
 );
 import { FutureLetters } from "@/components/journal/FutureLetters";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
+import { MemorySky } from "@/components/journal/MemorySky";
 import { DayView } from "@/components/day/DayView";
 import { Photo } from "@/components/ui/Photo";
 import { Card } from "@/components/ui/Card";
@@ -52,7 +53,7 @@ export default function JournalPage() {
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [adhocEntry, setAdhocEntry] = useState<JournalEntry | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [view, setView] = useState<"list" | "gallery">("list");
+  const [view, setView] = useState<"list" | "gallery" | "sky">("list");
   // Render the newest page of entries first; "عرض المزيد" reveals more. Keeps
   // a big archive (e.g. after a Day One import) from mounting hundreds of
   // cards — and their images — all at once. A search shows all its matches.
@@ -364,7 +365,7 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* تبديل قائمة/معرض */}
+      {/* تبديل قائمة/معرض/سماء */}
       <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-4">
         <button
           onClick={() => setView("list")}
@@ -382,9 +383,21 @@ export default function JournalPage() {
         >
           معرض 🖼️
         </button>
+        <button
+          onClick={() => setView("sky")}
+          className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
+            view === "sky" ? "bg-white dark:bg-[#241c12] text-journal shadow-sm" : "text-gray-400"
+          }`}
+        >
+          السماء ✦
+        </button>
       </div>
 
-      {view === "list" ? (
+      {view === "sky" ? (
+        <div className="animate-fade-up stagger-4">
+          <MemorySky entries={filtered} memories={memories} onOpen={openViewer} />
+        </div>
+      ) : view === "list" ? (
         <div className="space-y-4 animate-fade-up stagger-4">
           {filtered.length === 0 && (
             <EmptyState
