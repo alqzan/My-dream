@@ -17,13 +17,17 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // حين تقارب النفاد، وإناء فارغ بلمسة حمراء عند السالب.
 function BudgetVessel({ frac, over }: { frac: number; over: boolean }) {
   const [lvl, setLvl] = useState(0);
+  const low = !over && frac < 0.25;
+  // حدّ أدنى مرئي: رصيد موجب صغير يبقى يظهر كطبقة رقيقة (يميّزه عن الفارغ/السالب).
+  const target = over ? 0 : Math.max(frac, frac > 0 ? 0.06 : 0);
   useEffect(() => {
-    const t = requestAnimationFrame(() => setLvl(frac));
+    const t = requestAnimationFrame(() => setLvl(target));
     return () => cancelAnimationFrame(t);
-  }, [frac]);
+  }, [target]);
   // مستوى الماء داخل الإناء: ممتلئ ≈ y24، فارغ ≈ y112.
   const top = 112 - lvl * 88;
-  const grad = over ? "vgLow" : frac < 0.25 ? "vgLow" : "vgOk";
+  const grad = low ? "vgLow" : "vgOk";
+  const crest = low ? "#ffe0ad" : "#c9f0c9";
   return (
     <svg width={92} height={112} viewBox="0 0 100 124" className="shrink-0" aria-hidden="true">
       <defs>
@@ -47,8 +51,15 @@ function BudgetVessel({ frac, over }: { frac: number; over: boolean }) {
                 d="M-50,5 q25,-5 50,0 t50,0 t50,0 t50,0 t50,0 V132 H-50 Z"
                 fill={`url(#${grad})`}
               />
+              {/* بريق سطح الماء (المنسكس) */}
+              <path
+                d="M-50,5 q25,-5 50,0 t50,0 t50,0 t50,0 t50,0"
+                fill="none" stroke={crest} strokeWidth="1.6" strokeLinecap="round" opacity="0.55"
+              />
             </g>
           </g>
+          {/* لمعة زجاجية ثابتة على جانب الإناء */}
+          <rect x="30" y="24" width="8" height="82" rx="4" fill="#ffffff" opacity="0.1" />
         </g>
       ) : (
         <g clipPath="url(#vClip)">
