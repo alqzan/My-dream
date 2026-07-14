@@ -227,12 +227,12 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       </div>
 
       {reserves.length > 0 && (
-        <div className="bg-prayer/5 rounded-xl p-3 space-y-2.5">
+        <div className="bg-finance/5 rounded-xl p-3 space-y-2.5">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-prayer">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-finance">
               <PiggyBank size={14} /> مصدر الصرف
             </span>
-            <span className={cn("text-[11px] font-bold", dailyPct === 100 ? "text-gray-400" : "text-prayer")}>
+            <span className={cn("text-[11px] font-bold", dailyPct === 100 ? "text-gray-400" : "text-finance")}>
               {dailyPct}% يومية · {reservedPct}% احتياطي
             </span>
           </div>
@@ -277,8 +277,8 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
                         className={cn(
                           "text-[10px] font-bold rounded-lg px-1.5 py-1 border transition-colors",
                           pct === p
-                            ? "bg-prayer text-white border-prayer"
-                            : "bg-white text-gray-500 border-gray-200 hover:border-prayer/40"
+                            ? "bg-finance text-white border-finance"
+                            : "bg-white text-gray-500 border-gray-200 hover:border-finance/40"
                         )}
                       >
                         {p === 0 ? "٠" : `${p}%`}
@@ -289,7 +289,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
                       onChange={(v) => setSplitPct(fund.id, parseInt(v) || 0)}
                       placeholder="%"
                       inputMode="numeric"
-                      className="w-11 text-[10px] text-center border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-1 focus:ring-prayer/40"
+                      className="w-11 text-[10px] text-center border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-1 focus:ring-finance/40"
                       aria-label={`نسبة ${fund.name}`}
                     />
                   </div>

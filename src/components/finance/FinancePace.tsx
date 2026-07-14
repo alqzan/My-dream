@@ -31,8 +31,8 @@ export function FinancePace({ budgets, monthTransactions, categories, monthlyInc
 
   const over = remaining < 0;
   const tight = !over && dailyAllowance < averagePace * 0.5;
-  const color = over ? "#e05555" : tight ? "#e07b39" : "#1f7a6c";
-  const bg = over ? "bg-red-50" : tight ? "bg-orange-50" : "bg-prayer/5";
+  const color = over ? "#e05555" : tight ? "#e07b39" : "#3d9640";
+  const bg = over ? "bg-red-50" : tight ? "bg-orange-50" : "bg-finance/5";
 
   return (
     <div className={`rounded-2xl p-4 ${bg} space-y-1.5`}>

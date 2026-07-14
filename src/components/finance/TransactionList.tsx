@@ -54,7 +54,7 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                   )}
                 </div>
                 {reservedPct > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-prayer bg-prayer/10 px-1.5 py-0.5 rounded-full shrink-0">
+                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full shrink-0">
                     <PiggyBank size={9} /> {reservedPct}% احتياطي
                   </span>
                 )}

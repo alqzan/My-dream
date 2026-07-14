@@ -187,7 +187,7 @@ export function DailyBudgetCard() {
   const over = status.balance < 0;
 
   return (
-    <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-prayer/5"}`}>
+    <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-finance/5"}`}>
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">الميزانية اليومية المتراكمة</span>
         <button onClick={() => setEditing(true)} className="text-gray-400 hover:text-gray-600 p-1">
@@ -195,7 +195,7 @@ export function DailyBudgetCard() {
         </button>
       </div>
       <div className="text-center py-1">
-        <div className={`text-3xl font-bold ${over ? "text-red-500" : "text-prayer"}`}>
+        <div className={`text-3xl font-bold ${over ? "text-red-500" : "text-finance"}`}>
           {over ? "-" : "+"}{formatAmount(Math.abs(status.balance))}
         </div>
         <div className="text-[11px] text-gray-400 mt-0.5">ر.س {over ? "بالسالب" : "رصيدك متراكم"}</div>
@@ -232,7 +232,7 @@ export function DailyBudgetCard() {
               <button
                 key={f.id}
                 onClick={() => handleSweep(f.id, status.balance)}
-                className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-gray-100 rounded-lg px-3 py-2 hover:border-prayer/40 press"
+                className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-gray-100 rounded-lg px-3 py-2 hover:border-finance/40 press"
               >
                 <span>{f.icon}</span>
                 <span className="flex-1 text-right text-gray-700 font-medium">{f.name}</span>
@@ -241,7 +241,7 @@ export function DailyBudgetCard() {
             {!reserves.some((f) => f.name === SURPLUS_FUND_NAME) && (
               <button
                 onClick={() => handleSweepToNewSurplus(status.balance)}
-                className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-dashed border-prayer/40 rounded-lg px-3 py-2 text-prayer font-medium press"
+                className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-dashed border-finance/40 rounded-lg px-3 py-2 text-finance font-medium press"
               >
                 ✨ صندوق {SURPLUS_FUND_NAME} (جديد)
               </button>
@@ -253,7 +253,7 @@ export function DailyBudgetCard() {
         ) : (
           <button
             onClick={() => setSweeping(true)}
-            className="w-full flex items-center justify-center gap-2 text-sm font-bold text-prayer bg-prayer/10 hover:bg-prayer/15 rounded-xl py-2.5 transition-colors press"
+            className="w-full flex items-center justify-center gap-2 text-sm font-bold text-finance bg-finance/10 hover:bg-finance/15 rounded-xl py-2.5 transition-colors press"
           >
             <PiggyBank size={15} />
             أضف الفائض ({formatAmount(status.balance)} ر.س) للاحتياطي

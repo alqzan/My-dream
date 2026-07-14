@@ -67,7 +67,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
           const isFuture = date > todayStr;
           const barHeight = spent > 0 ? Math.max(4, Math.round((spent / maxSpend) * 20)) : 0;
           const barColor = dailyBudget
-            ? (dailyShareByDate.get(date) ?? 0) > dailyBudget.amount ? "#e05555" : "#1f7a6c"
+            ? (dailyShareByDate.get(date) ?? 0) > dailyBudget.amount ? "#e05555" : "#3d9640"
             : "#e17b6e";
           return (
             <button
@@ -98,7 +98,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
       <div className="flex items-center justify-center gap-3 text-[10px] text-gray-400 pt-1">
         {dailyBudget ? (
           <>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-prayer inline-block" /> ضمن اليومية</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-finance inline-block" /> ضمن اليومية</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> تجاوزتها</span>
           </>
         ) : (

@@ -34,17 +34,17 @@ export function ReserveFunds() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <PiggyBank size={16} className="text-prayer" />
+          <PiggyBank size={16} className="text-finance" />
           <span className="text-sm font-semibold text-gray-700">الاحتياطي</span>
           {reserves.length > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-prayer/10 text-prayer">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-finance/10 text-finance">
               {formatAmount(reserves.reduce((s, f) => s + reserveBalance(f, transactions), 0))} ر.س
             </span>
           )}
         </div>
         <button
           onClick={() => setAdding(!adding)}
-          className="text-prayer hover:text-prayer/80 p-1.5 press"
+          className="text-finance hover:text-finance/80 p-1.5 press"
           aria-label="إضافة احتياطي"
         >
           <Plus size={16} />
@@ -56,7 +56,7 @@ export function ReserveFunds() {
       {reserves.length === 0 && !adding && (
         <button
           onClick={() => setAdding(true)}
-          className="w-full py-5 rounded-xl border-2 border-dashed border-prayer/30 text-prayer text-sm font-medium hover:bg-prayer/5 press"
+          className="w-full py-5 rounded-xl border-2 border-dashed border-finance/30 text-finance text-sm font-medium hover:bg-finance/5 press"
         >
           🪺 خصّص مبلغاً لهدف — إيجار، سفرة، هدايا...
         </button>
@@ -120,7 +120,7 @@ function AddFundForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="مخصص لـ... (الإيجار، سفرة الصيف)"
-          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-prayer/40"
+          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
         />
       </div>
       <div className="flex items-center gap-1 flex-wrap">
@@ -128,7 +128,7 @@ function AddFundForm({
           <button
             key={ic}
             onClick={() => setIcon(ic)}
-            className={`text-lg p-1 rounded-lg press ${icon === ic ? "bg-prayer/10 ring-1 ring-prayer" : "hover:bg-gray-200"}`}
+            className={`text-lg p-1 rounded-lg press ${icon === ic ? "bg-finance/10 ring-1 ring-finance" : "hover:bg-gray-200"}`}
           >
             {ic}
           </button>
@@ -140,7 +140,7 @@ function AddFundForm({
             if (emoji) setIcon(emoji);
           }}
           placeholder="أو أي إيموجي"
-          className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-prayer/40"
+          className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
           aria-label="إيموجي مخصص"
         />
       </div>
@@ -162,7 +162,7 @@ function AddFundForm({
           <NumberInput
             value={target} onChange={setTarget}
             placeholder="مثلاً 30000" inputMode="decimal"
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-prayer/40"
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
           />
         </div>
         <div>
@@ -170,12 +170,12 @@ function AddFundForm({
           <NumberInput
             value={initial} onChange={setInitial}
             placeholder="مثلاً 5000" inputMode="decimal"
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-prayer/40"
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
           />
         </div>
       </div>
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleAdd} className="flex-1 bg-prayer hover:bg-prayer/90">إضافة</Button>
+        <Button size="sm" onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90">إضافة</Button>
         <Button size="sm" variant="secondary" onClick={onDone}>إلغاء</Button>
       </div>
     </div>
@@ -273,7 +273,7 @@ function FundCard({ fund, expanded, onToggle }: { fund: ReserveFund; expanded: b
             <NumberInput
               value={amount} onChange={setAmount}
               placeholder="المبلغ" inputMode="decimal"
-              className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-prayer/40"
+              className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
             />
             <button
               onClick={() => move(1)}
