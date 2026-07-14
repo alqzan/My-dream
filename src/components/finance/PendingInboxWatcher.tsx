@@ -1,61 +1,81 @@
 "use client";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { PendingImport } from "@/components/finance/PendingImport";
 import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
-import { loadInbox, deleteInboxItem } from "@/lib/sync";
+import { subscribeInbox, deleteInboxItem, type InboxItem } from "@/lib/sync";
 import { parseBankSmsBulk, isNoiseMessage } from "@/lib/bankParser";
 import { today } from "@/lib/utils";
 import { usePending } from "@/lib/pending";
 
-// App-wide watcher: on launch (from any page, including the home screen) it
-// drains the automatic bank-SMS inbox into shared state, pops the review sheet,
-// and keeps the home-screen count in sync. Unreadable messages are cleared
-// silently. Closing the sheet with X keeps the items so the home banner can
-// reopen it; approving/discarding clears everything.
+// App-wide watcher: it keeps a LIVE listener on the automatic bank-SMS inbox,
+// so a message the iOS Automation delivers surfaces the review sheet at once —
+// even while the app is already open (the old one-shot load ran only on launch,
+// so a purchase made mid-session never appeared until the next relaunch).
+// Unreadable messages are surfaced for manual review; only confirmed noise is
+// cleared silently. Closing with X keeps the items so the home banner can
+// reopen; approving/discarding clears everything from the cloud inbox.
 export function PendingInboxWatcher() {
   const { items, reviewing, setItems, openReview, closeReview, clear } = usePending();
 
+  // Latest inbox snapshot + guards, read inside the (stable) drain closure.
+  const latestRef = useRef<InboxItem[]>([]);
+  const busyRef = useRef(false);
+  const reviewingRef = useRef(reviewing);
+  reviewingRef.current = reviewing;
+
+  const drain = useCallback(async () => {
+    // Never disturb an in-progress review: approve/discard deletes exactly the
+    // items it surfaced, so processing a newer snapshot mid-review could delete
+    // an expense the user never saw. Held-back items are picked up the moment
+    // the sheet closes (the reviewing→false effect below re-runs drain).
+    if (reviewingRef.current || busyRef.current) return;
+    const inbox = latestRef.current;
+    if (!inbox.length) return;
+    busyRef.current = true;
+    try {
+      // Classify each message so nothing an expense could hide in is dropped
+      // unseen. Only confirmed noise (OTP, balance-only alert, decline,
+      // statement, incoming credit) is deleted silently; an unreadable-but-not-
+      // noise message is KEPT and surfaced for manual review.
+      const readable: InboxItem[] = [];
+      const unreadable: InboxItem[] = [];
+      const noise: InboxItem[] = [];
+      let count = 0;
+      for (const it of inbox) {
+        const n = parseBankSmsBulk(it.text, today()).transactions.length;
+        if (n > 0) { readable.push(it); count += n; }
+        else if (isNoiseMessage(it.text)) noise.push(it);
+        else { unreadable.push(it); count += 1; }
+      }
+      if (noise.length) {
+        await Promise.all(noise.map((it) => deleteInboxItem(it.id).catch(() => {})));
+      }
+      const toReview = [...readable, ...unreadable];
+      if (toReview.length) {
+        setItems(toReview, count);
+        openReview();
+      }
+    } catch {
+      /* offline — the listener re-fires on reconnect */
+    } finally {
+      busyRef.current = false;
+    }
+  }, [setItems, openReview]);
+
   useEffect(() => {
     if (!isFirebaseEnabled || !getSyncSpace()) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const inbox = await loadInbox();
-        if (cancelled || !inbox.length) return;
-        // Classify each message so nothing an expense could hide in is ever
-        // dropped unseen. Only confirmed noise (OTP, balance-only alert,
-        // decline, statement, incoming credit) is deleted silently. A message
-        // that isn't noise but the parser couldn't read is KEPT and surfaced
-        // for manual review — previously these were deleted, so a bank format
-        // we didn't recognise made the expense vanish with no trace.
-        const readable: typeof inbox = [];
-        const unreadable: typeof inbox = [];
-        const noise: typeof inbox = [];
-        let count = 0;
-        for (const it of inbox) {
-          const n = parseBankSmsBulk(it.text, today()).transactions.length;
-          if (n > 0) { readable.push(it); count += n; }
-          else if (isNoiseMessage(it.text)) noise.push(it);
-          else { unreadable.push(it); count += 1; }
-        }
-        if (noise.length) {
-          await Promise.all(noise.map((it) => deleteInboxItem(it.id).catch(() => {})));
-        }
-        const toReview = [...readable, ...unreadable];
-        if (toReview.length) {
-          setItems(toReview, count);
-          openReview();
-        }
-      } catch {
-        /* offline — try again next launch */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const unsub = subscribeInbox((inbox) => {
+      latestRef.current = inbox;
+      void drain();
+    });
+    return unsub;
+  }, [drain]);
+
+  // When a review closes, catch anything that landed while it was open.
+  useEffect(() => {
+    if (!reviewing) void drain();
+  }, [reviewing, drain]);
 
   if (!reviewing) return null;
   return (

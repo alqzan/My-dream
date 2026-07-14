@@ -56,6 +56,27 @@ export async function deleteInboxItem(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTION, space, INBOX, id));
 }
 
+// Live inbox listener: fires with the current queue on attach and again on
+// every change, so a bank message the iOS Automation delivers while the app is
+// already open surfaces immediately — no relaunch. Errors (e.g. offline) are
+// swallowed; the next connection re-delivers. Returns an unsubscribe fn.
+export function subscribeInbox(cb: (items: InboxItem[]) => void): () => void {
+  const space = getSyncSpace();
+  if (!db || !space) return () => {};
+  return onSnapshot(
+    collection(db, COLLECTION, space, INBOX),
+    (snap) => {
+      cb(
+        snap.docs.map((d) => {
+          const data = d.data() as Record<string, unknown>;
+          return { id: d.id, text: decodeInboxText(data), ts: typeof data.ts === "string" ? data.ts : undefined };
+        })
+      );
+    },
+    () => { /* offline / permission — retry on next connection */ }
+  );
+}
+
 // ===================== Media cloud sync (Cloud Storage) =====================
 // Photos and voice notes live in Cloud Storage at userData/{uid}/photos/{hash}
 // and .../audios/{hash} (keyed by content hash → automatic dedup). The main
