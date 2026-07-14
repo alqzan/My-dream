@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,58 +69,73 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+  return createPortal(
+    // The OVERLAY scrolls as one unit (not the panel). On a short laptop
+    // viewport a tall modal used to get its bottom cut flush against the
+    // screen edge — no scrollbar, no hint — so the confirm/save button looked
+    // unreachable. Here the whole overlay scrolls: long modals push past the
+    // fold with backdrop showing above/below (obvious "there's more"), and a
+    // wheel/trackpad gesture anywhere scrolls to every button. `min-h-full`
+    // centres short modals (desktop) and pins the bottom sheet (mobile).
+    <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm"
         style={{ animation: "backdropIn 0.25s ease both" }}
-        onClick={onClose}
+        aria-hidden
       />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={title ? titleId : undefined}
-        tabIndex={-1}
-        className={cn(
-          "relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl focus:outline-none",
-          "max-sm:[animation:sheetUp_0.35s_cubic-bezier(0.16,1,0.3,1)_both]",
-          "sm:[animation:scaleIn_0.25s_cubic-bezier(0.16,1,0.3,1)_both]",
-          className
-        )}
-      >
-        {/* Drag-handle hint on mobile bottom sheet */}
-        <div className="sm:hidden pt-2.5 flex justify-center">
-          <div className="w-10 h-1 rounded-full bg-gray-200" />
+      <div className="fixed inset-0 overflow-y-auto overscroll-contain">
+        <div
+          className="flex min-h-full items-end sm:items-center justify-center sm:p-6"
+          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
+            tabIndex={-1}
+            className={cn(
+              "relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl focus:outline-none",
+              "max-sm:[animation:sheetUp_0.35s_cubic-bezier(0.16,1,0.3,1)_both]",
+              "sm:[animation:scaleIn_0.25s_cubic-bezier(0.16,1,0.3,1)_both]",
+              className
+            )}
+          >
+            {/* Drag-handle hint on mobile bottom sheet */}
+            <div className="sm:hidden pt-2.5 flex justify-center">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            {title ? (
+              <div className="flex items-center justify-between p-5 pb-4 border-b border-gray-100 sticky top-0 bg-white z-10 rounded-t-3xl">
+                <h2 id={titleId} className="text-lg font-bold text-gray-900">{title}</h2>
+                <button
+                  onClick={onClose}
+                  aria-label="إغلاق"
+                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 press"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              // Zero-height sticky wrapper keeps the close button pinned to the
+              // top even when the content scrolls (long journal entries).
+              <div className="sticky top-0 z-10 h-0 overflow-visible">
+                <button
+                  onClick={onClose}
+                  className="absolute top-4 left-4 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 press"
+                  aria-label="إغلاق"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+            <div className="p-5">{children}</div>
+          </div>
         </div>
-        {title ? (
-          <div className="flex items-center justify-between p-5 pb-4 border-b border-gray-100 sticky top-0 bg-white z-10 rounded-t-3xl">
-            <h2 id={titleId} className="text-lg font-bold text-gray-900">{title}</h2>
-            <button
-              onClick={onClose}
-              aria-label="إغلاق"
-              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 press"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        ) : (
-          // Zero-height sticky wrapper keeps the close button pinned to the
-          // top even when the content scrolls (long journal entries).
-          <div className="sticky top-0 z-10 h-0 overflow-visible">
-            <button
-              onClick={onClose}
-              className="absolute top-4 left-4 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 press"
-              aria-label="إغلاق"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        )}
-        <div className="p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
