@@ -8,6 +8,7 @@ import { PRAYERS, type PrayerName, type PrayerStatus } from "@/lib/types";
 import { PrayerRow } from "@/components/prayer/PrayerRow";
 import { PrayerCalendar } from "@/components/prayer/PrayerCalendar";
 import { PrayerInsight } from "@/components/prayer/PrayerInsight";
+import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
@@ -19,7 +20,7 @@ export default function PrayersPage() {
 
   const todayStr = today();
   const todayLog = getPrayerLog(prayerLogs, todayStr);
-  const { prayed: todayPrayed, mosque: todayMosque } = countDayPrayers(todayLog);
+  const { prayed: todayPrayed } = countDayPrayers(todayLog);
 
   const streak = getPrayerStreak(prayerLogs);
   const mosqueStreak = getMosqueStreak(prayerLogs);
@@ -59,6 +60,10 @@ export default function PrayersPage() {
         </div>
       </div>
 
+      <Card>
+        <PrayerOrbit size="large" />
+      </Card>
+
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-prayer/5 rounded-xl p-3 text-center">
           <div className="text-xl font-bold text-prayer">{todayPrayed}/5</div>
@@ -75,32 +80,6 @@ export default function PrayersPage() {
           <div className="text-[11px] text-gray-500 mt-0.5">سلسلة المسجد</div>
         </div>
       </div>
-
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-gray-700">صلوات اليوم</span>
-          {todayMosque > 0 && (
-            <span className="text-xs text-prayer flex items-center gap-1">
-              <MosqueIcon size={13} /> {todayMosque} بالمسجد
-            </span>
-          )}
-        </div>
-        <div className="space-y-2">
-          {PRAYERS.map((prayer) => (
-            <PrayerRow
-              key={prayer}
-              prayer={prayer}
-              status={statusFor(todayStr, prayer)}
-              onChange={(status) => setPrayerStatus(todayStr, prayer, status)}
-            />
-          ))}
-        </div>
-        {todayPrayed === 5 && (
-          <div className="text-center py-2 mt-3 text-sm font-bold text-prayer bg-prayer/10 rounded-xl">
-            {todayMosque === 5 ? "🕌 صلّيت الخمس بالمسجد اليوم — تقبّل الله" : "✨ أكملت صلوات اليوم"}
-          </div>
-        )}
-      </Card>
 
       <Card>
         <div className="flex items-center justify-between mb-3">

@@ -25,7 +25,15 @@ const ARC_START = point(178);
 const ARC_END = point(2);
 const ARC_PATH = `M ${ARC_START.x} ${ARC_START.y} A ${R} ${R} 0 0 1 ${ARC_END.x} ${ARC_END.y}`;
 
-export function PrayerOrbit() {
+interface PrayerOrbitProps {
+  // "large" is used on the dedicated /prayers page, where the orbit is the
+  // page's hero and sole input for today — slightly bigger touch targets
+  // and type. "default" (dashboard widget) keeps the exact original look.
+  size?: "default" | "large";
+}
+
+export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
+  const large = size === "large";
   const { prayerLogs, cyclePrayerStatus } = useAppStore();
   const todayStr = today();
   const log = getPrayerLog(prayerLogs, todayStr);
@@ -47,10 +55,10 @@ export function PrayerOrbit() {
   const nowPoint = inRange ? point(178 - ((hourFrac - 4.5) / (21 - 4.5)) * 176) : null;
 
   return (
-    <div className="space-y-2">
+    <div className={large ? "space-y-3" : "space-y-2"}>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700">صلوات اليوم</span>
-        <div className="flex items-center gap-3 text-xs font-medium">
+        <span className={`font-semibold text-gray-700 ${large ? "text-base" : "text-sm"}`}>صلوات اليوم</span>
+        <div className={`flex items-center gap-3 font-medium ${large ? "text-sm" : "text-xs"}`}>
           <span className="flex items-center gap-1 text-amber-600">
             <span>🔥</span> {streak}
           </span>
@@ -102,9 +110,9 @@ export function PrayerOrbit() {
               title={`${prayer} — ${statusMeta.label}`}
             >
               <span
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-base shadow-sm border-2 transition-all group-active:scale-90 ${
-                  isNext && status === "لم" ? "animate-pulse ring-2 ring-brand-300 ring-offset-1" : ""
-                }`}
+                className={`rounded-full flex items-center justify-center shadow-sm border-2 transition-all group-active:scale-90 ${
+                  large ? "w-11 h-11 text-lg" : "w-9 h-9 text-base"
+                } ${isNext && status === "لم" ? "animate-pulse ring-2 ring-brand-300 ring-offset-1" : ""}`}
                 style={{
                   backgroundColor: status === "لم" ? "#fff" : statusMeta.color,
                   borderColor: statusMeta.color,
@@ -112,11 +120,11 @@ export function PrayerOrbit() {
               >
                 {meta.icon}
               </span>
-              <span className={`text-[10px] font-medium whitespace-nowrap ${isNext ? "text-brand-600 font-bold" : "text-gray-500"}`}>
+              <span className={`font-medium whitespace-nowrap ${large ? "text-xs" : "text-[10px]"} ${isNext ? "text-brand-600 font-bold" : "text-gray-500"}`}>
                 {prayer}
               </span>
               {times && (
-                <span className={`text-[8px] tabular-nums whitespace-nowrap -mt-0.5 ${isNext ? "text-brand-500 font-bold" : "text-gray-400"}`}>
+                <span className={`tabular-nums whitespace-nowrap -mt-0.5 ${large ? "text-[10px]" : "text-[8px]"} ${isNext ? "text-brand-500 font-bold" : "text-gray-400"}`}>
                   {formatClock(times[prayer])}
                 </span>
               )}
@@ -125,7 +133,7 @@ export function PrayerOrbit() {
         })}
       </div>
 
-      <div className="text-center text-xs pt-1">
+      <div className={`text-center pt-1 ${large ? "text-sm" : "text-xs"}`}>
         {prayed === 5 ? (
           <span className="font-bold text-prayer">
             {mosque === 5 ? "🕌 صليتها كلها بالمسجد اليوم — الله يتقبّل" : "أكملت صلوات اليوم كلها ✨"}
