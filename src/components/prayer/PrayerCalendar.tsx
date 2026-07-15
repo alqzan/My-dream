@@ -17,8 +17,48 @@ interface PrayerCalendarProps {
 
 const DAYS_AR = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
 
-// Each day renders as a tiny five-dot "fingerprint" of that day's prayers
-// instead of a single flat colour — a month becomes a mosaic at a glance.
+// ===== مدار مصغّر — a micro echo of PrayerOrbit's dawn→night sky arc =====
+// Each day carries its five prayers as beads on a tiny gold semicircle, each
+// coloured by that prayer's status (لم/منفردة/بالمسجد) — so the month reads as
+// a field of little orbits rather than flat dot-rows. The stations are spread
+// evenly (not at PrayerOrbit's true angles, which bunch illegibly at ~26px);
+// order stays الفجر→العشاء with dawn on the left, matching the big instrument.
+const MO_CX = 12;
+const MO_CY = 11.4;
+const MO_R = 9.2;
+const MO_ANGLES = [162, 126, 90, 54, 18];
+function moPoint(deg: number) {
+  const rad = (deg * Math.PI) / 180;
+  return { x: MO_CX + MO_R * Math.cos(rad), y: MO_CY - MO_R * Math.sin(rad) };
+}
+const MO_ARC = (() => {
+  const a = moPoint(180), b = moPoint(0);
+  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${MO_R} ${MO_R} 0 0 1 ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+})();
+
+function MiniOrbit({ log, isFuture }: { log: PrayerLog | undefined; isFuture: boolean }) {
+  return (
+    <svg viewBox="0 0 24 13" className="w-[26px] h-[14px] overflow-visible" aria-hidden="true">
+      <path
+        d={MO_ARC}
+        fill="none"
+        stroke="currentColor"
+        className="text-[#e2d3aa] dark:text-[#54462d]"
+        strokeWidth="1"
+        strokeLinecap="round"
+      />
+      {PRAYERS.map((p, i) => {
+        const status = log?.prayers[p] ?? "لم";
+        const color = isFuture ? "#e6dcc6" : PRAYER_STATUS_META[status].color;
+        const { x, y } = moPoint(MO_ANGLES[i]);
+        return <circle key={p} cx={x} cy={y} r="1.7" fill={color} />;
+      })}
+    </svg>
+  );
+}
+
+// Each day renders as a tiny mini-orbit of that day's five prayers instead of a
+// single flat colour — a month becomes a field of little orbits at a glance.
 export function PrayerCalendar({ prayerLogs, onDayClick, year: yearProp, month: monthProp, onNavigate }: PrayerCalendarProps) {
   const now = new Date();
   const [internalYear, setInternalYear] = useState(now.getFullYear());
@@ -88,19 +128,7 @@ export function PrayerCalendar({ prayerLogs, onDayClick, year: yearProp, month: 
               <span className={`text-[7px] leading-none ${isFuture ? "text-gray-200" : "text-gray-400"}`}>
                 {hijriDay(date)}
               </span>
-              <span className="flex gap-[1.5px]">
-                {PRAYERS.map((p) => {
-                  const status = log?.prayers[p] ?? "لم";
-                  const color = isFuture ? "#e9e2d0" : PRAYER_STATUS_META[status].color;
-                  return (
-                    <span
-                      key={p}
-                      className="block w-[3px] h-[3px] rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                  );
-                })}
-              </span>
+              <MiniOrbit log={log} isFuture={isFuture} />
             </button>
           );
         })}
