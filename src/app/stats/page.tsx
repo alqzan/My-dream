@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   getJournalStreak,
@@ -177,30 +177,25 @@ export default function StatsPage() {
           <Trophy size={16} className="text-brand-600" />
           <span className="text-sm font-semibold text-gray-700">أرقامك القياسية</span>
         </div>
-        <div className="space-y-2.5">
+        <div className="space-y-3.5">
           {streaks.map((s) => (
-            <div key={s.label} className="flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                style={{ backgroundColor: s.color + "18", color: s.color }}
-              >
-                {s.icon}
+            <div key={s.label}>
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: s.color + "18", color: s.color }}
+                >
+                  {s.icon}
+                </span>
+                <span className="text-xs font-medium text-gray-700">{s.label}</span>
               </div>
-              <span className="text-sm text-gray-700 flex-1">{s.label}</span>
-              <div className="flex items-center gap-1 text-sm">
-                <Flame size={13} className={s.current > 0 ? "text-orange-500" : "text-gray-300"} />
-                <span className="font-bold text-gray-800 min-w-[1.5rem]">{s.current}</span>
-              </div>
-              <div className="flex items-center gap-1 text-sm text-gray-400">
-                <Trophy size={13} className="text-brand-400" />
-                <span className="font-bold text-gray-600 min-w-[1.5rem]">{s.best}</span>
-              </div>
+              <RecordTrack current={s.current} best={s.best} color={s.color} />
             </div>
           ))}
         </div>
         <div className="flex justify-end gap-4 mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-400">
           <span className="flex items-center gap-1"><Flame size={10} /> الحالية</span>
-          <span className="flex items-center gap-1"><Trophy size={10} /> الأفضل</span>
+          <span className="flex items-center gap-1"><Trophy size={10} /> الأفضل (الرقم القياسي)</span>
         </div>
       </Card>
 
@@ -243,6 +238,72 @@ export default function StatsPage() {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+// A short horizontal race-track (مضمار) for one streak record: the far end holds
+// the Trophy at your all-time best (the record), and a Flame marker sits at your
+// current streak's position toward it — so "how close am I to my record" reads at
+// a glance. Fills from the RTL start (right) toward the record (left). Thin gold
+// line-work; the progress + markers tint with the row's own section colour.
+const REC_START = 90; // % from left — the "0" start (RTL: right edge)
+const REC_END = 10; // % from left — the record end (RTL: left edge, trophy)
+
+function RecordTrack({ current, best, color }: { current: number; best: number; color: string }) {
+  const reduce = prefersReducedMotion();
+  const [on, setOn] = useState(reduce);
+  useEffect(() => {
+    if (reduce) return;
+    const t = requestAnimationFrame(() => setOn(true));
+    return () => cancelAnimationFrame(t);
+  }, [reduce]);
+
+  const f = best > 0 ? Math.min(1, Math.max(0, current / best)) : 0;
+  const fv = on ? f : 0;
+  const flameX = REC_START - fv * (REC_START - REC_END);
+  const atRecord = best > 0 && current >= best;
+  const trans = reduce ? undefined : "left 1s cubic-bezier(0.16,1,0.3,1)";
+
+  return (
+    <div className="relative h-9 mt-1">
+      {/* base track line — thin faint gold */}
+      <div
+        className="absolute top-[64%] -translate-y-1/2 h-[2px] rounded-full"
+        style={{ left: `${REC_END}%`, right: `${100 - REC_START}%`, backgroundColor: "#c9852a", opacity: 0.28 }}
+      />
+      {/* progress line — section colour, from the start (right) to the flame */}
+      <div
+        className="absolute top-[64%] -translate-y-1/2 h-[3px] rounded-full"
+        style={{ left: `${flameX}%`, right: `${100 - REC_START}%`, backgroundColor: color, opacity: 0.9, transition: trans }}
+      />
+
+      {/* Trophy at the record end + best value above it */}
+      <div
+        className="absolute top-[64%] -translate-y-1/2 -translate-x-1/2 flex items-center justify-center rounded-full"
+        style={{ left: `${REC_END}%`, width: 18, height: 18, backgroundColor: atRecord ? "#c9852a" : "#fff7e6", boxShadow: `0 0 0 1.4px ${atRecord ? "#c9852a" : "rgba(201,133,42,0.55)"}` }}
+      >
+        <Trophy size={10} style={{ color: atRecord ? "#fff" : "#c9852a" }} />
+      </div>
+      <span className="absolute top-0 -translate-x-1/2 text-[11px] font-bold tabular-nums text-brand-600" style={{ left: `${REC_END}%` }}>{best}</span>
+
+      {/* Flame marker at the current position + current value above it */}
+      <div
+        className="absolute top-[64%] -translate-y-1/2 -translate-x-1/2 flex items-center justify-center rounded-full"
+        style={{ left: `${flameX}%`, width: 18, height: 18, backgroundColor: "#fff", boxShadow: `0 0 0 1.4px ${current > 0 ? color : "#d7cbb4"}`, transition: trans }}
+      >
+        <Flame size={10} style={{ color: current > 0 ? "#f97316" : "#c9bda0" }} />
+      </div>
+      <span
+        className="absolute top-0 -translate-x-1/2 text-[11px] font-bold tabular-nums"
+        style={{ left: `${flameX}%`, color: current > 0 ? color : "#a2947a", transition: trans }}
+      >
+        {current}
+      </span>
     </div>
   );
 }
