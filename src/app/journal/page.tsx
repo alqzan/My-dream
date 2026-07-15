@@ -14,6 +14,7 @@ const DayOneImport = dynamic(
   { ssr: false, loading: () => <div className="py-10 text-center text-sm text-gray-400">…جارٍ التحميل</div> }
 );
 import { FutureLetters } from "@/components/journal/FutureLetters";
+import { QuestionMoon } from "@/components/journal/QuestionMoon";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { MemorySky } from "@/components/journal/MemorySky";
 import { DayView } from "@/components/day/DayView";
@@ -257,17 +258,22 @@ export default function JournalPage() {
 
       {/* سؤال اليوم */}
       <div className="rounded-2xl p-4 text-white bg-gradient-to-l from-[#5d4a8a] via-[#7c6fcd] to-[#9587d6] card-shadow shine animate-fade-up stagger-1">
-        <p className="text-[11px] font-bold opacity-80 mb-1">سؤال اليوم 💭</p>
-        <p className="text-base font-bold leading-relaxed">{question}</p>
-        {!hasToday && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="mt-3 flex items-center gap-1.5 bg-white/95 hover:bg-white text-journal text-xs font-bold px-3.5 py-2 rounded-xl transition-colors press"
-          >
-            <PenLine size={13} />
-            اكتب عنه الآن
-          </button>
-        )}
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold opacity-80 mb-1">سؤال اليوم 💭</p>
+            <p className="text-base font-bold leading-relaxed">{question}</p>
+            {!hasToday && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="mt-3 flex items-center gap-1.5 bg-white/95 hover:bg-white text-journal text-xs font-bold px-3.5 py-2 rounded-xl transition-colors press"
+              >
+                <PenLine size={13} />
+                اكتب عنه الآن
+              </button>
+            )}
+          </div>
+          <QuestionMoon />
+        </div>
       </div>
 
       {/* رسائل لنفسك المستقبلية */}
