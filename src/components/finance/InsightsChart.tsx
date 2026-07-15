@@ -27,19 +27,19 @@ export function InsightsChart({ data, period, maxBar, dailyBudgetAmount, format 
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 8, left: 0, right: 0, bottom: 0 }}>
-        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e5e0d5" strokeOpacity={0.5} />
+        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#c9852a" strokeOpacity={0.22} />
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 9, fill: "#a2947a" }}
+          tick={{ fontSize: 9, fill: "#a9814a", fontFamily: "var(--font-thamaniah), serif" }}
           axisLine={false}
           tickLine={false}
           interval={period === "شهر" ? 4 : 0}
         />
         <YAxis hide domain={[0, Math.max(maxBar, showBudgetLine ? dailyBudgetAmount! * 1.15 : 0)]} />
         <Tooltip
-          cursor={{ fill: "#00000008" }}
+          cursor={{ fill: "rgba(61,150,64,0.08)" }}
           formatter={(v: number) => [`${format(v)} ر.س`, "الصرف"]}
-          contentStyle={{ borderRadius: 12, border: "none", fontSize: 12, direction: "rtl", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}
+          contentStyle={{ borderRadius: 12, border: "1px solid rgba(201,133,42,0.35)", fontSize: 12, direction: "rtl", boxShadow: "0 6px 20px rgba(92,61,33,0.18)", background: "#fffdf7", color: "#5b3a1b", fontFamily: "var(--font-thamaniah), serif" }}
         />
         {showBudgetLine && (
           <ReferenceLine y={dailyBudgetAmount} stroke="#c9852a" strokeDasharray="4 4" strokeWidth={1.5} />

@@ -215,8 +215,8 @@ export default function StatsPage() {
             <MonthlyBars
               data={financeMonthly}
               dataKey="مصاريف"
-              color="#d96a4a"
-              cursorFill="rgba(201,133,42,0.06)"
+              color="#3d9640"
+              cursorFill="rgba(61,150,64,0.08)"
               yWidth={44}
               format={(v) => `${formatAmount(v)} ر.س`}
             />
