@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { today, yearProgress } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
@@ -91,6 +91,13 @@ export function ReadingGoalCard() {
   const remaining = Math.max(0, goal - finishedThisYear);
   const done = finishedThisYear >= goal;
 
+  // حكمٌ قصير مشتقّ من نفس المقارنة: هل حلقة الإنجاز متقدّمة على حلقة العام؟
+  const verdict = done
+    ? { text: "🎉 أنجزت هدفك!", cls: "text-finance" }
+    : onTrack
+    ? { text: "متقدّم على الخطة", cls: "text-finance" }
+    : { text: "متأخّر عن الخطة", cls: "text-reading" };
+
   return (
     <Card className="animate-fade-up">
       <div className="flex items-center justify-between mb-3">
@@ -107,27 +114,128 @@ export function ReadingGoalCard() {
         </button>
       </div>
 
-      <div className="flex items-baseline gap-1.5 mb-2">
-        <span className="text-3xl font-black text-reading tabular-nums">{finishedThisYear}</span>
-        <span className="text-sm text-gray-400">/ {goal} كتاب</span>
-      </div>
-
-      <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-gradient-to-l from-[#c1663f] to-[#e8b15a] transition-all duration-700"
-          style={{ width: `${pct}%` }}
+      {/* سباق المدارين: حلقتان متراكزتان — الخارجية نصيب العام المنقضي، الداخلية
+          نصيب الهدف المُنجَز. حين يسبق مؤشّر الداخلية مؤشّر الخارجية فأنت متقدّم. */}
+      <div className="flex items-center gap-4">
+        <GoalRace
+          goalFrac={goal > 0 ? finishedThisYear / goal : 0}
+          yearFrac={yearPct / 100}
+          finished={finishedThisYear}
+          goal={goal}
         />
+        <div className="flex-1 min-w-0 space-y-2.5">
+          <p className={`text-base font-bold leading-tight ${verdict.cls}`}>{verdict.text}</p>
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-gray-500 min-w-0">
+                <span className="w-2 h-2 rounded-full shrink-0 bg-reading" />
+                <span className="truncate">أنجزت من الهدف</span>
+              </span>
+              <span className="font-bold text-gray-800 tabular-nums shrink-0">{pct}%</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-gray-500 min-w-0">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: "#c9852a" }} />
+                <span className="truncate">مضى من العام</span>
+              </span>
+              <span className="font-bold text-gray-800 tabular-nums shrink-0">{yearPct}%</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            {done
+              ? "كتابٌ إضافي هدية 🎁"
+              : `باقٍ ${remaining} ${remaining === 1 ? "كتاب" : "كتب"} لبلوغ الهدف.`}
+          </p>
+        </div>
       </div>
-
-      <p className="text-xs mt-2.5 leading-relaxed">
-        {done ? (
-          <span className="text-finance font-bold">🎉 أنجزت هدفك لهذا العام! كتاب إضافي هدية.</span>
-        ) : onTrack ? (
-          <span className="text-finance font-medium">على الوتيرة الصحيحة — باقٍ {remaining} {remaining === 1 ? "كتاب" : "كتب"}.</span>
-        ) : (
-          <span className="text-gray-500">باقٍ {remaining} {remaining === 1 ? "كتاب" : "كتب"} — مضى {yearPct}% من العام، شدّ الهمّة 📚</span>
-        )}
-      </p>
     </Card>
+  );
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+// حلقتان متراكزتان بحدٍّ ذهبي/طوبيّ رفيع كأخوات الأداة (مدار الانضباط، مدار العام):
+// الخارجية الذهبية = نسبة العام المنقضي، والداخلية الطوبيّة = نسبة الهدف المُنجَز.
+// لكلٍّ مؤشّرٌ صغير عند طرف قوسها؛ فإن سبق الطوبيّ الذهبيَّ زاويةً فالقارئ متقدّم.
+const VB = 120;
+const CENTER = VB / 2;
+const YEAR_R = 51; // الخارجية — العام
+const GOAL_R = 38; // الداخلية — الهدف
+
+function GoalRace({
+  goalFrac,
+  yearFrac,
+  finished,
+  goal,
+}: {
+  goalFrac: number;
+  yearFrac: number;
+  finished: number;
+  goal: number;
+}) {
+  const reduce = prefersReducedMotion();
+  const [on, setOn] = useState(reduce);
+  useEffect(() => {
+    if (reduce) return;
+    const t = requestAnimationFrame(() => setOn(true));
+    return () => cancelAnimationFrame(t);
+  }, [reduce]);
+
+  const gf = Math.max(0, Math.min(1, goalFrac));
+  const yf = Math.max(0, Math.min(1, yearFrac));
+  const yearC = 2 * Math.PI * YEAR_R;
+  const goalC = 2 * Math.PI * GOAL_R;
+  const yearDash = (on ? yf : 0) * yearC;
+  const goalDash = (on ? gf : 0) * goalC;
+
+  const tip = (r: number, frac: number) => {
+    const a = ((on ? frac : 0) * 360 - 90) * (Math.PI / 180);
+    return { x: CENTER + r * Math.cos(a), y: CENTER + r * Math.sin(a) };
+  };
+  const yearTip = tip(YEAR_R, yf);
+  const goalTip = tip(GOAL_R, gf);
+  const dashTrans = reduce ? undefined : { transition: "stroke-dasharray 1.4s cubic-bezier(0.16,1,0.3,1)" };
+  const tipTrans = reduce ? undefined : { transition: "cx 1.4s cubic-bezier(0.16,1,0.3,1), cy 1.4s cubic-bezier(0.16,1,0.3,1)" };
+
+  return (
+    <div className="relative shrink-0" style={{ width: 116, height: 116 }}>
+      <svg viewBox={`0 0 ${VB} ${VB}`} width={116} height={116}>
+        <defs>
+          <linearGradient id="goalYearGold" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#e8b15a" />
+            <stop offset="100%" stopColor="#c9852a" />
+          </linearGradient>
+          <linearGradient id="goalReadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#e8b15a" />
+            <stop offset="100%" stopColor="#c1663f" />
+          </linearGradient>
+        </defs>
+        <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
+          {/* الخارجية: العام المنقضي (ذهبي) */}
+          <circle cx={CENTER} cy={CENTER} r={YEAR_R} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={4} />
+          <circle
+            cx={CENTER} cy={CENTER} r={YEAR_R} fill="none"
+            stroke="url(#goalYearGold)" strokeWidth={4} strokeLinecap="round"
+            strokeDasharray={`${yearDash} ${yearC}`} style={dashTrans}
+          />
+          {/* الداخلية: الهدف المُنجَز (طوبيّ) */}
+          <circle cx={CENTER} cy={CENTER} r={GOAL_R} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={5} />
+          <circle
+            cx={CENTER} cy={CENTER} r={GOAL_R} fill="none"
+            stroke="url(#goalReadGrad)" strokeWidth={5} strokeLinecap="round"
+            strokeDasharray={`${goalDash} ${goalC}`} style={dashTrans}
+          />
+        </g>
+        {/* مؤشّرا الطرفين */}
+        <circle cx={yearTip.x} cy={yearTip.y} r={2.6} fill="#c9852a" stroke="#fff" strokeWidth={1.2} style={tipTrans} />
+        <circle cx={goalTip.x} cy={goalTip.y} r={3.4} fill="#c1663f" stroke="#fff" strokeWidth={1.4} style={tipTrans} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-black text-reading tabular-nums leading-none">{finished}</span>
+        <span className="text-[10px] text-gray-400 mt-0.5">/ {goal} كتاب</span>
+      </div>
+    </div>
   );
 }
