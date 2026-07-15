@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Transaction, JournalEntry, ReadingLog, Book } from "@/lib/types";
 import { formatAmount, toDateStr, parseDate, formatDateShort } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
@@ -156,8 +156,52 @@ function getThisWeekDates() {
   return dates;
 }
 
+// ===================== سماء الأسبوع =====================
+// The week as a small night-sky strip: seven stars strung along a gentle
+// faint arc (a sibling to PrayerOrbit / سماء الذكريات — data as marks on a
+// celestial diagram, thin gold line-work). Each star's size and brightness
+// encode that day's overall activity level (مذكرة + قراءة + حركة صرف). The
+// arc is a symmetric quadratic: with the control x at the midpoint, x is
+// linear in t, so the seven stars land evenly spaced — أقدم يوم على اليمين
+// (RTL) واليوم على اليسار.
+const SKY_W = 100;
+const SKY_H = 30;
+const SKY_P0 = { x: 90, y: 20 }; // أقدم يوم (يمين)
+const SKY_P1 = { x: 50, y: 7 }; // قمة القوس
+const SKY_P2 = { x: 10, y: 20 }; // اليوم (يسار)
+const SKY_ARC_PATH = `M ${SKY_P0.x} ${SKY_P0.y} Q ${SKY_P1.x} ${SKY_P1.y} ${SKY_P2.x} ${SKY_P2.y}`;
+
+function skyPoint(t: number): { x: number; y: number } {
+  const u = 1 - t;
+  return {
+    x: u * u * SKY_P0.x + 2 * u * t * SKY_P1.x + t * t * SKY_P2.x,
+    y: u * u * SKY_P0.y + 2 * u * t * SKY_P1.y + t * t * SKY_P2.y,
+  };
+}
+
+// A four-point sparkle (نجمة) around (cx,cy) — outer radius r, waist ri.
+function sparklePath(cx: number, cy: number, r: number): string {
+  const ri = r * 0.36;
+  return `M ${cx} ${cy - r} L ${cx + ri} ${cy - ri} L ${cx + r} ${cy} L ${cx + ri} ${cy + ri} L ${cx} ${cy + r} L ${cx - ri} ${cy + ri} L ${cx - r} ${cy} L ${cx - ri} ${cy - ri} Z`;
+}
+
+const WEEKDAYS_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
+const WEEKDAYS_FULL = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+// Star radius (viewBox units) and brightness per activity level 0..3.
+const STAR_R = [1.3, 2.8, 3.7, 4.6];
+const STAR_O = [0.32, 0.6, 0.8, 1];
+
 export function WeeklyWrap({ transactions, journalEntries, readingLogs }: WeeklyWrapProps) {
   const [sharing, setSharing] = useState(false);
+  const [openDay, setOpenDay] = useState<string | null>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    setReduceMotion(
+      typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    );
+  }, []);
+
   const week = getThisWeekDates();
   const weekSet = new Set(week);
 
@@ -169,6 +213,19 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
   const pagesRead = weekLogs.reduce((s, l) => s + l.pagesRead, 0);
   const journalDays = weekJournal.length;
   const readingDays = new Set(weekLogs.map((l) => l.date)).size;
+
+  // Per-day breakdown — one star each. Activity level (0..3) combines the
+  // signals this card already tracks: مذكرة + قراءة + حركة صرف that day.
+  const dayInfo = week.map((d) => {
+    const journaled = weekJournal.some((e) => e.date === d);
+    const read = weekLogs.some((l) => l.date === d);
+    const dayTx = weekTx.filter((t) => t.date === d);
+    const daySpent = dayTx.reduce((s, t) => s + t.amount, 0);
+    const dayPages = weekLogs.filter((l) => l.date === d).reduce((s, l) => s + l.pagesRead, 0);
+    const level = (journaled ? 1 : 0) + (read ? 1 : 0) + (dayTx.length ? 1 : 0);
+    return { date: d, journaled, read, hasTx: dayTx.length > 0, daySpent, dayPages, level };
+  });
+  const openInfo = openDay ? dayInfo.find((x) => x.date === openDay) ?? null : null;
 
   async function onShare() {
     setSharing(true);
@@ -223,29 +280,130 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
         <StatPill icon="📖" label="أيام قراءة" value={`${readingDays}/7`} color="text-blue-300" />
       </div>
 
-      <div className="flex gap-1 justify-center pt-1">
-        {week.map((d, i) => {
-          const hasJ = weekJournal.some((e) => e.date === d);
-          const hasR = readingLogs.some((l) => l.date === d);
-          const score = [hasJ, hasR].filter(Boolean).length;
-          return (
-            <div key={d} className="flex flex-col items-center gap-1">
-              <div className="text-[10px] text-white/45">
-                {["أح","إث","ثل","أر","خم","جم","سب"][parseDate(d).getDay()]}
-              </div>
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"
-                style={{
-                  backgroundColor: score === 2 ? "#f97316" : score === 1 ? "#d4a017" : "rgba(255,255,255,0.12)",
-                }}
+      {/* سماء الأسبوع — سبع نجوم على قوس خافت؛ حجم/سطوع كل نجمة = نشاط يومها */}
+      <div className="pt-1">
+        <div className="relative w-full" style={{ aspectRatio: `${SKY_W} / ${SKY_H}` }}>
+          <svg viewBox={`0 0 ${SKY_W} ${SKY_H}`} className="absolute inset-0 w-full h-full overflow-visible">
+            <defs>
+              <radialGradient id="weekStarHalo" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#f6dca0" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#f6dca0" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+
+            {/* القوس الخافت — خط ذهبيّ رفيع */}
+            <path
+              d={SKY_ARC_PATH}
+              fill="none"
+              stroke="#f0d9a8"
+              strokeOpacity="0.3"
+              strokeWidth="0.8"
+              strokeLinecap="round"
+            />
+
+            {/* غبار نجميّ خافت للأجواء — غير قابل للضغط */}
+            <g style={{ pointerEvents: "none" }}>
+              <circle cx="30" cy="5" r="0.4" fill="#f0d9a8" opacity="0.45" />
+              <circle cx="70" cy="6" r="0.5" fill="#f0d9a8" opacity="0.4" />
+              <circle cx="50" cy="2.5" r="0.35" fill="#f0d9a8" opacity="0.35" />
+            </g>
+
+            {/* النجوم — واحدة لكل يوم من الأسبوع */}
+            {dayInfo.map((info, i) => {
+              const { x, y } = skyPoint(i / 6);
+              const selected = info.date === openDay;
+              const r = STAR_R[info.level];
+              const o = STAR_O[info.level];
+              const starStyle = (reduceMotion
+                ? { opacity: o }
+                : { "--star-o": o, animationDelay: `${i * 0.5}s` }) as React.CSSProperties;
+              return (
+                <g
+                  key={info.date}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${WEEKDAYS_FULL[parseDate(info.date).getDay()]} — ${info.level > 0 ? "فيه نشاط" : "هادئ"}`}
+                  onClick={() => setOpenDay(selected ? null : info.date)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setOpenDay(selected ? null : info.date);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  {info.level >= 2 && <circle cx={x} cy={y} r={r * 2.2} fill="url(#weekStarHalo)" />}
+                  {selected && (
+                    <circle cx={x} cy={y} r={r + 2.4} fill="none" stroke="#f6dca0" strokeOpacity="0.75" strokeWidth="0.7" />
+                  )}
+                  {info.level === 0 ? (
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={STAR_R[0]}
+                      fill="#f0d9a8"
+                      className={reduceMotion ? undefined : "sky-star"}
+                      style={starStyle}
+                    />
+                  ) : (
+                    <path
+                      d={sparklePath(x, y, r)}
+                      fill="#f6dca0"
+                      className={reduceMotion ? undefined : "sky-star"}
+                      style={starStyle}
+                    />
+                  )}
+                  {/* منطقة ضغط أوسع للنجوم الصغيرة */}
+                  <circle cx={x} cy={y} r={6} fill="transparent" />
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* أسماء الأيام — صف أسفل النجوم */}
+          {dayInfo.map((info, i) => {
+            const { x } = skyPoint(i / 6);
+            const selected = info.date === openDay;
+            return (
+              <span
+                key={info.date}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 text-[8px] font-medium whitespace-nowrap pointer-events-none ${
+                  selected ? "text-[#f6dca0]" : "text-white/45"
+                }`}
+                style={{ left: `${x}%`, top: "88%" }}
               >
-                {score === 2 ? "🔥" : score > 0 ? score : "·"}
-              </div>
+                {WEEKDAYS_SHORT[parseDate(info.date).getDay()]}
+              </span>
+            );
+          })}
+        </div>
+
+        {/* تفاصيل الليلة المختارة — أو تلميح */}
+        <div className="mt-1 min-h-[1.75rem] flex items-center justify-center">
+          {openInfo ? (
+            <div className="flex items-center gap-1.5 flex-wrap justify-center animate-fade-up">
+              <span className="text-[11px] font-bold text-[#f6dca0]">
+                {WEEKDAYS_FULL[parseDate(openInfo.date).getDay()]} · {formatDateShort(openInfo.date)}
+              </span>
+              {openInfo.journaled && <DayBadge>📓 مذكرة</DayBadge>}
+              {openInfo.dayPages > 0 && <DayBadge>📚 {formatAmount(openInfo.dayPages)} صفحة</DayBadge>}
+              {openInfo.hasTx && <DayBadge>💰 {formatAmount(openInfo.daySpent)}</DayBadge>}
+              {openInfo.level === 0 && <span className="text-[11px] text-white/55">ليلة هادئة 🌙</span>}
             </div>
-          );
-        })}
+          ) : (
+            <p className="text-[11px] text-white/45">اضغط أي نجمة لتفاصيل يومها ✦</p>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function DayBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="bg-white/10 rounded-lg px-2 py-0.5 text-[11px] text-white/85 whitespace-nowrap">
+      {children}
+    </span>
   );
 }
 
