@@ -7,28 +7,43 @@ import { ChevronRight, ChevronLeft } from "lucide-react";
 interface PrayerCalendarProps {
   prayerLogs: PrayerLog[];
   onDayClick: (date: string) => void;
+  // Optional controlled view: when provided (e.g. so فلك الشهور can jump the
+  // calendar to a tapped month) they drive the displayed month; otherwise the
+  // calendar keeps its own internal month state as before.
+  year?: number;
+  month?: number;
+  onNavigate?: (year: number, month: number) => void;
 }
 
 const DAYS_AR = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
 
 // Each day renders as a tiny five-dot "fingerprint" of that day's prayers
 // instead of a single flat colour — a month becomes a mosaic at a glance.
-export function PrayerCalendar({ prayerLogs, onDayClick }: PrayerCalendarProps) {
+export function PrayerCalendar({ prayerLogs, onDayClick, year: yearProp, month: monthProp, onNavigate }: PrayerCalendarProps) {
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  const [internalYear, setInternalYear] = useState(now.getFullYear());
+  const [internalMonth, setInternalMonth] = useState(now.getMonth());
+  const year = yearProp ?? internalYear;
+  const month = monthProp ?? internalMonth;
 
   const dates = getMonthDates(year, month);
   const firstDay = new Date(year, month, 1).getDay();
   const todayStr = today();
 
+  // Keep internal state in sync AND notify the parent, so the component works
+  // both standalone (uncontrolled) and controlled without desyncing.
+  function navigate(y: number, m: number) {
+    setInternalYear(y);
+    setInternalMonth(m);
+    onNavigate?.(y, m);
+  }
   function prev() {
-    if (month === 0) { setYear((y) => y - 1); setMonth(11); }
-    else setMonth((m) => m - 1);
+    if (month === 0) navigate(year - 1, 11);
+    else navigate(year, month - 1);
   }
   function next() {
-    if (month === 11) { setYear((y) => y + 1); setMonth(0); }
-    else setMonth((m) => m + 1);
+    if (month === 11) navigate(year + 1, 0);
+    else navigate(year, month + 1);
   }
 
   return (

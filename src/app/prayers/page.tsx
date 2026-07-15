@@ -7,6 +7,7 @@ import {
 import { PRAYERS, type PrayerName, type PrayerStatus } from "@/lib/types";
 import { PrayerRow } from "@/components/prayer/PrayerRow";
 import { PrayerCalendar } from "@/components/prayer/PrayerCalendar";
+import { PrayerYearRing } from "@/components/prayer/PrayerYearRing";
 import { PrayerInsight } from "@/components/prayer/PrayerInsight";
 import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { Card } from "@/components/ui/Card";
@@ -17,8 +18,13 @@ import { Flame } from "lucide-react";
 export default function PrayersPage() {
   const { prayerLogs, setPrayerStatus } = useAppStore();
   const [editDate, setEditDate] = useState<string | null>(null);
+  // Shared calendar view — فلك الشهور taps set it so the calendar jumps to that
+  // month; the calendar's own arrows write back through onNavigate.
+  const [calYear, setCalYear] = useState(() => Number(today().slice(0, 4)));
+  const [calMonth, setCalMonth] = useState(() => Number(today().slice(5, 7)) - 1);
 
   const todayStr = today();
+  const ringYear = Number(todayStr.slice(0, 4));
   const todayLog = getPrayerLog(prayerLogs, todayStr);
   const { prayed: todayPrayed } = countDayPrayers(todayLog);
 
@@ -83,10 +89,29 @@ export default function PrayersPage() {
 
       <Card>
         <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold text-gray-700">فلك الشهور</span>
+          <span className="text-xs text-gray-400">سطوع كل قوسٍ = التزام شهره</span>
+        </div>
+        <PrayerYearRing
+          prayerLogs={prayerLogs}
+          year={ringYear}
+          activeMonth={calYear === ringYear ? calMonth : -1}
+          onSelectMonth={(m) => { setCalYear(ringYear); setCalMonth(m); }}
+        />
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-gray-700">سجل الشهر</span>
           <span className="text-xs text-gray-400">اضغط أي يوم للتعديل 👆</span>
         </div>
-        <PrayerCalendar prayerLogs={prayerLogs} onDayClick={setEditDate} />
+        <PrayerCalendar
+          prayerLogs={prayerLogs}
+          onDayClick={setEditDate}
+          year={calYear}
+          month={calMonth}
+          onNavigate={(y, m) => { setCalYear(y); setCalMonth(m); }}
+        />
       </Card>
 
       <PrayerInsight prayerLogs={prayerLogs} />
