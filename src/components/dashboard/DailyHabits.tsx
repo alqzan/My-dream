@@ -119,6 +119,63 @@ function TileBody({
   );
 }
 
+// A mini dome that fills by today's completion fraction (doneItems/totalItems)
+// — a small sibling of PrayerOrbit's arc (thin gold line-work on a celestial
+// diagram), so the habits master visibly echoes the prayer instrument. Static
+// fill like PrayerOrbit (no continuous motion → nothing to gate for reduced
+// motion); the count sits inside the dome.
+const ARC_CX = 24;
+const ARC_CY = 24;
+const ARC_R = 20;
+function arcPoint(deg: number) {
+  const r = (deg * Math.PI) / 180;
+  return { x: ARC_CX + ARC_R * Math.cos(r), y: ARC_CY - ARC_R * Math.sin(r) };
+}
+const ARC_A = arcPoint(178);
+const ARC_B = arcPoint(2);
+const HABIT_ARC_PATH = `M ${ARC_A.x} ${ARC_A.y} A ${ARC_R} ${ARC_R} 0 0 1 ${ARC_B.x} ${ARC_B.y}`;
+const HABIT_ARC_LEN = Math.PI * ARC_R;
+
+function HabitArc({ done, total }: { done: number; total: number }) {
+  const frac = total > 0 ? done / total : 0;
+  const tip = arcPoint(178 - frac * 176);
+  return (
+    <div className="flex flex-col items-center shrink-0">
+      <div className="relative w-[52px]">
+        <svg viewBox="0 0 48 28" className="w-full block overflow-visible">
+          <defs>
+            <linearGradient id="habitArcGold" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#fff4d6" />
+              <stop offset="100%" stopColor="#f2d29a" />
+            </linearGradient>
+          </defs>
+          <path
+            d={HABIT_ARC_PATH}
+            fill="none"
+            stroke="currentColor"
+            className="text-white/25"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+          <path
+            d={HABIT_ARC_PATH}
+            fill="none"
+            stroke="url(#habitArcGold)"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeDasharray={`${frac * HABIT_ARC_LEN} 999`}
+          />
+          {frac > 0 && frac < 1 && <circle cx={tip.x} cy={tip.y} r="1.7" fill="#fff4d6" />}
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center pt-2.5">
+          <span className="text-base font-bold tabular-nums leading-none">{done}/{total}</span>
+        </div>
+      </div>
+      <div className="text-[11px] opacity-80 mt-0.5">أنجزت اليوم</div>
+    </div>
+  );
+}
+
 // The dashboard's single daily card: the master streak on top, then every
 // daily practice in ONE grid — the app's core rituals (journal, reading,
 // prayer) shown as tiles alongside the habits the owner adds. Core tiles open
@@ -209,10 +266,7 @@ export function DailyHabits() {
             {masterStreak > 0 ? "يوم متواصل — مذكرة وقراءة" : "ابدأ سلسلتك اليوم!"}
           </div>
         </div>
-        <div className="text-left">
-          <div className="text-2xl font-bold tabular-nums">{doneItems}/{totalItems}</div>
-          <div className="text-xs opacity-80">أنجزت اليوم</div>
-        </div>
+        <HabitArc done={doneItems} total={totalItems} />
       </div>
 
       {/* White panel: rituals + habits in one grid */}
