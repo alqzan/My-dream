@@ -207,6 +207,15 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* المدار الحيّ — نقطة العلامة تدور حول المركز (22,22 في viewBox) عندما «يستيقظ»
+   المساعد بعد ربط الوسيط. transform-box: view-box يجعل نقطة الأصل بإحداثيات
+   الـviewBox فتدور النقطة في مدارٍ لا حول نفسها. تُعطَّل عند تقليل الحركة أدناه. */
+.brand-orbit-dot {
+  transform-box: view-box;
+  transform-origin: 22px 22px;
+  animation: orbitDot 6s linear infinite;
+}
+
 @keyframes confettiFall {
   0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
   85% { opacity: 1; }
@@ -338,7 +347,8 @@ body {
   .page-fade,
   .shine::after,
   .sky-star,
-  .sky-comet-head {
+  .sky-comet-head,
+  .brand-orbit-dot {
     animation: none;
   }
   .animate-fade-up,

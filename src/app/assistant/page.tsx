@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { buildAssistantContext } from "@/lib/assistantContext";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { BrandMark } from "@/components/layout/BrandMark";
 import { Sparkles, Send, Settings2, User, MessageSquarePlus } from "lucide-react";
 
 const ENDPOINT_KEY = "madar-assistant-endpoint";
@@ -166,7 +167,23 @@ export default function AssistantPage() {
           <Sparkles size={22} className="text-brand-600" />
           <h1 className="text-2xl font-bold text-gray-900">المساعد</h1>
         </div>
-        <Card className="animate-fade-up stagger-1 space-y-3">
+
+        {/* مدار المساعد النائم — حلقات العلامة كبيرة وساكنة كأنّ المساعد نائم؛
+            حين يُحفظ رابط وسيطٍ صالح (endpoint) تدور نقطة المدار فيستيقظ
+            (تُعطَّل الحركة عند تفضيل تقليل الحركة). زخرفي بحت — لا يمسّ الإعداد. */}
+        <div
+          className="flex flex-col items-center gap-2 pt-3 pb-1 animate-fade-up stagger-1"
+          aria-hidden
+        >
+          <div className={`transition-opacity duration-700 ${endpoint ? "opacity-95" : "opacity-[0.55]"}`}>
+            <BrandMark size={176} spin={!!endpoint} />
+          </div>
+          <span className="text-xs text-gray-400">
+            {endpoint ? "المساعد متّصل" : "المساعد نائم — فعّله بربط الوسيط"}
+          </span>
+        </div>
+
+        <Card className="animate-fade-up stagger-2 space-y-3">
           <p className="text-sm text-gray-600 leading-relaxed">
             المساعد يجيب عن أسئلتك حول مصاريفك ومذكراتك وعاداتك. يعمل عبر «وسيط» مجاني تنشئه مرة
             واحدة (Cloudflare Worker) يحفظ مفتاح Gemini بأمان — لا يوضع المفتاح في التطبيق.
