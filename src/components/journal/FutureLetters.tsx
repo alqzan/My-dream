@@ -5,7 +5,7 @@ import type { FutureLetter } from "@/lib/types";
 import { uid, today, formatDate, toDateStr } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Mail, MailOpen, Lock, Trash2, Send, Hourglass } from "lucide-react";
+import { Mail, MailOpen, Trash2, Send, Hourglass } from "lucide-react";
 
 function addMonths(dateStr: string, months: number): string {
   const d = new Date(dateStr + "T12:00:00");
@@ -27,6 +27,49 @@ function agoLabel(days: number): string {
     return m === 1 ? "قبل شهر" : m === 2 ? "قبل شهرين" : `قبل ${m} أشهر`;
   }
   return `قبل ${days} يوم`;
+}
+
+// مسار القوس المضيء لقمرٍ «متزايد» (نفس فكرة QuestionMoon): القرص نصف قطره r
+// حول (cx,cy)، والطرف نصفه الأفقي rx=r·(1−2f) بإشارته — f=0 محاق (لا يضيء)،
+// f=0.5 نصف، f=1 بدرٌ كامل. الجهة المضيئة يميناً.
+function litPath(cx: number, cy: number, r: number, f: number): string {
+  const rx = r * (1 - 2 * f);
+  const sweep = rx > 0 ? 0 : 1;
+  return (
+    `M ${cx} ${cy - r} ` +
+    `A ${r} ${r} 0 0 1 ${cx} ${cy + r} ` +
+    `A ${Math.abs(rx).toFixed(3)} ${r} 0 0 ${sweep} ${cx} ${cy - r} Z`
+  );
+}
+
+// الرسالة المختومة كهلالٍ يتزايد نحو البدر كلما اقترب موعد فتحها: نسبة
+// الاستضاءة = (اليوم − يوم الكتابة)/(يوم الفتح − يوم الكتابة) محصورة 0..1.
+// قرصٌ بنفسجي معتم (الختم) يمتلئ ذهباً حتى يكتمل بدراً يوم التسليم.
+function LetterMoon({ frac }: { frac: number }) {
+  const f = Math.max(0, Math.min(1, frac));
+  const R = 15;
+  const C = 20; // مركز القرص في مساحة 40×40
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      className="w-9 h-9 shrink-0 motion-safe:animate-fade-up"
+      role="img"
+      aria-label={`الرسالة اكتملت ${Math.round(f * 100)}٪`}
+    >
+      <defs>
+        <linearGradient id="letterMoonLit" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#c9b3e6" />
+          <stop offset="100%" stopColor="#e5b45f" />
+        </linearGradient>
+      </defs>
+      {/* القرص المعتم — الرسالة ما زالت مختومة */}
+      <circle cx={C} cy={C} r={R} className="fill-journal" fillOpacity={0.18} />
+      {/* الجزء المضيء ينمو نحو موعد الفتح */}
+      <path d={litPath(C, C, R, f)} fill="url(#letterMoonLit)" />
+      {/* خط ذهبي رفيع حول الحافة */}
+      <circle cx={C} cy={C} r={R} fill="none" stroke="#e5b45f" strokeWidth={1} strokeOpacity={0.7} />
+    </svg>
+  );
 }
 
 export function FutureLetters() {
@@ -121,10 +164,12 @@ export function FutureLetters() {
         {/* المختومة */}
         {locked.map((l) => {
           const left = daysBetween(todayStr, l.deliveryDate);
+          const span = daysBetween(l.writtenDate, l.deliveryDate);
+          const frac = span > 0 ? daysBetween(l.writtenDate, todayStr) / span : 0;
           return (
             <div key={l.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
-              <div className="w-9 h-9 rounded-xl bg-journal/10 flex items-center justify-center shrink-0">
-                <Lock size={15} className="text-journal" />
+              <div className="shrink-0" title={`باقٍ ${left} يوم`}>
+                <LetterMoon frac={frac} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-700 truncate">
