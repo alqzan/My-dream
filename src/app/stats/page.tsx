@@ -15,6 +15,7 @@ import {
 } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { SectionSignet } from "@/components/layout/SectionSignet";
 import { YearHeatmap } from "@/components/stats/YearHeatmap";
 import dynamic from "next/dynamic";
 // Charts (recharts) load on demand so the stats shell paints without waiting
@@ -130,7 +131,10 @@ export default function StatsPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="animate-fade-up">
-        <h1 className="text-2xl font-bold text-gray-900">إحصائياتي</h1>
+        <div className="flex items-center gap-2.5">
+          <SectionSignet href="/stats" />
+          <h1 className="text-2xl font-bold text-gray-900">إحصائياتي</h1>
+        </div>
         <p className="text-sm text-gray-500 mt-0.5">رحلتك في {year} بالأرقام</p>
       </div>
 

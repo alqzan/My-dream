@@ -13,6 +13,7 @@ import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
+import { SectionSignet } from "@/components/layout/SectionSignet";
 import { Flame } from "lucide-react";
 
 export default function PrayersPage() {
@@ -56,7 +57,10 @@ export default function PrayersPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">الصلاة</h1>
+          <div className="flex items-center gap-2.5">
+            <SectionSignet href="/prayers" />
+            <h1 className="text-2xl font-bold text-gray-900">الصلاة</h1>
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <Flame size={14} className={streak > 0 ? "text-amber-500" : "text-gray-300"} />
             <span className="text-sm text-gray-500">

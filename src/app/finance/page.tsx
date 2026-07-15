@@ -22,6 +22,7 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X } from "lucide-react";
 import { getCategoryInfo, normalizeArabic } from "@/lib/utils";
@@ -92,7 +93,10 @@ export default function FinancePage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">المصاريف</h1>
+          <div className="flex items-center gap-2.5">
+            <SectionSignet href="/finance" />
+            <h1 className="text-2xl font-bold text-gray-900">المصاريف</h1>
+          </div>
           <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
         </div>
         <div className="flex gap-2">

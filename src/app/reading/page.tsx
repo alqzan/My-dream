@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SectionSignet } from "@/components/layout/SectionSignet";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import type { Book, ReadingLog } from "@/lib/types";
 import { Plus, BookOpen, Flame, Pencil, Trash2 } from "lucide-react";
@@ -66,7 +67,10 @@ export default function ReadingPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">القراءة</h1>
+          <div className="flex items-center gap-2.5">
+            <SectionSignet href="/reading" />
+            <h1 className="text-2xl font-bold text-gray-900">القراءة</h1>
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <Flame size={14} className={streak > 0 ? "text-reading animate-flame" : "text-gray-300"} />
             <span className="text-sm text-gray-500">
