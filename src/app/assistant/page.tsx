@@ -233,17 +233,27 @@ export default function AssistantPage() {
               <Sparkles size={28} className="mx-auto text-brand-300" />
               <p>اسألني عن مصاريفك، مذكراتك، عاداتك، صلواتك أو قراءتك.</p>
             </div>
-            <div className="flex flex-wrap gap-2 justify-center px-2">
-              {SUGGESTIONS.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => send(q)}
-                  disabled={busy}
-                  className="text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-full px-3 py-1.5 press disabled:opacity-50"
-                >
-                  {q}
-                </button>
-              ))}
+            {/* بُرج الأسئلة — الرقائق مرتّبة على قوسٍ لطيف كوكبةً صغيرة فوق حقل
+                الكتابة بدل صفٍّ مسطّح، بلمسةٍ فلكية تناسب اسم «مدار». كلٌّ منها
+                «نجمة» بنقطةٍ ذهبية، وإزاحةٌ أفقية تتبع جيبَ الزاوية ترسم القوس.
+                النصوص والنقر (send) كما هي؛ الإزاحة تخطيطية ساكنة (لا حركة). */}
+            <div className="flex flex-col items-center gap-2.5 px-2 pt-1">
+              {SUGGESTIONS.map((q, i) => {
+                const t = SUGGESTIONS.length > 1 ? i / (SUGGESTIONS.length - 1) : 0;
+                const shift = Math.round(Math.sin(t * Math.PI) * 20);
+                return (
+                  <button
+                    key={q}
+                    onClick={() => send(q)}
+                    disabled={busy}
+                    style={{ transform: `translateX(${shift}px)` }}
+                    className="inline-flex items-center gap-1.5 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-full px-3.5 py-1.5 press disabled:opacity-50"
+                  >
+                    <span className="w-1 h-1 rounded-full bg-brand-400/80 shrink-0" aria-hidden />
+                    {q}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
