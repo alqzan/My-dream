@@ -8,6 +8,7 @@ import { ReadingLogForm } from "@/components/reading/ReadingLogForm";
 import { ReadingPace } from "@/components/reading/ReadingPace";
 import { ReadingGoalCard } from "@/components/reading/ReadingGoalCard";
 import { ReadingTimer } from "@/components/reading/ReadingTimer";
+import { ReadingJourney } from "@/components/reading/ReadingJourney";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -28,6 +29,8 @@ export default function ReadingPage() {
   const [filter, setFilter] = useState<FilterStatus>("الكل");
   // دقائق ممرَّرة من مؤقّت الجلسة لتعبئة نموذج التسجيل تلقائياً.
   const [timerMinutes, setTimerMinutes] = useState<number | undefined>();
+  // الكتاب المستهدَف عند النقر من «قافلة القراءة» — يفتح نموذج التسجيل عليه.
+  const [logBookId, setLogBookId] = useState<string | undefined>();
 
   function finishTimer(minutes: number) {
     setTimerMinutes(minutes);
@@ -118,6 +121,14 @@ export default function ReadingPage() {
       <Card className="animate-fade-up stagger-2">
         <StreakCalendar markedDates={logDates} color="#e07b39" />
       </Card>
+
+      <div className="animate-fade-up stagger-2">
+        <ReadingJourney
+          books={books}
+          logs={readingLogs}
+          onLogBook={(book) => { setLogBookId(book.id); setShowLogForm(true); }}
+        />
+      </div>
 
       {currentBooks.length > 0 && (
         <div className="space-y-2">
@@ -213,15 +224,16 @@ export default function ReadingPage() {
 
       <Modal
         open={showLogForm || !!editLog}
-        onClose={() => { setShowLogForm(false); setEditLog(undefined); setTimerMinutes(undefined); }}
+        onClose={() => { setShowLogForm(false); setEditLog(undefined); setTimerMinutes(undefined); setLogBookId(undefined); }}
         title={editLog ? "تعديل جلسة القراءة" : "سجّل جلسة قراءة"}
       >
         <ReadingLogForm
-          key={editLog?.id ?? `new-${timerMinutes ?? ""}`}
+          key={editLog?.id ?? `new-${logBookId ?? ""}-${timerMinutes ?? ""}`}
           books={books}
           initial={editLog}
+          defaultBookId={editLog ? undefined : logBookId}
           defaultMinutes={editLog ? undefined : timerMinutes}
-          onClose={() => { setShowLogForm(false); setEditLog(undefined); setTimerMinutes(undefined); }}
+          onClose={() => { setShowLogForm(false); setEditLog(undefined); setTimerMinutes(undefined); setLogBookId(undefined); }}
         />
       </Modal>
     </div>
