@@ -169,13 +169,24 @@ function FundDial({
               className="text-gray-200 dark:text-[#3a2e1e]"
               strokeWidth={STROKE}
             />
-            {hasTarget ? (
+            {!healthy ? (
+              // منفدٌ/سالب → حلقة حمراء كاملة واضحة
               <circle
                 cx={DIAL / 2}
                 cy={DIAL / 2}
                 r={R}
                 fill="none"
-                stroke={healthy ? "url(#reserveGreen)" : DRAINED}
+                stroke={DRAINED}
+                strokeOpacity={0.75}
+                strokeWidth={STROKE}
+              />
+            ) : hasTarget ? (
+              <circle
+                cx={DIAL / 2}
+                cy={DIAL / 2}
+                r={R}
+                fill="none"
+                stroke="url(#reserveGreen)"
                 strokeWidth={STROKE}
                 strokeLinecap="round"
                 strokeDasharray={`${on} ${CIRC - on}`}
@@ -188,14 +199,14 @@ function FundDial({
                 cy={DIAL / 2}
                 r={R}
                 fill="none"
-                stroke={healthy ? GOLD : DRAINED}
-                strokeOpacity={healthy ? 0.4 : 0.7}
+                stroke={GOLD}
+                strokeOpacity={0.4}
                 strokeWidth={STROKE}
               />
             )}
           </g>
           {/* راكب المدار عند رأس التقدّم */}
-          {hasTarget && anim > 0 && (
+          {healthy && hasTarget && anim > 0 && (
             <circle
               cx={dotX}
               cy={dotY}
@@ -207,7 +218,7 @@ function FundDial({
             />
           )}
           {/* علامة الغاية في الأعلى */}
-          {hasTarget && (
+          {healthy && hasTarget && (
             <circle cx={DIAL / 2} cy={2} r={1.1} fill={GOLD} opacity={0.75} />
           )}
         </svg>
@@ -224,8 +235,13 @@ function FundDial({
       <span className={cn("text-[11px] font-bold tabular-nums leading-none", healthy ? "text-green-700 dark:text-green-400" : "text-red-500")}>
         {formatAmount(balance)}
       </span>
-      <span className={cn("text-[9px] leading-none", done ? "text-finance font-bold" : "text-gray-400")}>
-        {hasTarget ? (done ? "اكتمل ✓" : `${pct}٪ من الهدف`) : healthy ? "متوفّر" : "مستنفد"}
+      <span
+        className={cn(
+          "text-[9px] leading-none",
+          !healthy ? "text-red-500 font-semibold" : done ? "text-finance font-bold" : "text-gray-400"
+        )}
+      >
+        {!healthy ? "مستنفد" : done ? "اكتمل ✓" : hasTarget ? `${pct}٪ من الهدف` : "متوفّر"}
       </span>
     </button>
   );
