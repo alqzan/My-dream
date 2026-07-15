@@ -382,8 +382,10 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
         <div className="mt-1 min-h-[1.75rem] flex items-center justify-center">
           {openInfo ? (
             <div className="flex items-center gap-1.5 flex-wrap justify-center animate-fade-up">
-              <span className="text-[11px] font-bold text-[#f6dca0]">
-                {WEEKDAYS_FULL[parseDate(openInfo.date).getDay()]} · {formatDateShort(openInfo.date)}
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#f6dca0]">
+                <span>{WEEKDAYS_FULL[parseDate(openInfo.date).getDay()]}</span>
+                <span className="opacity-50">·</span>
+                <bdi>{formatDateShort(openInfo.date)}</bdi>
               </span>
               {openInfo.journaled && <DayBadge>📓 مذكرة</DayBadge>}
               {openInfo.dayPages > 0 && <DayBadge>📚 {formatAmount(openInfo.dayPages)} صفحة</DayBadge>}
