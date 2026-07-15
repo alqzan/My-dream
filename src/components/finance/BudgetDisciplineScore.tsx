@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import type { Transaction, Budget, DailyBudget, FinanceCategoryDef } from "@/lib/types";
 import { computeDailyBudgetStatus, formatAmount, toDateStr, getMainCategory, budgetLimit } from "@/lib/utils";
 
@@ -9,6 +10,10 @@ interface BudgetDisciplineScoreProps {
   categories: FinanceCategoryDef[];
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
 // A spending-discipline score (0-100) built entirely from expense data —
@@ -63,49 +68,126 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
   const score = Math.max(0, Math.min(100, budgetScore + dailyScore + trendScore));
   const { label, color, bg, advice } = getInfo(score);
 
+  // The three component sub-scores become concentric rings inside the orbit,
+  // each filled to its own share of its max (budget/40, daily/30, trend/30) —
+  // the same numbers the columns used to print, now drawn as line-work.
+  const subs = [
+    { key: "budget", label: "ضمن الميزانية", color: "#2f7a33", frac: budgetScore / 40,
+      value: budgets.length ? `${Math.round((budgetScore / 40) * 100)}%` : "—" },
+    { key: "daily", label: "الرصيد اليومي", color: "#3d9640", frac: dailyScore / 30,
+      value: dailyRatioLabel },
+    { key: "trend", label: "مقابل الأسبوع الماضي", color: "#64b767", frac: trendScore / 30,
+      value: lastWeek > 0 ? `${thisWeek <= lastWeek ? "↓" : "↑"} ${Math.round(Math.abs((thisWeek - lastWeek) / lastWeek) * 100)}%` : "—" },
+  ];
+
   return (
     <div className={`rounded-2xl p-4 ${bg} space-y-3`}>
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium text-gray-500">انضباط الميزانية</p>
-          <p className="text-2xl font-bold mt-0.5" style={{ color }}>{score}</p>
-        </div>
-        <div
-          className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black border-4"
-          style={{ borderColor: color, color }}
-        >
-          {score}
-        </div>
-      </div>
-
-      <div className="h-2 bg-white/60 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${score}%`, backgroundColor: color }}
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
+        <p className="text-xs font-medium text-gray-500">انضباط الميزانية</p>
         <span className="font-bold text-sm" style={{ color }}>{label}</span>
-        <span className="text-xs text-gray-500">—</span>
-        <span className="text-xs text-gray-600 leading-relaxed">{advice}</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-xs text-gray-500">ضمن الميزانية</div>
-          <div className="text-sm font-bold text-gray-800">{budgets.length ? `${Math.round((budgetScore / 40) * 100)}%` : "—"}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500">الرصيد اليومي</div>
-          <div className="text-sm font-bold text-gray-800">{dailyRatioLabel}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500">مقابل الأسبوع الماضي</div>
-          <div className="text-sm font-bold text-gray-800">
-            {lastWeek > 0 ? `${thisWeek <= lastWeek ? "↓" : "↑"} ${Math.round(Math.abs((thisWeek - lastWeek) / lastWeek) * 100)}%` : "—"}
+      <div className="flex items-center gap-4">
+        <ScoreOrbit score={score} scoreColor={color} subs={subs} />
+        <div className="flex-1 min-w-0 space-y-2.5">
+          <p className="text-xs text-gray-600 leading-relaxed">{advice}</p>
+          <div className="space-y-1.5">
+            {subs.map((s) => (
+              <div key={s.key} className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="flex items-center gap-1.5 text-gray-500 min-w-0">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                  <span className="truncate">{s.label}</span>
+                </span>
+                <span className="font-bold text-gray-800 tabular-nums shrink-0">{s.value}</span>
+              </div>
+            ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ————————————————————————————————————————————————————————————————
+// مدار الانضباط: قوسٌ ذهبي كبير يمتلئ إلى الدرجة، وثلاث حلقات خضراء متراكزة
+// للمكوّنات الفرعية — بحدٍّ ذهبي رفيع كأخوات الأداة. الرقم في المركز يبقى ظاهراً.
+const VB = 120;
+const CENTER = VB / 2;
+const MAIN_R = 54;
+const SUB_R = [43, 34, 25];
+
+function ring(r: number, frac: number) {
+  const c = 2 * Math.PI * r;
+  return { c, dash: Math.max(0, Math.min(1, frac)) * c };
+}
+
+function ScoreOrbit({
+  score,
+  scoreColor,
+  subs,
+}: {
+  score: number;
+  scoreColor: string;
+  subs: { key: string; color: string; frac: number }[];
+}) {
+  const reduce = prefersReducedMotion();
+  const [on, setOn] = useState(reduce);
+  useEffect(() => {
+    if (reduce) return;
+    const t = requestAnimationFrame(() => setOn(true));
+    return () => cancelAnimationFrame(t);
+  }, [reduce]);
+
+  const main = ring(MAIN_R, score / 100);
+  const tipAngle = ((on ? score / 100 : 0) * 360 - 90) * (Math.PI / 180);
+  const tipX = CENTER + MAIN_R * Math.cos(tipAngle);
+  const tipY = CENTER + MAIN_R * Math.sin(tipAngle);
+  const dashTrans = reduce ? undefined : { transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1)" };
+
+  return (
+    <div className="relative shrink-0" style={{ width: 132, height: 132 }}>
+      <svg viewBox={`0 0 ${VB} ${VB}`} width={132} height={132}>
+        <defs>
+          <linearGradient id="disciplineGold" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#e8b15a" />
+            <stop offset="100%" stopColor="#c1663f" />
+          </linearGradient>
+        </defs>
+        <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
+          {/* main score arc (gold) */}
+          <circle cx={CENTER} cy={CENTER} r={MAIN_R} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={5} />
+          <circle
+            cx={CENTER} cy={CENTER} r={MAIN_R} fill="none"
+            stroke="url(#disciplineGold)" strokeWidth={5} strokeLinecap="round"
+            strokeDasharray={`${on ? main.dash : 0} ${main.c}`}
+            style={dashTrans}
+          />
+          {/* three concentric sub-rings */}
+          {subs.map((s, i) => {
+            const rr = SUB_R[i];
+            const { c, dash } = ring(rr, s.frac);
+            return (
+              <g key={s.key}>
+                <circle cx={CENTER} cy={CENTER} r={rr} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={3.5} />
+                <circle
+                  cx={CENTER} cy={CENTER} r={rr} fill="none"
+                  stroke={s.color} strokeWidth={3.5} strokeLinecap="round"
+                  strokeDasharray={`${on ? dash : 0} ${c}`}
+                  style={dashTrans}
+                />
+              </g>
+            );
+          })}
+        </g>
+        {/* orbiting tip on the main arc */}
+        <circle
+          cx={tipX} cy={tipY} r={3.4} fill="#e8b15a" stroke="#fff" strokeWidth={1.4}
+          style={reduce ? undefined : { transition: "cx 1.2s cubic-bezier(0.16,1,0.3,1), cy 1.2s cubic-bezier(0.16,1,0.3,1)" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-3xl font-black leading-none" style={{ color: scoreColor }}>{score}</span>
+        <span className="text-[9px] text-gray-400 mt-1">من ١٠٠</span>
       </div>
     </div>
   );
