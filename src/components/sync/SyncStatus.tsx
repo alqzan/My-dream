@@ -18,7 +18,7 @@ export function SyncStatus() {
     if (!isFirebaseEnabled) return null;
     return (
       <Link
-        href="/stats"
+        href="/settings"
         className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500 press"
         title="المزامنة غير مفعّلة على هذا الجهاز — أضف مفتاح المزامنة لتظهر بياناتك"
       >
