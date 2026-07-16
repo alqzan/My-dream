@@ -14,8 +14,8 @@ import {
   today,
 } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
-import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { SectionSignet } from "@/components/layout/SectionSignet";
+import { StatInstrument } from "@/components/stats/StatInstrument";
 import { YearHeatmap } from "@/components/stats/YearHeatmap";
 import dynamic from "next/dynamic";
 // Charts (recharts) load on demand so the stats shell paints without waiting
@@ -24,10 +24,10 @@ const MonthlyBars = dynamic(
   () => import("@/components/stats/MonthlyBars").then((m) => m.MonthlyBars),
   { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-gray-100 rounded-xl" /> }
 );
-import { Flame, Trophy, BookOpen, Wallet, BookMarked, CalendarCheck } from "lucide-react";
+import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck } from "lucide-react";
 
 export default function StatsPage() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, readingGoal } = useAppStore();
 
   const year = today().slice(0, 4);
 
@@ -138,31 +138,34 @@ export default function StatsPage() {
         <p className="text-sm text-gray-500 mt-0.5">رحلتك في {year} بالأرقام</p>
       </div>
 
-      {/* Hero numbers */}
+      {/* Hero numbers — أربع أدواتٍ صغيرة بلغة اللوحة نفسها (سطح كريمي، حدٌّ
+          ذهبي، ونجمُ القسم لونًا للعدد وحلقةً صغيرة) تمهيدًا لإسطرلاب السنة تحتها.
+          حلقةُ «الكتب» مقياسٌ حقيقيّ نحو هدف القراءة؛ البقية مداراتٌ زخرفية. */}
       <div className="grid grid-cols-2 gap-3 animate-fade-up stagger-1">
-        <HeroStat
-          emoji="📓"
+        <StatInstrument
           value={entriesThisYear}
           label="مذكرة هذا العام"
-          gradient="from-[#8a6fb0] to-[#6d5595]"
+          color="#8a6fb0"
+          icon={<BookMarked size={15} />}
         />
-        <HeroStat
-          emoji="📖"
+        <StatInstrument
           value={pagesThisYear}
           label="صفحة قرأتها"
-          gradient="from-[#c1663f] to-[#a04e2c]"
+          color="#c1663f"
+          icon={<BookOpen size={15} />}
         />
-        <HeroStat
-          emoji="🏁"
+        <StatInstrument
           value={booksFinished}
           label="كتاب أنهيته"
-          gradient="from-[#3d9640] to-[#2d7a30]"
+          color="#c9852a"
+          icon={<BookCheck size={15} />}
+          goal={readingGoal ?? undefined}
         />
-        <HeroStat
-          emoji="💰"
+        <StatInstrument
           value={spentThisYear}
           label="ر.س مصاريف العام"
-          gradient="from-[#c9852a] to-[#a96c20]"
+          color="#3d9640"
+          icon={<Wallet size={15} />}
         />
       </div>
 
@@ -312,21 +315,3 @@ function RecordTrack({ current, best, color }: { current: number; best: number; 
   );
 }
 
-function HeroStat({
-  emoji, value, label, gradient,
-}: {
-  emoji: string;
-  value: number;
-  label: string;
-  gradient: string;
-}) {
-  return (
-    <div className={`relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-br ${gradient} card-shadow`}>
-      <div className="text-2xl mb-2">{emoji}</div>
-      <div className="text-2xl font-bold tabular-nums">
-        <AnimatedNumber value={value} />
-      </div>
-      <div className="text-xs opacity-85 mt-0.5">{label}</div>
-    </div>
-  );
-}
