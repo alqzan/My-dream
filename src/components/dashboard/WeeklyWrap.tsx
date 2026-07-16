@@ -251,7 +251,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
   }
 
   return (
-    <div className="bg-gradient-to-br from-[#4a3320] via-[#6b4629] to-[#8a5a24] rounded-2xl p-4 text-white space-y-3 card-shadow shine">
+    <div className="bg-gradient-to-br from-[#4a3320] via-[#6b4629] to-[#8a5a24] dark:from-[#5e4429] dark:via-[#805536] dark:to-[#a06d32] rounded-2xl p-4 text-white space-y-3 card-shadow shine border border-transparent dark:border-[#c9852a]/30">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-white/55 font-medium">حصيلة الأسبوع</p>
