@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
@@ -23,6 +23,17 @@ import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X } from "lucide-react";
 import { getCategoryInfo, normalizeArabic } from "@/lib/utils";
 import { showUndo } from "@/components/ui/UndoToast";
+
+// عنوانٌ خفيفٌ يجمّع البطاقات بصريًّا — مسمّى مكتوم صغير (ثمانية، عالميّ) مع خيطٍ
+// ذهبيٍّ باهتٍ يمتدّ جانبًا. ليس شريطًا ثقيلًا؛ فقط يقسّم الصفحة فصولًا للعين.
+function GroupLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5 pt-2 -mb-1">
+      <h2 className="shrink-0 text-xs font-semibold tracking-wide text-gray-400">{children}</h2>
+      <span className="h-px flex-1 bg-gray-100" aria-hidden />
+    </div>
+  );
+}
 
 export default function FinancePage() {
   const { transactions, recurring, categories, dailyBudget, deleteTransaction, addTransaction } = useAppStore();
@@ -153,6 +164,8 @@ export default function FinancePage() {
 
       <SalaryBanner />
 
+      <GroupLabel>يومياتك</GroupLabel>
+
       <div className="animate-fade-up stagger-1">
         <DailyBudgetCard />
       </div>
@@ -183,6 +196,8 @@ export default function FinancePage() {
           تصنيفاتي
         </button>
       </div>
+
+      <GroupLabel>سجلّك</GroupLabel>
 
       <Card>
         <div className="flex items-center justify-between mb-3">
