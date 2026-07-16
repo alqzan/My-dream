@@ -209,10 +209,27 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
   if (m) amount = parseFloat((m[1] ?? "").replace(/,/g, ""));
   if (!amount) return null;
 
-  // Merchant: "لـX" / "من X" / "لدى X" / "at X" / "@X".
+  // Merchant markers point at either the payee ("لـ"/"لدى"/"at"/"@") or the
+  // funding SOURCE ("من {account}"). A mada/Apple-Pay alert lists both — e.g.
+  // "من9004" (source account) before "لـEHSAN" (the real merchant) — so taking
+  // the first marker grabbed the account number. Collect EVERY marker, strip a
+  // trailing currency as before, and reject empty or pure number/punctuation
+  // values (an account number is never a merchant name). Prefer a payee marker;
+  // fall back to "من" only when it names a real (lettered) merchant, so a bank
+  // that legitimately writes "من ستاربكس" still resolves correctly.
   let merchant = "";
-  const mm = body.match(/(?:لدى|لـ|من|at|@)\s*([^\n\r,،.؛;]+)/i);
-  if (mm) merchant = mm[1].replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim();
+  let fromMerchant = "";
+  const stripCur = (v: string) => v.replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim();
+  for (const mk of body.matchAll(/(لدى|لـ|من|at|@)\s*([^\n\r,،.؛;]+)/gi)) {
+    const value = stripCur(mk[2]);
+    if (!/\p{L}/u.test(value)) continue; // empty or purely numeric/punctuation
+    if (mk[1] === "من") {
+      if (!fromMerchant) fromMerchant = value;
+    } else if (!merchant) {
+      merchant = value;
+    }
+  }
+  merchant = merchant || fromMerchant;
 
   return {
     amount,
@@ -231,6 +248,15 @@ function extractSmsDate(text: string): string | null {
   if (dmy) {
     const [, d, m, y] = dmy;
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  // dd/mm/yy (or dd-mm-yy): a 2-digit year, as mada alerts send ("16/7/26").
+  // Interpret yy as 20yy (26 → 2026). The trailing (?!\d) guard keeps this from
+  // biting off the first two digits of a 4-digit year (that case already
+  // returned above).
+  const dmy2 = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?!\d)/);
+  if (dmy2) {
+    const [, d, m, y] = dmy2;
+    return `20${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
   return null;
 }
