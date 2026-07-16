@@ -151,7 +151,6 @@ export const useAppStore = create<AppStore>()(
       habits: [
         { id: "h1", name: "رياضة", icon: "🏃", color: "#3d9640", logs: [] },
         { id: "h2", name: "قرآن", icon: "📖", color: "#7c6fcd", logs: [] },
-        { id: "h3", name: "قراءة", icon: "📚", color: "#e07b39", logs: [] },
       ],
       recurring: [],
       budgets: [],
