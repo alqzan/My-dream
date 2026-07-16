@@ -74,7 +74,7 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
   const subs = [
     { key: "budget", label: "ضمن الميزانية", color: "#2f7a33", frac: budgetScore / 40,
       value: budgets.length ? `${Math.round((budgetScore / 40) * 100)}%` : "—" },
-    { key: "daily", label: "الرصيد اليومي", color: "#3d9640", frac: dailyScore / 30,
+    { key: "daily", label: "رصيدك الحالي", color: "#3d9640", frac: dailyScore / 30,
       value: dailyRatioLabel },
     { key: "trend", label: "مقابل الأسبوع الماضي", color: "#64b767", frac: trendScore / 30,
       value: lastWeek > 0 ? `${thisWeek <= lastWeek ? "↓" : "↑"} ${Math.round(Math.abs((thisWeek - lastWeek) / lastWeek) * 100)}%` : "—" },
@@ -104,6 +104,9 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
           </div>
         </div>
       </div>
+      <p className="text-[10px] text-gray-400 leading-relaxed">
+        درجة انضباط من ١٠٠، تجمع ثلاثة عوامل: التزامك بميزانيات التصنيفات، ورصيدك الحالي، ومقارنة صرفك هذا الأسبوع بالأسبوع الماضي.
+      </p>
     </div>
   );
 }

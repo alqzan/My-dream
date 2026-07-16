@@ -280,6 +280,9 @@ export function DailyBudgetCard() {
           <div className="text-[11px] text-gray-400 mt-0.5">ر.س {over ? "بالسالب" : "رصيدك متراكم"}</div>
         </div>
       </div>
+      <p className="text-[10px] text-gray-400 text-center leading-relaxed">
+        الإناء ممتلئ حين يعادل رصيدك يوميّة كاملة أو أكثر · يفرغ باقترابه من الصفر
+      </p>
       {status.days === 0 ? (
         <p className="text-xs text-gray-500 text-center leading-relaxed">
           🌱 رُحّل الفائض — الدورة الجديدة تبدأ من الغد بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً
