@@ -8,6 +8,8 @@ import {
   formatDate,
   hijriDate,
   yearProgress,
+  getPrayerLog,
+  countDayPrayers,
 } from "@/lib/utils";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { InstallHint } from "@/components/layout/InstallHint";
@@ -35,7 +37,7 @@ import { ChevronLeft, BarChart3, TrendingDown, Plus } from "lucide-react";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
@@ -46,6 +48,12 @@ export default function Dashboard() {
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
   const allDoneToday = hasTodayJournal && hasTodayReading;
+
+  // «أقمار اليوم» — today's done-state for each daily domain, reusing the
+  // exact predicates the domain widgets use (PrayerOrbit / DailyHabits), so
+  // the moons on YearOrbit never drift from the real trackers.
+  const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
+  const hasTodayHabit = habits.some((h) => h.logs.includes(todayStr));
 
   // One confetti celebration per completed day. Also sweeps out celebration
   // keys older than 30 days — one gets written every completed day forever
@@ -92,7 +100,13 @@ export default function Dashboard() {
           <p className="text-sm text-gray-500 mt-0.5">{formatDate(todayStr)}</p>
           <p className="text-xs text-gray-400 mt-0.5">{hijriDate(todayStr)}</p>
         </div>
-        <YearOrbit pct={yearPct} />
+        <YearOrbit
+          pct={yearPct}
+          prayer={hasTodayPrayer}
+          journal={hasTodayJournal}
+          reading={hasTodayReading}
+          habits={hasTodayHabit}
+        />
       </div>
 
       <PendingBankBanner />
@@ -109,7 +123,7 @@ export default function Dashboard() {
         <HikmaCard />
       </div>
 
-      <div className="animate-fade-up stagger-2">
+      <div id="daily-habits" className="animate-fade-up stagger-2 scroll-mt-4">
         <DailyHabits />
       </div>
 
@@ -188,7 +202,15 @@ function getGreeting() {
 // Orbit ring showing how much of the year has passed — the "مدار" motif.
 // The arc fills in with an eased animation on mount, with a gold gradient
 // and a small orbiting "planet" at the arc's tip.
-function YearOrbit({ pct }: { pct: number }) {
+function YearOrbit({
+  pct, prayer, journal, reading, habits,
+}: {
+  pct: number;
+  prayer: boolean;
+  journal: boolean;
+  reading: boolean;
+  habits: boolean;
+}) {
   const size = 88;
   const stroke = 6.5;
   const r = (size - stroke) / 2 - 2;
@@ -204,6 +226,35 @@ function YearOrbit({ pct }: { pct: number }) {
   const angle = (animPct / 100) * 360 - 90;
   const dotX = size / 2 + (r) * Math.cos((angle * Math.PI) / 180);
   const dotY = size / 2 + (r) * Math.sin((angle * Math.PI) / 180);
+
+  // «أقمار اليوم على مدار السنة» — one small moon per daily domain, orbiting
+  // just inside the year ring at the four cardinal points. A moon glows in its
+  // section colour when that domain is done today, or sits as a faint outline
+  // when not. The centre radius (26) keeps every moon clear of the orbiting
+  // planet (on the ring at r≈39), the centre "%" label, and the greeting to
+  // the side. Purely additive — the year arc, planet, and label are untouched.
+  const cx0 = size / 2;
+  const cy0 = size / 2;
+  const moonR = 26;
+  const moons = [
+    { key: "prayer", label: "الصلاة", color: "#1f7a6c", done: prayer, angle: -90, href: "/prayers" as string | null },
+    { key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, angle: 0, href: "/journal" as string | null },
+    { key: "reading", label: "القراءة", color: "#c1663f", done: reading, angle: 90, href: "/reading" as string | null },
+    { key: "habits", label: "العادات", color: "#c9852a", done: habits, angle: 180, href: null as string | null },
+  ].map((m) => ({
+    ...m,
+    x: cx0 + moonR * Math.cos((m.angle * Math.PI) / 180),
+    y: cy0 + moonR * Math.sin((m.angle * Math.PI) / 180),
+  }));
+
+  // Habits has no page of its own — its moon nudges the DailyHabits card into
+  // view. Instant when the user prefers reduced motion.
+  const scrollToHabits = () => {
+    const el = typeof document !== "undefined" && document.getElementById("daily-habits");
+    if (!el) return;
+    const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+  };
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
@@ -232,11 +283,35 @@ function YearOrbit({ pct }: { pct: number }) {
           stroke="#fff" strokeWidth={1.5}
           style={{ transition: "cx 1.4s cubic-bezier(0.16,1,0.3,1), cy 1.4s cubic-bezier(0.16,1,0.3,1)" }}
         />
+        {moons.map((m) => (
+          <g key={m.key}>
+            {m.done && <circle cx={m.x} cy={m.y} r={4.2} fill={m.color} opacity={0.25} />}
+            <circle
+              cx={m.x} cy={m.y} r={2.8}
+              fill={m.done ? m.color : "none"}
+              stroke={m.color}
+              strokeWidth={m.done ? 0 : 1.3}
+              opacity={m.done ? 1 : 0.42}
+            />
+          </g>
+        ))}
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <span className="text-base font-bold text-gray-800 leading-none">{pct}%</span>
         <span className="text-[9px] text-gray-400 mt-0.5">من العام</span>
       </div>
+      {/* Transparent hit targets over each moon: real tap size + focus ring +
+          Arabic label, so the moons are keyboard-reachable and navigate. */}
+      {moons.map((m) => {
+        const aria = `${m.label} — ${m.done ? "أنجزت اليوم" : "لم تُنجز بعد"}`;
+        const cls = "absolute rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
+        const st = { left: m.x - 10, top: m.y - 10, width: 20, height: 20, ["--tw-ring-color" as string]: m.color };
+        return m.href ? (
+          <Link key={m.key} href={m.href} aria-label={aria} title={aria} className={cls} style={st} />
+        ) : (
+          <button key={m.key} type="button" onClick={scrollToHabits} aria-label={aria} title={aria} className={cls} style={st} />
+        );
+      })}
     </div>
   );
 }
