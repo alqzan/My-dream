@@ -5,10 +5,11 @@ import { formatAmount } from "@/lib/utils";
 
 // بطاقة رقمٍ في هيئة «أداة» صغيرة — سطح كريمي كأخوات لوحة القيادة (الإسطرلاب،
 // مدار الانضباط، سباق المدارين): حدٌّ ذهبي رفيع، ونجمُ القسم لونًا للعدد
-// (بخط ثمانية العريض)، وشارةُ أيقونةٍ صغيرة، وحلقةٌ صغيرة بلون القسم. حيث
-// يوجد نسبةٌ حقيقية (كالكتب المنهاة مقابل هدف القراءة) تمتلئ الحلقة بها؛ وإلا
-// فهي مدارٌ زخرفيّ بقمرٍ ساكن (بلا نِسبٍ موهومة). يعمل في النهاري والليلي عبر
-// إعادة تعيين bg-white إلى ورقٍ داكن في globals.css.
+// (بخط ثمانية العريض)، وشارةُ أيقونةٍ صغيرة، وشارةٌ في الزاوية بلون القسم. حيث
+// يوجد نسبةٌ حقيقية (كالكتب المنهاة مقابل هدف القراءة) تكون الشارةُ حلقةَ مقياسٍ
+// تمتلئ بها — وهي الحلقةُ الوحيدة في الطاقم؛ وإلا فالشارةُ عنقودُ نجومٍ زخرفيّ
+// (لا حلقة أصلًا) كي لا تُقرأ كمقياسٍ فارغ. يعمل في النهاري والليلي عبر إعادة
+// تعيين bg-white إلى ورقٍ داكن في globals.css.
 interface StatInstrumentProps {
   value: number;
   label: string;
@@ -56,13 +57,20 @@ function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-// حلقةٌ صغيرة على لسان أخواتها (ScoreOrbit / GoalRace / YearOrbit): مسارٌ باهت
-// وحلقةٌ داخلية أخفت للعمق. إن مُرِّرت نسبة رُسِم قوسٌ ذهبي يمتلئ إليها بطرفٍ
-// مداريّ؛ وإلا فقمرُ القسم يستقرّ على المدار (زخرفيّ، بلا إيحاء نسبة).
+// شارةُ الزاوية. إن مُرِّرت نسبة فهي حلقةُ مقياسٍ حقيقية (مسارٌ باهت + قوسٌ ذهبي
+// يمتلئ إليها بطرفٍ مداريّ + حلقةٌ داخلية للعمق) — الحلقةُ الوحيدة في الطاقم؛
+// وإلا فعنقودُ نجومٍ زخرفيّ بلون القسم (نجمةٌ رباعية + شرارتان، بلا أي حلقة) كي
+// لا يُقرأ كمقياسٍ فارغ بجوار المقياس الحقيقي.
 const VB = 48;
 const C = VB / 2;
 const R = 17; // المسار الخارجي
 const R_INNER = 11; // حلقة داخلية باهتة
+
+// نجمةٌ رباعية (شرارة) حول (cx,cy) — نصف قطرٍ خارجي r وخصرٌ ri.
+function sparklePath(cx: number, cy: number, r: number): string {
+  const ri = r * 0.36;
+  return `M ${cx} ${cy - r} L ${cx + ri} ${cy - ri} L ${cx + r} ${cy} L ${cx + ri} ${cy + ri} L ${cx} ${cy + r} L ${cx - ri} ${cy + ri} L ${cx - r} ${cy} L ${cx - ri} ${cy - ri} Z`;
+}
 
 function InstrumentRing({ color, frac }: { color: string; frac?: number }) {
   const reduce = prefersReducedMotion();
@@ -73,8 +81,24 @@ function InstrumentRing({ color, frac }: { color: string; frac?: number }) {
     return () => cancelAnimationFrame(t);
   }, [reduce]);
 
+  // ===== زخرفيّ (بلا هدف): عنقودُ نجومٍ — واضحُ الزخرفة، ليس حلقةً، فلا يُقرأ
+  // كمقياسٍ فارغ بجوار المقياس الحقيقي. لا دوائر البتّة. =====
+  if (frac === undefined) {
+    return (
+      <svg viewBox={`0 0 ${VB} ${VB}`} width={46} height={46} className="shrink-0 overflow-visible" aria-hidden>
+        {/* نجمةٌ رئيسية رباعية بقلبٍ فاتح — شارةُ القسم الزخرفية */}
+        <path d={sparklePath(C, C, 8.6)} fill={color} opacity={0.9} />
+        <path d={sparklePath(C, C, 3.4)} fill="#fff" className="dark:fill-[#241c12]" opacity={0.85} />
+        {/* شرارتان صغيرتان مرافِقتان — عنقودٌ لا مدار */}
+        <path d={sparklePath(C + 11.5, C - 10.5, 3)} fill={color} opacity={0.6} />
+        <path d={sparklePath(C - 12, C + 9, 2.1)} fill={color} opacity={0.4} />
+      </svg>
+    );
+  }
+
+  // ===== مقياسٌ حقيقيّ (بهدف): الحلقةُ الوحيدة في الطاقم =====
   const circ = 2 * Math.PI * R;
-  const f = frac ?? 0;
+  const f = frac;
   const dash = (on ? f : 0) * circ;
   const tipA = ((on ? f : 0) * 360 - 90) * (Math.PI / 180);
   const tipX = C + R * Math.cos(tipA);
@@ -82,53 +106,26 @@ function InstrumentRing({ color, frac }: { color: string; frac?: number }) {
   const dashTrans = reduce ? undefined : { transition: "stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1)" };
   const tipTrans = reduce ? undefined : { transition: "cx 1.2s cubic-bezier(0.16,1,0.3,1), cy 1.2s cubic-bezier(0.16,1,0.3,1)" };
 
-  // القمر الزخرفيّ يستقرّ أعلى-اليمين (زاوية لطيفة، لا عند «صفر» المقياس)
-  const moonA = -52;
-  const moonX = C + R * Math.cos((moonA * Math.PI) / 180);
-  const moonY = C + R * Math.sin((moonA * Math.PI) / 180);
-  // رِمُّ الإسطرلاب الصغير: علاماتٌ صغيرة حول المدار تتلألأ باهتةً كأنجم الرِّم،
-  // تخفت كلما ابتعدت عن القمر — فتقرأ كمدارٍ زخرفيّ لا كمقياسٍ فارغ.
-  const rimDots = Array.from({ length: 12 }, (_, i) => {
-    const a = -90 + i * 30;
-    const near = Math.abs(((a - moonA + 540) % 360) - 180); // 0..180، أقرب للقمر = أصغر
-    const op = 0.18 + 0.42 * Math.max(0, 1 - near / 150);
-    return { x: C + R * Math.cos((a * Math.PI) / 180), y: C + R * Math.sin((a * Math.PI) / 180), op };
-  });
-
   return (
     <svg viewBox={`0 0 ${VB} ${VB}`} width={46} height={46} className="shrink-0 overflow-visible">
       {/* حلقة داخلية باهتة — عمقٌ لطيف في الوضعين */}
       <circle cx={C} cy={C} r={R_INNER} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={1.1} opacity={0.5} />
-
-      {frac === undefined ? (
-        <>
-          {/* مدارٌ زخرفيّ: رِمٌّ منقّط بلون القسم + قمرٌ بهالة */}
-          {rimDots.map((d, i) => (
-            <circle key={i} cx={d.x} cy={d.y} r={0.9} fill={color} opacity={d.op} />
-          ))}
-          <circle cx={moonX} cy={moonY} r={4} fill={color} opacity={0.2} />
-          <circle cx={moonX} cy={moonY} r={2.4} fill={color} stroke="#fff" strokeWidth={0.9} className="dark:stroke-[#241c12]" />
-        </>
-      ) : (
-        <>
-          {/* مقياسٌ حقيقيّ: مسارٌ باهت + قوسٌ ذهبي يمتلئ إلى النسبة بطرفٍ مداريّ */}
-          <defs>
-            <linearGradient id="heroGaugeGold" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#e8b15a" />
-              <stop offset="100%" stopColor="#c9852a" />
-            </linearGradient>
-          </defs>
-          <circle cx={C} cy={C} r={R} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={3} />
-          <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
-            <circle
-              cx={C} cy={C} r={R} fill="none"
-              stroke="url(#heroGaugeGold)" strokeWidth={3} strokeLinecap="round"
-              strokeDasharray={`${dash} ${circ}`} style={dashTrans}
-            />
-          </g>
-          <circle cx={tipX} cy={tipY} r={2.6} fill="#e8b15a" stroke="#fff" strokeWidth={1.1} className="dark:stroke-[#241c12]" style={tipTrans} />
-        </>
-      )}
+      {/* مقياسٌ حقيقيّ: مسارٌ باهت + قوسٌ ذهبي يمتلئ إلى النسبة بطرفٍ مداريّ */}
+      <defs>
+        <linearGradient id="heroGaugeGold" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#e8b15a" />
+          <stop offset="100%" stopColor="#c9852a" />
+        </linearGradient>
+      </defs>
+      <circle cx={C} cy={C} r={R} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={3} />
+      <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
+        <circle
+          cx={C} cy={C} r={R} fill="none"
+          stroke="url(#heroGaugeGold)" strokeWidth={3} strokeLinecap="round"
+          strokeDasharray={`${dash} ${circ}`} style={dashTrans}
+        />
+      </g>
+      <circle cx={tipX} cy={tipY} r={2.6} fill="#e8b15a" stroke="#fff" strokeWidth={1.1} className="dark:stroke-[#241c12]" style={tipTrans} />
     </svg>
   );
 }
