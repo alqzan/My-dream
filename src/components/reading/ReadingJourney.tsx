@@ -8,8 +8,9 @@ import { Route } from "lucide-react";
 // عند طرف الخطّ = «الوصول المتوقّع» يحمل تاريخه تقديرَ وتيرةِ القراءة. النقر على
 // الكتاب يفتح تدفّق «سجّل صفحات اليوم» القائم بعينه (لا منطق تسجيل جديد).
 
-// نفس صيغة ReadingPace حرفياً (ReadingPace.tsx يبقى للقراءة فقط)، ليطابق مؤشّرُ
-// الوصول تقديرَ بطاقة الوتيرة تماماً — لا حساب وتيرة مختلف.
+// صيغةُ الوتيرة نفسها التي كانت في «بطاقة الوتيرة» (ReadingPace) حرفياً — دُمجت
+// هنا لتصبح القافلةُ المصدرَ الوحيد لتقدّم كل كتاب: الموضع + الوصول المتوقّع +
+// مُعدّل الصفحات/اليوم. لا حساب وتيرة مختلف؛ نفس المتوسط والأيام والتاريخ.
 function bookPace(book: Book, logs: ReadingLog[]) {
   const bookLogs = logs.filter((l) => l.bookId === book.id);
   if (bookLogs.length < 2) return null;
@@ -109,7 +110,12 @@ function JourneyLane({
       </svg>
 
       <div className="flex items-center justify-between gap-2 mt-1.5">
-        <span className="text-[11px] text-reading font-medium tabular-nums">{pct}%</span>
+        <span className="text-[11px] text-reading font-medium tabular-nums">
+          {pct}%
+          {pace ? (
+            <span className="text-gray-400 font-normal"> · ~{Math.round(pace.avgPerDay)} ص/يوم</span>
+          ) : null}
+        </span>
         {pace?.finishDate ? (
           <span className="text-[11px] text-gray-500">
             الوصول ≈ <strong className="text-reading">{pace.finishDate}</strong>

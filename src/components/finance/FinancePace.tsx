@@ -10,8 +10,8 @@ interface FinancePaceProps {
 }
 
 // Turns "how much budget do I have left" into "how much can I spend per
-// day for the rest of the month" — the same pacing idea as ReadingPace,
-// applied to money instead of pages.
+// day for the rest of the month" — the same pacing idea as the reading
+// caravan (ReadingJourney), applied to money instead of pages.
 export function FinancePace({ budgets, monthTransactions, categories, monthlyIncome }: FinancePaceProps) {
   if (!budgets.length) return null;
 

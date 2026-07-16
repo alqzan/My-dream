@@ -5,7 +5,6 @@ import { getReadingStreak, formatDateShort } from "@/lib/utils";
 import { BookCard } from "@/components/reading/BookCard";
 import { BookForm } from "@/components/reading/BookForm";
 import { ReadingLogForm } from "@/components/reading/ReadingLogForm";
-import { ReadingPace } from "@/components/reading/ReadingPace";
 import { ReadingGoalCard } from "@/components/reading/ReadingGoalCard";
 import { ReadingTimer } from "@/components/reading/ReadingTimer";
 import { ReadingJourney } from "@/components/reading/ReadingJourney";
@@ -50,8 +49,6 @@ export default function ReadingPage() {
   const totalPagesRead = readingLogs.reduce((s, l) => s + l.pagesRead, 0);
   const totalMinutes = readingLogs.reduce((s, l) => s + (l.minutesRead ?? 0), 0);
   const booksFinished = books.filter((b) => b.status === "أنهيت").length;
-  // كل الكتب الجارية — قد تقرأ أكثر من كتاب بالتوازي، فكل واحد يستحق بطاقة وتيرة.
-  const currentBooks = books.filter((b) => b.status === "أقرأ");
 
   const filtered =
     filter === "الكل" ? books : books.filter((b) => b.status === filter);
@@ -133,14 +130,6 @@ export default function ReadingPage() {
           onLogBook={(book) => { setLogBookId(book.id); setShowLogForm(true); }}
         />
       </div>
-
-      {currentBooks.length > 0 && (
-        <div className="space-y-2">
-          {currentBooks.map((b) => (
-            <ReadingPace key={b.id} book={b} logs={readingLogs} />
-          ))}
-        </div>
-      )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
         {(["الكل", "أقرأ", "أنهيت", "أريد_قراءة"] as FilterStatus[]).map((f) => (
