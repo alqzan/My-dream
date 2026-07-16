@@ -17,6 +17,9 @@ import {
 import type { Transaction } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
+import { FinancePace } from "@/components/finance/FinancePace";
+import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import dynamic from "next/dynamic";
 // recharts (~90KB) loads on demand so the insights shell paints without
 // waiting on it. The placeholder keeps the card height stable.
@@ -75,12 +78,22 @@ function periodRanges(period: Period, todayStr: string) {
 const inRange = (t: Transaction, start: string, end: string) => t.date >= start && t.date <= end;
 
 export default function SpendInsightsPage() {
-  const { transactions, categories, reserves, dailyBudget } = useAppStore();
+  const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome } = useAppStore();
   const [period, setPeriod] = useState<Period>("أسبوع");
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
 
   const todayStr = today();
   const ranges = periodRanges(period, todayStr);
+
+  // The essential/luxury gauge, budget-pace and discipline cards below are
+  // inherently about the CURRENT calendar month (their "days left"/"this month
+  // vs last" language), so they read the month directly rather than the page's
+  // period toggle — same data & math they used on /finance, just relocated here.
+  const currentMonth = todayStr.slice(0, 7);
+  const monthTx = useMemo(
+    () => transactions.filter((t) => t.date.startsWith(currentMonth)),
+    [transactions, currentMonth]
+  );
 
   const periodTx = transactions.filter((t) => inRange(t, ranges.start, ranges.end));
   const prevTx = transactions.filter((t) => inRange(t, ranges.prevStart, ranges.prevEnd));
@@ -370,6 +383,25 @@ export default function SpendInsightsPage() {
           </div>
         )}
       </Card>
+
+      {/* نمط الصرف — الأساسي مقابل الكمالي لهذا الشهر (مقياس تفاعلي، منقول من
+          صفحة المصاريف ليجتمع التحليل كله هنا) */}
+      <Card className="animate-fade-up stagger-4">
+        <SpendingPatternCard transactions={transactions} categories={categories} monthFilter={currentMonth} />
+      </Card>
+
+      {/* وتيرة الصرف مقابل ميزانيات التصنيفات + درجة الانضباط — تحليلٌ للشهر
+          الحالي، بلا بطاقة (كلٌّ يرسم إطاره)، فيختفيان بلا فجوة عند غياب بياناتهما */}
+      <FinancePace budgets={budgets} monthTransactions={monthTx} categories={categories} monthlyIncome={monthlyIncome} />
+
+      <BudgetDisciplineScore
+        transactions={transactions}
+        monthTransactions={monthTx}
+        budgets={budgets}
+        categories={categories}
+        dailyBudget={dailyBudget}
+        monthlyIncome={monthlyIncome}
+      />
 
       {/* Automated analysis */}
       {insights.length > 0 && (

@@ -44,7 +44,7 @@ export function FinancePace({ budgets, monthTransactions, categories, monthlyInc
       ) : (
         <p className="text-sm leading-relaxed text-gray-700">
           متبقي <strong style={{ color }}>{formatAmount(remaining)} ر.س</strong> لـ {daysLeft} يوم — يعني
-          {" "}<strong style={{ color }}>{formatAmount(dailyAllowance)} ر.س/يوم</strong> متاح لك.
+          {" "}<strong style={{ color }}>{formatAmount(Math.round(dailyAllowance))} ر.س/يوم</strong> متاح لك.
         </p>
       )}
       {tight && <p className="text-[11px] text-orange-500">وتيرتك أبطأ من المعتاد — خفف الكماليات شوي.</p>}

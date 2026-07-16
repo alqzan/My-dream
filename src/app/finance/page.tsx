@@ -1,10 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { FinanceSummary } from "@/components/finance/FinanceSummary";
-import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
-import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
-import { FinancePace } from "@/components/finance/FinancePace";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
@@ -29,7 +25,7 @@ import { getCategoryInfo, normalizeArabic } from "@/lib/utils";
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function FinancePage() {
-  const { transactions, budgets, recurring, categories, dailyBudget, monthlyIncome, deleteTransaction, addTransaction } = useAppStore();
+  const { transactions, recurring, categories, dailyBudget, deleteTransaction, addTransaction } = useAppStore();
 
   // Instant delete + 5s undo window.
   function handleDelete(id: string) {
@@ -164,25 +160,6 @@ export default function FinancePage() {
       <Card className="animate-fade-up stagger-1">
         <ReserveFunds />
       </Card>
-
-      <Card className="animate-fade-up stagger-2">
-        <FinanceSummary transactions={byMonth} categories={categories} />
-      </Card>
-
-      <Card className="animate-fade-up stagger-2">
-        <SpendingPatternCard transactions={transactions} categories={categories} monthFilter={monthFilter} />
-      </Card>
-
-      <FinancePace budgets={budgets} monthTransactions={byMonth} categories={categories} monthlyIncome={monthlyIncome} />
-
-      <BudgetDisciplineScore
-        transactions={transactions}
-        monthTransactions={byMonth}
-        budgets={budgets}
-        categories={categories}
-        dailyBudget={dailyBudget}
-        monthlyIncome={monthlyIncome}
-      />
 
       <Card className="animate-fade-up stagger-3">
         <BudgetTracker monthPrefix={monthFilter} />

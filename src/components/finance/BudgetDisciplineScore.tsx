@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { Transaction, Budget, DailyBudget, FinanceCategoryDef } from "@/lib/types";
-import { computeDailyBudgetStatus, formatAmount, toDateStr, getMainCategory, budgetLimit } from "@/lib/utils";
+import { computeDailyBudgetStatus, toDateStr, getMainCategory, budgetLimit } from "@/lib/utils";
 
 interface BudgetDisciplineScoreProps {
   transactions: Transaction[]; // all-time, for trend + daily budget calc
@@ -62,7 +62,10 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
     else if (ratio <= 1) dailyScore = 20;
     else if (ratio <= 1.2) dailyScore = 10;
     else dailyScore = 0;
-    dailyRatioLabel = `${status.balance >= 0 ? "+" : "-"}${formatAmount(Math.abs(status.balance))}`;
+    // Relative indicator — the share of the accumulated daily allowance that's
+    // already spent. The raw رصيد itself lives on the vessel (and the insights
+    // hero chip), so printing it again here was a duplicate of the same number.
+    dailyRatioLabel = `${Math.round(ratio * 100)}٪`;
   }
 
   const score = Math.max(0, Math.min(100, budgetScore + dailyScore + trendScore));
@@ -74,7 +77,7 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
   const subs = [
     { key: "budget", label: "ضمن الميزانية", color: "#2f7a33", frac: budgetScore / 40,
       value: budgets.length ? `${Math.round((budgetScore / 40) * 100)}%` : "—" },
-    { key: "daily", label: "رصيدك الحالي", color: "#3d9640", frac: dailyScore / 30,
+    { key: "daily", label: "من المتاح مصروف", color: "#3d9640", frac: dailyScore / 30,
       value: dailyRatioLabel },
     { key: "trend", label: "مقابل الأسبوع الماضي", color: "#64b767", frac: trendScore / 30,
       value: lastWeek > 0 ? `${thisWeek <= lastWeek ? "↓" : "↑"} ${Math.round(Math.abs((thisWeek - lastWeek) / lastWeek) * 100)}%` : "—" },
@@ -105,7 +108,7 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
         </div>
       </div>
       <p className="text-[10px] text-gray-400 leading-relaxed">
-        درجة انضباط من ١٠٠، تجمع ثلاثة عوامل: التزامك بميزانيات التصنيفات، ورصيدك الحالي، ومقارنة صرفك هذا الأسبوع بالأسبوع الماضي.
+        درجة انضباط من ١٠٠، تجمع ثلاثة عوامل: التزامك بميزانيات التصنيفات، ونسبة ما صرفته من ميزانيتك اليومية، ومقارنة صرفك هذا الأسبوع بالأسبوع الماضي.
       </p>
     </div>
   );
