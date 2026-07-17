@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { generateInsights } from "@/lib/insights";
 import { Sparkles, ChevronDown, ChevronUp } from "lucide-react";
@@ -55,15 +56,34 @@ export function SmartInsights() {
       </div>
 
       <div className="space-y-2">
-        {shown.map((ins, i) => (
-          <div
-            key={i}
-            className={`flex items-start gap-2.5 rounded-xl px-3 py-2.5 ${TONE_STYLES[ins.tone]}`}
-          >
-            <span className="text-base shrink-0">{ins.icon}</span>
-            <p className="text-xs leading-relaxed font-medium">{ins.text}</p>
-          </div>
-        ))}
+        {shown.map((ins, i) => {
+          const cls = `flex items-start gap-2.5 rounded-xl px-3 py-2.5 ${TONE_STYLES[ins.tone]}`;
+          const body = (
+            <>
+              <span className="text-base shrink-0">{ins.icon}</span>
+              <p className="text-xs leading-relaxed font-medium">{ins.text}</p>
+            </>
+          );
+          // تذكير النسخة الاحتياطية قابل للنقر — يأخذك مباشرةً لصفحة الإعدادات
+          // حيث بطاقة النسخ الاحتياطي (BackupCard). بقية التوصيات تبقى كما هي.
+          if (ins.text.includes("نسخة احتياطية")) {
+            return (
+              <Link
+                key={i}
+                href="/settings"
+                aria-label="اذهب إلى الإعدادات لأخذ نسخة احتياطية من بياناتك"
+                className={`${cls} press hover:brightness-95 transition`}
+              >
+                {body}
+              </Link>
+            );
+          }
+          return (
+            <div key={i} className={cls}>
+              {body}
+            </div>
+          );
+        })}
       </div>
 
       {insights.length > 3 && (
