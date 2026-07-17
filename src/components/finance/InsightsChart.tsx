@@ -44,7 +44,10 @@ export function InsightsChart({ data, period, maxBar, dailyBudgetAmount, format 
         {showBudgetLine && (
           <ReferenceLine y={dailyBudgetAmount} stroke="#c9852a" strokeDasharray="4 4" strokeWidth={1.5} />
         )}
-        <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={period === "شهر" ? 8 : 22}>
+        {/* بلا حركة نموّ: الحركة كانت لا تستقرّ (خصوصًا مع خلايا الألوان المنفصلة
+            والتحميل الكسول لـrecharts)، فتُلتقط الأعمدة قصيرةً باهتةً — كأخوات
+            الرسم في «الإحصائيات». التعطيل يجعلها صلبةً فورًا ويحترم تقليل الحركة. */}
+        <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={period === "شهر" ? 8 : 22} isAnimationActive={false}>
           {data.map((d) => (
             <Cell
               key={d.key}
