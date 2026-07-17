@@ -120,7 +120,7 @@ function normalizeDigits(s: string): string {
 // passwords and declined/failed operations.
 const NON_TRANSACTION = [
   /رمز التحقق|الرمز السري|كلمة (?:المرور|السر)|\bOTP\b|verification code/i,
-  /مرفوضة|تم رفض|رفضت|فشلت|لم تتم|غير ناجحة|declined|failed/i,
+  /مرفوضة|تم رفض|رفضت|فشلت|لم تتم|غير ناجحة|رصيد غير كاف|declined|failed|insufficient/i,
 ];
 
 // Statement / bill-reminder vocabulary — skipped unless the message also
@@ -277,7 +277,15 @@ export function parseBankSmsBulk(
   // operation/alert keyword. Otherwise this is one multi-line SMS (e.g. Al
   // Rajhi's field-per-line format) and splitting it would turn its amount and
   // balance lines into bogus separate transactions — so keep it whole.
-  if (chunks.length <= 1) {
+  //
+  // NEVER sub-split a blob that, taken whole, is already a non-transaction (a
+  // decline/failure, OTP, statement or balance-only alert). A declined purchase
+  // quotes the very fields a real one does ("العملية: شراء" / "المبلغ: SAR
+  // 100.73") with its reason on a separate line ("تم رفض العملية: الرصيد غير
+  // كافٍ"); carving it into chunks orphans that reason and lets the
+  // amount-bearing chunk record as a real expense. Keeping it whole lets
+  // parseBankSms see the decline signal and drop the message (returns null).
+  if (chunks.length <= 1 && !isNonTransaction(text)) {
     const lines = text.split(/\r?\n/).map((c) => c.trim()).filter(Boolean);
     const startsChunk = (l: string) =>
       TXN_KEYWORD.test(l) ||
