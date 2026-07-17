@@ -26,7 +26,9 @@ import { Confetti } from "@/components/ui/Confetti";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import Link from "next/link";
-import { ChevronLeft, BarChart3, TrendingDown, Plus } from "lucide-react";
+import { ChevronLeft, BarChart3, TrendingDown, Plus, Wallet, BookMarked, BookOpen } from "lucide-react";
+import { MosqueIcon } from "@/components/icons/MosqueIcon";
+import { BrandMark } from "@/components/layout/BrandMark";
 
 // Dashboard layout, top to bottom — one card per idea, nothing repeated:
 //   1. التحية والتاريخ (هجري + ميلادي) + مدار السنة
@@ -54,6 +56,18 @@ export default function Dashboard() {
   // the moons on YearOrbit never drift from the real trackers.
   const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
   const hasTodayHabit = habits.some((h) => h.logs.includes(todayStr));
+
+  // First run: a brand-new user has nothing tracked in any domain yet, so the
+  // dashboard is a wall of empty instruments with no guidance. Detect it from
+  // the same store slices the widgets read (no new state) — the instant ANY of
+  // them holds data, this flips false and the normal dashboard shows.
+  const isFirstRun =
+    journalEntries.length === 0 &&
+    readingLogs.length === 0 &&
+    transactions.length === 0 &&
+    books.length === 0 &&
+    prayerLogs.length === 0 &&
+    !habits.some((h) => h.logs.length > 0);
 
   // One confetti celebration per completed day. Also sweeps out celebration
   // keys older than 30 days — one gets written every completed day forever
@@ -108,6 +122,8 @@ export default function Dashboard() {
           habits={hasTodayHabit}
         />
       </div>
+
+      {isFirstRun && <OnboardingCard />}
 
       <PendingBankBanner />
 
@@ -188,6 +204,44 @@ export default function Dashboard() {
         <TransactionForm onClose={() => setQuickExpense(false)} />
       </Modal>
     </div>
+  );
+}
+
+// Shown only on a truly empty first run (see `isFirstRun`). A warm welcome plus
+// four section-coloured quick starts — the same icons the nav uses — so a new
+// user has one obvious first move instead of a page of empty instruments.
+const QUICK_STARTS = [
+  { href: "/prayers", icon: MosqueIcon, label: "سجّل صلاة", color: "text-prayer", bg: "bg-prayer/10" },
+  { href: "/finance", icon: Wallet, label: "أضف مصروف", color: "text-finance", bg: "bg-finance/10" },
+  { href: "/journal", icon: BookMarked, label: "اكتب مذكرة", color: "text-journal", bg: "bg-journal/10" },
+  { href: "/reading", icon: BookOpen, label: "أضف كتاباً", color: "text-reading", bg: "bg-reading/10" },
+];
+
+function OnboardingCard() {
+  return (
+    <Card className="animate-fade-up">
+      <div className="flex items-center gap-2 mb-1.5">
+        <BrandMark size={26} />
+        <h2 className="text-lg font-bold text-gray-800">ابدأ رحلتك في مدار</h2>
+      </div>
+      <p className="text-sm text-gray-500 leading-relaxed mb-4">
+        مساحتك الشخصية لمتابعة صلواتك ومصاريفك ومذكراتك وقراءتك — وكلّها محفوظةٌ على جهازك وحده. اختر بدايةً:
+      </p>
+      <div className="grid grid-cols-2 gap-2.5">
+        {QUICK_STARTS.map((it) => (
+          <Link
+            key={it.href}
+            href={it.href}
+            className="flex items-center gap-2.5 rounded-xl border border-gray-100 p-3 press transition-colors hover:border-brand-300"
+          >
+            <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${it.bg}`}>
+              <it.icon size={18} className={it.color} />
+            </span>
+            <span className="text-sm font-semibold text-gray-700">{it.label}</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
 
