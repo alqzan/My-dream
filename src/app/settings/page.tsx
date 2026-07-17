@@ -2,6 +2,10 @@
 import { BackupCard } from "@/components/settings/BackupCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
+import { BrandMark } from "@/components/layout/BrandMark";
+
+// Keep in step with package.json's version when it bumps.
+const APP_VERSION = "0.1.0";
 
 // Home for device-level controls that aren't statistics — backups, the
 // privacy lock, and the sync key. They used to live at the bottom of /stats;
@@ -23,6 +27,15 @@ export default function SettingsPage() {
       <div className="animate-fade-up stagger-3">
         <SyncKeyCard />
       </div>
+
+      {/* تذييلٌ هادئ يوازن صفحةً قليلة البطاقات — علامة المدار الساكنة، الاسم،
+          ثم سطرٌ مكتومٌ بالشعار والإصدار. بخطّ التطبيق (ثمانية) وألوانٍ باهتة
+          في الوضعين. */}
+      <footer className="pt-6 pb-2 flex flex-col items-center gap-1.5 animate-fade-up stagger-4">
+        <BrandMark size={30} />
+        <p className="text-base font-bold text-gray-500 dark:text-gray-400">مدار</p>
+        <p className="text-xs text-gray-400">مساحتك الشخصية · الإصدار {APP_VERSION}</p>
+      </footer>
     </div>
   );
 }
