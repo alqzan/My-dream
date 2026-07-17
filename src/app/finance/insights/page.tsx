@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   today,
@@ -76,6 +76,17 @@ function periodRanges(period: Period, todayStr: string) {
 }
 
 const inRange = (t: Transaction, start: string, end: string) => t.date >= start && t.date <= end;
+
+// عنوانٌ خفيفٌ يجمّع البطاقات بصريًّا (نفس نمط صفحة المصاريف: «يومياتك»/«سجلّك») —
+// مسمّى مكتوم صغير مع خيطٍ ذهبيٍّ باهت، ليفصل قسم «هذا الشهر» عمّا فوقه من الفترة.
+function GroupLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5 pt-2 -mb-1">
+      <h2 className="shrink-0 text-xs font-semibold tracking-wide text-gray-400">{children}</h2>
+      <span className="h-px flex-1 bg-brand-500/25" aria-hidden />
+    </div>
+  );
+}
 
 export default function SpendInsightsPage() {
   const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome } = useAppStore();
@@ -163,13 +174,8 @@ export default function SpendInsightsPage() {
     const list: string[] = [];
     if (!periodTx.length) return list;
 
-    if (deltaPct !== null) {
-      list.push(
-        deltaPct <= 0
-          ? `👏 صرفك أقل بـ ${Math.abs(deltaPct)}٪ من ${ranges.prevLabel}.`
-          : `⬆️ صرفك زاد ${deltaPct}٪ عن ${ranges.prevLabel}.`
-      );
-    }
+    // ملاحظة: نسبة «مقابل الفترة السابقة» تظهر أصلاً في شارة البطل أعلى الصفحة
+    // (وفي صف «مقابل الأسبوع الماضي» ضمن بطاقة الانضباط)، فلا نكرّرها هنا نصًّا.
 
     const topDay = [...chartData].sort((a, b) => b.value - a.value)[0];
     if (topDay && topDay.value > 0) {
@@ -384,8 +390,29 @@ export default function SpendInsightsPage() {
         )}
       </Card>
 
-      {/* نمط الصرف — الأساسي مقابل الكمالي لهذا الشهر (مقياس تفاعلي، منقول من
-          صفحة المصاريف ليجتمع التحليل كله هنا) */}
+      {/* Automated analysis — يتبع مبدّل الفترة (أسبوعي/شهري/سنوي)، فيبقى ضمن
+          القسم العلوي فوق عنوان «هذا الشهر» حتى لا يختلط الأسبوعي بالشهري */}
+      {insights.length > 0 && (
+        <Card className="animate-fade-up stagger-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Sparkles size={15} className="text-brand-500" />
+            <span className="text-sm font-semibold text-gray-700">تحليل تلقائي</span>
+          </div>
+          <div className="space-y-2">
+            {insights.map((line, i) => (
+              <p key={i} className="text-xs text-gray-600 leading-relaxed bg-gray-50 dark:bg-[#2c2318] rounded-xl px-3 py-2">
+                {line}
+              </p>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* حدٌّ صريح: كل ما تحت هذا العنوان يخصّ الشهر الحالي ومستقلٌّ عن مبدّل
+          الفترة أعلاه — بطاقاتٌ شهريّة نُقلت من صفحة المصاريف ليجتمع التحليل هنا */}
+      <GroupLabel>نظرة على هذا الشهر</GroupLabel>
+
+      {/* نمط الصرف — الأساسي مقابل الكمالي لهذا الشهر (مقياس تفاعلي) */}
       <Card className="animate-fade-up stagger-4">
         <SpendingPatternCard transactions={transactions} categories={categories} monthFilter={currentMonth} />
       </Card>
@@ -402,23 +429,6 @@ export default function SpendInsightsPage() {
         dailyBudget={dailyBudget}
         monthlyIncome={monthlyIncome}
       />
-
-      {/* Automated analysis */}
-      {insights.length > 0 && (
-        <Card className="animate-fade-up stagger-5">
-          <div className="flex items-center gap-1.5 mb-3">
-            <Sparkles size={15} className="text-brand-500" />
-            <span className="text-sm font-semibold text-gray-700">تحليل تلقائي</span>
-          </div>
-          <div className="space-y-2">
-            {insights.map((line, i) => (
-              <p key={i} className="text-xs text-gray-600 leading-relaxed bg-gray-50 dark:bg-[#2c2318] rounded-xl px-3 py-2">
-                {line}
-              </p>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
