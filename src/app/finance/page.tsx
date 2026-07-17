@@ -30,7 +30,7 @@ function GroupLabel({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 pt-2 -mb-1">
       <h2 className="shrink-0 text-xs font-semibold tracking-wide text-gray-400">{children}</h2>
-      <span className="h-px flex-1 bg-gray-100" aria-hidden />
+      <span className="h-px flex-1 bg-brand-500/25" aria-hidden />
     </div>
   );
 }
