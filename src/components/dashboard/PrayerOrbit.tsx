@@ -112,6 +112,13 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
           const status = log?.prayers[prayer] ?? "لم";
           const statusMeta = PRAYER_STATUS_META[status];
           const isNext = prayer === nextPrayer;
+          // Compact dashboard only: المغرب (36°) sits just up-left of العشاء (8°),
+          // and the tail of المغرب's time slips under العشاء's circle on narrow
+          // phones. Nudge just المغرب's text (label + time) left a touch so it
+          // clears — circles stay on the arc, and the large /prayers orbit (its
+          // own LARGE_ANGLES) is untouched.
+          const textNudge =
+            !large && prayer === "المغرب" ? { transform: "translateX(-8px)" } : undefined;
           return (
             <button
               key={prayer}
@@ -134,11 +141,11 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
               >
                 {meta.icon}
               </span>
-              <span className={`font-medium whitespace-nowrap ${large ? "text-xs" : "text-[10px]"} ${isNext ? "text-brand-600 font-bold" : "text-gray-500"}`}>
+              <span style={textNudge} className={`font-medium whitespace-nowrap ${large ? "text-xs" : "text-[10px]"} ${isNext ? "text-brand-600 font-bold" : "text-gray-500"}`}>
                 {prayer}
               </span>
               {times && (
-                <span className={`tabular-nums whitespace-nowrap -mt-0.5 ${large ? "text-[10px]" : "text-[8px]"} ${isNext ? "text-brand-500 font-bold" : "text-gray-400"}`}>
+                <span style={textNudge} className={`tabular-nums whitespace-nowrap -mt-0.5 ${large ? "text-[10px]" : "text-[8px]"} ${isNext ? "text-brand-500 font-bold" : "text-gray-400"}`}>
                   {formatClock(times[prayer])}
                 </span>
               )}
