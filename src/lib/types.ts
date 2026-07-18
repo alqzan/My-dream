@@ -237,12 +237,26 @@ export interface QuranReflection {
   createdAt: string; // YYYY-MM-DD وقت الإنشاء (للترتيب الثانوي)
 }
 
-// عنصر محفوظ — سورة أو مقطع، مع جدولة مراجعة بتكرار متباعد (نمط SM مبسّط).
+// وحدة قياس المحفوظ — يختار المستخدم بحرّية: سورة كاملة، مدى آيات، جزء، حزب،
+// أو أوجه (صفحات المصحف) مع كسورٍ (وجه/نصف وجه/ربع وجه). القديم بلا kind يُعرض
+// كما هو (توافق).
+export type MemorizationKind = "surah" | "ayat" | "juz" | "hizb" | "page";
+
+// عنصر محفوظ + جدولة مراجعة بتكرار متباعد (نمط SM مبسّط).
 export interface MemorizationItem {
   id: string;
-  label: string; // ما حُفظ (اسم السورة أو وصف المقطع)
-  fromAyah?: number;
-  toAyah?: number;
+  kind?: MemorizationKind; // غيابه = عنصر قديم يُعرض بوصفه فقط
+  label: string; // وصف عربي مُشتقّ (أو ما كتبه المستخدم في النسخة القديمة)
+  // معاملات حسب الوحدة:
+  surah?: number; // surah, ayat
+  fromAyah?: number; // ayat
+  toAyah?: number; // ayat
+  juz?: number; // 1..30
+  hizb?: number; // 1..60
+  fromPage?: number; // page — أوّل وجه
+  toPage?: number; // page — آخر وجه (لمدى الأوجه)
+  fraction?: number; // 1 | 0.5 | 0.25 — وجه كامل/نصف/ربع (لوجهٍ واحد)
+  ayatCount?: number; // عدد الآيات (تقريبيّ للأوجه الكسرية) — لحساب التقدّم
   memorizedDate: string; // YYYY-MM-DD تاريخ الحفظ
   reviewStage: number; // مرتبة الجدولة (0 = جديد) → تحدّد فاصل المراجعة القادم
   lastReviewed?: string; // YYYY-MM-DD آخر مراجعة
