@@ -39,7 +39,7 @@ import { BrandMark } from "@/components/layout/BrandMark";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
@@ -56,6 +56,7 @@ export default function Dashboard() {
   // the moons on YearOrbit never drift from the real trackers.
   const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
   const hasTodayHabit = habits.some((h) => h.logs.includes(todayStr));
+  const hasTodayWird = quranWird.includes(todayStr);
 
   // First run: a brand-new user has nothing tracked in any domain yet, so the
   // dashboard is a wall of empty instruments with no guidance. Detect it from
@@ -120,6 +121,7 @@ export default function Dashboard() {
           journal={hasTodayJournal}
           reading={hasTodayReading}
           habits={hasTodayHabit}
+          wird={hasTodayWird}
         />
       </div>
 
@@ -257,13 +259,14 @@ function getGreeting() {
 // The arc fills in with an eased animation on mount, with a gold gradient
 // and a small orbiting "planet" at the arc's tip.
 function YearOrbit({
-  pct, prayer, journal, reading, habits,
+  pct, prayer, journal, reading, habits, wird,
 }: {
   pct: number;
   prayer: boolean;
   journal: boolean;
   reading: boolean;
   habits: boolean;
+  wird: boolean;
 }) {
   const size = 88;
   const stroke = 6.5;
@@ -290,11 +293,14 @@ function YearOrbit({
   const cx0 = size / 2;
   const cy0 = size / 2;
   const moonR = 26;
+  // خمسة أقمار موزّعة بالتساوي (كل 72°) — أُضيف الوِرد بلونه الأخضر القرآني
+  // إلى جانب المدارات الأربعة الأصلية.
   const moons = [
     { key: "prayer", label: "الصلاة", color: "#1f7a6c", done: prayer, angle: -90, href: "/prayers" as string | null },
-    { key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, angle: 0, href: "/journal" as string | null },
-    { key: "reading", label: "القراءة", color: "#c1663f", done: reading, angle: 90, href: "/reading" as string | null },
-    { key: "habits", label: "العادات", color: "#c9852a", done: habits, angle: 180, href: null as string | null },
+    { key: "wird", label: "الورد", color: "#1b6b4c", done: wird, angle: -18, href: "/quran" as string | null },
+    { key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, angle: 54, href: "/journal" as string | null },
+    { key: "reading", label: "القراءة", color: "#c1663f", done: reading, angle: 126, href: "/reading" as string | null },
+    { key: "habits", label: "العادات", color: "#c9852a", done: habits, angle: 198, href: null as string | null },
   ].map((m) => ({
     ...m,
     x: cx0 + moonR * Math.cos((m.angle * Math.PI) / 180),

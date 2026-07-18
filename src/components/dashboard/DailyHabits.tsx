@@ -183,8 +183,8 @@ function HabitArc({ done, total }: { done: number; total: number }) {
 // prayer orbit, and habit tracker so the day lives in one nice place.
 export function DailyHabits() {
   const {
-    habits, journalEntries, readingLogs, books,
-    toggleHabitLog, addHabit, updateHabit, deleteHabit,
+    habits, journalEntries, readingLogs, books, quranWird,
+    toggleHabitLog, addHabit, updateHabit, deleteHabit, toggleWird,
   } = useAppStore();
   const [showAdd, setShowAdd] = useState(false);
   const [manage, setManage] = useState(false);
@@ -214,11 +214,17 @@ export function DailyHabits() {
     },
   ];
 
-  // Combined day progress across rituals + habits.
+  // الوِرد اليومي — عادة أساسية مبنيّة (لا تُحذف): نقرةٌ تُتمّها، بلونها الأخضر
+  // القرآني، وسلسلتها من نفس تواريخ الوِرد. تُحتسب ضمن تقدّم اليوم كبقية العادات.
+  const wirdDates = new Set(quranWird);
+  const wirdDone = wirdDates.has(todayStr);
+  const wirdStreak = calcStreak(quranWird);
+
+  // Combined day progress across rituals + wird + habits.
   const coreDone = core.filter((c) => c.done).length;
   const habitsDone = habits.filter((h) => h.logs.includes(todayStr)).length;
-  const totalItems = core.length + habits.length;
-  const doneItems = coreDone + habitsDone;
+  const totalItems = core.length + 1 + habits.length;
+  const doneItems = coreDone + (wirdDone ? 1 : 0) + habitsDone;
   const allDone = totalItems > 0 && doneItems === totalItems;
   const pct = totalItems ? Math.round((doneItems / totalItems) * 100) : 0;
 
@@ -390,6 +396,34 @@ export function DailyHabits() {
               <TileBody icon={c.icon} name={c.name} color={c.color} done={c.done} weekKept={c.weekKept} statusLine={c.statusLine} />
             </Link>
           ))}
+
+          {/* الوِرد اليومي — عادة أساسية مبنيّة: نقرة تُتمّها، وسهمٌ صغير يفتح
+              قسم قرآن. تشبه بطاقات العادات لكنها ثابتة لا تُحذف. */}
+          <button
+            onClick={() => { if (!wirdDone) buzz(); toggleWird(todayStr); }}
+            className={cn(
+              "relative rounded-2xl border p-3 text-right press transition-all duration-300",
+              wirdDone ? "card-shadow" : "bg-white border-gray-200 hover:border-gray-300"
+            )}
+            style={wirdDone ? { borderColor: "#1b6b4c66", background: "linear-gradient(135deg, #1b6b4c1f, #1b6b4c0a)" } : undefined}
+          >
+            <Link
+              href="/quran"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="افتح قسم قرآن"
+              className="absolute top-2 left-2 text-gray-300 hover:text-quran press"
+            >
+              <ChevronLeft size={13} />
+            </Link>
+            <TileBody
+              icon="🌿"
+              name="وِرد اليوم"
+              color="#1b6b4c"
+              done={wirdDone}
+              weekKept={wirdDates}
+              statusLine={wirdStreak > 0 ? `${wirdStreak} يوم متواصل` : "اقرأ وردك"}
+            />
+          </button>
 
           {/* Custom habits — tap toggles done */}
           {habits.map((habit) => {

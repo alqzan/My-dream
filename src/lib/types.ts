@@ -222,6 +222,43 @@ export interface FutureLetter {
   openedDate?: string;
 }
 
+// ===================== القرآن =====================
+
+// تأمّل على آية — نصّ حرّ يكتبه المستخدم مربوطاً بمرجع اختياري.
+export interface QuranReflection {
+  id: string;
+  date: string; // YYYY-MM-DD
+  reference?: string; // مرجع الآية كنصّ (مثل «الرعد 28») — اختياري
+  text: string; // نصّ التأمّل
+  createdAt: string; // YYYY-MM-DD وقت الإنشاء (للترتيب الثانوي)
+}
+
+// عنصر محفوظ — سورة أو مقطع، مع جدولة مراجعة بتكرار متباعد (نمط SM مبسّط).
+export interface MemorizationItem {
+  id: string;
+  label: string; // ما حُفظ (اسم السورة أو وصف المقطع)
+  fromAyah?: number;
+  toAyah?: number;
+  memorizedDate: string; // YYYY-MM-DD تاريخ الحفظ
+  reviewStage: number; // مرتبة الجدولة (0 = جديد) → تحدّد فاصل المراجعة القادم
+  lastReviewed?: string; // YYYY-MM-DD آخر مراجعة
+  nextReview: string; // YYYY-MM-DD موعد المراجعة القادمة
+}
+
+// فواصل المراجعة المتباعدة (أيام) — كلّ مراجعة ناجحة ترفع المرتبة فيتباعد
+// الموعد التالي؛ التعثّر يعيدها للبداية. الفهرس = reviewStage.
+export const REVIEW_INTERVALS = [1, 3, 7, 15, 30, 60, 120, 240] as const;
+
+// حالة الختمة الجارية + عدّاد الختمات المكتملة (يقود «مدار الختمة»).
+export interface KhatmaState {
+  juz: number; // 0..30 عدد الأجزاء المقروءة في الختمة الحالية
+  startDate?: string; // YYYY-MM-DD بداية الختمة الحالية
+  completed: number; // عدد الختمات المكتملة
+  lastReadDate?: string; // YYYY-MM-DD آخر يوم سُجّل فيه جزء
+}
+
+export const EMPTY_KHATMA: KhatmaState = { juz: 0, completed: 0 };
+
 // اسم صندوق الفوائض الذي يستقبل باقي الميزانية اليومية عند نزول الراتب.
 export const SURPLUS_FUND_NAME = "الفوائض";
 
@@ -236,6 +273,12 @@ export interface AppData {
   categories: FinanceCategoryDef[];
   reserves: ReserveFund[];
   prayerLogs: PrayerLog[];
+  // القرآن: تأمّلات ومحفوظات (مفاتيح id تُختم عند الحذف)، أيام الوِرد اليومي
+  // (تُوحَّد كسجلّات العادات)، وحالة الختمة (مفردة، الأحدث يفوز).
+  quranReflections: QuranReflection[];
+  quranMemorized: MemorizationItem[];
+  quranWird: string[]; // dates YYYY-MM-DD أُتمّ فيها الوِرد اليومي
+  quranKhatma: KhatmaState;
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null; // shared by %-based budgets and the daily budget editor
   futureLetters: FutureLetter[];

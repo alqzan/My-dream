@@ -4,8 +4,9 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter,
+  QuranReflection, MemorizationItem,
 } from "./types";
-import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME } from "./types";
+import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, REVIEW_INTERVALS } from "./types";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2 } from "./utils";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
@@ -15,7 +16,15 @@ import { idbStorage } from "./idbStorage";
 const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
+  "quranReflections", "quranMemorized",
 ] as const;
+
+// Add N days to a YYYY-MM-DD key, returning a YYYY-MM-DD key (local dates).
+function addDays(dateStr: string, n: number): string {
+  const d = parseDate(dateStr);
+  d.setDate(d.getDate() + n);
+  return toDateStr(d);
+}
 
 interface AppStore extends AppData {
   // Journal
@@ -92,6 +101,20 @@ interface AppStore extends AppData {
   setPrayerStatus: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
   cyclePrayerStatus: (date: string, prayer: PrayerName) => void;
 
+  // Quran — reflections (تدبّر), memorization (حفظ + مراجعة متباعدة),
+  // daily wird, and the running khatma (مدار الختمة).
+  addReflection: (r: QuranReflection) => void;
+  updateReflection: (id: string, updates: Partial<QuranReflection>) => void;
+  deleteReflection: (id: string) => void;
+  addMemorization: (m: MemorizationItem) => void;
+  updateMemorization: (id: string, updates: Partial<MemorizationItem>) => void;
+  deleteMemorization: (id: string) => void;
+  reviewMemorization: (id: string, remembered: boolean) => void; // advance/reset schedule
+  toggleWird: (date: string) => void; // mark/unmark today's daily wird
+  addKhatmaJuz: () => void; // read one juz (wraps at 30 → a completed khatma)
+  setKhatmaJuz: (juz: number) => void; // set progress directly (0..30)
+  resetKhatma: () => void; // start a fresh khatma from zero
+
   // Cloud sync
   hydrate: (data: Partial<AppData>) => void;
   snapshot: () => AppData;
@@ -157,6 +180,10 @@ export const useAppStore = create<AppStore>()(
       categories: DEFAULT_CATEGORIES,
       reserves: [],
       prayerLogs: [],
+      quranReflections: [],
+      quranMemorized: [],
+      quranWird: [],
+      quranKhatma: EMPTY_KHATMA,
       dailyBudget: null,
       monthlyIncome: null,
       futureLetters: [],
@@ -627,6 +654,100 @@ export const useAppStore = create<AppStore>()(
           return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
         }),
 
+      // ---------- Quran ----------
+      addReflection: (r) =>
+        set((s) => ({ quranReflections: [r, ...s.quranReflections] })),
+
+      updateReflection: (id, updates) =>
+        set((s) => ({
+          quranReflections: s.quranReflections.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+        })),
+
+      deleteReflection: (id) =>
+        set((s) => ({ quranReflections: s.quranReflections.filter((r) => r.id !== id) })),
+
+      addMemorization: (m) =>
+        set((s) => ({ quranMemorized: [m, ...s.quranMemorized] })),
+
+      updateMemorization: (id, updates) =>
+        set((s) => ({
+          quranMemorized: s.quranMemorized.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+        })),
+
+      deleteMemorization: (id) =>
+        set((s) => ({ quranMemorized: s.quranMemorized.filter((m) => m.id !== id) })),
+
+      // Spaced repetition: a successful review lifts the stage one step (longer
+      // gap to the next), a lapse drops it back to the start (review tomorrow).
+      reviewMemorization: (id, remembered) =>
+        set((s) => {
+          const todayStr = today();
+          return {
+            quranMemorized: s.quranMemorized.map((m) => {
+              if (m.id !== id) return m;
+              const stage = remembered
+                ? Math.min(m.reviewStage + 1, REVIEW_INTERVALS.length - 1)
+                : 0;
+              const interval = REVIEW_INTERVALS[stage];
+              return { ...m, reviewStage: stage, lastReviewed: todayStr, nextReview: addDays(todayStr, interval) };
+            }),
+          };
+        }),
+
+      toggleWird: (date) =>
+        set((s) => ({
+          quranWird: s.quranWird.includes(date)
+            ? s.quranWird.filter((d) => d !== date)
+            : [...s.quranWird, date],
+        })),
+
+      // Read a juz. The 30th wraps the ring: the khatma completes (counter++)
+      // and a fresh one begins at zero, starting today.
+      addKhatmaJuz: () =>
+        set((s) => {
+          const k = s.quranKhatma ?? EMPTY_KHATMA;
+          const todayStr = today();
+          const nextJuz = k.juz + 1;
+          if (nextJuz >= 30) {
+            return {
+              quranKhatma: {
+                juz: 0,
+                completed: k.completed + 1,
+                startDate: todayStr,
+                lastReadDate: todayStr,
+              },
+            };
+          }
+          return {
+            quranKhatma: {
+              ...k,
+              juz: nextJuz,
+              startDate: k.startDate ?? (k.juz === 0 ? todayStr : k.startDate),
+              lastReadDate: todayStr,
+            },
+          };
+        }),
+
+      setKhatmaJuz: (juz) =>
+        set((s) => {
+          const k = s.quranKhatma ?? EMPTY_KHATMA;
+          const clamped = Math.min(Math.max(Math.round(juz) || 0, 0), 30);
+          if (clamped === 30) {
+            return { quranKhatma: { juz: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today() } };
+          }
+          return {
+            quranKhatma: {
+              ...k,
+              juz: clamped,
+              startDate: clamped > 0 ? (k.startDate ?? today()) : undefined,
+              lastReadDate: clamped > 0 ? today() : k.lastReadDate,
+            },
+          };
+        }),
+
+      resetKhatma: () =>
+        set((s) => ({ quranKhatma: { juz: 0, completed: (s.quranKhatma ?? EMPTY_KHATMA).completed } })),
+
       // Uses rawSet so the cloud's own lastUpdated is preserved (stamping a
       // fresh one here would defeat the newer-wins merge comparison).
       hydrate: (data) =>
@@ -641,6 +762,10 @@ export const useAppStore = create<AppStore>()(
           categories: data.categories ?? DEFAULT_CATEGORIES,
           reserves: data.reserves ?? [],
           prayerLogs: data.prayerLogs ?? [],
+          quranReflections: data.quranReflections ?? [],
+          quranMemorized: data.quranMemorized ?? [],
+          quranWird: data.quranWird ?? [],
+          quranKhatma: data.quranKhatma ?? EMPTY_KHATMA,
           dailyBudget: data.dailyBudget ?? null,
           monthlyIncome: data.monthlyIncome ?? null,
           futureLetters: data.futureLetters ?? [],
@@ -665,6 +790,10 @@ export const useAppStore = create<AppStore>()(
           categories: s.categories,
           reserves: s.reserves,
           prayerLogs: s.prayerLogs,
+          quranReflections: s.quranReflections,
+          quranMemorized: s.quranMemorized,
+          quranWird: s.quranWird,
+          quranKhatma: s.quranKhatma ?? EMPTY_KHATMA,
           dailyBudget: s.dailyBudget,
           monthlyIncome: s.monthlyIncome,
           futureLetters: s.futureLetters,
@@ -680,7 +809,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 9,
+      version: 10,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -825,6 +954,17 @@ export const useAppStore = create<AppStore>()(
         // v9 adds an optional annual reading goal (عدد الكتب المُنهاة هذا العام).
         if (version < 9) {
           state = { ...state, readingGoal: state.readingGoal ?? null };
+        }
+
+        // v10 adds the قرآن section: تأمّلات، محفوظات، وِرد يومي، وحالة الختمة.
+        if (version < 10) {
+          state = {
+            ...state,
+            quranReflections: state.quranReflections ?? [],
+            quranMemorized: state.quranMemorized ?? [],
+            quranWird: state.quranWird ?? [],
+            quranKhatma: state.quranKhatma ?? { juz: 0, completed: 0 },
+          };
         }
 
         return state as unknown as AppData;

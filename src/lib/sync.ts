@@ -378,6 +378,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     return sMatch ? { ...pl, prayers: { ...sMatch.prayers, ...pl.prayers } } : pl;
   });
 
+  // Quran khatma: singleton from the newer snapshot, but never lose a completed
+  // khatma — take the higher `completed` count across both devices.
+  const pk = primary.quranKhatma ?? { juz: 0, completed: 0 };
+  const sk = secondary.quranKhatma ?? { juz: 0, completed: 0 };
+  const quranKhatma = { ...pk, completed: Math.max(pk.completed ?? 0, sk.completed ?? 0) };
+
   return {
     transactions: byId(primary.transactions, secondary.transactions),
     books: byId(primary.books, secondary.books),
@@ -389,6 +395,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     categories: alive(unionOrdered(primary.categories, secondary.categories, (c) => c.id)),
     reserves,
     prayerLogs,
+    // القرآن: تأمّلات ومحفوظات تُوحَّد بالـid (مع الأختام)، والوِرد يُوحَّد
+    // كتواريخ (كسجلّات العادات) فلا يضيع وِردٌ سُجّل على جهاز.
+    quranReflections: byId(primary.quranReflections ?? [], secondary.quranReflections ?? []),
+    quranMemorized: byId(primary.quranMemorized ?? [], secondary.quranMemorized ?? []),
+    quranWird: [...new Set([...(primary.quranWird ?? []), ...(secondary.quranWird ?? [])])].sort(),
+    quranKhatma,
     dailyBudget: primary.dailyBudget,
     monthlyIncome: primary.monthlyIncome,
     futureLetters: byId(primary.futureLetters, secondary.futureLetters),
