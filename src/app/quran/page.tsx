@@ -4,13 +4,14 @@ import { SectionSignet } from "@/components/layout/SectionSignet";
 import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { MemorizationSection } from "@/components/quran/MemorizationSection";
 import { TadabburSection } from "@/components/quran/TadabburSection";
+import { MushafBrowser } from "@/components/quran/MushafBrowser";
 import { QuranBanner } from "@/components/quran/QuranBanner";
-import { Sprout, BookOpenText } from "lucide-react";
+import { Sprout, BookOpenText, BookText } from "lucide-react";
 
-// قسم «قرآن» — عمودان: التدبّر (تأمّلات + آية اليوم) والحفظ (محفوظ + مراجعة
-// متباعدة + مدار الختمة). العنوان دعاءٌ نبويّ، وتحته بطاقة «خلاصة اليوم» ثم
-// عبارة قرآنية متجدّدة. تُبنى المكوّنات ميزةً ميزة؛ هذا الهيكل يجمعها.
-type Tab = "tadabbur" | "hifz";
+// قسم «قرآن» — التدبّر (تأمّلات + آية اليوم)، الحفظ (محفوظ + مراجعة متباعدة +
+// مدار الختمة)، والمصحف (تصفّح كل السور وقراءتها). العنوان دعاءٌ نبويّ، وتحته
+// عبارة قرآنية متجدّدة.
+type Tab = "tadabbur" | "hifz" | "mushaf";
 
 export default function QuranPage() {
   const [tab, setTab] = useState<Tab>("tadabbur");
@@ -26,20 +27,27 @@ export default function QuranPage() {
         <QuranBanner />
       </div>
 
-      {/* مبدّل العمودين */}
+      {/* مبدّل الأعمدة */}
       <div className="flex gap-1.5 p-1 rounded-2xl bg-quran/10 animate-fade-up stagger-1">
         <TabButton active={tab === "tadabbur"} onClick={() => setTab("tadabbur")} icon={<Sprout size={15} />} label="التدبّر" />
         <TabButton active={tab === "hifz"} onClick={() => setTab("hifz")} icon={<BookOpenText size={15} />} label="الحفظ" />
+        <TabButton active={tab === "mushaf"} onClick={() => setTab("mushaf")} icon={<BookText size={15} />} label="المصحف" />
       </div>
 
-      {tab === "tadabbur" ? (
+      {tab === "tadabbur" && (
         <div className="animate-fade-up stagger-2 space-y-4">
           <TadabburSection />
         </div>
-      ) : (
+      )}
+      {tab === "hifz" && (
         <div className="animate-fade-up stagger-2 space-y-4">
           <KhatmaOrbit />
           <MemorizationSection />
+        </div>
+      )}
+      {tab === "mushaf" && (
+        <div className="animate-fade-up stagger-2">
+          <MushafBrowser />
         </div>
       )}
     </div>
