@@ -20,6 +20,7 @@ import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { RamadanCard } from "@/components/dashboard/RamadanCard";
 import { DayView } from "@/components/day/DayView";
+import { DayDigestCard } from "@/components/quran/DayDigestCard";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Confetti } from "@/components/ui/Confetti";
@@ -128,6 +129,12 @@ export default function Dashboard() {
       {isFirstRun && <OnboardingCard />}
 
       <PendingBankBanner />
+
+      {!isFirstRun && (
+        <div className="animate-fade-up stagger-1">
+          <DayDigestCard />
+        </div>
+      )}
 
       <div className="animate-fade-up stagger-1">
         <RamadanCard />

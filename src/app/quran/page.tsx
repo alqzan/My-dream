@@ -4,7 +4,6 @@ import { SectionSignet } from "@/components/layout/SectionSignet";
 import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { MemorizationSection } from "@/components/quran/MemorizationSection";
 import { TadabburSection } from "@/components/quran/TadabburSection";
-import { DayDigestCard } from "@/components/quran/DayDigestCard";
 import { QuranBanner } from "@/components/quran/QuranBanner";
 import { Sprout, BookOpenText } from "lucide-react";
 
@@ -25,10 +24,6 @@ export default function QuranPage() {
 
       <div className="animate-fade-up stagger-1">
         <QuranBanner />
-      </div>
-
-      <div className="animate-fade-up stagger-1">
-        <DayDigestCard />
       </div>
 
       {/* مبدّل العمودين */}
