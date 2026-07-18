@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
+import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
+import { MemorizationSection } from "@/components/quran/MemorizationSection";
 import { Sprout, BookOpenText } from "lucide-react";
 
 // قسم «قرآن» — عمودان: التدبّر (تأمّلات + آية اليوم) والحفظ (محفوظ + مراجعة
@@ -33,7 +35,8 @@ export default function QuranPage() {
         </div>
       ) : (
         <div className="animate-fade-up stagger-2 space-y-4">
-          <Placeholder title="الحفظ" note="محفوظك ومراجعتك ومدار الختمة — قريباً." />
+          <KhatmaOrbit />
+          <MemorizationSection />
         </div>
       )}
     </div>

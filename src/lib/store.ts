@@ -111,9 +111,10 @@ interface AppStore extends AppData {
   deleteMemorization: (id: string) => void;
   reviewMemorization: (id: string, remembered: boolean) => void; // advance/reset schedule
   toggleWird: (date: string) => void; // mark/unmark today's daily wird
-  addKhatmaJuz: () => void; // read one juz (wraps at 30 → a completed khatma)
+  addKhatmaJuz: () => void; // read one juz (caps at 30 — the full ring)
   setKhatmaJuz: (juz: number) => void; // set progress directly (0..30)
-  resetKhatma: () => void; // start a fresh khatma from zero
+  completeKhatma: () => void; // seal a finished khatma (completed++, ring → 0)
+  resetKhatma: () => void; // abandon current progress (juz → 0, completed kept)
 
   // Cloud sync
   hydrate: (data: Partial<AppData>) => void;
@@ -701,28 +702,19 @@ export const useAppStore = create<AppStore>()(
             : [...s.quranWird, date],
         })),
 
-      // Read a juz. The 30th wraps the ring: the khatma completes (counter++)
-      // and a fresh one begins at zero, starting today.
+      // Read a juz — fill one more segment of the ring, up to the full 30.
+      // Sealing the finished ring into a completed khatma is an explicit step
+      // (completeKhatma) so the full ring gets its celebratory moment.
       addKhatmaJuz: () =>
         set((s) => {
           const k = s.quranKhatma ?? EMPTY_KHATMA;
+          if (k.juz >= 30) return {};
           const todayStr = today();
-          const nextJuz = k.juz + 1;
-          if (nextJuz >= 30) {
-            return {
-              quranKhatma: {
-                juz: 0,
-                completed: k.completed + 1,
-                startDate: todayStr,
-                lastReadDate: todayStr,
-              },
-            };
-          }
           return {
             quranKhatma: {
               ...k,
-              juz: nextJuz,
-              startDate: k.startDate ?? (k.juz === 0 ? todayStr : k.startDate),
+              juz: k.juz + 1,
+              startDate: k.startDate ?? todayStr,
               lastReadDate: todayStr,
             },
           };
@@ -732,9 +724,6 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const k = s.quranKhatma ?? EMPTY_KHATMA;
           const clamped = Math.min(Math.max(Math.round(juz) || 0, 0), 30);
-          if (clamped === 30) {
-            return { quranKhatma: { juz: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today() } };
-          }
           return {
             quranKhatma: {
               ...k,
@@ -743,6 +732,12 @@ export const useAppStore = create<AppStore>()(
               lastReadDate: clamped > 0 ? today() : k.lastReadDate,
             },
           };
+        }),
+
+      completeKhatma: () =>
+        set((s) => {
+          const k = s.quranKhatma ?? EMPTY_KHATMA;
+          return { quranKhatma: { juz: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today() } };
         }),
 
       resetKhatma: () =>
