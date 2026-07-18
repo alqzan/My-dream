@@ -15,8 +15,50 @@ import {
   prayerConsistency,
   getReadingStreak,
   reserveBalance,
+  dailyShare,
 } from "./utils";
 import { PRAYERS } from "./types";
+
+// ===================== خلاصة اليوم =====================
+// ملخّصٌ موجز لليوم الحالي يجمع الصرف والصلوات والعادات والوِرد والمذكرة
+// والقراءة والختمة — يُشتقّ من نفس منطق grounding أعلاه لكنه مبنيّ (structured)
+// ليقود بطاقة «خلاصة اليوم» بدل نصّ حرّ. أُعيد استخدام الملف بعد إزالة المساعد.
+export interface DayDigest {
+  spentToday: number; // إجمالي صرف اليوم (ر.س)
+  budgetBalance: number | null; // رصيد الميزانية اليومية المتراكم (إن وُجدت)
+  prayed: number; // صلوات اليوم المُصلّاة (٠..٥)
+  mosque: number; // منها في المسجد/جماعة
+  habitsDone: number;
+  habitsTotal: number;
+  wirdDone: boolean;
+  journalWritten: boolean;
+  readingDone: boolean;
+  khatmaJuz: number; // تقدّم الختمة الحالية (٠..٣٠)
+}
+
+export function buildDayDigest(d: AppData): DayDigest {
+  const todayStr = today();
+  const spentToday = d.transactions
+    .filter((t) => t.date === todayStr)
+    .reduce((s, t) => s + dailyShare(t), 0);
+  const budgetBalance = d.dailyBudget
+    ? computeDailyBudgetStatus(d.dailyBudget, d.transactions).balance
+    : null;
+  const { prayed, mosque } = countDayPrayers(getPrayerLog(d.prayerLogs, todayStr));
+  const habitsDone = d.habits.filter((h) => h.logs.includes(todayStr)).length;
+  return {
+    spentToday,
+    budgetBalance,
+    prayed,
+    mosque,
+    habitsDone,
+    habitsTotal: d.habits.length,
+    wirdDone: (d.quranWird ?? []).includes(todayStr),
+    journalWritten: d.journalEntries.some((e) => e.date === todayStr),
+    readingDone: d.readingLogs.some((l) => l.date === todayStr),
+    khatmaJuz: (d.quranKhatma ?? { juz: 0 }).juz,
+  };
+}
 
 function lastNDates(n: number): string[] {
   const out: string[] = [];
