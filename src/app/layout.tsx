@@ -18,6 +18,16 @@ const thamaniah = localFont({
   variable: "--font-thamaniah",
   display: "swap",
 });
+
+// خط «أميري قرآن» — مصمَّم للرسم العثماني بعلامات الضبط الكاملة والتوصيل
+// الصحيح. خطّ العرض العام (ثمانية) لا يشكّل هذه العلامات فتنفصل الحروف؛ نطبّق
+// هذا الخط على نصّ الآيات فقط عبر صنف .font-quran. يُحمَّل عبر next/font ليحترم
+// basePath على GitHub Pages.
+const amiriQuran = localFont({
+  src: [{ path: "../../public/fonts/amiri-quran.woff2", weight: "400", style: "normal" }],
+  variable: "--font-amiri-quran",
+  display: "swap",
+});
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { ClientOnly } from "@/components/layout/ClientOnly";
@@ -74,7 +84,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl" className={thamaniah.variable}>
+    <html lang="ar" dir="rtl" className={`${thamaniah.variable} ${amiriQuran.variable}`}>
       <body>
         <ClientOnly>
           <SWRegister bp={bp} />

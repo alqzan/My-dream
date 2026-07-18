@@ -19,7 +19,7 @@ export function QuranBanner() {
       </p>
       {verse && (
         <div className="relative mt-3 pt-3 border-t border-quran/15">
-          <p className="text-center text-[15px] font-bold text-gray-800 dark:text-gray-100 leading-[2]">
+          <p className="font-quran text-center text-[17px] font-bold text-gray-800 dark:text-gray-100 leading-[2.1]">
             {verse.text}
           </p>
           <p className="text-center text-[11px] text-quran/80 font-semibold mt-2">﴿ {verseRef(verse)} ﴾</p>

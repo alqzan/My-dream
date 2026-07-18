@@ -105,16 +105,16 @@ function SurahReader({
 
       <div className="rounded-2xl border border-quran/15 bg-gradient-to-b from-quran/[0.04] to-transparent p-4">
         {showBasmala && (
-          <p className="text-center text-[17px] font-bold text-quran mb-4 pb-3 border-b border-quran/10">{basmala}</p>
+          <p className="font-quran text-center text-[19px] font-bold text-quran mb-4 pb-3 border-b border-quran/10">{basmala}</p>
         )}
         {!text ? (
           <p className="text-sm text-gray-400 text-center py-8">…جارٍ تحميل المصحف</p>
         ) : (
-          <p className="text-justify leading-[2.4] text-[19px] font-bold text-gray-800 dark:text-gray-100" dir="rtl">
+          <p className="font-quran text-justify leading-[2.6] text-[22px] font-bold text-gray-800 dark:text-gray-100" dir="rtl">
             {ayat.map((v) => (
               <span key={v.n}>
                 {v.text}
-                <span className="inline-flex items-center justify-center text-[11px] text-quran font-normal mx-1 align-middle">
+                <span className="inline-flex items-center justify-center text-[13px] text-quran mx-1 align-middle">
                   ﴿{v.n}﴾
                 </span>
               </span>

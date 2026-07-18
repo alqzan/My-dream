@@ -82,11 +82,11 @@ export function AyahPicker({
         {!text ? (
           <p className="text-xs text-gray-400 text-center py-3">…جارٍ تحميل المصحف</p>
         ) : (
-          <p className="text-center text-[17px] leading-[2.15] font-bold text-gray-800 dark:text-gray-100">
+          <p className="font-quran text-center text-[19px] leading-[2.3] font-bold text-gray-800 dark:text-gray-100">
             {preview.map((p) => (
               <span key={p.id}>
                 {p.text}
-                <span className="text-quran text-[11px] align-middle mx-0.5 font-normal">﴿{p.n}﴾</span>{" "}
+                <span className="text-quran text-[12px] align-middle mx-0.5">﴿{p.n}﴾</span>{" "}
               </span>
             ))}
           </p>

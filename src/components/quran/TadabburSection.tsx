@@ -98,7 +98,7 @@ export function TadabburSection() {
               <Shuffle size={12} /> آية أخرى
             </button>
           </div>
-          <p className="text-center text-[19px] leading-[2.1] font-bold text-gray-800 dark:text-gray-100 px-1">
+          <p className="font-quran text-center text-[21px] leading-[2.2] font-bold text-gray-800 dark:text-gray-100 px-1">
             {verse.text}
           </p>
           <p className="text-center text-xs text-quran font-semibold mt-3">﴿ {verseRef(verse)} ﴾</p>
@@ -170,9 +170,9 @@ export function TadabburSection() {
                   <p className="text-[11px] font-semibold text-quran mb-1.5">﴿ {r.reference} ﴾</p>
                 )}
                 {verses.length > 0 && (
-                  <p className="text-center text-[15px] leading-[2] font-bold text-gray-700 dark:text-gray-200 mb-2.5 pb-2.5 border-b border-gray-50 dark:border-[#3a2e1e]">
+                  <p className="font-quran text-center text-[17px] leading-[2.2] font-bold text-gray-700 dark:text-gray-200 mb-2.5 pb-2.5 border-b border-gray-50 dark:border-[#3a2e1e]">
                     {verses.map((v) => (
-                      <span key={v.n}>{v.text}<span className="text-quran/70 text-[10px] align-middle mx-0.5 font-normal">﴿{v.n}﴾</span>{" "}</span>
+                      <span key={v.n}>{v.text}<span className="text-quran/70 text-[11px] align-middle mx-0.5">﴿{v.n}﴾</span>{" "}</span>
                     ))}
                   </p>
                 )}
