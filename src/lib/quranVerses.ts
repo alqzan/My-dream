@@ -62,3 +62,11 @@ export function dayOfYear(now = new Date()): number {
   const start = new Date(now.getFullYear(), 0, 0);
   return Math.floor((now.getTime() - start.getTime()) / (24 * 3600 * 1000));
 }
+
+// آياتٌ قصيرة تصلح لبطاقة العبارة المتجدّدة (نمط HikmaCard) دون أن تطغى.
+export const SHORT_VERSES: QuranVerse[] = QURAN_VERSES.filter((v) => v.text.length <= 80);
+
+export function shortVerseOfDay(dayIndex: number, offset = 0): QuranVerse {
+  const n = SHORT_VERSES.length;
+  return SHORT_VERSES[(((dayIndex + offset) % n) + n) % n];
+}

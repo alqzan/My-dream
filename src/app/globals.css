@@ -116,6 +116,8 @@ body {
 .dark .text-orange-500 { color: #ee9459 !important; }
 .dark .text-purple-500 { color: #b8a5da !important; }
 .dark .text-brand-700  { color: #ecc078 !important; }
+/* أخضر القرآن العميق يعتم على الرقّ الداكن — يُرفع إلى زمرّدٍ أفتح للنصّ. */
+.dark .text-quran { color: #46c091 !important; }
 
 /* Hover states of remapped surfaces */
 .dark .hover\:bg-gray-100:hover { background-color: #382c1d !important; }

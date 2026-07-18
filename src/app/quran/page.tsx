@@ -5,6 +5,7 @@ import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { MemorizationSection } from "@/components/quran/MemorizationSection";
 import { TadabburSection } from "@/components/quran/TadabburSection";
 import { DayDigestCard } from "@/components/quran/DayDigestCard";
+import { QuranBanner } from "@/components/quran/QuranBanner";
 import { Sprout, BookOpenText } from "lucide-react";
 
 // قسم «قرآن» — عمودان: التدبّر (تأمّلات + آية اليوم) والحفظ (محفوظ + مراجعة
@@ -19,10 +20,11 @@ export default function QuranPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center gap-3 animate-fade-up">
         <SectionSignet href="/quran" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">قرآن</h1>
-          <p className="text-sm text-quran font-semibold mt-0.5">اللهم اجعل القرآن ربيع قلبي</p>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-900">قرآن</h1>
+      </div>
+
+      <div className="animate-fade-up stagger-1">
+        <QuranBanner />
       </div>
 
       <div className="animate-fade-up stagger-1">
