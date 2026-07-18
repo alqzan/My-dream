@@ -3,6 +3,7 @@ import { useState } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { MemorizationSection } from "@/components/quran/MemorizationSection";
+import { TadabburSection } from "@/components/quran/TadabburSection";
 import { Sprout, BookOpenText } from "lucide-react";
 
 // قسم «قرآن» — عمودان: التدبّر (تأمّلات + آية اليوم) والحفظ (محفوظ + مراجعة
@@ -31,7 +32,7 @@ export default function QuranPage() {
 
       {tab === "tadabbur" ? (
         <div className="animate-fade-up stagger-2 space-y-4">
-          <Placeholder title="التدبّر" note="آية اليوم وتأمّلاتك عليها — قريباً." />
+          <TadabburSection />
         </div>
       ) : (
         <div className="animate-fade-up stagger-2 space-y-4">
@@ -58,14 +59,5 @@ function TabButton({
       {icon}
       {label}
     </button>
-  );
-}
-
-function Placeholder({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-quran/30 p-6 text-center">
-      <p className="text-sm font-semibold text-gray-700">{title}</p>
-      <p className="text-xs text-gray-400 mt-1">{note}</p>
-    </div>
   );
 }
