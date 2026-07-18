@@ -30,6 +30,8 @@ const config: Config = {
         finance: { DEFAULT: "#3d9640", light: "#dcf0dc" },
         reading: { DEFAULT: "#c1663f", light: "#f7e7dd" },
         prayer: { DEFAULT: "#1f7a6c", light: "#dcece6" },
+        // أخضر إسلامي عميق للقرآن — مميّز عن أخضر المال العشبي وتركواز الصلاة.
+        quran: { DEFAULT: "#1b6b4c", light: "#daeee3" },
       },
     },
   },
