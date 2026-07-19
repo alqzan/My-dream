@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef, ReserveFund, Budget } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -429,6 +429,24 @@ export function dedupeJournalEntries(entries: JournalEntry[]): JournalEntry[] {
 
 export function getReadingStreak(logs: ReadingLog[]): number {
   return calcStreak(logs.map((l) => l.date));
+}
+
+// «وِرد اليوم» يُحتسب تمامه بأيّ نشاطٍ قرآني في ذلك اليوم — لا نقرة الوِرد فحسب،
+// بل حفظٌ جديد، أو مراجعة، أو تدبّرٌ مكتوب، أو جزءٌ سُجّل في الختمة. تُجمع تواريخ
+// كل ذلك في مجموعةٍ واحدة تقود حالة «تمّ» وسلسلتها، فمن فتح المصحف بأيّ وجهٍ لا
+// يُطالَب بنقرةٍ منفصلة. (الختمة لا تحفظ إلا آخر يوم قراءة، فيُضاف وحده.)
+export function quranActivityDates(d: {
+  quranWird?: string[];
+  quranHifz?: HifzState;
+  quranReflections?: QuranReflection[];
+  quranKhatma?: KhatmaState;
+}): Set<string> {
+  const dates = new Set<string>(d.quranWird ?? []);
+  for (const s of d.quranHifz?.sessions ?? []) dates.add(s.date);
+  for (const r of d.quranHifz?.reviews ?? []) dates.add(r.date);
+  for (const r of d.quranReflections ?? []) dates.add(r.date);
+  if (d.quranKhatma?.lastReadDate) dates.add(d.quranKhatma.lastReadDate);
+  return dates;
 }
 
 export function getCategoryInfo(categories: FinanceCategoryDef[], id: string): FinanceCategoryDef {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   today, calcStreak, uid, cn, toDateStr, buzz,
-  getJournalStreak, getReadingStreak,
+  getJournalStreak, getReadingStreak, quranActivityDates,
 } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Plus, Check, Settings2, X, Flame, ChevronLeft, Snowflake, Play } from "lucide-react";
@@ -202,7 +202,8 @@ function HabitArc({ done, total }: { done: number; total: number }) {
 // prayer orbit, and habit tracker so the day lives in one nice place.
 export function DailyHabits() {
   const {
-    habits, journalEntries, readingLogs, books, quranWird, quranHifz, frozenHabits,
+    habits, journalEntries, readingLogs, books, quranWird, quranHifz,
+    quranReflections, quranKhatma, frozenHabits,
     toggleHabitLog, addHabit, updateHabit, deleteHabit, toggleWird, toggleFreezeHabit,
   } = useAppStore();
   const [showAdd, setShowAdd] = useState(false);
@@ -263,10 +264,12 @@ export function DailyHabits() {
   ];
 
   // الوِرد اليومي — عادة أساسية مبنيّة (لا تُحذف): نقرةٌ تُتمّها، بلونها الأخضر
-  // القرآني، وسلسلتها من نفس تواريخ الوِرد. تُحتسب ضمن تقدّم اليوم كبقية العادات.
-  const wirdDates = new Set(quranWird);
+  // القرآني. تُحتسب «تمّت» بأيّ نشاطٍ قرآني اليوم (حفظ/مراجعة/تدبّر/ختمة) لا
+  // بنقرة الوِرد وحدها، وسلسلتها من مجموع تلك التواريخ. نقرةُ البطاقة تظلّ تسجّل
+  // وِرداً يدوياً لأيام لم يُسجَّل فيها شيءٌ آخر.
+  const wirdDates = quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma });
   const wirdDone = wirdDates.has(todayStr);
-  const wirdStreak = calcStreak(quranWird);
+  const wirdStreak = calcStreak([...wirdDates]);
   const wirdFrozen = isFrozen("core:wird");
 
   // البطاقات النشطة (غير المجمّدة) هي وحدها ما يُعرض ويُحتسب في تقدّم اليوم.

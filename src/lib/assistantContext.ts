@@ -16,6 +16,7 @@ import {
   getReadingStreak,
   reserveBalance,
   dailyShare,
+  quranActivityDates,
 } from "./utils";
 import { PRAYERS } from "./types";
 
@@ -53,7 +54,7 @@ export function buildDayDigest(d: AppData): DayDigest {
     mosque,
     habitsDone,
     habitsTotal: d.habits.length,
-    wirdDone: (d.quranWird ?? []).includes(todayStr),
+    wirdDone: quranActivityDates(d).has(todayStr),
     journalWritten: d.journalEntries.some((e) => e.date === todayStr),
     readingDone: d.readingLogs.some((l) => l.date === todayStr),
     khatmaJuz: (d.quranKhatma ?? { juz: 0 }).juz,
