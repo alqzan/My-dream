@@ -12,6 +12,7 @@ import {
 } from "@/lib/quran/hifz";
 import { HifzCoach } from "@/components/quran/HifzCoach";
 import { HifzMap } from "@/components/quran/HifzMap";
+import { HifzChart } from "@/components/quran/HifzChart";
 import { NumberInput } from "@/components/ui/NumberInput";
 import {
   Sprout, RefreshCw, Check, Target, GraduationCap, Headphones,
@@ -20,14 +21,14 @@ import {
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
 const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
 
-export function HifzSection() {
+export function HifzSection({ onRead }: { onRead: (surah: number) => void }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [text, setText] = useState<string[] | null>(null);
   useEffect(() => { loadAyahText().then(setText); }, []);
 
   if (!h.plan) return <PlanSetup onStart={store.startHifzPlan} />;
-  return <HifzDashboard text={text} />;
+  return <HifzDashboard text={text} onRead={onRead} />;
 }
 
 // ---------------- إعداد الخطة ----------------
@@ -110,7 +111,7 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
 }
 
 // ---------------- لوحة الحفظ ----------------
-function HifzDashboard({ text }: { text: string[] | null }) {
+function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah: number) => void }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
@@ -202,7 +203,14 @@ function HifzDashboard({ text }: { text: string[] | null }) {
       })()}
 
       {/* 3) خريطة الحفظ — لوحة كاملة: المحفوظ، المتقن، المحتاج للمراجعة، والضعف */}
-      <HifzMap text={text} onReview={(p) => setCoach({ portion: p, mode: "recall", advance: false })} />
+      <HifzMap
+        text={text}
+        onReview={(p) => setCoach({ portion: p, mode: "recall", advance: false })}
+        onRead={onRead}
+      />
+
+      {/* 4) رسم تقدّم الحفظ عبر الزمن */}
+      <HifzChart />
 
       {coach && text && (
         <HifzCoach

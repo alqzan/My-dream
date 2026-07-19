@@ -8,11 +8,14 @@ import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 // المصحف — كل القرآن داخل القسم: قائمة السور الـ114 بأعداد آياتها، وقارئٌ يعرض
 // آيات أي سورة كاملة بالرسم العثماني (من بيانات المصحف المحلية). البسملة تُعرض
 // كترويسةٍ للسور عدا الفاتحة (آيتها الأولى) والتوبة (بلا بسملة).
-export function MushafBrowser() {
+export function MushafBrowser({ initialSurah }: { initialSurah?: number | null }) {
   const [text, setText] = useState<string[] | null>(null);
   useEffect(() => { loadAyahText().then(setText); }, []);
   const [open, setOpen] = useState<number | null>(null); // رقم السورة المفتوحة
   const [query, setQuery] = useState("");
+
+  // فتح سورة مطلوبة من خارج القسم (مثل «اقرأ في المصحف» من خريطة الحفظ).
+  useEffect(() => { if (initialSurah) setOpen(initialSurah); }, [initialSurah]);
 
   const filtered = useMemo(() => {
     const q = normalizeArabic(query.trim());

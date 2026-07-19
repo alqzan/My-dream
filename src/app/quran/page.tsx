@@ -16,12 +16,20 @@ type Tab = "tadabbur" | "hifz" | "mushaf";
 export default function QuranPage() {
   // الحفظ أوّلاً وافتراضياً — هو الممارسة اليومية الأكثر استعمالاً.
   const [tab, setTab] = useState<Tab>("hifz");
+  // سورة يُطلب فتحها في المصحف (من «اقرأ في المصحف» في خريطة الحفظ).
+  const [mushafSurah, setMushafSurah] = useState<number | null>(null);
 
   // فتح تبويبٍ محدّد عبر ?tab= (من تذكير الحفظ في الرئيسية مثلاً).
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "hifz" || t === "mushaf" || t === "tadabbur") setTab(t);
   }, []);
+
+  // ينقل المستخدم إلى المصحف على سورةٍ محدّدة (nonce يضمن إعادة الفتح حتى لو
+  // كررنا نفس السورة).
+  const openMushaf = (surah: number) => { setMushafSurah(surah); setTab("mushaf"); };
+  // النقر اليدوي على التبويبات يمسح طلب السورة حتى لا يُعاد فتحها لاحقاً.
+  const selectTab = (t: Tab) => { setMushafSurah(null); setTab(t); };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
@@ -36,9 +44,9 @@ export default function QuranPage() {
 
       {/* مبدّل الأعمدة */}
       <div className="flex gap-1.5 p-1 rounded-2xl bg-quran/10 animate-fade-up stagger-1">
-        <TabButton active={tab === "hifz"} onClick={() => setTab("hifz")} icon={<BookOpenText size={15} />} label="الحفظ" />
-        <TabButton active={tab === "tadabbur"} onClick={() => setTab("tadabbur")} icon={<Sprout size={15} />} label="التدبّر" />
-        <TabButton active={tab === "mushaf"} onClick={() => setTab("mushaf")} icon={<BookText size={15} />} label="المصحف" />
+        <TabButton active={tab === "hifz"} onClick={() => selectTab("hifz")} icon={<BookOpenText size={15} />} label="الحفظ" />
+        <TabButton active={tab === "tadabbur"} onClick={() => selectTab("tadabbur")} icon={<Sprout size={15} />} label="التدبّر" />
+        <TabButton active={tab === "mushaf"} onClick={() => selectTab("mushaf")} icon={<BookText size={15} />} label="المصحف" />
       </div>
 
       {tab === "tadabbur" && (
@@ -48,13 +56,13 @@ export default function QuranPage() {
       )}
       {tab === "hifz" && (
         <div className="animate-fade-up stagger-2 space-y-4">
-          <HifzSection />
+          <HifzSection onRead={openMushaf} />
         </div>
       )}
       {tab === "mushaf" && (
         <div className="animate-fade-up stagger-2 space-y-4">
           <KhatmaOrbit />
-          <MushafBrowser />
+          <MushafBrowser initialSurah={mushafSurah} />
         </div>
       )}
     </div>

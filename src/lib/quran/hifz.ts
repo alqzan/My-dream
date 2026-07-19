@@ -1,7 +1,8 @@
 import type { HifzState, HifzUnit, HifzRating } from "../types";
-import { calcStreak, parseDate } from "../utils";
+import { calcStreak, parseDate, toDateStr } from "../utils";
 import {
-  TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, idToPage, idToJuz, idToSurahAyah, juzRange, pageRange, SURAHS,
+  TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, TOTAL_HIZB, idToPage, idToJuz, idToHizb, idToSurahAyah,
+  juzRange, hizbRange, pageRange, SURAHS,
 } from "./meta";
 
 export interface Portion { fromId: number; toId: number }
@@ -162,40 +163,56 @@ export const REVIEW_DUE_DAYS = 7;
 
 export type JuzState = "none" | "partial" | "fresh" | "due" | "weak";
 
-export interface JuzCell {
-  juz: number;
+// حبيبة الخريطة: أجزاء (30)، أحزاب (60)، أو أوجه (604).
+export type MapUnit = "juz" | "hizb" | "page";
+
+export interface UnitCell {
+  n: number; // رقم الوحدة (1-based)
+  start: number; // معرّف أوّل آية في الوحدة
+  end: number; // معرّف آخر آية
   totalAyat: number;
   memorizedAyat: number;
-  fill: number; // 0..1 نسبة المحفوظ من الجزء
-  memStart: number; // معرّف أوّل آية محفوظة في الجزء (0 إن لا شيء)
-  memEnd: number; // معرّف آخر آية محفوظة
-  lastDate?: string; // آخر حفظٍ/مراجعةٍ مسّت الجزء
+  fill: number; // 0..1 نسبة المحفوظ من الوحدة
+  memStart: number; // معرّف أوّل آية محفوظة (0 إن لا شيء)
+  memEnd: number;
+  lastDate?: string; // آخر حفظٍ/مراجعةٍ مسّت الوحدة
   lastRating?: HifzRating;
   daysSince: number | null;
   state: JuzState;
+}
+
+export const MAP_UNIT_COUNT: Record<MapUnit, number> = { juz: TOTAL_JUZ, hizb: TOTAL_HIZB, page: TOTAL_PAGES };
+
+function unitRange(unit: MapUnit, n: number) {
+  return unit === "juz" ? juzRange(n) : unit === "hizb" ? hizbRange(n) : pageRange(n);
+}
+function unitOf(unit: MapUnit, id: number): number {
+  return unit === "juz" ? idToJuz(id) : unit === "hizb" ? idToHizb(id) : idToPage(id);
 }
 
 function daysBetween(a: string, b: string): number {
   return Math.round((parseDate(b).getTime() - parseDate(a).getTime()) / 86400000);
 }
 
-export function hifzMap(s: HifzState, todayStr: string): JuzCell[] {
+// حالة كل وحدة (جزء/حزب/وجه) للعرض في الخريطة.
+export function hifzUnits(s: HifzState, todayStr: string, unit: MapUnit): UnitCell[] {
   const from = s.plan?.startId ?? 1;
-  const frontierJuz = s.frontierId >= 1 ? idToJuz(s.frontierId) : 0;
+  const frontierUnit = s.frontierId >= 1 ? unitOf(unit, s.frontierId) : 0;
   const events = [
     ...s.sessions.map((x) => ({ from: x.fromId, to: x.toId, date: x.date, rating: x.rating })),
     ...s.reviews.map((x) => ({ from: x.fromId, to: x.toId, date: x.date, rating: x.rating })),
-  ].sort((a, b) => (a.date < b.date ? -1 : 1)); // تصاعدي: الأحدث آخراً
+  ].sort((a, b) => (a.date < b.date ? -1 : 1));
 
-  const cells: JuzCell[] = [];
-  for (let j = 1; j <= TOTAL_JUZ; j++) {
-    const r = juzRange(j);
+  const count = MAP_UNIT_COUNT[unit];
+  const cells: UnitCell[] = [];
+  for (let n = 1; n <= count; n++) {
+    const r = unitRange(unit, n);
     const total = r.end - r.start + 1;
     const memStart = Math.max(r.start, from);
     const memEnd = Math.min(r.end, s.frontierId);
     const memAyat = Math.max(0, memEnd - memStart + 1);
     if (memAyat === 0) {
-      cells.push({ juz: j, totalAyat: total, memorizedAyat: 0, fill: 0, memStart: 0, memEnd: 0, daysSince: null, state: "none" });
+      cells.push({ n, start: r.start, end: r.end, totalAyat: total, memorizedAyat: 0, fill: 0, memStart: 0, memEnd: 0, daysSince: null, state: "none" });
       continue;
     }
     const overlapping = events.filter((e) => e.to >= r.start && e.from <= r.end);
@@ -203,11 +220,11 @@ export function hifzMap(s: HifzState, todayStr: string): JuzCell[] {
     const daysSince = last ? daysBetween(last.date, todayStr) : null;
     let state: JuzState;
     if (last?.rating === 1) state = "weak";
-    else if (memAyat < total && j === frontierJuz) state = "partial"; // الجزء الجاري حفظه
+    else if (memAyat < total && n === frontierUnit) state = "partial";
     else if (daysSince == null || daysSince >= REVIEW_DUE_DAYS) state = "due";
     else state = "fresh";
     cells.push({
-      juz: j, totalAyat: total, memorizedAyat: memAyat, fill: memAyat / total,
+      n, start: r.start, end: r.end, totalAyat: total, memorizedAyat: memAyat, fill: memAyat / total,
       memStart, memEnd, lastDate: last?.date, lastRating: last?.rating, daysSince, state,
     });
   }
@@ -215,7 +232,7 @@ export function hifzMap(s: HifzState, todayStr: string): JuzCell[] {
 }
 
 export interface HifzMapCounts { memorized: number; fresh: number; due: number; weak: number; partial: number }
-export function mapCounts(cells: JuzCell[]): HifzMapCounts {
+export function mapCounts(cells: UnitCell[]): HifzMapCounts {
   const c: HifzMapCounts = { memorized: 0, fresh: 0, due: 0, weak: 0, partial: 0 };
   for (const x of cells) {
     if (x.state === "none") continue;
@@ -226,4 +243,42 @@ export function mapCounts(cells: JuzCell[]): HifzMapCounts {
     else if (x.state === "partial") c.partial++;
   }
   return c;
+}
+
+// ===================== سلسلة تقدّم الحفظ عبر الزمن =====================
+// نقاط يومية بعدد الآيات المحفوظة تراكمياً منذ بداية الخطة حتى اليوم — للرسم
+// البياني. تُبنى من مجموع آيات الجلسات في كل يوم.
+export interface HifzPoint { date: string; ayat: number; cumAyat: number }
+
+export function hifzSeries(s: HifzState, todayStr: string): HifzPoint[] {
+  if (!s.plan || !s.sessions.length) return [];
+  const perDay = new Map<string, number>();
+  for (const x of s.sessions) perDay.set(x.date, (perDay.get(x.date) ?? 0) + (x.toId - x.fromId + 1));
+  const startStr = [...perDay.keys()].sort()[0] ?? s.plan.createdAt;
+  const start = parseDate(startStr);
+  const end = parseDate(todayStr);
+  const out: HifzPoint[] = [];
+  let cum = 0;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = toDateStr(d);
+    const ayat = perDay.get(key) ?? 0;
+    cum += ayat;
+    out.push({ date: key, ayat, cumAyat: cum });
+  }
+  return out;
+}
+
+// مجموع الآيات المحفوظة خلال آخر N يوماً (اليوم ضمنها).
+export function memorizedInWindow(s: HifzState, days: number, todayStr: string): number {
+  const cutoff = parseDate(todayStr);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutStr = toDateStr(cutoff);
+  return s.sessions
+    .filter((x) => x.date >= cutStr && x.date <= todayStr)
+    .reduce((a, x) => a + (x.toId - x.fromId + 1), 0);
+}
+
+// تحويل عدد الآيات إلى تقديرٍ بالأوجه.
+export function ayatToPages(ayat: number): number {
+  return Math.round((ayat / TOTAL_AYAT) * TOTAL_PAGES);
 }
