@@ -59,6 +59,8 @@ export default function Dashboard() {
   const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
   const hasTodayHabit = habits.some((h) => h.logs.includes(todayStr));
   const hasTodayWird = quranWird.includes(todayStr);
+  const hasHifzPlan = !!quranHifz?.plan;
+  const hasTodayHifz = (quranHifz?.sessions ?? []).some((s) => s.date === todayStr);
 
   // First run: a brand-new user has nothing tracked in any domain yet, so the
   // dashboard is a wall of empty instruments with no guidance. Detect it from
@@ -127,6 +129,7 @@ export default function Dashboard() {
           reading={hasTodayReading}
           habits={hasTodayHabit}
           wird={hasTodayWird}
+          hifz={hasHifzPlan ? hasTodayHifz : null}
         />
       </div>
 
@@ -271,7 +274,7 @@ function getGreeting() {
 // The arc fills in with an eased animation on mount, with a gold gradient
 // and a small orbiting "planet" at the arc's tip.
 function YearOrbit({
-  pct, prayer, journal, reading, habits, wird,
+  pct, prayer, journal, reading, habits, wird, hifz,
 }: {
   pct: number;
   prayer: boolean;
@@ -279,6 +282,7 @@ function YearOrbit({
   reading: boolean;
   habits: boolean;
   wird: boolean;
+  hifz: boolean | null; // null = لا خطة حفظ → لا يُعرض قمرها
 }) {
   const size = 88;
   const stroke = 6.5;
@@ -305,15 +309,17 @@ function YearOrbit({
   const cx0 = size / 2;
   const cy0 = size / 2;
   const moonR = 26;
-  // خمسة أقمار موزّعة بالتساوي (كل 72°) — أُضيف الوِرد بلونه الأخضر القرآني
-  // إلى جانب المدارات الأربعة الأصلية.
-  const moons = [
-    { key: "prayer", label: "الصلاة", color: "#1f7a6c", done: prayer, angle: -90, href: "/prayers" as string | null },
-    { key: "wird", label: "الورد", color: "#1b6b4c", done: wird, angle: -18, href: "/quran" as string | null },
-    { key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, angle: 54, href: "/journal" as string | null },
-    { key: "reading", label: "القراءة", color: "#c1663f", done: reading, angle: 126, href: "/reading" as string | null },
-    { key: "habits", label: "العادات", color: "#c9852a", done: habits, angle: 198, href: null as string | null },
-  ].map((m) => ({
+  // أقمار اليوم موزّعة بالتساوي على المدار — تُضاف الحفظ (متى وُجدت خطة) بلونها
+  // الأخضر القرآني إلى جانب بقية الممارسات. زاويةُ كلٍّ تُحسب بالتساوي حسب العدد.
+  const base = [
+    { key: "prayer", label: "الصلاة", color: "#1f7a6c", done: prayer, href: "/prayers" as string | null },
+    { key: "wird", label: "الورد", color: "#1b6b4c", done: wird, href: "/quran" as string | null },
+    ...(hifz != null ? [{ key: "hifz", label: "الحفظ", color: "#1b6b4c", done: hifz, href: "/quran?tab=hifz" as string | null }] : []),
+    { key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, href: "/journal" as string | null },
+    { key: "reading", label: "القراءة", color: "#c1663f", done: reading, href: "/reading" as string | null },
+    { key: "habits", label: "العادات", color: "#c9852a", done: habits, href: null as string | null },
+  ];
+  const moons = base.map((m, i) => ({ ...m, angle: -90 + (i * 360) / base.length })).map((m) => ({
     ...m,
     x: cx0 + moonR * Math.cos((m.angle * Math.PI) / 180),
     y: cy0 + moonR * Math.sin((m.angle * Math.PI) / 180),

@@ -9,6 +9,8 @@ import {
   getReadingStreak,
   buzz,
 } from "@/lib/utils";
+import { hifzStreak } from "@/lib/quran/hifz";
+import { juzRange } from "@/lib/quran/meta";
 import { STREAK_MILESTONES, BOOK_MILESTONES, highestReached } from "@/lib/milestones";
 import { Confetti } from "@/components/ui/Confetti";
 import { showToast } from "@/components/ui/UndoToast";
@@ -27,7 +29,7 @@ interface Metric {
 // sync settles, so opening the app on a device that already has a long streak
 // doesn't retro-fire a celebration.
 export function MilestoneWatcher() {
-  const { journalEntries, readingLogs, prayerLogs, books } = useAppStore();
+  const { journalEntries, readingLogs, prayerLogs, books, quranHifz } = useAppStore();
   const [ready, setReady] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
 
@@ -53,6 +55,8 @@ export function MilestoneWatcher() {
         message: (t) => `📚 ${t} يوماً من القراءة المتواصلة!` },
       { key: "books", value: booksFinished, thresholds: BOOK_MILESTONES,
         message: (t) => `🏁 أنهيت ${t} ${t === 1 ? "كتاباً — بداية رحلة!" : "كتاباً!"}` },
+      { key: "hifz", value: hifzStreak(quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 }), thresholds: STREAK_MILESTONES,
+        message: (t) => `🧠 ${t} يوماً من الحفظ المتواصل — ثبّتك الله!` },
     ];
 
     const messages: string[] = [];
@@ -77,6 +81,24 @@ export function MilestoneWatcher() {
       }
     }
 
+    // إتمام جزءٍ من الحفظ — كلّما اكتمل جزءٌ كاملاً ضمن المحفوظ نحتفل باسمه.
+    if (quranHifz?.plan) {
+      let completed = 0, top = 0;
+      for (let j = 1; j <= 30; j++) {
+        const r = juzRange(j);
+        if (r.start >= quranHifz.plan.startId && r.end <= quranHifz.frontierId) { completed++; top = j; }
+      }
+      const key = "madar-ms-hifzjuz";
+      let stored: number | null;
+      try { const raw = localStorage.getItem(key); stored = raw === null ? null : parseInt(raw) || 0; } catch { stored = 0; }
+      if (stored === null) {
+        try { localStorage.setItem(key, String(completed)); } catch { /* ignore */ }
+      } else if (completed > stored) {
+        try { localStorage.setItem(key, String(completed)); } catch { /* ignore */ }
+        messages.push(`🎉 أتممت حفظ الجزء ${top} — تقبّل الله وبارك فيك!`);
+      }
+    }
+
     if (messages.length) {
       setCelebrate(true);
       buzz(30);
@@ -84,7 +106,7 @@ export function MilestoneWatcher() {
       const t = setTimeout(() => setCelebrate(false), 5200);
       return () => clearTimeout(t);
     }
-  }, [ready, journalEntries, readingLogs, prayerLogs, books]);
+  }, [ready, journalEntries, readingLogs, prayerLogs, books, quranHifz]);
 
   return celebrate ? <Confetti pieces={80} /> : null;
 }

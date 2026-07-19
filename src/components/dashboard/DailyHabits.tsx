@@ -183,7 +183,7 @@ function HabitArc({ done, total }: { done: number; total: number }) {
 // prayer orbit, and habit tracker so the day lives in one nice place.
 export function DailyHabits() {
   const {
-    habits, journalEntries, readingLogs, books, quranWird,
+    habits, journalEntries, readingLogs, books, quranWird, quranHifz,
     toggleHabitLog, addHabit, updateHabit, deleteHabit, toggleWird,
   } = useAppStore();
   const [showAdd, setShowAdd] = useState(false);
@@ -201,6 +201,11 @@ export function DailyHabits() {
   const readingDates = new Set(readingLogs.map((l) => l.date));
   const currentBook = books.find((b) => b.status === "أقرأ");
 
+  // حفظ اليوم — عادة أساسية تظهر متى وُجدت خطة حفظ: «أُنجزت» إن سُجّلت جلسة حفظ
+  // اليوم، وتفتح تبويب الحفظ. مشتقّة من الجلسات (كالمذكرة والقراءة).
+  const hifzDates = new Set((quranHifz?.sessions ?? []).map((s) => s.date));
+  const hasPlan = !!quranHifz?.plan;
+
   const core = [
     {
       href: "/journal", icon: "📓", name: "مذكرة اليوم", color: "#8a6fb0",
@@ -212,6 +217,11 @@ export function DailyHabits() {
       done: readingDates.has(todayStr), weekKept: readingDates,
       statusLine: (() => { const s = getReadingStreak(readingLogs); return s > 0 ? `${s} يوم متواصل` : "اقرأ اليوم"; })(),
     },
+    ...(hasPlan ? [{
+      href: "/quran?tab=hifz", icon: "🧠", name: "حفظ اليوم", color: "#1b6b4c",
+      done: hifzDates.has(todayStr), weekKept: hifzDates,
+      statusLine: (() => { const s = calcStreak([...hifzDates]); return s > 0 ? `${s} يوم متواصل` : "احفظ وردك"; })(),
+    }] : []),
   ];
 
   // الوِرد اليومي — عادة أساسية مبنيّة (لا تُحذف): نقرةٌ تُتمّها، بلونها الأخضر
