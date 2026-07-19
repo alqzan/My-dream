@@ -237,11 +237,8 @@ export function DailyHabits() {
   const masterStreak = calcStreak(streakDates);
   const streakLabel = streakParts.map((p) => p.label).join(" و");
 
-  // حفظ اليوم — عادة أساسية تظهر متى وُجدت خطة حفظ: «أُنجزت» إن سُجّلت جلسة حفظ
-  // اليوم، وتفتح تبويب الحفظ. مشتقّة من الجلسات (كالمذكرة والقراءة).
-  const hifzDates = new Set((quranHifz?.sessions ?? []).map((s) => s.date));
-  const hasPlan = !!quranHifz?.plan;
-
+  // «حفظ اليوم» أُزيل من هنا: صار «وِرد اليوم» يشمل الحفظ (وأيّ نشاطٍ قرآني)،
+  // فبطاقةٌ منفصلة للحفظ تكرارٌ لا داعي له — تُتابَع تفاصيل الحفظ في قسم قرآن.
   const core = [
     {
       key: "core:journal",
@@ -255,12 +252,6 @@ export function DailyHabits() {
       done: readingDates.has(todayStr), weekKept: readingDates,
       statusLine: (() => { const s = getReadingStreak(readingLogs); return s > 0 ? `${s} يوم متواصل` : "اقرأ اليوم"; })(),
     },
-    ...(hasPlan ? [{
-      key: "core:hifz",
-      href: "/quran?tab=hifz", icon: "🧠", name: "حفظ اليوم", color: "#1b6b4c",
-      done: hifzDates.has(todayStr), weekKept: hifzDates,
-      statusLine: (() => { const s = calcStreak([...hifzDates]); return s > 0 ? `${s} يوم متواصل` : "احفظ وردك"; })(),
-    }] : []),
   ];
 
   // الوِرد اليومي — عادة أساسية مبنيّة (لا تُحذف): نقرةٌ تُتمّها، بلونها الأخضر
