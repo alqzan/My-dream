@@ -237,35 +237,55 @@ export interface QuranReflection {
   createdAt: string; // YYYY-MM-DD وقت الإنشاء (للترتيب الثانوي)
 }
 
-// وحدة قياس المحفوظ — يختار المستخدم بحرّية: سورة كاملة، مدى آيات، جزء، حزب،
-// أو أوجه (صفحات المصحف) مع كسورٍ (وجه/نصف وجه/ربع وجه). القديم بلا kind يُعرض
-// كما هو (توافق).
-export type MemorizationKind = "surah" | "ayat" | "juz" | "hizb" | "page";
+// ===================== خطة الحفظ (متتابعة) =====================
+// الحفظ متتابعٌ عبر المصحف من نقطة بداية مختارة: «جبهة الحفظ» (frontierId) هي
+// آخر آية محفوظة، ويتقدّم الوردُ اليومي منها للأمام حسب الخطة. لا قفز بين السور
+// — تُكمل من حيث وقفت. مع تقييم ذاتي ومراجعة دورية دوّارة لكلّ المحفوظ.
 
-// عنصر محفوظ + جدولة مراجعة بتكرار متباعد (نمط SM مبسّط).
-export interface MemorizationItem {
-  id: string;
-  kind?: MemorizationKind; // غيابه = عنصر قديم يُعرض بوصفه فقط
-  label: string; // وصف عربي مُشتقّ (أو ما كتبه المستخدم في النسخة القديمة)
-  // معاملات حسب الوحدة:
-  surah?: number; // surah, ayat
-  fromAyah?: number; // ayat
-  toAyah?: number; // ayat
-  juz?: number; // 1..30
-  hizb?: number; // 1..60
-  fromPage?: number; // page — أوّل وجه
-  toPage?: number; // page — آخر وجه (لمدى الأوجه)
-  fraction?: number; // 1 | 0.5 | 0.25 — وجه كامل/نصف/ربع (لوجهٍ واحد)
-  ayatCount?: number; // عدد الآيات (تقريبيّ للأوجه الكسرية) — لحساب التقدّم
-  memorizedDate: string; // YYYY-MM-DD تاريخ الحفظ
-  reviewStage: number; // مرتبة الجدولة (0 = جديد) → تحدّد فاصل المراجعة القادم
-  lastReviewed?: string; // YYYY-MM-DD آخر مراجعة
-  nextReview: string; // YYYY-MM-DD موعد المراجعة القادمة
+// وحدة الورد اليومي — آية، ربع وجه، نصف وجه، أو وجه كامل. مرنة «على كيفك».
+export type HifzUnit = "ayah" | "quarter" | "half" | "page";
+
+export interface HifzPlan {
+  startId: number; // المعرّف العام لأوّل آية في الخطة (نقطة البداية)
+  unit: HifzUnit; // وحدة الورد اليومي
+  amount: number; // كم وحدة يومياً (≥ 1)
+  createdAt: string; // YYYY-MM-DD
 }
 
-// فواصل المراجعة المتباعدة (أيام) — كلّ مراجعة ناجحة ترفع المرتبة فيتباعد
-// الموعد التالي؛ التعثّر يعيدها للبداية. الفهرس = reviewStage.
-export const REVIEW_INTERVALS = [1, 3, 7, 15, 30, 60, 120, 240] as const;
+// تقييم ذاتي للحفظ/المراجعة: 1 يحتاج إتقاناً · 2 جيّد · 3 متقن.
+export type HifzRating = 1 | 2 | 3;
+
+export interface HifzSession {
+  id: string;
+  date: string; // YYYY-MM-DD
+  fromId: number; // أوّل آية حُفظت في الجلسة
+  toId: number; // آخر آية
+  rating?: HifzRating;
+}
+
+export interface HifzReviewLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  fromId: number;
+  toId: number;
+  rating?: HifzRating;
+}
+
+export interface HifzState {
+  plan: HifzPlan | null;
+  frontierId: number; // آخر آية محفوظة (0 = لم يبدأ)
+  sessions: HifzSession[]; // سجلّ الحفظ (تتابعي)
+  reviews: HifzReviewLog[]; // سجلّ المراجعات الدورية
+  reviewCursorId: number; // موضع دوران المراجعة الدورية داخل المحفوظ (0 = من البداية)
+}
+
+export const EMPTY_HIFZ: HifzState = {
+  plan: null,
+  frontierId: 0,
+  sessions: [],
+  reviews: [],
+  reviewCursorId: 0,
+};
 
 // حالة الختمة الجارية + عدّاد الختمات المكتملة (يقود «مدار الختمة»).
 export interface KhatmaState {
@@ -294,7 +314,7 @@ export interface AppData {
   // القرآن: تأمّلات ومحفوظات (مفاتيح id تُختم عند الحذف)، أيام الوِرد اليومي
   // (تُوحَّد كسجلّات العادات)، وحالة الختمة (مفردة، الأحدث يفوز).
   quranReflections: QuranReflection[];
-  quranMemorized: MemorizationItem[];
+  quranHifz: HifzState; // خطة الحفظ المتتابعة (بديلة عن قائمة المحفوظات القديمة)
   quranWird: string[]; // dates YYYY-MM-DD أُتمّ فيها الوِرد اليومي
   quranKhatma: KhatmaState;
   dailyBudget: DailyBudget | null;

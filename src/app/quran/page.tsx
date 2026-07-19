@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
-import { MemorizationSection } from "@/components/quran/MemorizationSection";
+import { HifzSection } from "@/components/quran/HifzSection";
 import { TadabburSection } from "@/components/quran/TadabburSection";
 import { MushafBrowser } from "@/components/quran/MushafBrowser";
 import { QuranBanner } from "@/components/quran/QuranBanner";
@@ -41,8 +41,8 @@ export default function QuranPage() {
       )}
       {tab === "hifz" && (
         <div className="animate-fade-up stagger-2 space-y-4">
+          <HifzSection />
           <KhatmaOrbit />
-          <MemorizationSection />
         </div>
       )}
       {tab === "mushaf" && (

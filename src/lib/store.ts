@@ -4,9 +4,11 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter,
-  QuranReflection, MemorizationItem,
+  QuranReflection, HifzUnit, HifzRating,
 } from "./types";
-import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, REVIEW_INTERVALS } from "./types";
+import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
+import { TOTAL_AYAT } from "./quran/meta";
+import { nextReviewCursor } from "./quran/hifz";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2 } from "./utils";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
@@ -16,15 +18,8 @@ import { idbStorage } from "./idbStorage";
 const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
-  "quranReflections", "quranMemorized",
+  "quranReflections",
 ] as const;
-
-// Add N days to a YYYY-MM-DD key, returning a YYYY-MM-DD key (local dates).
-function addDays(dateStr: string, n: number): string {
-  const d = parseDate(dateStr);
-  d.setDate(d.getDate() + n);
-  return toDateStr(d);
-}
 
 interface AppStore extends AppData {
   // Journal
@@ -106,10 +101,14 @@ interface AppStore extends AppData {
   addReflection: (r: QuranReflection) => void;
   updateReflection: (id: string, updates: Partial<QuranReflection>) => void;
   deleteReflection: (id: string) => void;
-  addMemorization: (m: MemorizationItem) => void;
-  updateMemorization: (id: string, updates: Partial<MemorizationItem>) => void;
-  deleteMemorization: (id: string) => void;
-  reviewMemorization: (id: string, remembered: boolean) => void; // advance/reset schedule
+  // خطة الحفظ المتتابعة
+  startHifzPlan: (startId: number, unit: HifzUnit, amount: number) => void; // fresh plan
+  updateHifzPlan: (patch: { unit?: HifzUnit; amount?: number }) => void; // tune without reset
+  clearHifz: () => void; // delete plan + all progress
+  recordHifzSession: (toId: number, rating?: HifzRating) => void; // memorize up to toId
+  setFrontier: (id: number) => void; // move position manually (0..6236)
+  recordReview: (fromId: number, toId: number, rating?: HifzRating) => void; // periodic review
+  skipReview: (toId: number) => void; // move the review cursor on without logging
   toggleWird: (date: string) => void; // mark/unmark today's daily wird
   addKhatmaJuz: () => void; // read one juz (caps at 30 — the full ring)
   setKhatmaJuz: (juz: number) => void; // set progress directly (0..30)
@@ -182,7 +181,7 @@ export const useAppStore = create<AppStore>()(
       reserves: [],
       prayerLogs: [],
       quranReflections: [],
-      quranMemorized: [],
+      quranHifz: EMPTY_HIFZ,
       quranWird: [],
       quranKhatma: EMPTY_KHATMA,
       dailyBudget: null,
@@ -667,32 +666,63 @@ export const useAppStore = create<AppStore>()(
       deleteReflection: (id) =>
         set((s) => ({ quranReflections: s.quranReflections.filter((r) => r.id !== id) })),
 
-      addMemorization: (m) =>
-        set((s) => ({ quranMemorized: [m, ...s.quranMemorized] })),
-
-      updateMemorization: (id, updates) =>
-        set((s) => ({
-          quranMemorized: s.quranMemorized.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+      // Fresh plan: sets the start point and daily target, and resets the
+      // frontier to just before the start (so the first daily portion begins at
+      // startId) along with all sessions/reviews.
+      startHifzPlan: (startId, unit, amount) =>
+        set(() => ({
+          quranHifz: {
+            plan: { startId, unit, amount: Math.max(1, Math.round(amount) || 1), createdAt: today() },
+            frontierId: Math.max(0, startId - 1),
+            sessions: [],
+            reviews: [],
+            reviewCursorId: 0,
+          },
         })),
 
-      deleteMemorization: (id) =>
-        set((s) => ({ quranMemorized: s.quranMemorized.filter((m) => m.id !== id) })),
-
-      // Spaced repetition: a successful review lifts the stage one step (longer
-      // gap to the next), a lapse drops it back to the start (review tomorrow).
-      reviewMemorization: (id, remembered) =>
+      // Tune the daily target/unit without touching memorized progress.
+      updateHifzPlan: (patch) =>
         set((s) => {
-          const todayStr = today();
-          return {
-            quranMemorized: s.quranMemorized.map((m) => {
-              if (m.id !== id) return m;
-              const stage = remembered
-                ? Math.min(m.reviewStage + 1, REVIEW_INTERVALS.length - 1)
-                : 0;
-              const interval = REVIEW_INTERVALS[stage];
-              return { ...m, reviewStage: stage, lastReviewed: todayStr, nextReview: addDays(todayStr, interval) };
-            }),
-          };
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          if (!h.plan) return {};
+          const plan = { ...h.plan, ...patch };
+          if (patch.amount != null) plan.amount = Math.max(1, Math.round(patch.amount) || 1);
+          return { quranHifz: { ...h, plan } };
+        }),
+
+      clearHifz: () => set(() => ({ quranHifz: EMPTY_HIFZ })),
+
+      // Memorize forward: advance the frontier to toId and log the session.
+      recordHifzSession: (toId, rating) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const from = h.frontierId + 1;
+          const to = Math.min(Math.max(toId, from), TOTAL_AYAT);
+          if (to < from) return {};
+          const session = { id: uid(), date: today(), fromId: from, toId: to, rating };
+          return { quranHifz: { ...h, frontierId: to, sessions: [session, ...h.sessions] } };
+        }),
+
+      // Move the memorization position by hand (correction) without a session.
+      setFrontier: (id) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          return { quranHifz: { ...h, frontierId: Math.min(Math.max(Math.round(id) || 0, 0), TOTAL_AYAT) } };
+        }),
+
+      // Log a periodic review of a memorized portion and advance the review
+      // cursor (loops back to the start once it passes the frontier).
+      recordReview: (fromId, toId, rating) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const log = { id: uid(), date: today(), fromId, toId, rating };
+          return { quranHifz: { ...h, reviews: [log, ...h.reviews], reviewCursorId: nextReviewCursor(h, toId) } };
+        }),
+
+      skipReview: (toId) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          return { quranHifz: { ...h, reviewCursorId: nextReviewCursor(h, toId) } };
         }),
 
       toggleWird: (date) =>
@@ -758,7 +788,7 @@ export const useAppStore = create<AppStore>()(
           reserves: data.reserves ?? [],
           prayerLogs: data.prayerLogs ?? [],
           quranReflections: data.quranReflections ?? [],
-          quranMemorized: data.quranMemorized ?? [],
+          quranHifz: data.quranHifz ?? EMPTY_HIFZ,
           quranWird: data.quranWird ?? [],
           quranKhatma: data.quranKhatma ?? EMPTY_KHATMA,
           dailyBudget: data.dailyBudget ?? null,
@@ -786,7 +816,7 @@ export const useAppStore = create<AppStore>()(
           reserves: s.reserves,
           prayerLogs: s.prayerLogs,
           quranReflections: s.quranReflections,
-          quranMemorized: s.quranMemorized,
+          quranHifz: s.quranHifz ?? EMPTY_HIFZ,
           quranWird: s.quranWird,
           quranKhatma: s.quranKhatma ?? EMPTY_KHATMA,
           dailyBudget: s.dailyBudget,
@@ -804,7 +834,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 10,
+      version: 11,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -956,9 +986,19 @@ export const useAppStore = create<AppStore>()(
           state = {
             ...state,
             quranReflections: state.quranReflections ?? [],
-            quranMemorized: state.quranMemorized ?? [],
             quranWird: state.quranWird ?? [],
             quranKhatma: state.quranKhatma ?? { juz: 0, completed: 0 },
+          };
+        }
+
+        // v11 replaces the old memorization list (quranMemorized) with the
+        // sequential حفظ plan (quranHifz). The old experimental list is dropped.
+        if (version < 11) {
+          const st = state as Record<string, unknown>;
+          delete st.quranMemorized;
+          state = {
+            ...st,
+            quranHifz: st.quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 },
           };
         }
 

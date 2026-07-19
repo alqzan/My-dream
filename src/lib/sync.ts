@@ -384,6 +384,19 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const sk = secondary.quranKhatma ?? { juz: 0, completed: 0 };
   const quranKhatma = { ...pk, completed: Math.max(pk.completed ?? 0, sk.completed ?? 0) };
 
+  // Quran حفظ: خطة من الأحدث، والجبهة أبعد موضعٍ بلغه أيُّ جهاز، وسجلّا الجلسات
+  // والمراجعات يُوحَّدان بالـid فلا يضيع أثرٌ سُجّل على جهاز.
+  const emptyHifz = { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 };
+  const ph = primary.quranHifz ?? emptyHifz;
+  const sh = secondary.quranHifz ?? emptyHifz;
+  const quranHifz = {
+    plan: ph.plan ?? sh.plan,
+    frontierId: Math.max(ph.frontierId ?? 0, sh.frontierId ?? 0),
+    sessions: unionOrdered(ph.sessions ?? [], sh.sessions ?? [], (x) => x.id),
+    reviews: unionOrdered(ph.reviews ?? [], sh.reviews ?? [], (x) => x.id),
+    reviewCursorId: ph.reviewCursorId || sh.reviewCursorId || 0,
+  };
+
   return {
     transactions: byId(primary.transactions, secondary.transactions),
     books: byId(primary.books, secondary.books),
@@ -398,7 +411,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // القرآن: تأمّلات ومحفوظات تُوحَّد بالـid (مع الأختام)، والوِرد يُوحَّد
     // كتواريخ (كسجلّات العادات) فلا يضيع وِردٌ سُجّل على جهاز.
     quranReflections: byId(primary.quranReflections ?? [], secondary.quranReflections ?? []),
-    quranMemorized: byId(primary.quranMemorized ?? [], secondary.quranMemorized ?? []),
+    quranHifz,
     quranWird: [...new Set([...(primary.quranWird ?? []), ...(secondary.quranWird ?? [])])].sort(),
     quranKhatma,
     dailyBudget: primary.dailyBudget,

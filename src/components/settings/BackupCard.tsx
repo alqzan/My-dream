@@ -83,7 +83,7 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     reserves: g("reserves", []),
     prayerLogs: g("prayerLogs", []),
     quranReflections: g("quranReflections", []),
-    quranMemorized: g("quranMemorized", []),
+    quranHifz: g("quranHifz", { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 }),
     quranWird: g("quranWird", []),
     quranKhatma: g("quranKhatma", { juz: 0, completed: 0 }),
     dailyBudget: g("dailyBudget", null),
