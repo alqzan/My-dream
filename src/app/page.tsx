@@ -41,13 +41,18 @@ import { BrandMark } from "@/components/layout/BrandMark";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird, quranHifz, quranReflections } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird, quranHifz, quranReflections, frozenHabits } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
 
   const todayStr = today();
   const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
+
+  // العادات المجمّدة تختفي من التطبيق كلّه: لا تظهر أقمارها على مدار السنة ولا
+  // تُحتسب. القراءة/المذكرة/الوِرد المجمّدة تُخفى قمرُها، والعادات المخصّصة
+  // المجمّدة تُستثنى من قمر «العادات» الجامع.
+  const frozen = new Set(frozenHabits ?? []);
 
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
@@ -57,7 +62,7 @@ export default function Dashboard() {
   // exact predicates the domain widgets use (PrayerOrbit / DailyHabits), so
   // the moons on YearOrbit never drift from the real trackers.
   const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
-  const hasTodayHabit = habits.some((h) => h.logs.includes(todayStr));
+  const hasTodayHabit = habits.some((h) => !frozen.has(h.id) && h.logs.includes(todayStr));
   const hasTodayWird = quranWird.includes(todayStr);
   const hasHifzPlan = !!quranHifz?.plan;
   const hasTodayHifz = (quranHifz?.sessions ?? []).some((s) => s.date === todayStr);
@@ -130,6 +135,10 @@ export default function Dashboard() {
           habits={hasTodayHabit}
           wird={hasTodayWird}
           hifz={hasHifzPlan ? hasTodayHifz : null}
+          journalFrozen={frozen.has("core:journal")}
+          readingFrozen={frozen.has("core:reading")}
+          wirdFrozen={frozen.has("core:wird")}
+          habitsShown={habits.length === 0 || habits.some((h) => !frozen.has(h.id))}
         />
       </div>
 
@@ -275,6 +284,7 @@ function getGreeting() {
 // and a small orbiting "planet" at the arc's tip.
 function YearOrbit({
   pct, prayer, journal, reading, habits, wird, hifz,
+  journalFrozen, readingFrozen, wirdFrozen, habitsShown,
 }: {
   pct: number;
   prayer: boolean;
@@ -283,6 +293,10 @@ function YearOrbit({
   habits: boolean;
   wird: boolean;
   hifz: boolean | null; // null = لا خطة حفظ → لا يُعرض قمرها
+  journalFrozen: boolean; // القراءة/المذكرة/الوِرد المجمّدة تُخفى أقمارها كلّياً
+  readingFrozen: boolean;
+  wirdFrozen: boolean;
+  habitsShown: boolean; // يُخفى قمر «العادات» متى جُمِّدت كلّ العادات المخصّصة
 }) {
   const size = 88;
   const stroke = 6.5;
@@ -313,11 +327,11 @@ function YearOrbit({
   // الأخضر القرآني إلى جانب بقية الممارسات. زاويةُ كلٍّ تُحسب بالتساوي حسب العدد.
   const base = [
     { key: "prayer", label: "الصلاة", color: "#1f7a6c", done: prayer, href: "/prayers" as string | null },
-    { key: "wird", label: "الورد", color: "#1b6b4c", done: wird, href: "/quran" as string | null },
+    ...(wirdFrozen ? [] : [{ key: "wird", label: "الورد", color: "#1b6b4c", done: wird, href: "/quran" as string | null }]),
     ...(hifz != null ? [{ key: "hifz", label: "الحفظ", color: "#1b6b4c", done: hifz, href: "/quran?tab=hifz" as string | null }] : []),
-    { key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, href: "/journal" as string | null },
-    { key: "reading", label: "القراءة", color: "#c1663f", done: reading, href: "/reading" as string | null },
-    { key: "habits", label: "العادات", color: "#c9852a", done: habits, href: null as string | null },
+    ...(journalFrozen ? [] : [{ key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, href: "/journal" as string | null }]),
+    ...(readingFrozen ? [] : [{ key: "reading", label: "القراءة", color: "#c1663f", done: reading, href: "/reading" as string | null }]),
+    ...(habitsShown ? [{ key: "habits", label: "العادات", color: "#c9852a", done: habits, href: null as string | null }] : []),
   ];
   const moons = base.map((m, i) => ({ ...m, angle: -90 + (i * 360) / base.length })).map((m) => ({
     ...m,

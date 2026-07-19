@@ -44,12 +44,18 @@ export function DayDigestCard() {
           value={`${d.prayed}/5`}
           sub={d.mosque > 0 ? `${d.mosque} بالمسجد` : undefined}
         />
-        {/* الوِرد */}
-        <BoolStat icon={<Sprout size={15} />} color="#1b6b4c" label="وِرد اليوم" done={d.wirdDone} />
-        {/* المذكرة */}
-        <BoolStat icon={<BookMarked size={15} />} color="#8a6fb0" label="المذكرة" done={d.journalWritten} />
-        {/* القراءة */}
-        <BoolStat icon={<BookOpen size={15} />} color="#c1663f" label="القراءة" done={d.readingDone} />
+        {/* الوِرد — يختفي متى جُمِّد */}
+        {!d.wirdFrozen && (
+          <BoolStat icon={<Sprout size={15} />} color="#1b6b4c" label="وِرد اليوم" done={d.wirdDone} />
+        )}
+        {/* المذكرة — تختفي متى جُمِّدت */}
+        {!d.journalFrozen && (
+          <BoolStat icon={<BookMarked size={15} />} color="#8a6fb0" label="المذكرة" done={d.journalWritten} />
+        )}
+        {/* القراءة — تختفي متى جُمِّدت */}
+        {!d.readingFrozen && (
+          <BoolStat icon={<BookOpen size={15} />} color="#c1663f" label="القراءة" done={d.readingDone} />
+        )}
         {/* العادات أو الختمة */}
         {d.habitsTotal > 0 ? (
           <Stat icon={<Star size={15} />} color="#c9852a" label="العادات" value={`${d.habitsDone}/${d.habitsTotal}`} />

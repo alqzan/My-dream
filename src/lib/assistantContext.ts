@@ -35,6 +35,11 @@ export interface DayDigest {
   journalWritten: boolean;
   readingDone: boolean;
   khatmaJuz: number; // تقدّم الختمة الحالية (٠..٣٠)
+  // الطقوس المجمّدة تختفي من بطاقة «خلاصة اليوم» كما تختفي من قائمة اليوم في
+  // الرئيسية — تجميدُ عادةٍ يُخرجها من التطبيق كلّه لا من قائمة العادات وحدها.
+  wirdFrozen: boolean;
+  journalFrozen: boolean;
+  readingFrozen: boolean;
 }
 
 export function buildDayDigest(d: AppData): DayDigest {
@@ -46,18 +51,25 @@ export function buildDayDigest(d: AppData): DayDigest {
     ? computeDailyBudgetStatus(d.dailyBudget, d.transactions).balance
     : null;
   const { prayed, mosque } = countDayPrayers(getPrayerLog(d.prayerLogs, todayStr));
-  const habitsDone = d.habits.filter((h) => h.logs.includes(todayStr)).length;
+  // العادات المجمّدة لا تُحتسب في عدّاد «العادات» (المخصّصة تُطابَق بمعرّفها،
+  // والطقوس الأساسية بمفتاح «core:*»).
+  const frozen = new Set(d.frozenHabits ?? []);
+  const activeHabits = d.habits.filter((h) => !frozen.has(h.id));
+  const habitsDone = activeHabits.filter((h) => h.logs.includes(todayStr)).length;
   return {
     spentToday,
     budgetBalance,
     prayed,
     mosque,
     habitsDone,
-    habitsTotal: d.habits.length,
+    habitsTotal: activeHabits.length,
     wirdDone: quranActivityDates(d).has(todayStr),
     journalWritten: d.journalEntries.some((e) => e.date === todayStr),
     readingDone: d.readingLogs.some((l) => l.date === todayStr),
     khatmaJuz: (d.quranKhatma ?? { juz: 0 }).juz,
+    wirdFrozen: frozen.has("core:wird"),
+    journalFrozen: frozen.has("core:journal"),
+    readingFrozen: frozen.has("core:reading"),
   };
 }
 
