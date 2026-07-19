@@ -14,7 +14,7 @@ const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
   { keywords: ["سوبرماركت", "هايبر", "بقاله", "بقالة", "تموينات", "بنده", "الدانوب", "لولو", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "التميمي", "المزرعة", "نستو"], category: "cat-essentials" },
   { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
   { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "ساسكو", "fuel", "petrol"], category: "cat-essentials" },
-  { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "utility"], category: "cat-essentials" },
+  { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "طاقة", "السعودية للطاقة", "utility"], category: "cat-essentials" },
   { keywords: ["مستشفى", "عيادة", "صيدلية", "النهدي", "الدواء", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
   { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
   // Eating out & cafes → luxuries (an experience, not sustenance).
@@ -209,18 +209,23 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
   if (m) amount = parseFloat((m[1] ?? "").replace(/,/g, ""));
   if (!amount) return null;
 
-  // Merchant markers point at either the payee ("لـ"/"لدى"/"at"/"@") or the
-  // funding SOURCE ("من {account}"). A mada/Apple-Pay alert lists both — e.g.
-  // "من9004" (source account) before "لـEHSAN" (the real merchant) — so taking
-  // the first marker grabbed the account number. Collect EVERY marker, strip a
-  // trailing currency as before, and reject empty or pure number/punctuation
-  // values (an account number is never a merchant name). Prefer a payee marker;
-  // fall back to "من" only when it names a real (lettered) merchant, so a bank
-  // that legitimately writes "من ستاربكس" still resolves correctly.
+  // Merchant markers point at either the payee ("مفوتر"/"لـ"/"لدى"/"at"/"@") or
+  // the funding SOURCE ("من {account}"). A mada/Apple-Pay alert lists both —
+  // e.g. "من9004" (source account) before "لـEHSAN" (the real merchant) — so
+  // taking the first marker grabbed the account number. A SADAD bill payment
+  // (سداد فاتورة) is the same shape the other way round: it names the biller
+  // after "مفوتر:" (السعودية للطاقة) but the funding card after "من البطاقة
+  // الائتمانية: 9407", so the "من" fallback used to record the card number as
+  // the merchant and lose the biller. Collect EVERY marker (allowing an
+  // optional ":" after it, as SADAD writes "مفوتر:"), strip a trailing currency
+  // as before, and reject empty or pure number/punctuation values (an account
+  // number is never a merchant name). Prefer a payee marker; fall back to "من"
+  // only when it names a real (lettered) merchant, so a bank that legitimately
+  // writes "من ستاربكس" still resolves correctly.
   let merchant = "";
   let fromMerchant = "";
   const stripCur = (v: string) => v.replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim();
-  for (const mk of body.matchAll(/(لدى|لـ|من|at|@)\s*([^\n\r,،.؛;]+)/gi)) {
+  for (const mk of body.matchAll(/(مفوتر|لدى|لـ|من|at|@)\s*:?\s*([^\n\r,،.؛;]+)/gi)) {
     const value = stripCur(mk[2]);
     if (!/\p{L}/u.test(value)) continue; // empty or purely numeric/punctuation
     if (mk[1] === "من") {
