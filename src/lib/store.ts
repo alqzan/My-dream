@@ -9,7 +9,7 @@ import type {
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { nextReviewCursor } from "./quran/hifz";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2 } from "./utils";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries } from "./utils";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
@@ -842,7 +842,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 11,
+      version: 12,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -1008,6 +1008,16 @@ export const useAppStore = create<AppStore>()(
             ...st,
             quranHifz: st.quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 },
           };
+        }
+
+        // v12 يُثبّت هوية مذكرات Day One: كانت تأخذ uid عشوائياً كل استيراد، فنفس
+        // المذكرة على الجوال والآيباد صارت بمعرّفين مختلفين — يتكرّر عرضها،
+        // وحذفها على جهاز لا ينتشر للآخر. الآن معرّفها مشتقّ من UUID الثابت
+        // (`do-<uuid>`)، فتتلاقى النسخ في عنصرٍ واحد ويصبح الحذف قابلاً للانتشار.
+        // dedupeJournalEntries يعيد كتابة المعرّفات ويدمج المكرّرات (مع وسائطها).
+        if (version < 12) {
+          const je = (state.journalEntries as JournalEntry[]) ?? [];
+          state = { ...state, journalEntries: dedupeJournalEntries(je) };
         }
 
         return state as unknown as AppData;

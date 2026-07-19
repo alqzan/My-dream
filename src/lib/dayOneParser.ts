@@ -143,7 +143,10 @@ function baseEntry(entry: DayOneEntry): JournalEntry {
     ...(typeof v.duration === "number" ? { duration: v.duration } : {}),
   }));
   return {
-    id: uid(),
+    // معرّف ثابت مشتقّ من UUID الخاص بـ Day One — نفسه على كل جهاز وفي كل إعادة
+    // استيراد، فتُعرَف المذكرة كعنصرٍ واحد (لا تكرار عبر الأجهزة) وينتشر حذفها.
+    // (uid احتياطيّ نادر لمدخلة بلا UUID حتى لا تتصادم مع غيرها.)
+    id: entry.uuid ? `do-${entry.uuid}` : uid(),
     date,
     ...(time ? { time } : {}),
     ...(title ? { title } : {}),

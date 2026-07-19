@@ -366,6 +366,67 @@ export function entryAudios(e: { audio?: string; audios?: string[] }): string[] 
   return e.audio ? [e.audio] : [];
 }
 
+// ===== هوية المذكرات المستوردة والحفاظ على وسائطها عبر الأجهزة =====
+
+// هوية مذكرة Day One الثابتة هي UUID الخاص بها — نفسه على كل جهاز وفي كل إعادة
+// استيراد. اشتقاق مُعرّف المتجر منه (بدل uid عشوائي جديد كل استيراد) هو ما يجعل
+// جهازين يعرفان أنّ المذكرة المستوردة عنصرٌ واحد: عند التوحيد بالـid تُدمَج بدل
+// أن تتكرّر، وحذفها على جهاز يختم مُعرّفاً يملكه الجهاز الآخر فعلاً — فينتشر
+// الحذف أخيراً. المذكرات اليدوية تحتفظ بمعرّفها.
+export function canonicalEntryId(
+  e: Pick<JournalEntry, "id" | "source" | "dayOneUUID">
+): string {
+  if (e.source === "dayOne" && e.dayOneUUID) return `do-${e.dayOneUUID}`;
+  return e.id;
+}
+
+function entryHasPhotos(e: Pick<JournalEntry, "photo" | "photos">): boolean {
+  return !!(e.photos?.length || e.photo);
+}
+function entryHasAudios(e: Pick<JournalEntry, "audio" | "audios">): boolean {
+  return !!(e.audios?.length || e.audio);
+}
+
+// دمج نسختين من المذكرة نفسها بحيث لا تضيع الوسائط أبداً. النصّ وبقية الحقول من
+// `base`؛ أمّا الصور والملاحظات الصوتية وإشارات الفيديو فتُؤخذ من أيّ نسخة تملكها
+// فعلاً (base يفوز عند وجودها في الاثنتين). هذه شبكة الأمان التي تمنع جهازاً
+// طابَعه الزمنيّ الأحدث من محو صورةٍ أضافها الجهاز الآخر لنفس المذكرة — ومن دفع
+// تلك النسخة المجرّدة فيحذف الصورة من Cloud Storage.
+export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): JournalEntry {
+  let out = base;
+  if (!entryHasPhotos(base) && entryHasPhotos(other)) {
+    out = { ...out, photos: other.photos, photo: other.photo };
+  }
+  if (!entryHasAudios(base) && entryHasAudios(other)) {
+    out = { ...out, audios: other.audios, audio: other.audio };
+  }
+  if (!(base.videoRefs?.length) && other.videoRefs?.length) {
+    out = { ...out, videoRefs: other.videoRefs };
+  }
+  return out;
+}
+
+// توحيد المعرّفات (Day One → معرّف ثابت مشتقّ من UUID) ودمج المكرّرات التي تشترك
+// في معرّف واحد مع الحفاظ على وسائطها. يُحفظ الترتيب حسب أوّل ظهور. يُستخدَم في
+// ترقية المتجر المحلّي وفي كل دمج سحابيّ، فتتلاقى المكرّرات القديمة (باختلاف
+// المعرّفات) في عنصرٍ واحد.
+export function dedupeJournalEntries(entries: JournalEntry[]): JournalEntry[] {
+  const order: string[] = [];
+  const byId = new Map<string, JournalEntry>();
+  for (const raw of entries) {
+    const id = canonicalEntryId(raw);
+    const e = id === raw.id ? raw : { ...raw, id };
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, e);
+      order.push(id);
+    } else {
+      byId.set(id, mergeEntryMedia(existing, e));
+    }
+  }
+  return order.map((id) => byId.get(id)!);
+}
+
 export function getReadingStreak(logs: ReadingLog[]): number {
   return calcStreak(logs.map((l) => l.date));
 }

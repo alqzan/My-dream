@@ -4,7 +4,7 @@ import {
 import { ref as storageRef, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
-import { entryPhotos, entryAudios } from "./utils";
+import { entryPhotos, entryAudios, dedupeJournalEntries, mergeEntryMedia } from "./utils";
 import { showToast } from "@/components/ui/UndoToast";
 
 const COLLECTION = "userData";
@@ -397,11 +397,32 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     reviewCursorId: ph.reviewCursorId || sh.reviewCursorId || 0,
   };
 
+  // Journal entries need more than a plain id-union. First canonicalize +
+  // dedupe both sides so the same Day One entry imported on two devices (which
+  // historically got a different random id each time) collapses into one item.
+  // Then, for an entry both devices hold, keep the chosen side's text but never
+  // lose media the other side has — this is what stops a device with the newer
+  // top-level stamp from wiping a photo/voice note the other device added (and
+  // from pushing that stripped copy back, deleting the file from Cloud Storage).
+  const pJournal = dedupeJournalEntries(primary.journalEntries);
+  const sJournal = dedupeJournalEntries(secondary.journalEntries);
+  const sJournalById = new Map(sJournal.map((e) => [e.id, e]));
+  const journalEntries = alive(
+    unionOrdered(
+      pJournal.map((e) => {
+        const other = sJournalById.get(e.id);
+        return other ? mergeEntryMedia(e, other) : e;
+      }),
+      sJournal,
+      (e) => e.id
+    )
+  );
+
   return {
     transactions: byId(primary.transactions, secondary.transactions),
     books: byId(primary.books, secondary.books),
     readingLogs: byId(primary.readingLogs, secondary.readingLogs),
-    journalEntries: byId(primary.journalEntries, secondary.journalEntries),
+    journalEntries,
     habits,
     recurring: byId(primary.recurring, secondary.recurring),
     budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category),
@@ -414,8 +435,11 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     quranHifz,
     quranWird: [...new Set([...(primary.quranWird ?? []), ...(secondary.quranWird ?? [])])].sort(),
     quranKhatma,
-    dailyBudget: primary.dailyBudget,
-    monthlyIncome: primary.monthlyIncome,
+    // الإعدادات المفردة (الميزانية اليومية والدخل الشهري): الأحدث يفوز، لكن إن
+    // لم يضبطها الجهاز الأحدث نأخذها من الآخر — فلا يمحو جهازٌ لم تُضبَط فيه
+    // إعداداً موجوداً على الجهاز الثاني (كان سبب «الإعدادات ما تظهر بالآيباد»).
+    dailyBudget: primary.dailyBudget ?? secondary.dailyBudget,
+    monthlyIncome: primary.monthlyIncome ?? secondary.monthlyIncome,
     futureLetters: byId(primary.futureLetters, secondary.futureLetters),
     salaryDay: primary.salaryDay,
     lastSalaryConfirm: primary.lastSalaryConfirm,

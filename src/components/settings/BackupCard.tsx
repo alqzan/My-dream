@@ -93,6 +93,8 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     lastSalaryConfirm: g("lastSalaryConfirm", null),
     readingGoal: g("readingGoal", null),
     merchantRules: g("merchantRules", {}),
+    // نُبقي شواهد الحذف (tombstones) فلا تُبعث العناصر المحذوفة عند الدمج.
+    deleted: g("deleted", {}),
     lastUpdated: g("lastUpdated", new Date().toISOString()),
   };
 }
