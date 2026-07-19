@@ -14,7 +14,8 @@ import { Sprout, BookOpenText, BookText } from "lucide-react";
 type Tab = "tadabbur" | "hifz" | "mushaf";
 
 export default function QuranPage() {
-  const [tab, setTab] = useState<Tab>("tadabbur");
+  // الحفظ أوّلاً وافتراضياً — هو الممارسة اليومية الأكثر استعمالاً.
+  const [tab, setTab] = useState<Tab>("hifz");
 
   // فتح تبويبٍ محدّد عبر ?tab= (من تذكير الحفظ في الرئيسية مثلاً).
   useEffect(() => {
@@ -35,8 +36,8 @@ export default function QuranPage() {
 
       {/* مبدّل الأعمدة */}
       <div className="flex gap-1.5 p-1 rounded-2xl bg-quran/10 animate-fade-up stagger-1">
-        <TabButton active={tab === "tadabbur"} onClick={() => setTab("tadabbur")} icon={<Sprout size={15} />} label="التدبّر" />
         <TabButton active={tab === "hifz"} onClick={() => setTab("hifz")} icon={<BookOpenText size={15} />} label="الحفظ" />
+        <TabButton active={tab === "tadabbur"} onClick={() => setTab("tadabbur")} icon={<Sprout size={15} />} label="التدبّر" />
         <TabButton active={tab === "mushaf"} onClick={() => setTab("mushaf")} icon={<BookText size={15} />} label="المصحف" />
       </div>
 
