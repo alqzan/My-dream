@@ -205,8 +205,8 @@ export default function StatsPage() {
           ))}
         </div>
         <div className="flex justify-end gap-4 mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-400">
-          <span className="flex items-center gap-1"><Flame size={10} /> الحالية</span>
           <span className="flex items-center gap-1"><Trophy size={10} /> الأفضل (الرقم القياسي)</span>
+          <span className="flex items-center gap-1"><Flame size={10} /> الحالية</span>
         </div>
       </Card>
 
@@ -260,10 +260,10 @@ function prefersReducedMotion(): boolean {
 // A short horizontal race-track (مضمار) for one streak record: the far end holds
 // the Trophy at your all-time best (the record), and a Flame marker sits at your
 // current streak's position toward it — so "how close am I to my record" reads at
-// a glance. Fills from the RTL start (right) toward the record (left). Thin gold
+// a glance. Fills from the left start toward the record (right). Thin gold
 // line-work; the progress + markers tint with the row's own section colour.
-const REC_START = 90; // % from left — the "0" start (RTL: right edge)
-const REC_END = 10; // % from left — the record end (RTL: left edge, trophy)
+const REC_START = 10; // % from left — the "0" start (left edge)
+const REC_END = 90; // % from left — the record end (right edge, trophy)
 
 function RecordTrack({ current, best, color }: { current: number; best: number; color: string }) {
   const reduce = prefersReducedMotion();
@@ -285,12 +285,12 @@ function RecordTrack({ current, best, color }: { current: number; best: number; 
       {/* base track line — thin faint gold */}
       <div
         className="absolute top-[64%] -translate-y-1/2 h-[2px] rounded-full"
-        style={{ left: `${REC_END}%`, right: `${100 - REC_START}%`, backgroundColor: "#c9852a", opacity: 0.28 }}
+        style={{ left: `${REC_START}%`, right: `${100 - REC_END}%`, backgroundColor: "#c9852a", opacity: 0.28 }}
       />
-      {/* progress line — section colour, from the start (right) to the flame */}
+      {/* progress line — section colour, from the start (left) to the flame */}
       <div
         className="absolute top-[64%] -translate-y-1/2 h-[3px] rounded-full"
-        style={{ left: `${flameX}%`, right: `${100 - REC_START}%`, backgroundColor: color, opacity: 0.9, transition: trans }}
+        style={{ left: `${REC_START}%`, right: `${100 - flameX}%`, backgroundColor: color, opacity: 0.9, transition: trans }}
       />
 
       {/* Trophy at the record end + best value above it */}
