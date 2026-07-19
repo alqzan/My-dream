@@ -1,4 +1,4 @@
-import type { HifzState, HifzUnit, HifzRating } from "../types";
+import type { HifzState, HifzUnit, HifzRating, HifzMistake } from "../types";
 import { calcStreak, parseDate, toDateStr } from "../utils";
 import {
   TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, TOTAL_HIZB, idToPage, idToJuz, idToHizb, idToSurahAyah,
@@ -113,6 +113,79 @@ export function nextReviewCursor(s: HifzState, toId: number): number {
   const from = s.plan?.startId ?? 1;
   const next = toId + 1;
   return next > s.frontierId ? from : next;
+}
+
+// ===================== ورد المراجعة (نافذة متحرّكة) =====================
+// المراجعة اليومية على مبدأ «آخر N وجه»: مقطعٌ يغطّي آخر reviewWindowPages وجهاً
+// محفوظاً حتى الجبهة. كلّما تقدّمت الجبهة بحفظٍ جديد تنزلق النافذة تلقائياً فيخرج
+// الأقدم — بلا ضبطٍ يدوي.
+export const DEFAULT_REVIEW_WINDOW = 5;
+export const RANDOM_TEST_INTERVAL_DAYS = 3;
+
+export function reviewWindowPages(s: HifzState): number {
+  const n = s.plan?.reviewWindowPages ?? DEFAULT_REVIEW_WINDOW;
+  return Math.min(Math.max(Math.round(n) || DEFAULT_REVIEW_WINDOW, 1), 15);
+}
+
+// مقطع «آخر N وجه» المحفوظة (null إن لا محفوظ بعد).
+export function recentReviewBand(s: HifzState): Portion | null {
+  const from = s.plan?.startId ?? 1;
+  if (s.frontierId < from) return null;
+  const pages = reviewWindowPages(s);
+  const frontierPage = idToPage(s.frontierId);
+  const startPage = Math.max(1, frontierPage - pages + 1);
+  const start = Math.max(pageRange(startPage).start, from);
+  return { fromId: start, toId: s.frontierId };
+}
+
+// اختبار مفاجئ: وجهٌ عشوائيٌّ ضمن المحفوظ [startPage..frontierPage] (null إن لا
+// محفوظ). يُستدعى مرّة ويُثبَّت في حالة المكوّن حتى لا يتغيّر مع كل رسم.
+export function randomTestPage(s: HifzState): Portion | null {
+  const from = s.plan?.startId ?? 1;
+  if (s.frontierId < from) return null;
+  const firstPage = idToPage(from);
+  const lastPage = idToPage(s.frontierId);
+  const p = firstPage + Math.floor(Math.random() * (lastPage - firstPage + 1));
+  const pr = pageRange(p);
+  return { fromId: Math.max(pr.start, from), toId: Math.min(pr.end, s.frontierId) };
+}
+
+// هل حان الاختبار الدوري؟ (بعد فاصلٍ من آخر اختبار، وبشرط وجود محفوظ).
+export function testDue(s: HifzState, todayStr: string): boolean {
+  const from = s.plan?.startId ?? 1;
+  if (s.frontierId < from) return false;
+  if (!s.lastTestDate) return true;
+  return daysBetween(s.lastTestDate, todayStr) >= RANDOM_TEST_INTERVAL_DAYS;
+}
+
+// ===================== الأخطاء (تحديد مواضع الخطأ) =====================
+export function mistakeKey(ayahId: number, wordIndex: number | null): string {
+  return `${ayahId}:${wordIndex ?? "all"}`;
+}
+
+// الأخطاء المفتوحة (غير المُتقنة) مرتّبةً: الأكثر تكراراً أوّلاً ثم الأحدث.
+export function openMistakes(s: HifzState): HifzMistake[] {
+  return (s.mistakes ?? [])
+    .filter((m) => !m.resolved && m.hits.length > 0)
+    .sort((a, b) => b.hits.length - a.hits.length || (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+// خريطة أخطاء آيةٍ بعينها: wordIndex → الخطأ (للتلوين المسبق أثناء المراجعة).
+// مفتاح "all" يمثّل وسم الآية كاملةً.
+export function mistakesForAyah(s: HifzState, ayahId: number): Map<number | "all", HifzMistake> {
+  const m = new Map<number | "all", HifzMistake>();
+  for (const x of s.mistakes ?? []) {
+    if (x.ayahId !== ayahId || x.resolved || x.hits.length === 0) continue;
+    m.set(x.wordIndex == null ? "all" : x.wordIndex, x);
+  }
+  return m;
+}
+
+// عدد الأخطاء المفتوحة الواقعة ضمن مدى معرّفات [from, to].
+export function mistakesInRange(s: HifzState, from: number, to: number): number {
+  return (s.mistakes ?? []).filter(
+    (m) => !m.resolved && m.hits.length > 0 && m.ayahId >= from && m.ayahId <= to,
+  ).length;
 }
 
 // أحدث تقييم لكل مقطع (بمفتاح المدى) عبر الحفظ والمراجعة معاً.

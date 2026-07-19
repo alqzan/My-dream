@@ -4,7 +4,7 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter,
-  QuranReflection, HifzUnit, HifzRating,
+  QuranReflection, HifzUnit, HifzRating, HifzMistake,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -109,6 +109,12 @@ interface AppStore extends AppData {
   setFrontier: (id: number) => void; // move position manually (0..6236)
   recordReview: (fromId: number, toId: number, rating?: HifzRating, advance?: boolean) => void; // periodic review
   skipReview: (toId: number) => void; // move the review cursor on without logging
+  setReviewWindow: (pages: number) => void; // حجم نافذة المراجعة المتحرّكة (أوجه)
+  recordRandomTest: (fromId: number, toId: number, rating?: HifzRating) => void; // اختبار مفاجئ
+  toggleMistakeWord: (ayahId: number, wordIndex: number | null, word?: string) => void; // تحديد/إلغاء خطأ
+  resolveMistake: (id: string) => void; // أُتقن الموضع (أُغلق)
+  reopenMistake: (id: string) => void; // إعادة فتح خطأٍ مُتقن
+  deleteMistake: (id: string) => void; // حذف الخطأ نهائياً
   toggleWird: (date: string) => void; // mark/unmark today's daily wird
   addKhatmaJuz: () => void; // read one juz (caps at 30 — the full ring)
   setKhatmaJuz: (juz: number) => void; // set progress directly (0..30)
@@ -731,6 +737,78 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           return { quranHifz: { ...h, reviewCursorId: nextReviewCursor(h, toId) } };
+        }),
+
+      // حجم نافذة المراجعة المتحرّكة «آخر N وجه» (مقيّد 1..15).
+      setReviewWindow: (pages) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          if (!h.plan) return {};
+          const p = Math.min(Math.max(Math.round(pages) || 1, 1), 15);
+          return { quranHifz: { ...h, plan: { ...h.plan, reviewWindowPages: p } } };
+        }),
+
+      // اختبار مفاجئ: يُسجَّل كمراجعةٍ (بلا تحريك مؤشّر الدورة) ويضبط تاريخ آخر
+      // اختبارٍ حتى تُحسب دوريّته.
+      recordRandomTest: (fromId, toId, rating) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const log = { id: uid(), date: today(), fromId, toId, rating };
+          return { quranHifz: { ...h, reviews: [log, ...h.reviews], lastTestDate: today() } };
+        }),
+
+      // تحديد خطأٍ في موضعٍ (كلمة أو آية كاملة) بمنطق التبديل: أوّل مرّة يُنشئ
+      // سجلّاً بضربةٍ اليوم؛ الضغط ثانيةً في نفس اليوم يتراجع (يُزيل ضربة اليوم،
+      // ويحذف السجلّ إن فرغ)؛ إن كان آخر خطأٍ في يومٍ سابق فالضغط يُضيف ضربةً
+      // اليوم (تكرارٌ يزيد العدّاد) ويُعيد فتح السجلّ.
+      toggleMistakeWord: (ayahId, wordIndex, word) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const list = h.mistakes ?? [];
+          const t = today();
+          const idx = list.findIndex(
+            (m) => m.ayahId === ayahId && (m.wordIndex ?? null) === (wordIndex ?? null),
+          );
+          if (idx < 0) {
+            const created: HifzMistake = {
+              id: uid(), ayahId, wordIndex: wordIndex ?? null, word,
+              hits: [t], resolved: false, updatedAt: t,
+            };
+            return { quranHifz: { ...h, mistakes: [created, ...list] } };
+          }
+          const cur = list[idx];
+          const next = [...list];
+          if (cur.hits[cur.hits.length - 1] === t) {
+            // تراجُع في نفس اليوم — أزِل ضربة اليوم، واحذف السجلّ إن فرغ.
+            const hits = cur.hits.slice(0, -1);
+            if (hits.length === 0) next.splice(idx, 1);
+            else next[idx] = { ...cur, hits, resolved: false, updatedAt: t };
+          } else {
+            // تكرارٌ في يومٍ جديد — أضِف ضربةً وأعِد الفتح.
+            next[idx] = { ...cur, hits: [...cur.hits, t], word: word ?? cur.word, resolved: false, updatedAt: t };
+          }
+          return { quranHifz: { ...h, mistakes: next } };
+        }),
+
+      resolveMistake: (id) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const list = h.mistakes ?? [];
+          return { quranHifz: { ...h, mistakes: list.map((m) => (m.id === id ? { ...m, resolved: true, updatedAt: today() } : m)) } };
+        }),
+
+      reopenMistake: (id) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const list = h.mistakes ?? [];
+          return { quranHifz: { ...h, mistakes: list.map((m) => (m.id === id ? { ...m, resolved: false, updatedAt: today() } : m)) } };
+        }),
+
+      deleteMistake: (id) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const list = h.mistakes ?? [];
+          return { quranHifz: { ...h, mistakes: list.filter((m) => m.id !== id) } };
         }),
 
       toggleWird: (date) =>

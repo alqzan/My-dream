@@ -2,9 +2,10 @@
 import { useState, useEffect } from "react";
 import { idToSurahAyah, describeRange, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
-import type { Portion } from "@/lib/quran/hifz";
-import type { HifzRating } from "@/lib/types";
-import { X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft } from "lucide-react";
+import { mistakesForAyah, type Portion } from "@/lib/quran/hifz";
+import { useAppStore } from "@/lib/store";
+import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
+import { X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick } from "lucide-react";
 
 const REPS_KEY = "madar-hifz-reps";
 
@@ -13,13 +14,14 @@ const REPS_KEY = "madar-hifz-reps";
 // مرحلة ربطٍ للمقطع كله. له وضعان:
 // memorize (تكرار+تسميع) للورد، وrecall (تسميع فقط) للمراجعة.
 export function HifzCoach({
-  portion, text, mode, onDone, onClose,
+  portion, text, mode, onDone, onClose, recallTitle = "سمّع مراجعتك",
 }: {
   portion: Portion;
   text: string[];
   mode: "memorize" | "recall";
   onDone: (rating?: HifzRating) => void;
   onClose: () => void;
+  recallTitle?: string; // عنوان شاشة التسميع (مراجعة/اختبار مفاجئ)
 }) {
   const ayat = textsInRange(text, portion.fromId, portion.toId).map((r) => ({
     id: r.id, no: idToSurahAyah(r.id).ayah, text: r.text,
@@ -50,9 +52,10 @@ export function HifzCoach({
   }
 
   // ---- recall mode (مراجعة): تلقينٌ بالآية السابقة ثم سمّع المقطع ثم اكشف ----
+  // عند الكشف: الكلمات قابلة للضغط لتحديد مواضع الخطأ (تتلوّن بالأحمر وتُحفظ).
   if (mode === "recall") {
     return (
-      <Shell title="سمّع مراجعتك" subtitle={describeRange(portion.fromId, portion.toId)} onClose={onClose}>
+      <Shell title={recallTitle} subtitle={describeRange(portion.fromId, portion.toId)} onClose={onClose}>
         <LeadPrompt text={text} targetId={portion.fromId} />
         {!revealed ? (
           <>
@@ -63,7 +66,10 @@ export function HifzCoach({
           </>
         ) : (
           <>
-            <AyatBlock ayat={ayat} />
+            <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
+              <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها لتحديدها
+            </div>
+            <MarkableAyatBlock ayat={ayat} />
             <div className="mt-4">
               <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف كانت مراجعتك؟</div>
               <RatingRow onRate={(r) => onDone(r)} />
@@ -172,6 +178,55 @@ function AyatBlock({ ayat, big }: { ayat: { id: number; no: number; text: string
         {ayat.map((a) => (
           <span key={a.id}>{a.text}<span className="text-quran text-[13px] align-middle mx-0.5">﴿{a.no}﴾</span>{" "}</span>
         ))}
+      </p>
+    </div>
+  );
+}
+
+// كتلة آياتٍ قابلة للتحديد: كلُّ كلمةٍ زرٌّ يبدّل وسمها كخطأ (تحمرّ وتُحفظ)، وكلُّ
+// آيةٍ لها زرٌّ لوسمها كاملةً. الكلمات ذات الخطأ المفتوح سابقاً تظهر محمرّةً مسبقاً
+// (تحذير) مع عدّاد التكرار — فتُعرَف مواطن الخطأ المتكرّر.
+function MarkableAyatBlock({ ayat }: { ayat: { id: number; no: number; text: string }[] }) {
+  const store = useAppStore();
+  const h = store.quranHifz ?? EMPTY_HIFZ;
+  return (
+    <div className="rounded-2xl border border-quran/15 bg-white dark:bg-[#241c12] p-5 min-h-[100px]">
+      <p className="font-quran text-center font-bold text-gray-800 dark:text-gray-100 text-[21px] leading-[2.5]" dir="rtl">
+        {ayat.map((a) => {
+          const marks = mistakesForAyah(h, a.id);
+          const ayahMark = marks.get("all");
+          const words = a.text.split(/\s+/).filter(Boolean);
+          return (
+            <span key={a.id} className={ayahMark ? "rounded-md bg-red-500/10 ring-1 ring-red-400/50 px-0.5" : undefined}>
+              {words.map((w, i) => {
+                const mk = marks.get(i);
+                const repeats = mk ? mk.hits.length : 0;
+                return (
+                  <span key={i}>
+                    <button
+                      type="button"
+                      onClick={() => store.toggleMistakeWord(a.id, i, w)}
+                      className={`press align-middle transition-colors ${mk ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4" : "hover:text-quran"}`}
+                    >
+                      {w}
+                      {repeats >= 2 && (
+                        <sup className="text-[10px] font-sans font-bold text-red-500 mx-0.5">{repeats}</sup>
+                      )}
+                    </button>{" "}
+                  </span>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => store.toggleMistakeWord(a.id, null)}
+                title="وسم الآية كاملةً كخطأ"
+                className={`inline-flex items-center justify-center text-[13px] mx-0.5 align-middle press ${ayahMark ? "text-red-500" : "text-quran"}`}
+              >
+                ﴿{a.no}﴾
+              </button>{" "}
+            </span>
+          );
+        })}
       </p>
     </div>
   );

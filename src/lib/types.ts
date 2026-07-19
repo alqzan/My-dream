@@ -250,6 +250,7 @@ export interface HifzPlan {
   unit: HifzUnit; // وحدة الورد اليومي
   amount: number; // كم وحدة يومياً (≥ 1)
   createdAt: string; // YYYY-MM-DD
+  reviewWindowPages?: number; // حجم نافذة المراجعة المتحرّكة بالأوجه (افتراضي 5)
 }
 
 // تقييم ذاتي للحفظ/المراجعة: 1 يحتاج إتقاناً · 2 جيّد · 3 متقن.
@@ -271,12 +272,27 @@ export interface HifzReviewLog {
   rating?: HifzRating;
 }
 
+// خطأ محفوظ في موضعٍ من المصحف — إمّا كلمةٌ بعينها (wordIndex) أو الآية كاملةً
+// (wordIndex = null). المفتاح المنطقي هو `ayahId:wordIndex`. طول `hits` هو عدد
+// مرّات تكرار الخطأ في هذا الموضع (تاريخٌ لكل مرّة)، فيُعرَف الخطأ المتكرّر.
+export interface HifzMistake {
+  id: string;
+  ayahId: number; // معرّف الآية العام (1..6236)
+  wordIndex: number | null; // فهرس الكلمة داخل الآية، أو null للآية كاملة
+  word?: string; // نصّ الكلمة (للعرض دون تحميل المصحف)
+  hits: string[]; // تواريخ وقوع الخطأ YYYY-MM-DD — طولها = عدد التكرار
+  resolved: boolean; // أُتقن (أُغلق)
+  updatedAt: string; // YYYY-MM-DD
+}
+
 export interface HifzState {
   plan: HifzPlan | null;
   frontierId: number; // آخر آية محفوظة (0 = لم يبدأ)
   sessions: HifzSession[]; // سجلّ الحفظ (تتابعي)
   reviews: HifzReviewLog[]; // سجلّ المراجعات الدورية
   reviewCursorId: number; // موضع دوران المراجعة الدورية داخل المحفوظ (0 = من البداية)
+  mistakes?: HifzMistake[]; // مواضع الأخطاء المُحدَّدة أثناء المراجعة
+  lastTestDate?: string; // آخر يومٍ ظهر فيه الاختبار العشوائي (لدوريّته)
 }
 
 export const EMPTY_HIFZ: HifzState = {
@@ -285,6 +301,7 @@ export const EMPTY_HIFZ: HifzState = {
   sessions: [],
   reviews: [],
   reviewCursorId: 0,
+  mistakes: [],
 };
 
 // حالة الختمة الجارية + عدّاد الختمات المكتملة (يقود «مدار الختمة»).

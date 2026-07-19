@@ -5,7 +5,7 @@ import { EMPTY_HIFZ, type HifzUnit } from "@/lib/types";
 import { SURAHS, TOTAL_PAGES, idToPage, idToSurahAyah } from "@/lib/quran/meta";
 import { today, formatDate } from "@/lib/utils";
 import {
-  hifzProgress, hifzPace, hifzStreak, hifzUnits, mapCounts,
+  hifzProgress, hifzPace, hifzStreak, hifzUnits, mapCounts, mistakesInRange,
   type Portion, type JuzState, type UnitCell, type MapUnit,
 } from "@/lib/quran/hifz";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -96,16 +96,18 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
           const st = STATE[c.state];
           const active = sel === c.n;
           const fillH = c.state === "partial" ? c.fill * 100 : 100;
+          const mk = c.state !== "none" ? mistakesInRange(h, c.start, c.end) : 0;
           return (
             <button
               key={c.n}
               onClick={() => setSel(active ? null : c.n)}
               className={`relative ${tiny ? "" : "aspect-square"} rounded-${tiny ? "sm" : "lg"} overflow-hidden border press transition-transform ${active ? "ring-2 ring-quran ring-offset-1 z-10 scale-110" : ""} ${c.state === "none" ? "border-gray-200 dark:border-[#3a2e1e]" : "border-transparent"}`}
               style={tiny ? { height: 13 } : undefined}
-              title={`${MAP_UNITS.find((m) => m.key === unit)!.word} ${c.n} — ${st.label}`}
+              title={`${MAP_UNITS.find((m) => m.key === unit)!.word} ${c.n} — ${st.label}${mk ? ` · ${mk} خطأ` : ""}`}
             >
               {c.state !== "none" && <span className="absolute inset-x-0 bottom-0" style={{ height: `${fillH}%`, backgroundColor: st.fill }} />}
               {!tiny && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums" style={{ color: st.text }}>{c.n}</span>}
+              {mk > 0 && <span className={`absolute top-0 start-0 rounded-full bg-red-500 ${tiny ? "w-1 h-1" : "w-1.5 h-1.5 m-0.5"}`} />}
             </button>
           );
         })}
@@ -123,6 +125,7 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
         <UnitDetail
           cell={selCell}
           word={MAP_UNITS.find((m) => m.key === unit)!.word}
+          mistakes={mistakesInRange(h, selCell.start, selCell.end)}
           onReview={onReview}
           onRead={onRead}
           onClose={() => setSel(null)}
@@ -174,8 +177,8 @@ function StatTile({ icon, color, value, label }: { icon: React.ReactNode; color:
   );
 }
 
-function UnitDetail({ cell, word, onReview, onRead, onClose }: {
-  cell: UnitCell; word: string; onReview: (p: Portion) => void; onRead: (surah: number) => void; onClose: () => void;
+function UnitDetail({ cell, word, mistakes, onReview, onRead, onClose }: {
+  cell: UnitCell; word: string; mistakes: number; onReview: (p: Portion) => void; onRead: (surah: number) => void; onClose: () => void;
 }) {
   const st = STATE[cell.state];
   const a = idToSurahAyah(cell.start), b = idToSurahAyah(cell.end);
@@ -197,6 +200,7 @@ function UnitDetail({ cell, word, onReview, onRead, onClose }: {
           <>
             <div>محفوظ منه: {cell.memorizedAyat}/{cell.totalAyat} آية ({Math.round(cell.fill * 100)}%)</div>
             <div>آخر حفظ/مراجعة: {cell.lastDate ? `${formatDate(cell.lastDate)}${cell.daysSince != null ? ` (قبل ${cell.daysSince} يوم)` : ""}` : "—"}</div>
+            {mistakes > 0 && <div className="text-red-500 font-semibold">مواضع خطأ مفتوحة: {mistakes}</div>}
           </>
         )}
       </div>
