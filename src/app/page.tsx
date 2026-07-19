@@ -10,6 +10,7 @@ import {
   yearProgress,
   getPrayerLog,
   countDayPrayers,
+  quranActivityDates,
 } from "@/lib/utils";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { InstallHint } from "@/components/layout/InstallHint";
@@ -41,7 +42,7 @@ import { BrandMark } from "@/components/layout/BrandMark";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird, quranHifz, quranReflections, frozenHabits } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird, quranHifz, quranReflections, quranKhatma, frozenHabits } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
@@ -63,7 +64,10 @@ export default function Dashboard() {
   // the moons on YearOrbit never drift from the real trackers.
   const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
   const hasTodayHabit = habits.some((h) => !frozen.has(h.id) && h.logs.includes(todayStr));
-  const hasTodayWird = quranWird.includes(todayStr);
+  // قمر «الوِرد» يُضاء بأيّ نشاطٍ قرآني اليوم (حفظ/مراجعة/تدبّر/ختمة/ورد) تماماً
+  // كبطاقة «وِرد اليوم» و«خلاصة اليوم» — لا بنقرة الوِرد اليدوية وحدها، وإلا بقي
+  // القمر مطفأً رغم إتمام الوِرد عبر الحفظ أو التدبّر.
+  const hasTodayWird = quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }).has(todayStr);
   const hasHifzPlan = !!quranHifz?.plan;
   const hasTodayHifz = (quranHifz?.sessions ?? []).some((s) => s.date === todayStr);
 
