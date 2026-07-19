@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { idToSurahAyah, describeRange, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
 import { mistakesForAyah, type Portion } from "@/lib/quran/hifz";
+import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
 import { X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick } from "lucide-react";
@@ -70,6 +71,9 @@ export function HifzCoach({
               <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها لتحديدها
             </div>
             <MarkableAyatBlock ayat={ayat} />
+            <div className="mt-3">
+              <MutashabihatAlert portion={portion} compact />
+            </div>
             <div className="mt-4">
               <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف كانت مراجعتك؟</div>
               <RatingRow onRate={(r) => onDone(r)} />
@@ -103,6 +107,7 @@ export function HifzCoach({
         <>
           <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
           <AyatBlock ayat={[cur]} big />
+          <div className="mt-3"><MutashabihatAlert portion={{ fromId: cur.id, toId: cur.id }} compact /></div>
           <RepsDots reps={reps} target={repTarget} />
           <button
             onClick={() => setReps((r) => r + 1)}

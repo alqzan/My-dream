@@ -15,6 +15,7 @@ import { HifzCoach } from "@/components/quran/HifzCoach";
 import { HifzMap } from "@/components/quran/HifzMap";
 import { HifzChart } from "@/components/quran/HifzChart";
 import { MistakesPanel } from "@/components/quran/MistakesPanel";
+import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { NumberInput } from "@/components/ui/NumberInput";
 import {
   Sprout, RefreshCw, Check, Target, GraduationCap, Headphones, Shuffle, Layers, Minus, Plus,
@@ -166,6 +167,7 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
             <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
           </div>
           <PortionText text={text} portion={portion} />
+          <MutashabihatAlert portion={portion} />
           {text && (
             <button
               onClick={() => setCoach({ portion, mode: "memorize", kind: "memorize" })}
@@ -197,6 +199,7 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
             راجِع آخر ما حفظتَ باستمرار — كلّما تقدّمتَ في الحفظ انزلقت النافذة تلقائياً فخرج الأقدم.
           </p>
           <PortionText text={text} portion={band} muted />
+          <MutashabihatAlert portion={band} />
           {text && (
             <button
               onClick={() => setCoach({ portion: band, mode: "recall", kind: "review" })}
@@ -251,6 +254,7 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
             <span className="text-[11px] text-quran font-semibold">{describeRange(weakTop.fromId, weakTop.toId)}</span>
           </div>
           <PortionText text={text} portion={weakTop} muted />
+          <MutashabihatAlert portion={{ fromId: weakTop.fromId, toId: weakTop.toId }} />
           {text && (
             <button
               onClick={() => setCoach({ portion: { fromId: weakTop.fromId, toId: weakTop.toId }, mode: "recall", kind: "weak" })}

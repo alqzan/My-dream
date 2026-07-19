@@ -1,9 +1,12 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ } from "@/lib/types";
 import { idToSurahAyah, SURAHS } from "@/lib/quran/meta";
 import { openMistakes, type Portion } from "@/lib/quran/hifz";
-import { AlertTriangle, Check, Trash2, RefreshCw } from "lucide-react";
+import { loadMutashabihat, similarOf, type SimMap } from "@/lib/quran/mutashabihat";
+import { MutashabihatCompare } from "@/components/quran/MutashabihatCompare";
+import { AlertTriangle, Check, Trash2, RefreshCw, GitCompareArrows } from "lucide-react";
 
 // لوحة «أخطائي» — مواضع الأخطاء المفتوحة التي حُدّدت أثناء المراجعة، مرتّبةً
 // بالأكثر تكراراً. لكلّ موضعٍ: مكانه (سورة/آية + الكلمة)، عدّاد التكرار، وأزرار
@@ -12,6 +15,9 @@ export function MistakesPanel({ onReview }: { onReview: (p: Portion) => void }) 
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const items = openMistakes(h);
+  const [map, setMap] = useState<SimMap | null>(null);
+  const [compareId, setCompareId] = useState<number | null>(null);
+  useEffect(() => { loadMutashabihat().then(setMap); }, []);
   if (items.length === 0) return null;
 
   return (
@@ -47,6 +53,16 @@ export function MistakesPanel({ onReview }: { onReview: (p: Portion) => void }) 
                 </span>
               )}
               <div className="flex items-center gap-1 shrink-0">
+                {similarOf(map, m.ayahId).length > 0 && (
+                  <button
+                    onClick={() => setCompareId(m.ayahId)}
+                    className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-500/10 press"
+                    title="قارن المتشابهات"
+                    aria-label="قارن المتشابهات"
+                  >
+                    <GitCompareArrows size={15} />
+                  </button>
+                )}
                 <button
                   onClick={() => onReview({ fromId: m.ayahId, toId: m.ayahId })}
                   className="p-1.5 rounded-lg text-quran hover:bg-quran/10 press"
@@ -76,6 +92,7 @@ export function MistakesPanel({ onReview }: { onReview: (p: Portion) => void }) 
           );
         })}
       </div>
+      {compareId != null && <MutashabihatCompare baseIds={[compareId]} onClose={() => setCompareId(null)} />}
     </div>
   );
 }
