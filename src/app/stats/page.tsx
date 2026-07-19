@@ -16,6 +16,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { StatInstrument } from "@/components/stats/StatInstrument";
+import { HifzStatCard } from "@/components/quran/HifzStatCard";
 import { YearHeatmap } from "@/components/stats/YearHeatmap";
 import dynamic from "next/dynamic";
 // Charts (recharts) load on demand so the stats shell paints without waiting
@@ -168,6 +169,9 @@ export default function StatsPage() {
           icon={<Wallet size={15} />}
         />
       </div>
+
+      {/* Quran memorization summary (يظهر متى وُجدت خطة حفظ) */}
+      <HifzStatCard />
 
       {/* Year heatmap */}
       <Card className="animate-fade-up stagger-2">

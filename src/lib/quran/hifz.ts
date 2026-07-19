@@ -2,7 +2,7 @@ import type { HifzState, HifzUnit, HifzRating } from "../types";
 import { calcStreak, parseDate, toDateStr } from "../utils";
 import {
   TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, TOTAL_HIZB, idToPage, idToJuz, idToHizb, idToSurahAyah,
-  juzRange, hizbRange, pageRange, SURAHS,
+  juzRange, hizbRange, pageRange, describeRange, SURAHS,
 } from "./meta";
 
 export interface Portion { fromId: number; toId: number }
@@ -281,4 +281,41 @@ export function memorizedInWindow(s: HifzState, days: number, todayStr: string):
 // تحويل عدد الآيات إلى تقديرٍ بالأوجه.
 export function ayatToPages(ayat: number): number {
   return Math.round((ayat / TOTAL_AYAT) * TOTAL_PAGES);
+}
+
+// مقارنة الوتيرة: آيات آخر 30 يوماً مقابل الـ30 التي قبلها.
+export interface PaceCompare { thisMonth: number; prevMonth: number; deltaPct: number | null; faster: boolean }
+export function paceCompare(s: HifzState, todayStr: string): PaceCompare {
+  const last30 = memorizedInWindow(s, 30, todayStr);
+  const prev30 = memorizedInWindow(s, 60, todayStr) - last30;
+  const deltaPct = prev30 > 0 ? Math.round(((last30 - prev30) / prev30) * 100) : null;
+  return { thisMonth: last30, prevMonth: prev30, deltaPct, faster: last30 >= prev30 };
+}
+
+// تقرير حفظٍ نصّي مختصر — للنسخ/المشاركة.
+export function hifzReport(s: HifzState, todayStr: string): string {
+  if (!s.plan) return "لا توجد خطة حفظ بعد.";
+  const prog = hifzProgress(s);
+  const pace = hifzPace(s);
+  const streak = hifzStreak(s);
+  const startName = SURAHS[idToSurahAyah(s.plan.startId).surah - 1]?.name ?? "";
+  const completed: number[] = [];
+  for (let j = 1; j <= 30; j++) {
+    const r = juzRange(j);
+    if (r.start >= s.plan.startId && r.end <= s.frontierId) completed.push(j);
+  }
+  const weak = weakSpots(s).map((w) => describeRange(w.fromId, w.toId));
+  const L: string[] = [];
+  L.push(`📖 تقرير الحفظ — ${todayStr}`);
+  L.push("");
+  L.push(`الخطة: تبدأ من سورة ${startName}`);
+  L.push(`الموضع الحالي: ${prog.at ? `${prog.at.surahName} ${prog.at.ayah}` : "—"} · صفحة ${prog.page}/${TOTAL_PAGES} · الجزء ${prog.juz}`);
+  L.push(`المحفوظ: ${prog.spanAyat} آية ≈ ${prog.spanPages} وجه (${prog.pct}%)`);
+  L.push(`سلسلة الحفظ: ${streak} يوم`);
+  if (pace.text) L.push(`الوتيرة: ${pace.text.replace("على وتيرتك ", "")}`);
+  L.push(`الأجزاء المكتملة (${completed.length}): ${completed.length ? completed.join("، ") : "لا شيء بعد"}`);
+  if (weak.length) L.push(`مواطن تحتاج إتقاناً: ${weak.join(" · ")}`);
+  L.push("");
+  L.push("— من تطبيق مدار");
+  return L.join("\n");
 }

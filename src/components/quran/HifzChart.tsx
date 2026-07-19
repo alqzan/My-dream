@@ -3,8 +3,9 @@ import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ } from "@/lib/types";
 import { TOTAL_AYAT, TOTAL_PAGES } from "@/lib/quran/meta";
 import { today, formatDateShort } from "@/lib/utils";
-import { hifzSeries, memorizedInWindow } from "@/lib/quran/hifz";
-import { TrendingUp } from "lucide-react";
+import { hifzSeries, memorizedInWindow, paceCompare, hifzReport } from "@/lib/quran/hifz";
+import { showToast } from "@/components/ui/UndoToast";
+import { TrendingUp, TrendingDown, Copy } from "lucide-react";
 
 // رسم تقدّم الحفظ عبر الزمن — منحنى تراكمي (بالأوجه) منذ بداية الخطة، مع ملخّص
 // «اليوم/الأسبوع/الشهر». مرسومٌ بـSVG بلغة أدوات التطبيق (تدرّج أخضر، طرفٌ لامع).
@@ -19,12 +20,33 @@ export function HifzChart() {
   const wDay = memorizedInWindow(h, 1, todayStr);
   const wWeek = memorizedInWindow(h, 7, todayStr);
   const wMonth = memorizedInWindow(h, 30, todayStr);
+  const cmp = paceCompare(h, todayStr);
+
+  async function copyReport() {
+    const text = hifzReport(h, todayStr);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("نُسخ تقرير الحفظ", "success");
+    } catch {
+      // تعذّرت الحافظة — نزّل ملفاً نصّياً بدلاً منها.
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `تقرير-الحفظ-${todayStr}.txt`; a.click();
+      URL.revokeObjectURL(url);
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-quran/20 bg-white dark:bg-[#241c12] p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <TrendingUp size={15} className="text-quran" />
-        <span className="text-sm font-bold text-gray-800">تقدّم الحفظ</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={15} className="text-quran" />
+          <span className="text-sm font-bold text-gray-800">تقدّم الحفظ</span>
+        </div>
+        <button onClick={copyReport} className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-quran press" aria-label="نسخ تقرير الحفظ">
+          <Copy size={12} /> تقرير
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -32,6 +54,14 @@ export function HifzChart() {
         <WinTile value={wWeek} label="آخر أسبوع" />
         <WinTile value={wMonth} label="آخر شهر" />
       </div>
+
+      {/* مقارنة الوتيرة بالشهر الماضي */}
+      {cmp.deltaPct != null && (
+        <div className={`flex items-center justify-center gap-1.5 text-[11px] font-semibold ${cmp.faster ? "text-quran" : "text-amber-600"}`}>
+          {cmp.faster ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+          هذا الشهر {cmp.faster ? "أسرع" : "أبطأ"} من الماضي بـ{Math.abs(cmp.deltaPct)}%
+        </div>
+      )}
 
       {series.length < 2 ? (
         <p className="text-[11px] text-gray-400 text-center py-3">سجّل حفظك أيّاماً ليظهر منحنى تقدّمك هنا.</p>
