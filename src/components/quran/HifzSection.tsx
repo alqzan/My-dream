@@ -166,6 +166,23 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
             <span className="text-sm font-bold text-gray-800">ورد اليوم</span>
             <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
           </div>
+          {h.plan && (
+            <div className="flex items-center justify-center gap-2 text-[11px] text-gray-500">
+              <Target size={13} className="text-quran" /> مقدار وردك اليوم:
+              <button
+                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount - 1 })}
+                disabled={h.plan.amount <= 1}
+                className="w-6 h-6 rounded-lg bg-white dark:bg-[#382c1d] border border-gray-200 dark:border-transparent press flex items-center justify-center disabled:opacity-40"
+                aria-label="أنقص"
+              ><Minus size={13} /></button>
+              <span className="min-w-[64px] text-center font-bold text-gray-700 dark:text-gray-200 tabular-nums">{h.plan.amount} {UNIT_LABEL[h.plan.unit]}</span>
+              <button
+                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount + 1 })}
+                className="w-6 h-6 rounded-lg bg-white dark:bg-[#382c1d] border border-gray-200 dark:border-transparent press flex items-center justify-center"
+                aria-label="زِد"
+              ><Plus size={13} /></button>
+            </div>
+          )}
           <PortionText text={text} portion={portion} />
           <MutashabihatAlert portion={portion} />
           {text && (
