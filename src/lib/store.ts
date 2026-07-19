@@ -107,7 +107,7 @@ interface AppStore extends AppData {
   clearHifz: () => void; // delete plan + all progress
   recordHifzSession: (toId: number, rating?: HifzRating) => void; // memorize up to toId
   setFrontier: (id: number) => void; // move position manually (0..6236)
-  recordReview: (fromId: number, toId: number, rating?: HifzRating) => void; // periodic review
+  recordReview: (fromId: number, toId: number, rating?: HifzRating, advance?: boolean) => void; // periodic review
   skipReview: (toId: number) => void; // move the review cursor on without logging
   toggleWird: (date: string) => void; // mark/unmark today's daily wird
   addKhatmaJuz: () => void; // read one juz (caps at 30 — the full ring)
@@ -712,11 +712,19 @@ export const useAppStore = create<AppStore>()(
 
       // Log a periodic review of a memorized portion and advance the review
       // cursor (loops back to the start once it passes the frontier).
-      recordReview: (fromId, toId, rating) =>
+      // advance=true moves the cyclic review cursor forward (سياق المراجعة
+      // الدورية). Weak-spot reviews pass advance=false so they don't disturb it.
+      recordReview: (fromId, toId, rating, advance = true) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           const log = { id: uid(), date: today(), fromId, toId, rating };
-          return { quranHifz: { ...h, reviews: [log, ...h.reviews], reviewCursorId: nextReviewCursor(h, toId) } };
+          return {
+            quranHifz: {
+              ...h,
+              reviews: [log, ...h.reviews],
+              reviewCursorId: advance ? nextReviewCursor(h, toId) : h.reviewCursorId,
+            },
+          };
         }),
 
       skipReview: (toId) =>

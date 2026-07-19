@@ -7,7 +7,7 @@ import {
 } from "@/lib/quran/meta";
 import { loadAyahText, textsInRange } from "@/lib/quran/text";
 import {
-  plannedPortion, hifzProgress, hifzPace, hifzStreak, reviewPortion, weakSpots, type Portion,
+  plannedPortion, hifzProgress, hifzPace, hifzStreak, smartReview, weakSpots, type Portion,
 } from "@/lib/quran/hifz";
 import { HifzCoach } from "@/components/quran/HifzCoach";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -114,14 +114,15 @@ function HifzDashboard({ text }: { text: string[] | null }) {
   const [editPos, setEditPos] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [confirmNew, setConfirmNew] = useState(false);
-  // المُدرّب الموجّه — للورد (memorize) أو المراجعة (recall).
-  const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall" } | null>(null);
+  // المُدرّب الموجّه — للورد (memorize) أو المراجعة (recall). advance يحرّك
+  // مؤشّر الدورة (يُعطَّل لمراجعة الضعف).
+  const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; advance?: boolean } | null>(null);
 
   const prog = hifzProgress(h);
   const pace = hifzPace(h);
   const streak = hifzStreak(h);
   const portion = plannedPortion(h);
-  const review = reviewPortion(h);
+  const review = smartReview(h);
   const weak = weakSpots(h);
   const plan = h.plan!;
 
@@ -230,32 +231,40 @@ function HifzDashboard({ text }: { text: string[] | null }) {
         </div>
       )}
 
-      {/* المراجعة الدورية */}
-      {review && (
-        <div className="rounded-2xl border border-gray-100 bg-white dark:bg-[#241c12] p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <RefreshCw size={15} className="text-quran" />
-            <span className="text-sm font-bold text-gray-800">المراجعة الدورية</span>
-            <span className="text-[11px] text-quran font-semibold">{describeRange(review.fromId, review.toId)}</span>
+      {/* المراجعة — تُقدّم مواطن الضعف على الدورة المتسلسلة */}
+      {review && (() => {
+        const rp = review.portion;
+        const weakReview = review.reason === "weak";
+        const advance = !weakReview; // مراجعة الضعف لا تحرّك مؤشّر الدورة
+        return (
+          <div className={`rounded-2xl border p-4 space-y-3 ${weakReview ? "border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10" : "border-gray-100 bg-white dark:bg-[#241c12]"}`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <RefreshCw size={15} className={weakReview ? "text-amber-600" : "text-quran"} />
+              <span className="text-sm font-bold text-gray-800">{weakReview ? "مراجعة مركّزة" : "المراجعة الدورية"}</span>
+              {weakReview && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-full px-2 py-0.5">موطن ضعف</span>}
+              <span className="text-[11px] text-quran font-semibold">{describeRange(rp.fromId, rp.toId)}</span>
+            </div>
+            <PortionText text={text} portion={rp} muted />
+            {text && (
+              <button
+                onClick={() => setCoach({ portion: rp, mode: "recall", advance })}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
+              >
+                <Headphones size={16} /> سمّع موجّهاً
+              </button>
+            )}
+            <div>
+              <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
+              <RatingRow onRate={(r) => store.recordReview(rp.fromId, rp.toId, r, advance)} />
+              {!weakReview && (
+                <button onClick={() => store.skipReview(rp.toId)} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 press py-1.5">
+                  مقطع آخر ←
+                </button>
+              )}
+            </div>
           </div>
-          <PortionText text={text} portion={review} muted />
-          {text && (
-            <button
-              onClick={() => setCoach({ portion: review, mode: "recall" })}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
-            >
-              <Headphones size={16} /> سمّع موجّهاً
-            </button>
-          )}
-          <div>
-            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
-            <RatingRow onRate={(r) => store.recordReview(review.fromId, review.toId, r)} />
-            <button onClick={() => store.skipReview(review.toId)} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 press py-1.5">
-              مقطع آخر ←
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* مواطن الضعف */}
       {weak.length > 0 && (
@@ -285,7 +294,7 @@ function HifzDashboard({ text }: { text: string[] | null }) {
           onClose={() => setCoach(null)}
           onDone={(rating?: HifzRating) => {
             if (coach.mode === "memorize") store.recordHifzSession(coach.portion.toId, rating);
-            else store.recordReview(coach.portion.fromId, coach.portion.toId, rating);
+            else store.recordReview(coach.portion.fromId, coach.portion.toId, rating, coach.advance ?? true);
             setCoach(null);
           }}
         />

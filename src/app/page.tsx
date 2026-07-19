@@ -21,6 +21,7 @@ import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { RamadanCard } from "@/components/dashboard/RamadanCard";
 import { DayView } from "@/components/day/DayView";
 import { DayDigestCard } from "@/components/quran/DayDigestCard";
+import { HifzReminder } from "@/components/quran/HifzReminder";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Confetti } from "@/components/ui/Confetti";
@@ -40,7 +41,7 @@ import { BrandMark } from "@/components/layout/BrandMark";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird, quranHifz, quranReflections } = useAppStore();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
@@ -69,7 +70,10 @@ export default function Dashboard() {
     transactions.length === 0 &&
     books.length === 0 &&
     prayerLogs.length === 0 &&
-    !habits.some((h) => h.logs.length > 0);
+    !habits.some((h) => h.logs.length > 0) &&
+    quranWird.length === 0 &&
+    quranReflections.length === 0 &&
+    !quranHifz?.plan;
 
   // One confetti celebration per completed day. Also sweeps out celebration
   // keys older than 30 days — one gets written every completed day forever
@@ -131,7 +135,8 @@ export default function Dashboard() {
       <PendingBankBanner />
 
       {!isFirstRun && (
-        <div className="animate-fade-up stagger-1">
+        <div className="animate-fade-up stagger-1 space-y-3">
+          <HifzReminder />
           <DayDigestCard />
         </div>
       )}

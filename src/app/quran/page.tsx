@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { HifzSection } from "@/components/quran/HifzSection";
@@ -15,6 +15,12 @@ type Tab = "tadabbur" | "hifz" | "mushaf";
 
 export default function QuranPage() {
   const [tab, setTab] = useState<Tab>("tadabbur");
+
+  // فتح تبويبٍ محدّد عبر ?tab= (من تذكير الحفظ في الرئيسية مثلاً).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "hifz" || t === "mushaf" || t === "tadabbur") setTab(t);
+  }, []);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">

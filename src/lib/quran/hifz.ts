@@ -114,15 +114,43 @@ export function nextReviewCursor(s: HifzState, toId: number): number {
   return next > s.frontierId ? from : next;
 }
 
-// مواطن الضعف: مقاطع قُيّمت «تحتاج إتقاناً» (1) في الحفظ أو المراجعة، الأحدث أولاً.
+// أحدث تقييم لكل مقطع (بمفتاح المدى) عبر الحفظ والمراجعة معاً.
+function latestRatingByRange(s: HifzState): Map<string, { fromId: number; toId: number; date: string; rating?: 1 | 2 | 3 }> {
+  const events = [
+    ...s.sessions.map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date, rating: x.rating })),
+    ...s.reviews.map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date, rating: x.rating })),
+  ].sort((a, b) => (a.date < b.date ? -1 : 1)); // تصاعدي: الأحدث يكتب أخيراً
+  const m = new Map<string, { fromId: number; toId: number; date: string; rating?: 1 | 2 | 3 }>();
+  for (const e of events) m.set(`${e.fromId}-${e.toId}`, e);
+  return m;
+}
+
+// مواطن الضعف: مقاطع أحدثُ تقييمٍ لها «تحتاج إتقاناً» (1) — أي لم تُتقَن بعد.
 export function weakSpots(s: HifzState): { fromId: number; toId: number; date: string }[] {
-  const all = [
-    ...s.sessions.filter((x) => x.rating === 1).map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date })),
-    ...s.reviews.filter((x) => x.rating === 1).map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date })),
-  ];
-  const seen = new Set<string>();
-  return all
-    .sort((a, b) => (a.date < b.date ? 1 : -1))
-    .filter((x) => { const k = `${x.fromId}-${x.toId}`; if (seen.has(k)) return false; seen.add(k); return true; })
-    .slice(0, 6);
+  return [...latestRatingByRange(s).values()]
+    .filter((e) => e.rating === 1)
+    .sort((a, b) => (a.date < b.date ? -1 : 1)) // الأقدم أولاً (الأحوج للمراجعة)
+    .map((e) => ({ fromId: e.fromId, toId: e.toId, date: e.date }))
+    .slice(0, 8);
+}
+
+// مراجعة أذكى: تُقدّم مواطن الضعف المفتوحة (لم تُتقَن) على الدورة المتسلسلة.
+export interface SmartReview { portion: Portion; reason: "weak" | "cycle" }
+export function smartReview(s: HifzState): SmartReview | null {
+  const weak = weakSpots(s);
+  if (weak.length) return { portion: { fromId: weak[0].fromId, toId: weak[0].toId }, reason: "weak" };
+  const cyc = reviewPortion(s);
+  return cyc ? { portion: cyc, reason: "cycle" } : null;
+}
+
+// ما يحتاجه اليوم: هل بقي وردٌ للحفظ؟ وهل بقيت مراجعة؟ (للتذكير في الرئيسية)
+export function hifzTodo(s: HifzState, todayStr: string): { needWird: boolean; needReview: boolean } {
+  if (!s.plan) return { needWird: false, needReview: false };
+  const sessionToday = s.sessions.some((x) => x.date === todayStr);
+  const reviewToday = s.reviews.some((x) => x.date === todayStr);
+  const hasMemorized = s.frontierId >= (s.plan.startId ?? 1);
+  return {
+    needWird: plannedPortion(s) != null && !sessionToday,
+    needReview: hasMemorized && !reviewToday,
+  };
 }
