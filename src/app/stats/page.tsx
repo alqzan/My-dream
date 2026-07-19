@@ -6,7 +6,6 @@ import {
   getReadingStreak,
   getPrayerStreak,
   countDayPrayers,
-  getDailyCompletionDates,
   calcStreak,
   longestStreak,
   formatAmount,
@@ -28,7 +27,7 @@ const MonthlyBars = dynamic(
 import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck } from "lucide-react";
 
 export default function StatsPage() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, readingGoal } = useAppStore();
+  const { journalEntries, readingLogs, transactions, books, prayerLogs, readingGoal, frozenHabits } = useAppStore();
 
   const year = today().slice(0, 4);
 
@@ -61,7 +60,23 @@ export default function StatsPage() {
   }, [journalEntries, readingLogs, transactions]);
 
   // ---------- Streaks ----------
-  const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
+  // العادات المجمّدة تُستثنى هنا كما في الرئيسية: القراءة/المذكرة المجمّدة تختفي
+  // من القائمة ولا تدخل في «السلسلة الكاملة» (تُبنى من الطقوس النشطة فقط).
+  const frozen = new Set(frozenHabits ?? []);
+  const journalActive = !frozen.has("core:journal");
+  const readingActive = !frozen.has("core:reading");
+
+  // «السلسلة الكاملة» = الأيام التي أُتمّت فيها كلّ الطقوس النشطة (مذكرة/قراءة).
+  const jDates = new Set(journalEntries.map((e) => e.date));
+  const rDates = new Set(readingLogs.map((l) => l.date));
+  const activeSets = [
+    ...(journalActive ? [jDates] : []),
+    ...(readingActive ? [rDates] : []),
+  ];
+  const completionDates = activeSets.length
+    ? [...activeSets[0]].filter((d) => activeSets.every((s) => s.has(d)))
+    : [];
+
   const streaks = [
     {
       label: "السلسلة الكاملة",
@@ -77,20 +92,20 @@ export default function StatsPage() {
       current: getPrayerStreak(prayerLogs),
       best: longestStreak(fullPrayerDays),
     },
-    {
+    ...(journalActive ? [{
       label: "المذكرات",
       icon: <BookMarked size={16} />,
       color: "#8a6fb0",
       current: getJournalStreak(journalEntries),
       best: longestStreak(journalEntries.map((e) => e.date)),
-    },
-    {
+    }] : []),
+    ...(readingActive ? [{
       label: "القراءة",
       icon: <BookOpen size={16} />,
       color: "#c1663f",
       current: getReadingStreak(readingLogs),
       best: longestStreak(readingLogs.map((l) => l.date)),
-    },
+    }] : []),
   ];
 
   // ---------- Monthly spending (last 6 months) ----------
