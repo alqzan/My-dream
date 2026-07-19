@@ -9,9 +9,10 @@ import { loadAyahText, textsInRange } from "@/lib/quran/text";
 import {
   plannedPortion, hifzProgress, hifzPace, hifzStreak, reviewPortion, weakSpots, type Portion,
 } from "@/lib/quran/hifz";
+import { HifzCoach } from "@/components/quran/HifzCoach";
 import { NumberInput } from "@/components/ui/NumberInput";
 import {
-  Sprout, RefreshCw, Flame, MapPin, Gauge, Check, Pencil, RotateCcw, Target, TriangleAlert, ChevronLeft,
+  Sprout, RefreshCw, Flame, MapPin, Gauge, Check, Pencil, RotateCcw, Target, TriangleAlert, ChevronLeft, GraduationCap, Headphones,
 } from "lucide-react";
 
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
@@ -113,6 +114,8 @@ function HifzDashboard({ text }: { text: string[] | null }) {
   const [editPos, setEditPos] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [confirmNew, setConfirmNew] = useState(false);
+  // المُدرّب الموجّه — للورد (memorize) أو المراجعة (recall).
+  const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall" } | null>(null);
 
   const prog = hifzProgress(h);
   const pace = hifzPace(h);
@@ -209,8 +212,16 @@ function HifzDashboard({ text }: { text: string[] | null }) {
             <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
           </div>
           <PortionText text={text} portion={portion} />
+          {text && (
+            <button
+              onClick={() => setCoach({ portion, mode: "memorize" })}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press shadow-sm"
+            >
+              <GraduationCap size={17} /> احفظ بطريقة موجّهة
+            </button>
+          )}
           <div>
-            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أتممت الورد؟ قيّم حفظك:</div>
+            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو سجّل مباشرةً — قيّم حفظك:</div>
             <RatingRow onRate={(r) => store.recordHifzSession(portion.toId, r)} />
             <button onClick={() => store.recordHifzSession(portion.toId)} className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg py-2 press">
               <Check size={14} /> أتممت بلا تقييم
@@ -228,8 +239,16 @@ function HifzDashboard({ text }: { text: string[] | null }) {
             <span className="text-[11px] text-quran font-semibold">{describeRange(review.fromId, review.toId)}</span>
           </div>
           <PortionText text={text} portion={review} muted />
+          {text && (
+            <button
+              onClick={() => setCoach({ portion: review, mode: "recall" })}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
+            >
+              <Headphones size={16} /> سمّع موجّهاً
+            </button>
+          )}
           <div>
-            <div className="text-[11px] text-gray-500 mb-1.5 text-center">كيف كانت مراجعتك؟</div>
+            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
             <RatingRow onRate={(r) => store.recordReview(review.fromId, review.toId, r)} />
             <button onClick={() => store.skipReview(review.toId)} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 press py-1.5">
               مقطع آخر ←
@@ -256,6 +275,20 @@ function HifzDashboard({ text }: { text: string[] | null }) {
           </div>
           <p className="text-[10px] text-gray-400 mt-2">مقاطع قيّمتها «تحتاج إتقاناً» — راجعها من المصحف بتركيز.</p>
         </div>
+      )}
+
+      {coach && text && (
+        <HifzCoach
+          portion={coach.portion}
+          text={text}
+          mode={coach.mode}
+          onClose={() => setCoach(null)}
+          onDone={(rating?: HifzRating) => {
+            if (coach.mode === "memorize") store.recordHifzSession(coach.portion.toId, rating);
+            else store.recordReview(coach.portion.fromId, coach.portion.toId, rating);
+            setCoach(null);
+          }}
+        />
       )}
     </div>
   );
