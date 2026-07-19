@@ -6,6 +6,7 @@ import {
   SURAHS, TOTAL_AYAT, TOTAL_PAGES, surahAyahToId, idToSurahAyah, idToPage, describeRange,
 } from "@/lib/quran/meta";
 import { loadAyahText, textsInRange } from "@/lib/quran/text";
+import { today } from "@/lib/utils";
 import {
   plannedPortion, hifzProgress, hifzPace, hifzStreak, smartReview, weakSpots, type Portion,
 } from "@/lib/quran/hifz";
@@ -114,6 +115,7 @@ function HifzDashboard({ text }: { text: string[] | null }) {
   const [editPos, setEditPos] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [confirmNew, setConfirmNew] = useState(false);
+  const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
   // المُدرّب الموجّه — للورد (memorize) أو المراجعة (recall). advance يحرّك
   // مؤشّر الدورة (يُعطَّل لمراجعة الضعف).
   const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; advance?: boolean } | null>(null);
@@ -125,10 +127,87 @@ function HifzDashboard({ text }: { text: string[] | null }) {
   const review = smartReview(h);
   const weak = weakSpots(h);
   const plan = h.plan!;
+  const todayStr = today();
+  const wirdDoneToday = h.sessions.some((s) => s.date === todayStr);
 
   return (
     <div className="space-y-4">
-      {/* مؤشّر الحفظ */}
+      {/* 1) ورد اليوم — الفعل اليومي الأول */}
+      {prog.done ? (
+        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center">
+          <p className="text-sm font-bold text-quran">🎉 أتممت خطتك حتى آخر المصحف — تقبّل الله</p>
+          <p className="text-xs text-gray-500 mt-1">يمكنك بدء خطة جديدة من «مؤشّر الحفظ ← خطة جديدة».</p>
+        </div>
+      ) : portion && wirdDoneToday && !showMore ? (
+        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center space-y-1.5">
+          <p className="text-sm font-bold text-quran">🌿 أتممت ورد اليوم — تقبّل الله</p>
+          {prog.at && <p className="text-xs text-gray-500">تقدّمت إلى {prog.at.surahName} {prog.at.ayah} · صفحة {prog.page}</p>}
+          <button onClick={() => setShowMore(true)} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-1.5 press">
+            <Sprout size={13} /> زِد حفظك اليوم
+          </button>
+        </div>
+      ) : portion && (
+        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sprout size={15} className="text-quran" />
+            <span className="text-sm font-bold text-gray-800">ورد اليوم</span>
+            <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
+          </div>
+          <PortionText text={text} portion={portion} />
+          {text && (
+            <button
+              onClick={() => setCoach({ portion, mode: "memorize" })}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press shadow-sm"
+            >
+              <GraduationCap size={17} /> احفظ بطريقة موجّهة
+            </button>
+          )}
+          <div>
+            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو سجّل مباشرةً — قيّم حفظك:</div>
+            <RatingRow onRate={(r) => { store.recordHifzSession(portion.toId, r); setShowMore(false); }} />
+            <button onClick={() => { store.recordHifzSession(portion.toId); setShowMore(false); }} className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg py-2 press">
+              <Check size={14} /> أتممت بلا تقييم
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2) المراجعة — تُقدّم مواطن الضعف على الدورة المتسلسلة */}
+      {review && (() => {
+        const rp = review.portion;
+        const weakReview = review.reason === "weak";
+        const advance = !weakReview; // مراجعة الضعف لا تحرّك مؤشّر الدورة
+        return (
+          <div className={`rounded-2xl border p-4 space-y-3 ${weakReview ? "border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10" : "border-gray-100 bg-white dark:bg-[#241c12]"}`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <RefreshCw size={15} className={weakReview ? "text-amber-600" : "text-quran"} />
+              <span className="text-sm font-bold text-gray-800">{weakReview ? "مراجعة مركّزة" : "المراجعة الدورية"}</span>
+              {weakReview && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-full px-2 py-0.5">موطن ضعف</span>}
+              <span className="text-[11px] text-quran font-semibold">{describeRange(rp.fromId, rp.toId)}</span>
+            </div>
+            <PortionText text={text} portion={rp} muted />
+            {text && (
+              <button
+                onClick={() => setCoach({ portion: rp, mode: "recall", advance })}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
+              >
+                <Headphones size={16} /> سمّع موجّهاً
+              </button>
+            )}
+            <div>
+              <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
+              <RatingRow onRate={(r) => store.recordReview(rp.fromId, rp.toId, r, advance)} />
+              {!weakReview && (
+                <button onClick={() => store.skipReview(rp.toId)} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 press py-1.5">
+                  مقطع آخر ←
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 3) مؤشّر الحفظ — الموضع والتقدّم والوتيرة والخطة */}
       <div className="rounded-2xl border border-quran/20 bg-gradient-to-b from-quran/[0.07] to-transparent p-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold text-gray-800">مؤشّر الحفظ</span>
@@ -141,7 +220,7 @@ function HifzDashboard({ text }: { text: string[] | null }) {
         </div>
 
         {prog.at && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-600">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600 flex-wrap">
             <MapPin size={13} className="text-quran" />
             موضعك: <span className="font-bold text-gray-800">{prog.at.surahName} {prog.at.ayah}</span>
             <span className="text-gray-300">·</span> صفحة {prog.page}/{TOTAL_PAGES}
@@ -199,74 +278,7 @@ function HifzDashboard({ text }: { text: string[] | null }) {
 
       {editPos && <PositionEditor current={h.frontierId} onSave={(id) => { store.setFrontier(id); setEditPos(false); }} onCancel={() => setEditPos(false)} />}
 
-      {/* ورد اليوم */}
-      {prog.done ? (
-        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center">
-          <p className="text-sm font-bold text-quran">🎉 أتممت خطتك حتى آخر المصحف — تقبّل الله</p>
-          <p className="text-xs text-gray-500 mt-1">يمكنك بدء خطة جديدة من «مؤشّر الحفظ ← خطة جديدة».</p>
-        </div>
-      ) : portion && (
-        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sprout size={15} className="text-quran" />
-            <span className="text-sm font-bold text-gray-800">ورد اليوم</span>
-            <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
-          </div>
-          <PortionText text={text} portion={portion} />
-          {text && (
-            <button
-              onClick={() => setCoach({ portion, mode: "memorize" })}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press shadow-sm"
-            >
-              <GraduationCap size={17} /> احفظ بطريقة موجّهة
-            </button>
-          )}
-          <div>
-            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو سجّل مباشرةً — قيّم حفظك:</div>
-            <RatingRow onRate={(r) => store.recordHifzSession(portion.toId, r)} />
-            <button onClick={() => store.recordHifzSession(portion.toId)} className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg py-2 press">
-              <Check size={14} /> أتممت بلا تقييم
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* المراجعة — تُقدّم مواطن الضعف على الدورة المتسلسلة */}
-      {review && (() => {
-        const rp = review.portion;
-        const weakReview = review.reason === "weak";
-        const advance = !weakReview; // مراجعة الضعف لا تحرّك مؤشّر الدورة
-        return (
-          <div className={`rounded-2xl border p-4 space-y-3 ${weakReview ? "border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10" : "border-gray-100 bg-white dark:bg-[#241c12]"}`}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <RefreshCw size={15} className={weakReview ? "text-amber-600" : "text-quran"} />
-              <span className="text-sm font-bold text-gray-800">{weakReview ? "مراجعة مركّزة" : "المراجعة الدورية"}</span>
-              {weakReview && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-full px-2 py-0.5">موطن ضعف</span>}
-              <span className="text-[11px] text-quran font-semibold">{describeRange(rp.fromId, rp.toId)}</span>
-            </div>
-            <PortionText text={text} portion={rp} muted />
-            {text && (
-              <button
-                onClick={() => setCoach({ portion: rp, mode: "recall", advance })}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
-              >
-                <Headphones size={16} /> سمّع موجّهاً
-              </button>
-            )}
-            <div>
-              <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
-              <RatingRow onRate={(r) => store.recordReview(rp.fromId, rp.toId, r, advance)} />
-              {!weakReview && (
-                <button onClick={() => store.skipReview(rp.toId)} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 press py-1.5">
-                  مقطع آخر ←
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* مواطن الضعف */}
+      {/* 4) مواطن الضعف */}
       {weak.length > 0 && (
         <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4">
           <div className="flex items-center gap-2 mb-2">

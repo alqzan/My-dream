@@ -48,11 +48,11 @@ export default function QuranPage() {
       {tab === "hifz" && (
         <div className="animate-fade-up stagger-2 space-y-4">
           <HifzSection />
-          <KhatmaOrbit />
         </div>
       )}
       {tab === "mushaf" && (
-        <div className="animate-fade-up stagger-2">
+        <div className="animate-fade-up stagger-2 space-y-4">
+          <KhatmaOrbit />
           <MushafBrowser />
         </div>
       )}
