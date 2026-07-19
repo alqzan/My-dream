@@ -1,15 +1,16 @@
 "use client";
 import { useState, useEffect } from "react";
-import { idToSurahAyah, describeRange } from "@/lib/quran/meta";
+import { idToSurahAyah, describeRange, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
 import type { Portion } from "@/lib/quran/hifz";
 import type { HifzRating } from "@/lib/types";
-import { X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2 } from "lucide-react";
+import { X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft } from "lucide-react";
 
 const REPS_KEY = "madar-hifz-reps";
 
-// المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعددٍ تختاره، ثم تسميعٌ بإخفاء
-// الآية، ثم «أتقنتها» للانتقال، وأخيراً مرحلة ربطٍ للمقطع كله. له وضعان:
+// المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعددٍ تختاره، ثم تسميعٌ بتلقين
+// الآية السابقة (تسمّع التالية من حفظك ثم تكشفها)، ثم «أتقنتها» للانتقال، وأخيراً
+// مرحلة ربطٍ للمقطع كله. له وضعان:
 // memorize (تكرار+تسميع) للورد، وrecall (تسميع فقط) للمراجعة.
 export function HifzCoach({
   portion, text, mode, onDone, onClose,
@@ -48,21 +49,26 @@ export function HifzCoach({
     setIdx((i) => i + 1); setReps(0); setPhase("repeat"); setRevealed(true);
   }
 
-  // ---- recall mode (مراجعة): المقطع كله، إخفاء ثم كشف ثم تقييم ----
+  // ---- recall mode (مراجعة): تلقينٌ بالآية السابقة ثم سمّع المقطع ثم اكشف ----
   if (mode === "recall") {
     return (
       <Shell title="سمّع مراجعتك" subtitle={describeRange(portion.fromId, portion.toId)} onClose={onClose}>
-        <p className="text-[11px] text-gray-400 text-center mb-3">سمّع المقطع من حفظك ثم اكشفه لتتحقّق.</p>
-        <AyatBlock ayat={ayat} hidden={!revealed} />
+        <LeadPrompt text={text} targetId={portion.fromId} />
         {!revealed ? (
-          <button onClick={() => setRevealed(true)} className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
-            <Eye size={16} /> اكشف للتحقّق
-          </button>
+          <>
+            <HiddenBox label="سمّع المقطع من حفظك…" />
+            <button onClick={() => setRevealed(true)} className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
+              <Eye size={16} /> اكشف للتحقّق
+            </button>
+          </>
         ) : (
-          <div className="mt-4">
-            <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف كانت مراجعتك؟</div>
-            <RatingRow onRate={(r) => onDone(r)} />
-          </div>
+          <>
+            <AyatBlock ayat={ayat} />
+            <div className="mt-4">
+              <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف كانت مراجعتك؟</div>
+              <RatingRow onRate={(r) => onDone(r)} />
+            </div>
+          </>
         )}
       </Shell>
     );
@@ -80,7 +86,7 @@ export function HifzCoach({
         <>
           <div className="text-center text-[11px] font-semibold text-quran mb-2 flex items-center justify-center gap-1"><Link2 size={13} /> اربط المقطع كاملاً</div>
           <p className="text-[11px] text-gray-400 text-center mb-3">اقرأ المقطع كله مرّةً موصولاً لتثبيت الربط بين الآيات.</p>
-          <AyatBlock ayat={ayat} hidden={false} />
+          <AyatBlock ayat={ayat} />
           <div className="mt-4">
             <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف تقيّم حفظك للورد؟</div>
             <RatingRow onRate={(r) => onDone(r)} />
@@ -90,7 +96,7 @@ export function HifzCoach({
       ) : phase === "repeat" ? (
         <>
           <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
-          <AyatBlock ayat={[cur]} hidden={false} big />
+          <AyatBlock ayat={[cur]} big />
           <RepsDots reps={reps} target={repTarget} />
           <button
             onClick={() => setReps((r) => r + 1)}
@@ -116,8 +122,9 @@ export function HifzCoach({
         </>
       ) : (
         <>
-          <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><EyeOff size={13} /> سمّعها من حفظك</div>
-          <AyatBlock ayat={[cur]} hidden={!revealed} big />
+          <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><CornerDownLeft size={13} /> سمّع الآية التالية من حفظك</div>
+          <LeadPrompt text={text} targetId={cur.id} />
+          {revealed ? <AyatBlock ayat={[cur]} big /> : <HiddenBox label="سمّع من حفظك…" />}
           <div className="flex gap-2 mt-4">
             <button onClick={() => setRevealed((v) => !v)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran/10 text-quran font-semibold press">
               {revealed ? <><EyeOff size={15} /> أخفِ</> : <><Eye size={15} /> تحقّق</>}
@@ -158,14 +165,47 @@ function Shell({
   );
 }
 
-function AyatBlock({ ayat, hidden, big }: { ayat: { id: number; no: number; text: string }[]; hidden: boolean; big?: boolean }) {
+function AyatBlock({ ayat, big }: { ayat: { id: number; no: number; text: string }[]; big?: boolean }) {
   return (
     <div className="rounded-2xl border border-quran/15 bg-white dark:bg-[#241c12] p-5 min-h-[100px] flex items-center justify-center">
-      <p className={`font-quran text-center font-bold text-gray-800 dark:text-gray-100 ${big ? "text-[26px] leading-[2.5]" : "text-[21px] leading-[2.3]"} ${hidden ? "blur-md select-none" : ""}`} dir="rtl">
+      <p className={`font-quran text-center font-bold text-gray-800 dark:text-gray-100 ${big ? "text-[26px] leading-[2.5]" : "text-[21px] leading-[2.3]"}`} dir="rtl">
         {ayat.map((a) => (
           <span key={a.id}>{a.text}<span className="text-quran text-[13px] align-middle mx-0.5">﴿{a.no}﴾</span>{" "}</span>
         ))}
       </p>
+    </div>
+  );
+}
+
+// تلقين: يعرض الآية التي قبل الهدف (targetId) كتذكيرٍ يبني عليه المستخدم؛ فإن
+// كان الهدف أوّل آية في سورته عرض اسم السورة بدل آخر آية السورة السابقة.
+function LeadPrompt({ text, targetId }: { text: string[]; targetId: number }) {
+  const { surah, ayah } = idToSurahAyah(targetId);
+  if (ayah === 1) {
+    const name = SURAHS[surah - 1]?.name ?? "";
+    return (
+      <div className="rounded-xl bg-quran/[0.06] border border-quran/15 px-4 py-2.5 mb-2 text-center">
+        <div className="text-[10px] text-gray-400 mb-0.5">ابدأ من أوّل السورة</div>
+        <div className="text-sm font-bold text-quran">﴿ سورة {name} ﴾</div>
+      </div>
+    );
+  }
+  const prevText = text[targetId - 1] ?? "";
+  return (
+    <div className="rounded-xl bg-quran/[0.06] border border-quran/15 px-4 py-3 mb-2">
+      <div className="text-[10px] text-gray-400 mb-1 text-center">…الآية السابقة (تلقين)</div>
+      <p className="font-quran text-center text-[18px] leading-[2.2] font-bold text-gray-500 dark:text-gray-400" dir="rtl">
+        {prevText}<span className="text-quran/60 text-[11px] align-middle mx-0.5">﴿{ayah - 1}﴾</span>
+      </p>
+    </div>
+  );
+}
+
+// صندوق مكان الآية المخفيّة أثناء التسميع.
+function HiddenBox({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-quran/30 bg-quran/[0.03] p-5 min-h-[100px] flex items-center justify-center">
+      <span className="text-sm text-gray-400 flex items-center gap-1.5"><EyeOff size={15} /> {label}</span>
     </div>
   );
 }
