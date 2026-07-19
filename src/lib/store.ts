@@ -91,6 +91,8 @@ interface AppStore extends AppData {
   updateHabit: (id: string, updates: Partial<Habit>) => void;
   toggleHabitLog: (habitId: string, date: string) => void;
   deleteHabit: (id: string) => void;
+  // تجميد/استئناف بطاقة عادة (أساسية أو مخصّصة) بمفتاحها في «عاداتي اليوم»
+  toggleFreezeHabit: (key: string) => void;
 
   // Prayers
   setPrayerStatus: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
@@ -196,6 +198,7 @@ export const useAppStore = create<AppStore>()(
       salaryDay: 27,
       lastSalaryConfirm: null,
       readingGoal: null,
+      frozenHabits: [],
       merchantRules: {},
       deleted: {},
       theme: "auto",
@@ -631,6 +634,16 @@ export const useAppStore = create<AppStore>()(
       deleteHabit: (id) =>
         set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
 
+      toggleFreezeHabit: (key) =>
+        set((s) => {
+          const frozen = s.frozenHabits ?? [];
+          return {
+            frozenHabits: frozen.includes(key)
+              ? frozen.filter((k) => k !== key)
+              : [...frozen, key],
+          };
+        }),
+
       setPrayerStatus: (date, prayer, status) =>
         set((s) => {
           const existing = s.prayerLogs.find((l) => l.date === date);
@@ -883,6 +896,7 @@ export const useAppStore = create<AppStore>()(
           salaryDay: data.salaryDay ?? 27,
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
           readingGoal: data.readingGoal ?? null,
+          frozenHabits: data.frozenHabits ?? [],
           merchantRules: data.merchantRules ?? {},
           deleted: data.deleted ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
@@ -911,6 +925,7 @@ export const useAppStore = create<AppStore>()(
           salaryDay: s.salaryDay,
           lastSalaryConfirm: s.lastSalaryConfirm,
           readingGoal: s.readingGoal,
+          frozenHabits: s.frozenHabits ?? [],
           merchantRules: s.merchantRules,
           deleted: s.deleted ?? {},
           lastUpdated: s.lastUpdated,

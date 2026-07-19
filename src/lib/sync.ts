@@ -444,6 +444,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     salaryDay: primary.salaryDay,
     lastSalaryConfirm: primary.lastSalaryConfirm,
     readingGoal: primary.readingGoal ?? secondary.readingGoal ?? null,
+    // العادات المجمّدة إعدادٌ مفرد (تبديل مقصود): يفوز الأحدث كي يسري
+    // الاستئناف/التجميد عبر الأجهزة بدل أن يُعيده اتحادٌ لا يعرف الإزالة.
+    frozenHabits: primary.frozenHabits ?? secondary.frozenHabits ?? [],
     merchantRules: { ...secondary.merchantRules, ...primary.merchantRules },
     deleted,
     lastUpdated: (local.lastUpdated ?? "") > (cloud.lastUpdated ?? "") ? local.lastUpdated : cloud.lastUpdated,
