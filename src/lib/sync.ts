@@ -5,6 +5,7 @@ import { ref as storageRef, uploadString, getDownloadURL, listAll } from "fireba
 import { db, storage, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
+import { journalShardId } from "./merge";
 import { showToast } from "@/components/ui/UndoToast";
 
 const COLLECTION = "userData";
@@ -131,13 +132,111 @@ interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio" | "
   audioRefs?: string[];
 }
 
+// ===================== Journal sharding =====================
+// Journal entries are stored sharded across userData/{uid}/journal/{shardId}
+// documents — one per YYYY-MM of the entry's own date — instead of inline in
+// the single main doc. This lifts Firestore's hard 1MB-per-document cap off the
+// journal entirely (2000+ Day One entries would blow past it inline). Sharding
+// by the entry's date is stable across devices and naturally bounded (a month
+// of entries is small), and only shards whose contents changed are rewritten.
+const JOURNAL_SUB = "journal";
+const SHARD_WARN_BYTES = 850 * 1024; // warn before a single shard nears 1MB
+
+function splitJournalShards(entries: CloudEntry[]): Map<string, CloudEntry[]> {
+  const m = new Map<string, CloudEntry[]>();
+  for (const e of entries) {
+    const sid = journalShardId(e.date);
+    let arr = m.get(sid);
+    if (!arr) { arr = []; m.set(sid, arr); }
+    arr.push(e);
+  }
+  return m;
+}
+
+// Signature of what each shard last held (read or written), so a save rewrites
+// only the shards that actually changed — not all of them on every edit.
+let shardSignatures = new Map<string, string>();
+const shardSig = (entries: unknown[]): string => JSON.stringify(entries);
+
+// Read all journal shards and fold them (plus any legacy entries still inline in
+// the main doc, pre-migration) into one CloudEntry[]. Shard copies win a clash.
+// Seeds shardSignatures so the next save diffs correctly.
+async function loadJournalShards(
+  uid: string,
+  mainData: { journalEntries?: unknown[] }
+): Promise<CloudEntry[]> {
+  const byId = new Map<string, CloudEntry>();
+  const put = (e: CloudEntry | undefined) => {
+    const id = (e as { id?: string } | undefined)?.id;
+    if (id) byId.set(id, e as CloudEntry);
+  };
+  // Legacy inline entries first (overwritten by a shard copy if one exists).
+  for (const e of (mainData.journalEntries as CloudEntry[] | undefined) ?? []) put(e);
+  const sigs = new Map<string, string>();
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, COLLECTION, uid, JOURNAL_SUB));
+      snap.forEach((d) => {
+        const entries = (d.data() as { entries?: CloudEntry[] }).entries ?? [];
+        sigs.set(d.id, shardSig(entries));
+        for (const e of entries) put(e);
+      });
+    } catch { /* offline — fall back to legacy inline / local */ }
+  }
+  shardSignatures = sigs;
+  return [...byId.values()];
+}
+
+// Write the journal shards for this snapshot: only shards whose contents changed
+// are written, and shards that became empty (all their entries deleted/moved to
+// another month) are removed. Updates shardSignatures to match.
+async function writeJournalShards(uid: string, entries: CloudEntry[]): Promise<void> {
+  if (!db) return;
+  const shards = splitJournalShards(entries);
+  const nextSigs = new Map<string, string>();
+  for (const [sid, es] of shards) {
+    const sig = shardSig(es);
+    nextSigs.set(sid, sig);
+    if (shardSignatures.get(sid) === sig) continue; // unchanged → skip write
+    const bytes = new Blob([sig]).size;
+    if (bytes >= SHARD_WARN_BYTES) warnShardNearLimit(sid, bytes);
+    await setDoc(doc(db, COLLECTION, uid, JOURNAL_SUB, sid), { entries: es }, { merge: false });
+  }
+  // Delete shards we knew about that hold nothing now — BUT never when the whole
+  // journal is empty. An empty journal at save time almost always means the
+  // store isn't hydrated yet (a fresh tab, a failed load), not that the user
+  // deleted everything; deleting every shard here would be catastrophic data
+  // loss. Real per-entry deletes are handled by tombstones regardless, and a
+  // genuinely-emptied month is cleaned once other months are saved (entries>0).
+  if (entries.length > 0) {
+    for (const sid of shardSignatures.keys()) {
+      if (!shards.has(sid)) {
+        try { await deleteDoc(doc(db, COLLECTION, uid, JOURNAL_SUB, sid)); } catch { /* already gone */ }
+      }
+    }
+    shardSignatures = nextSigs;
+  } else {
+    // Keep prior knowledge of existing shards so a later real save can reconcile.
+    shardSignatures = new Map([...shardSignatures, ...nextSigs]);
+  }
+}
+
+let shardWarned = false;
+function warnShardNearLimit(sid: string, bytes: number): void {
+  if (shardWarned) return;
+  shardWarned = true;
+  showToast(`شهر ${sid} كبير (${Math.round(bytes / 1024)}KB) — قد يحتاج تقسيمًا أدق`, "warning");
+}
+
 // Replace each entry's photo/audio bytes with content-hash refs. Collects the
 // new (`data:`) media to upload and the full set of referenced hashes (for the
 // manifest and to know what to keep vs. delete in Storage).
 async function prepareForCloud(
   data: AppData
 ): Promise<{
-  main: AppData & { photoManifest: string[]; audioManifest: string[] };
+  // The main doc holds everything EXCEPT the journal (which is sharded).
+  main: Omit<AppData, "journalEntries"> & { photoManifest: string[]; audioManifest: string[] };
+  cloudJournal: CloudEntry[];
   newPhotos: Map<string, string>;
   newAudios: Map<string, string>;
   photoRefs: Set<string>;
@@ -185,13 +284,15 @@ async function prepareForCloud(
       return out;
     })
   );
+  // Strip journalEntries out of the main doc — they go to shards instead.
+  const { journalEntries: _omitJournal, ...dataNoJournal } = data;
   return {
     main: {
-      ...data,
-      journalEntries: journalEntries as unknown as JournalEntry[],
+      ...dataNoJournal,
       photoManifest: [...photoRefs],
       audioManifest: [...audioRefs],
     },
+    cloudJournal: journalEntries,
     newPhotos,
     newAudios,
     photoRefs,
@@ -199,21 +300,25 @@ async function prepareForCloud(
   };
 }
 
-// Main doc only (fast, no photo bytes). Seeds the known-hash cache from the
-// manifest so a subsequent save diffs correctly. Entries still carry
-// photoRefs at this point — call hydrateCloudPhotos to resolve them.
+// Main doc + journal shards (no photo bytes — entries still carry photoRefs,
+// resolved later by hydrateCloudPhotos). Seeds the known-hash cache from the
+// manifest and the shard-signature cache so a subsequent save diffs correctly.
 export async function loadUserMain(uid: string): Promise<AppData | null> {
   if (!db) return null;
   const snap = await getDoc(doc(db, COLLECTION, uid));
   if (!snap.exists()) {
     knownCloudHashes = new Set();
     knownCloudAudioHashes = new Set();
+    shardSignatures = new Map();
     return null;
   }
   const main = snap.data() as AppData & { photoManifest?: string[]; audioManifest?: string[] };
   knownCloudHashes = new Set(main.photoManifest ?? []);
   knownCloudAudioHashes = new Set(main.audioManifest ?? []);
-  return main;
+  // Journal lives in shards now; fold them (and any legacy inline entries) back
+  // into journalEntries so the rest of the app sees one flat list as before.
+  const journalEntries = await loadJournalShards(uid, main);
+  return { ...main, journalEntries: journalEntries as unknown as JournalEntry[] };
 }
 
 // Live-subscribe to the shared main doc so edits made on another device show
@@ -225,14 +330,18 @@ export function subscribeUserMain(
   cb: (main: (AppData & { photoManifest?: string[]; audioManifest?: string[] }) | null) => void
 ): () => void {
   if (!db) return () => {};
+  // Subscribe to the main doc. Every save writes the main doc (its lastUpdated
+  // bumps on any edit, journal included), so this fires on any remote change;
+  // we then re-read the journal shards to hand back a complete snapshot.
   return onSnapshot(
     doc(db, COLLECTION, uid),
-    (snap) => {
+    async (snap) => {
       if (!snap.exists()) return cb(null);
       const main = snap.data() as AppData & { photoManifest?: string[]; audioManifest?: string[] };
       knownCloudHashes = new Set(main.photoManifest ?? []);
       knownCloudAudioHashes = new Set(main.audioManifest ?? []);
-      cb(main);
+      const journalEntries = await loadJournalShards(uid, main);
+      cb({ ...main, journalEntries: journalEntries as unknown as JournalEntry[] });
     },
     () => cb(null)
   );
@@ -369,16 +478,18 @@ export interface SaveResult {
 
 export async function saveUserData(uid: string, data: AppData): Promise<SaveResult> {
   if (!db) return { mediaComplete: true };
-  const { main, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
+  const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
 
   // 1) Upload new media to Storage first. Text-only edits have none, so this is
   //    a no-op and stays fast.
   knownCloudHashes = await syncMediaToStorage(uid, "photos", newPhotos, photoRefs, knownCloudHashes);
   knownCloudAudioHashes = await syncMediaToStorage(uid, "audios", newAudios, audioRefs, knownCloudAudioHashes);
 
-  // 2) Write the main doc with a manifest of only what actually reached the
-  //    cloud, so any media that didn't upload is retried on the next save
-  //    instead of being marked present and stranded.
+  // 2) Write the journal shards (only the ones that changed) — this is what
+  //    keeps the journal off the 1MB single-doc cap. Then write the main doc
+  //    (no journal inline) with a manifest of only what actually reached the
+  //    cloud, so any media that didn't upload is retried on the next save.
+  await writeJournalShards(uid, cloudJournal);
   const honestMain = {
     ...main,
     photoManifest: [...knownCloudHashes],

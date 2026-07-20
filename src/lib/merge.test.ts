@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeAppData, unionOrdered } from "./merge";
+import { mergeAppData, unionOrdered, journalShardId } from "./merge";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type { AppData, JournalEntry, Transaction } from "./types";
 
@@ -53,6 +53,33 @@ describe("unionOrdered", () => {
     const out = unionOrdered(p, s, (x) => x.id);
     expect(out.map((x) => x.id)).toEqual(["a", "b", "c"]);
     expect(out.find((x) => x.id === "b")!.v).toBe(1); // primary wins the clash
+  });
+});
+
+describe("journalShardId", () => {
+  it("buckets by YYYY-MM of the entry date", () => {
+    expect(journalShardId("2026-05-03")).toBe("2026-05");
+    expect(journalShardId("1999-12-31")).toBe("1999-12");
+  });
+  it("falls back to 'misc' for missing/malformed dates", () => {
+    expect(journalShardId(undefined)).toBe("misc");
+    expect(journalShardId("")).toBe("misc");
+    expect(journalShardId("not-a-date")).toBe("misc");
+  });
+  it("sharding then flattening preserves every entry (no loss on split)", () => {
+    const entries = Array.from({ length: 500 }, (_, i) => ({
+      id: `E${i}`,
+      date: `2026-${String((i % 12) + 1).padStart(2, "0")}-15`,
+    }));
+    const shards = new Map<string, typeof entries>();
+    for (const e of entries) {
+      const s = journalShardId(e.date);
+      (shards.get(s) ?? shards.set(s, []).get(s)!).push(e);
+    }
+    const flat = [...shards.values()].flat();
+    expect(flat).toHaveLength(entries.length);
+    expect(new Set(flat.map((e) => e.id))).toEqual(new Set(entries.map((e) => e.id)));
+    expect(shards.size).toBe(12); // 12 months → 12 shards
   });
 });
 

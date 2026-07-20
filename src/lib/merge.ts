@@ -5,6 +5,14 @@
 import type { AppData, JournalEntry, HifzMistake } from "./types";
 import { dedupeJournalEntries, mergeEntryMedia } from "./utils";
 
+// Which journal shard a given entry belongs to: one document per YYYY-MM of the
+// entry's own date (stable across devices, naturally bounded). Malformed/absent
+// dates fall into a shared "misc" shard. Lives here (Firebase-free) so it's
+// unit-tested; sync.ts imports it to split/reassemble the journal collection.
+export function journalShardId(dateStr: string | undefined): string {
+  return dateStr && /^\d{4}-\d{2}/.test(dateStr) ? dateStr.slice(0, 7) : "misc";
+}
+
 // ===================== Multi-device merge =====================
 // Combine a local and a cloud snapshot so neither device's edits are lost to a
 // last-writer-wins overwrite. Every collection is unioned by its id/key; on a
