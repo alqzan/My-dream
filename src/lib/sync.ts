@@ -530,8 +530,16 @@ async function syncMediaToStorage(
   }
 }
 
-export async function saveUserData(uid: string, data: AppData): Promise<void> {
-  if (!db) return;
+// Result of a save. `mediaComplete` is false when some referenced photo/voice
+// note didn't reach Cloud Storage this round (a failed/partial upload) — the
+// text doc still saved, but the UI must NOT claim "تمت المزامنة" while media is
+// still pending. It's retried on the next save.
+export interface SaveResult {
+  mediaComplete: boolean;
+}
+
+export async function saveUserData(uid: string, data: AppData): Promise<SaveResult> {
+  if (!db) return { mediaComplete: true };
   const { main, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
 
   // 1) Upload new media to Storage first. Text-only edits have none, so this is
@@ -549,6 +557,12 @@ export async function saveUserData(uid: string, data: AppData): Promise<void> {
   };
   warnIfDocSizeNearLimit(honestMain);
   await setDoc(doc(db, COLLECTION, uid), honestMain, { merge: false });
+
+  // Honest signal: did every referenced photo/audio actually land in the cloud?
+  const allIn = (refs: Set<string>, known: Set<string>) => [...refs].every((h) => known.has(h));
+  const mediaComplete =
+    allIn(photoRefs, knownCloudHashes) && allIn(audioRefs, knownCloudAudioHashes);
+  return { mediaComplete };
 }
 
 // The whole main doc (all journal text, transactions, etc. — media is stored

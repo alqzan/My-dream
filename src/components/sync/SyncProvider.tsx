@@ -29,12 +29,16 @@ interface SyncContextValue {
   enabled: boolean;
   status: SyncState;
   lastSyncedAt: number | null;
+  // True when the text doc synced but some referenced photo/voice note hasn't
+  // reached the cloud yet — so the UI can be honest instead of claiming "متزامن".
+  mediaPending: boolean;
 }
 
 const SyncContext = createContext<SyncContextValue>({
   enabled: false,
   status: "idle",
   lastSyncedAt: null,
+  mediaPending: false,
 });
 
 export const useSync = () => useContext(SyncContext);
@@ -86,6 +90,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const syncEnabled = isFirebaseEnabled && !!spaceId;
   const [status, setStatus] = useState<SyncState>(syncEnabled ? "syncing" : "idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [mediaPending, setMediaPending] = useState(false);
 
   const hydratedRef = useRef(false);
   // True while we're applying a remote snapshot, so the store subscription
@@ -141,7 +146,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           applyingRemoteRef.current = false;
           // Push the union back up so the cloud gains any entries that lived
           // only on this device; other devices then pull them.
-          await saveUserData(space, merged);
+          const r = await saveUserData(space, merged);
+          setMediaPending(!r.mediaComplete);
           lastCloudUpdatedRef.current = merged.lastUpdated ?? cloudMain.lastUpdated ?? "";
         } else if (cloudMain && cloudHasData) {
           // Only the cloud has data → adopt it wholesale onto this fresh device.
@@ -152,7 +158,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
         } else if (localHasData) {
           // Only this device has data → seed the cloud from it.
-          await saveUserData(space, local);
+          const r = await saveUserData(space, local);
+          setMediaPending(!r.mediaComplete);
           lastCloudUpdatedRef.current = local.lastUpdated ?? "";
         } else {
           lastCloudUpdatedRef.current = cloudMain?.lastUpdated ?? "";
@@ -225,8 +232,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         applyingRemoteRef.current = true;
         useAppStore.setState({ lastUpdated: stamp });
         applyingRemoteRef.current = false;
-        await saveUserData(space, toSave);
+        const res = await saveUserData(space, toSave);
         lastCloudUpdatedRef.current = stamp;
+        return res.mediaComplete;
       };
 
       // Attempt a push; on failure surface a toast (once per streak) and retry
@@ -234,9 +242,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // stranded on this device until the next manual change.
       const attemptSave = () => {
         pushLocal()
-          .then(() => {
+          .then((mediaComplete) => {
             retryDelay.current = RETRY_BASE_MS;
             failNotified.current = false;
+            setMediaPending(!mediaComplete);
             setStatus("synced");
             setLastSyncedAt(Date.now());
           })
@@ -273,7 +282,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [hydrate, snapshot]);
 
   return (
-    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt }}>
+    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt, mediaPending }}>
       {children}
     </SyncContext.Provider>
   );

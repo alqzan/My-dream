@@ -2,12 +2,12 @@
 import Link from "next/link";
 import { useSync } from "./SyncProvider";
 import { isFirebaseEnabled } from "@/lib/firebase";
-import { Cloud, CloudOff, RefreshCw, KeyRound } from "lucide-react";
+import { Cloud, CloudOff, RefreshCw, KeyRound, ImageUp } from "lucide-react";
 
 // Automatic, login-free sync status. Every device shares one space, so there
 // is nothing to sign into — this just shows whether we're up to date.
 export function SyncStatus() {
-  const { enabled, status } = useSync();
+  const { enabled, status, mediaPending } = useSync();
 
   // Sync is possible on this build but no key is set on THIS device (e.g. a
   // freshly-opened laptop) → sync is silently off. Never render nothing here:
@@ -41,6 +41,23 @@ export function SyncStatus() {
   }
 
   const syncing = status === "syncing";
+
+  // Honest state: the text synced but a photo/voice note is still uploading (or
+  // failed and will retry). Never claim "متزامن" while media is stranded — that
+  // false reassurance is exactly how a photo silently fails to reach the other
+  // device.
+  if (!syncing && mediaPending) {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+        title="النص تزامن، لكن رفع صورة/صوت لم يكتمل بعد — يُعاد المحاولة تلقائياً"
+      >
+        <ImageUp size={13} />
+        <span className="hidden sm:inline">بانتظار رفع الوسائط</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex items-center gap-1.5 text-xs text-gray-500"
