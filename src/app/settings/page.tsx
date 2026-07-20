@@ -1,5 +1,6 @@
 "use client";
 import { BackupCard } from "@/components/settings/BackupCard";
+import { DataHealthCard } from "@/components/settings/DataHealthCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
 import { BrandMark } from "@/components/layout/BrandMark";
@@ -22,9 +23,12 @@ export default function SettingsPage() {
         <BackupCard />
       </div>
       <div className="animate-fade-up stagger-2">
-        <LockCard />
+        <DataHealthCard />
       </div>
       <div className="animate-fade-up stagger-3">
+        <LockCard />
+      </div>
+      <div className="animate-fade-up stagger-4">
         <SyncKeyCard />
       </div>
 
