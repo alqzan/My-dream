@@ -1,0 +1,15 @@
+name = "madar-r2-gateway"
+main = "src/index.ts"
+compatibility_date = "2026-07-20"
+
+[vars]
+R2_BUCKET_NAME = "madar-media"
+ALLOWED_ORIGINS = "https://alqzan.github.io,http://localhost:3000,http://127.0.0.1:3000"
+MAX_IMAGE_BYTES = "8388608"
+MAX_AUDIO_BYTES = "33554432"
+UPLOAD_URL_TTL_SECONDS = "120"
+DOWNLOAD_URL_TTL_SECONDS = "300"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "madar-media"

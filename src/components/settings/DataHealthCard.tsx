@@ -39,9 +39,17 @@ export function DataHealthCard() {
     if (!space) return;
     setReuploading(true);
     try {
-      await reuploadAllMedia(space, snapshot());
-      showToast("أُعيد رفع الوسائط — أعد الفحص للتأكد", "success");
-      await runScan();
+      const report = await reuploadAllMedia(space, snapshot());
+      setScan(report);
+      const pending = report.photos.pendingUpload + report.audios.pendingUpload;
+      const broken = report.photos.broken + report.audios.broken;
+      if (!report.storageReachable) {
+        showToast("تم الرفع لكن تعذّر التحقق من R2 الآن", "warning");
+      } else if (pending || broken) {
+        showToast(`اكتمل الرفع جزئيًا — بقي ${pending + broken} ملف`, "warning");
+      } else {
+        showToast("تم ترحيل الوسائط إلى R2 والتحقق منها", "success");
+      }
     } catch {
       showToast("تعذّر إعادة الرفع — تحقق من الاتصال", "warning");
     } finally {
@@ -163,7 +171,7 @@ export function DataHealthCard() {
 
           {scan && !scan.storageReachable && (
             <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-500 leading-relaxed animate-fade-up">
-              ⚠️ تعذّر الوصول لتخزين الصور من هذا الجهاز الآن (شبكة محجوبة أو انقطاع مؤقت).
+              ⚠️ تعذّر الوصول إلى Worker/R2 من هذا الجهاز الآن (شبكة محجوبة أو انقطاع مؤقت).
               هذا <strong>لا يعني أن صورك مفقودة</strong> — غالبًا هي سليمة في السحابة، لكن هذا الجهاز
               ما قدر يقرأها. جرّب على واي فاي، أو أعد الفحص بعد قليل. لا تضغط «إعادة الرفع» الآن.
             </div>

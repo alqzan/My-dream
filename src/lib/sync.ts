@@ -1,14 +1,50 @@
 import {
   doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
 } from "firebase/firestore";
-import { ref as storageRef, uploadString, getDownloadURL, listAll } from "firebase/storage";
-import { db, storage, getSyncSpace } from "./firebase";
+import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
 import { journalShardId } from "./merge";
 import { showToast } from "@/components/ui/UndoToast";
 
 const COLLECTION = "userData";
+
+// Public Worker endpoint only. The sync key remains device-local and is sent
+// as a Bearer credential on each request; no R2 credential reaches the app.
+const R2_WORKER_URL = (process.env.NEXT_PUBLIC_R2_WORKER_URL ?? "").replace(/\/+$/, "");
+
+type MediaKind = "photos" | "audios";
+
+class MediaGatewayError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+async function mediaGateway<T>(
+  syncKey: string,
+  path: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  if (!R2_WORKER_URL) throw new MediaGatewayError(503, "R2 Worker is not configured");
+  const response = await fetch(`${R2_WORKER_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${syncKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message = `R2 Worker returned ${response.status}`;
+    try {
+      const payload = await response.json() as { error?: string };
+      if (payload.error) message = payload.error;
+    } catch { /* non-JSON gateway error */ }
+    throw new MediaGatewayError(response.status, message);
+  }
+  return response.json() as Promise<T>;
+}
 
 // ===================== Bank-SMS inbox =====================
 // An iOS Automation POSTs each incoming bank message (unauthenticated, via the
@@ -78,36 +114,75 @@ export function subscribeInbox(cb: (items: InboxItem[]) => void): () => void {
   );
 }
 
-// ===================== Media cloud sync (Cloud Storage) =====================
-// Photos and voice notes live in Cloud Storage at userData/{uid}/photos/{hash}
-// and .../audios/{hash} (keyed by content hash → automatic dedup). The main
-// Firestore doc keeps only lightweight refs (hashes) per entry plus a manifest
-// of every hash in the cloud. Storage has far more room than Firestore and no
-// per-file size limit, and other devices display media straight from its
-// download URL so they don't have to keep every photo on-device.
+// ===================== Media cloud sync (Cloudflare R2) =====================
+// Photos and voice notes live privately in R2 at media/{kind}/{hash}. The
+// Cloudflare Worker authenticates the device's sync key and issues short-lived
+// presigned PUT/GET URLs; R2 credentials never reach this static PWA. Firestore
+// keeps only content-hash refs and the provider-specific manifest.
 
-// Hashes we believe already exist in the cloud — seeded from the main doc's
-// manifest on load, so a save only uploads new media and deletes removed ones.
+// Hashes we believe already exist in R2 — seeded from an R2-tagged manifest.
+// Saves only add confirmed objects; automatic deletion is intentionally absent.
 let knownCloudHashes = new Set<string>();
 let knownCloudAudioHashes = new Set<string>();
 
-// hash → Storage download URL, so each object's URL is resolved at most once.
-const urlCache = new Map<string, string>();
+// Presigned URLs expire, so cache them only while they still have a safe amount
+// of life left. Legacy Firebase download URLs use Infinity during migration.
+interface CachedMediaUrl { url: string; expiresAt: number }
+const urlCache = new Map<string, CachedMediaUrl>();
+const URL_EXPIRY_SAFETY_MS = 15_000;
 
-function mediaPath(uid: string, sub: string, hash: string): string {
-  return `${COLLECTION}/${uid}/${sub}/${hash}`;
-}
-
-// A media string is either a local `data:` URL (needs uploading) or a Storage
-// download URL already in the cloud (reuse its hash, don't re-upload).
+// A media string is either a local `data:` URL (needs uploading) or a cloud
+// download URL. Parse both R2 presigned URLs and legacy Firebase Storage URLs
+// so an already-hydrated entry keeps its hash rather than hashing the URL text.
 function isStorageUrl(s: string): boolean {
-  return /^https?:\/\//.test(s) && s.includes("/o/");
+  return /^https?:\/\//.test(s) && hashFromStorageUrl(s) !== null;
+}
+function isR2StorageUrl(s: string): boolean {
+  try {
+    return new URL(s).hostname.endsWith(".r2.cloudflarestorage.com");
+  } catch {
+    return false;
+  }
 }
 function hashFromStorageUrl(url: string): string | null {
-  const m = url.match(/\/o\/([^?]+)/);
-  if (!m) return null;
-  const last = decodeURIComponent(m[1]).split("/").pop();
-  return last || null;
+  try {
+    const legacy = url.match(/\/o\/([^?]+)/);
+    const path = legacy ? decodeURIComponent(legacy[1]) : new URL(url).pathname;
+    const last = path.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
+    return /^[a-f0-9]{32}$/.test(last) ? last : null;
+  } catch {
+    return null;
+  }
+}
+
+function presignedExpiry(url: string): number {
+  try {
+    const parsed = new URL(url);
+    const rawDate = parsed.searchParams.get("X-Amz-Date");
+    const rawTtl = parsed.searchParams.get("X-Amz-Expires");
+    if (!rawDate || !rawTtl || !/^\d{8}T\d{6}Z$/.test(rawDate)) return Infinity;
+    const created = Date.UTC(
+      Number(rawDate.slice(0, 4)), Number(rawDate.slice(4, 6)) - 1, Number(rawDate.slice(6, 8)),
+      Number(rawDate.slice(9, 11)), Number(rawDate.slice(11, 13)), Number(rawDate.slice(13, 15))
+    );
+    return created + Number(rawTtl) * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+function cacheMediaUrl(hash: string, url: string, expiresAt = presignedExpiry(url)): void {
+  urlCache.set(hash, { url, expiresAt });
+}
+
+function cachedMediaUrl(hash: string): string | null {
+  const cached = urlCache.get(hash);
+  if (!cached) return null;
+  if (cached.expiresAt - Date.now() <= URL_EXPIRY_SAFETY_MS) {
+    urlCache.delete(hash);
+    return null;
+  }
+  return cached.url;
 }
 
 // A photo's bytes are immutable, so its content hash never changes. Memoize
@@ -130,6 +205,21 @@ async function photoHash(data: string): Promise<string> {
 interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio" | "audios"> {
   photoRefs?: string[];
   audioRefs?: string[];
+}
+
+const MEDIA_PROVIDER = "r2-v1";
+interface CloudMediaMeta {
+  photoManifest?: string[];
+  audioManifest?: string[];
+  mediaProvider?: string;
+}
+
+function seedKnownMedia(main: CloudMediaMeta): void {
+  // A pre-R2 manifest only claimed Firebase Storage objects. Never treat those
+  // hashes as present in R2 or the migration could report a false success.
+  const isR2 = main.mediaProvider === MEDIA_PROVIDER;
+  knownCloudHashes = new Set(isR2 ? (main.photoManifest ?? []) : []);
+  knownCloudAudioHashes = new Set(isR2 ? (main.audioManifest ?? []) : []);
 }
 
 // ===================== Journal sharding =====================
@@ -230,12 +320,12 @@ function warnShardNearLimit(sid: string, bytes: number): void {
 
 // Replace each entry's photo/audio bytes with content-hash refs. Collects the
 // new (`data:`) media to upload and the full set of referenced hashes (for the
-// manifest and to know what to keep vs. delete in Storage).
+// manifest and to know what is confirmed in R2).
 async function prepareForCloud(
   data: AppData
 ): Promise<{
   // The main doc holds everything EXCEPT the journal (which is sharded).
-  main: Omit<AppData, "journalEntries"> & { photoManifest: string[]; audioManifest: string[] };
+  main: Omit<AppData, "journalEntries"> & CloudMediaMeta;
   cloudJournal: CloudEntry[];
   newPhotos: Map<string, string>;
   newAudios: Map<string, string>;
@@ -257,7 +347,14 @@ async function prepareForCloud(
       let h: string | null;
       if (isStorageUrl(it)) {
         h = hashFromStorageUrl(it);
-        if (h) urlCache.set(h, it); // already in the cloud
+        if (h && isR2StorageUrl(it)) {
+          cacheMediaUrl(h, it); // already hydrated from R2
+        } else if (h) {
+          // A legacy Firebase URL still contains retrievable bytes. Queue it
+          // for the R2 migration; if it has expired, verification reports the
+          // hash as broken rather than falsely adding it to the R2 manifest.
+          newMap.set(h, it);
+        }
       } else {
         h = await photoHash(it);
         newMap.set(h, it); // a local data: URL to upload
@@ -291,6 +388,7 @@ async function prepareForCloud(
       ...dataNoJournal,
       photoManifest: [...photoRefs],
       audioManifest: [...audioRefs],
+      mediaProvider: MEDIA_PROVIDER,
     },
     cloudJournal: journalEntries,
     newPhotos,
@@ -312,9 +410,8 @@ export async function loadUserMain(uid: string): Promise<AppData | null> {
     shardSignatures = new Map();
     return null;
   }
-  const main = snap.data() as AppData & { photoManifest?: string[]; audioManifest?: string[] };
-  knownCloudHashes = new Set(main.photoManifest ?? []);
-  knownCloudAudioHashes = new Set(main.audioManifest ?? []);
+  const main = snap.data() as AppData & CloudMediaMeta;
+  seedKnownMedia(main);
   // Journal lives in shards now; fold them (and any legacy inline entries) back
   // into journalEntries so the rest of the app sees one flat list as before.
   const journalEntries = await loadJournalShards(uid, main);
@@ -327,7 +424,7 @@ export async function loadUserMain(uid: string): Promise<AppData | null> {
 // hydrateCloudPhotos to resolve the images. Returns an unsubscribe function.
 export function subscribeUserMain(
   uid: string,
-  cb: (main: (AppData & { photoManifest?: string[]; audioManifest?: string[] }) | null) => void
+  cb: (main: (AppData & CloudMediaMeta) | null) => void
 ): () => void {
   if (!db) return () => {};
   // Subscribe to the main doc. Every save writes the main doc (its lastUpdated
@@ -337,9 +434,8 @@ export function subscribeUserMain(
     doc(db, COLLECTION, uid),
     async (snap) => {
       if (!snap.exists()) return cb(null);
-      const main = snap.data() as AppData & { photoManifest?: string[]; audioManifest?: string[] };
-      knownCloudHashes = new Set(main.photoManifest ?? []);
-      knownCloudAudioHashes = new Set(main.audioManifest ?? []);
+      const main = snap.data() as AppData & CloudMediaMeta;
+      seedKnownMedia(main);
       const journalEntries = await loadJournalShards(uid, main);
       cb({ ...main, journalEntries: journalEntries as unknown as JournalEntry[] });
     },
@@ -347,21 +443,23 @@ export function subscribeUserMain(
   );
 }
 
-// Resolve each entry's refs to a displayable source: a Storage download URL
-// (cached), falling back to the pre-migration Firestore media doc (base64) so
-// photos saved before the Storage move still appear until they're re-uploaded.
+// Resolve each entry's refs to a short-lived R2 download URL (cached until just
+// before expiry), falling back to the pre-migration Firestore media doc (base64)
+// so old photos still appear until the migration tool uploads them to R2.
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
-  const resolve = async (h: string, sub: string): Promise<string | null> => {
-    const cached = urlCache.get(h);
+  const resolve = async (h: string, sub: MediaKind): Promise<string | null> => {
+    const cached = cachedMediaUrl(h);
     if (cached) return cached;
-    if (storage) {
-      try {
-        const url = await getDownloadURL(storageRef(storage, mediaPath(uid, sub, h)));
-        urlCache.set(h, url);
-        return url;
-      } catch { /* not in Storage yet — try the legacy Firestore doc */ }
-    }
+    try {
+      const signed = await mediaGateway<{ url: string; expiresAt: number }>(
+        uid,
+        "/v1/media/download-url",
+        { kind: sub, hash: h }
+      );
+      cacheMediaUrl(h, signed.url, signed.expiresAt);
+      return signed.url;
+    } catch { /* not in R2 yet — try the legacy Firestore doc */ }
     try {
       const snap = await getDoc(doc(db!, COLLECTION, uid, sub, h));
       if (snap.exists()) return (snap.data() as { data: string }).data;
@@ -431,12 +529,12 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
 // Re-exported here so existing importers (SyncProvider, BackupCard) are unchanged.
 export { mergeAppData } from "./merge";
 
-// Upload new media to Storage. Non-fatal: a file that fails to upload just
-// isn't added to the returned set, so the manifest stays honest and it's
-// retried on the next save. No per-file size limit (Storage), so long voice
-// notes sync too.
+// Upload local media directly to R2 using a short-lived URL from the Worker.
+// The Worker signs the exact Content-Type, rejects declared oversize files,
+// then HEAD-verifies the stored size/type before we mark the hash successful.
+// A failed file is omitted from the manifest and retried on the next save.
 //
-// We deliberately NEVER delete from Storage here. The old pass deleted any
+// We deliberately NEVER delete from R2 here. The old pass deleted any
 // cloud hash not present in `allRefs` — but `allRefs` is only THIS device's
 // current snapshot, so a device syncing with a stale/incomplete view would
 // destroy a photo another device still references (data loss). Until a proper
@@ -444,32 +542,77 @@ export { mergeAppData } from "./merge";
 // that's cheap and safe. The manifest therefore only ever grows (union of what
 // we knew was in the cloud and what we just referenced), so no real file is
 // ever dropped from it.
-async function syncMediaToStorage(
+async function mediaSourceBlob(source: string): Promise<Blob> {
+  const response = await fetch(source);
+  if (!response.ok) throw new Error("تعذّر قراءة الوسيط المحلي");
+  const blob = await response.blob();
+  // The signing gateway normalizes this common alias; send the same canonical
+  // value on PUT or the Content-Type-bound signature would intentionally fail.
+  if (blob.type.toLowerCase() === "image/jpg") {
+    return new Blob([blob], { type: "image/jpeg" });
+  }
+  return blob;
+}
+
+interface UploadTicket {
+  exists: boolean;
+  url?: string;
+  headers?: Record<string, string>;
+}
+
+async function uploadMediaToR2(
+  syncKey: string,
+  kind: MediaKind,
+  hash: string,
+  source: string
+): Promise<void> {
+  const blob = await mediaSourceBlob(source);
+  const contentType = blob.type.split(";", 1)[0].toLowerCase();
+  const request = { kind, hash, contentType, size: blob.size };
+  const ticket = await mediaGateway<UploadTicket>(syncKey, "/v1/media/upload-url", request);
+  if (ticket.exists) return;
+  if (!ticket.url) throw new Error("لم يُرجع Worker رابط رفع");
+
+  const uploaded = await fetch(ticket.url, {
+    method: "PUT",
+    headers: ticket.headers ?? { "Content-Type": contentType },
+    body: blob,
+  });
+  if (!uploaded.ok) throw new Error(`رفض R2 الرفع (${uploaded.status})`);
+  await mediaGateway(syncKey, "/v1/media/complete", request);
+}
+
+async function syncMediaToR2(
   uid: string,
-  sub: string,
+  sub: MediaKind,
   toUpload: Map<string, string>,
-  allRefs: Set<string>,
   known: Set<string>
 ): Promise<Set<string>> {
-  if (!storage) return known;
   const uploaded = new Set(known);
-  try {
-    for (const [h, dataUrl] of toUpload) {
-      await uploadString(storageRef(storage, mediaPath(uid, sub, h)), dataUrl, "data_url");
-      uploaded.add(h);
-      urlCache.delete(h); // a fresh download URL will be fetched on next resolve
+  const queue = [...toUpload];
+  let next = 0;
+  // A small pool makes a 2000-photo Day One migration practical without
+  // flooding the browser, Worker, or R2 with thousands of simultaneous calls.
+  const worker = async () => {
+    while (next < queue.length) {
+      const index = next++;
+      const [hash, dataUrl] = queue[index];
+      try {
+        await uploadMediaToR2(uid, sub, hash, dataUrl);
+        uploaded.add(hash);
+        urlCache.delete(hash);
+      } catch {
+        // Continue other files. The honest manifest below excludes this hash,
+        // and mediaComplete keeps the UI in "pending" state for a later retry.
+      }
     }
-    // Everything we already knew is in the cloud (never deleted) plus everything
-    // this device references and just uploaded — union, never shrink.
-    for (const h of allRefs) uploaded.add(h);
-    return uploaded;
-  } catch {
-    return uploaded; // honest partial progress → failed ones retried next save
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+  return uploaded;
 }
 
 // Result of a save. `mediaComplete` is false when some referenced photo/voice
-// note didn't reach Cloud Storage this round (a failed/partial upload) — the
+// note didn't reach R2 this round (a failed/partial upload) — the
 // text doc still saved, but the UI must NOT claim "تمت المزامنة" while media is
 // still pending. It's retried on the next save.
 export interface SaveResult {
@@ -480,10 +623,10 @@ export async function saveUserData(uid: string, data: AppData): Promise<SaveResu
   if (!db) return { mediaComplete: true };
   const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
 
-  // 1) Upload new media to Storage first. Text-only edits have none, so this is
+  // 1) Upload new media to R2 first. Text-only edits have none, so this is
   //    a no-op and stays fast.
-  knownCloudHashes = await syncMediaToStorage(uid, "photos", newPhotos, photoRefs, knownCloudHashes);
-  knownCloudAudioHashes = await syncMediaToStorage(uid, "audios", newAudios, audioRefs, knownCloudAudioHashes);
+  knownCloudHashes = await syncMediaToR2(uid, "photos", newPhotos, knownCloudHashes);
+  knownCloudAudioHashes = await syncMediaToR2(uid, "audios", newAudios, knownCloudAudioHashes);
 
   // 2) Write the journal shards (only the ones that changed) — this is what
   //    keeps the journal off the 1MB single-doc cap. Then write the main doc
@@ -505,8 +648,8 @@ export async function saveUserData(uid: string, data: AppData): Promise<SaveResu
   return { mediaComplete };
 }
 
-// The whole main doc (all journal text, transactions, etc. — media is stored
-// separately in Cloud Storage) lives under Firestore's hard 1MB-per-document
+// The whole main doc (transactions/settings/etc. — media is stored separately
+// in R2 and the journal is sharded) lives under Firestore's hard 1MB-per-document
 // cap. A large text-only import (e.g. Day One) can approach it well before
 // media ever would, and crossing it breaks sync outright. Warn early, once per
 // session, instead of failing silently on the next save.
@@ -524,47 +667,53 @@ function warnIfDocSizeNearLimit(main: unknown): void {
   showToast(`مساحة المزامنة ${kb}KB من حد 1MB (${pct}%) — قارب الامتلاء`, "warning");
 }
 
-// Seed the hash→URL cache from media already stored locally as Storage URLs, so
-// a hydrate reuses them instead of re-fetching every download URL from scratch.
+// Seed the hash→URL cache from already-hydrated cloud URLs. Expired presigned
+// R2 URLs are rejected by cachedMediaUrl and transparently refreshed.
 export function primeUrlCache(entries: JournalEntry[]): void {
   for (const e of entries) {
     for (const u of [...(e.photos ?? []), e.photo, ...(e.audios ?? []), e.audio]) {
       if (u && isStorageUrl(u)) {
         const h = hashFromStorageUrl(u);
-        if (h) urlCache.set(h, u);
+        if (h) cacheMediaUrl(h, u);
       }
     }
   }
 }
 
-// Force a full media re-upload: forget what we think is already in the cloud so
-// the next save re-uploads every photo/voice note (idempotent — existing files
-// are just overwritten). Recovers media stranded by an older optimistic
-// manifest, and migrates local photos up to Cloud Storage.
-export async function reuploadAllMedia(uid: string, data: AppData): Promise<void> {
+// Force a full media migration/re-upload from this device, then verify the R2
+// inventory. Existing R2 objects are detected by the Worker and not transferred
+// again. Only actual local data URLs can repair a missing object.
+export async function reuploadAllMedia(uid: string, data: AppData): Promise<MediaInventory> {
   knownCloudHashes = new Set();
   knownCloudAudioHashes = new Set();
-  await saveUserData(uid, data);
+  const result = await saveUserData(uid, data);
+  const inventory = await inventoryMedia(uid, data);
+  if (!result.mediaComplete && inventory.storageReachable) {
+    // The detailed inventory is returned to the UI; no generic success is
+    // claimed when R2 still lacks a referenced local file.
+    return inventory;
+  }
+  return inventory;
 }
 
 // ===================== Media inventory / verification =====================
 // Read-only audit that reconciles what the entries REFERENCE against what
-// actually lives in Cloud Storage — the check the migration prep requires
+// actually lives in R2 — the check the migration prep requires
 // before any restructure (§10). Touches nothing; it only lists and compares.
 export interface MediaTypeReport {
   referenced: number;   // distinct hashes referenced by entries
-  inCloud: number;      // referenced AND present in Storage (healthy)
+  inCloud: number;      // referenced AND present in R2 (healthy)
   pendingUpload: number;// referenced, not in cloud, but still held locally → will upload
   broken: number;       // referenced, not in cloud, and NO local copy → the file is gone
-  orphans: number;      // in Storage but referenced by nothing → safe to ignore/GC later
+  orphans: number;      // in R2 but referenced by nothing → safe to ignore/GC later
 }
 export interface MediaInventory {
   photos: MediaTypeReport;
   audios: MediaTypeReport;
   brokenSamples: string[]; // a few hashes with a missing file, for reference
-  // False when Cloud Storage couldn't be listed at all (network blocked, offline,
-  // a Storage outage) — so the UI never reports a misleading "0 in cloud" when the
-  // truth is "couldn't reach Storage". The referenced photos may be perfectly safe
+  // False when R2 couldn't be listed at all (network blocked, offline,
+  // a Worker/R2 outage) — so the UI never reports a misleading "0 in cloud" when the
+  // truth is "couldn't reach R2". The referenced photos may be perfectly safe
   // in the cloud; we just couldn't see them from here right now.
   storageReachable: boolean;
 }
@@ -586,13 +735,16 @@ async function referencedHashes(
   return map;
 }
 
-async function listCloudHashes(uid: string, sub: string): Promise<{ hashes: Set<string>; ok: boolean }> {
-  if (!storage) return { hashes: new Set(), ok: false };
+async function listCloudHashes(uid: string, sub: MediaKind): Promise<{ hashes: Set<string>; ok: boolean }> {
   try {
-    const res = await listAll(storageRef(storage, `${COLLECTION}/${uid}/${sub}`));
-    return { hashes: new Set(res.items.map((i) => i.name)), ok: true };
+    const res = await mediaGateway<{ hashes: string[] }>(
+      uid,
+      "/v1/media/inventory",
+      { kind: sub }
+    );
+    return { hashes: new Set(res.hashes), ok: true };
   } catch {
-    return { hashes: new Set(), ok: false }; // couldn't reach Storage — NOT "empty"
+    return { hashes: new Set(), ok: false }; // couldn't reach R2 — NOT "empty"
   }
 }
 
