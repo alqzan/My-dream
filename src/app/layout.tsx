@@ -36,6 +36,7 @@ import { PrivacyLock } from "@/components/layout/PrivacyLock";
 import { AppBadge } from "@/components/layout/AppBadge";
 import { MilestoneWatcher } from "@/components/dashboard/MilestoneWatcher";
 import { SWRegister } from "@/components/layout/SWRegister";
+import { UpdatePrompt } from "@/components/layout/UpdatePrompt";
 import { ViewportWatcher } from "@/components/layout/ViewportWatcher";
 import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
@@ -100,6 +101,7 @@ export default function RootLayout({
               </div>
               <MobileNav />
               <UndoToast />
+              <UpdatePrompt />
               <PendingInboxWatcher />
               <RecurringRunner />
               <AppBadge />
