@@ -8,16 +8,16 @@ import { buzz } from "@/lib/utils";
 // Gate that hides the whole app behind a PIN screen when a lock is set and this
 // session hasn't unlocked yet. Once unlocked, it renders children untouched.
 export function PrivacyLock({ children }: { children: React.ReactNode }) {
-  // Start locked only if a PIN exists and we haven't unlocked this session.
-  // Evaluated on mount (client-only via ClientOnly parent), so no SSR mismatch.
-  const [locked, setLocked] = useState(false);
+  // Start locked (synchronously, in the lazy initializer) whenever a PIN exists
+  // and this session isn't unlocked — so the very FIRST render is already the
+  // lock screen. A useState(false)+useEffect would paint the app's private data
+  // for one frame before the lock appeared (a real leak). Safe to read
+  // localStorage here because PrivacyLock only ever renders on the client
+  // (wrapped in <ClientOnly> in layout.tsx), so there's no SSR/hydration flash.
+  const [locked, setLocked] = useState(() => hasPin() && !isUnlocked());
   const [digits, setDigits] = useState("");
   const [error, setError] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-
-  useEffect(() => {
-    if (hasPin() && !isUnlocked()) setLocked(true);
-  }, []);
 
   useEffect(() => {
     if (digits.length !== PIN_LENGTH) return;

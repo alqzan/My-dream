@@ -63,12 +63,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // قفل التكبير/التصغير: التبعيد بالأصابع كان يكسر التخطيط (يفعّل نسخة
-  // الكمبيوتر على الجوال) — بدونه يتصرف التطبيق كتطبيق حقيقي سلس.
+  // لا نقفل التكبير: منع تكبير النص يخالف معيار WCAG (Resize Text حتى 200%)
+  // ويؤذي ضعاف البصر. التخطيط RTL يتحمّل التكبير؛ إن ظهر أي كسر يُعالَج بـCSS
+  // لا بمصادرة تكبير المستخدم.
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   // يفعّل env(safe-area-inset-*) على الأجهزة ذات النوتش فلا يختفي الشريط
   // السفلي تحت مؤشر الهوم (المستهلك: .pb-safe في الشريط السفلي).
   viewportFit: "cover",
