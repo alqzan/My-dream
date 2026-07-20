@@ -3,7 +3,7 @@ import {
 } from "firebase/firestore";
 import { ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 import { db, storage, getSyncSpace } from "./firebase";
-import type { AppData, JournalEntry } from "./types";
+import type { AppData, JournalEntry, HifzMistake } from "./types";
 import { entryPhotos, entryAudios, dedupeJournalEntries, mergeEntryMedia } from "./utils";
 import { showToast } from "@/components/ui/UndoToast";
 
@@ -399,16 +399,35 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const quranKhatma = { ...pk, completed: Math.max(pk.completed ?? 0, sk.completed ?? 0) };
 
   // Quran حفظ: خطة من الأحدث، والجبهة أبعد موضعٍ بلغه أيُّ جهاز، وسجلّا الجلسات
-  // والمراجعات يُوحَّدان بالـid فلا يضيع أثرٌ سُجّل على جهاز.
-  const emptyHifz = { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 };
+  // والمراجعات يُوحَّدان بالـid فلا يضيع أثرٌ سُجّل على جهاز. مواضع الأخطاء
+  // (mistakes) تُوحَّد بالـid مع دمج تواريخ الوقوع (hits) وأحدث حالة إتقان، و
+  // lastTestDate يأخذ الأحدث — كان الاثنان يُمحيان لأن الدمج بنى كائنًا ناقصهما.
+  const emptyHifz = { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [] as HifzMistake[], lastTestDate: undefined as string | undefined };
   const ph = primary.quranHifz ?? emptyHifz;
   const sh = secondary.quranHifz ?? emptyHifz;
+  const pMist = ph.mistakes ?? [];
+  const sMist = sh.mistakes ?? [];
+  const pMistById = new Map(pMist.map((m) => [m.id, m]));
+  const sMistById = new Map(sMist.map((m) => [m.id, m]));
+  const mistakes = unionOrdered(pMist, sMist, (m) => m.id).map((m) => {
+    const a = pMistById.get(m.id);
+    const b = sMistById.get(m.id);
+    if (!a || !b) return m; // only one device has it
+    // Both hold it: union the hit dates, and take the record edited more
+    // recently for resolved/word so an "أُتقن" on either device sticks.
+    const newer = (a.updatedAt ?? "") >= (b.updatedAt ?? "") ? a : b;
+    return { ...newer, hits: [...new Set([...(a.hits ?? []), ...(b.hits ?? [])])].sort() };
+  });
+  const lastTestDate = (ph.lastTestDate ?? "") >= (sh.lastTestDate ?? "")
+    ? ph.lastTestDate : sh.lastTestDate;
   const quranHifz = {
     plan: ph.plan ?? sh.plan,
     frontierId: Math.max(ph.frontierId ?? 0, sh.frontierId ?? 0),
     sessions: unionOrdered(ph.sessions ?? [], sh.sessions ?? [], (x) => x.id),
     reviews: unionOrdered(ph.reviews ?? [], sh.reviews ?? [], (x) => x.id),
     reviewCursorId: ph.reviewCursorId || sh.reviewCursorId || 0,
+    mistakes,
+    lastTestDate,
   };
 
   // Journal entries need more than a plain id-union. First canonicalize +

@@ -21,6 +21,21 @@ const ID_COLLECTIONS = [
   "quranReflections",
 ] as const;
 
+// Undo of a delete re-adds the item with its original id — but the delete left
+// a tombstone in `deleted` (id → ts), and the cloud merge's `alive()` drops any
+// id that carries a live tombstone. So re-adding must also lift the tombstone,
+// or the restored item silently vanishes on the next sync. Returns a partial to
+// spread into the set() patch — empty (no churn) when there's nothing to clear.
+function clearTombstone(
+  deleted: Record<string, number> | undefined,
+  id: string
+): { deleted?: Record<string, number> } {
+  if (!deleted || !(id in deleted)) return {};
+  const next = { ...deleted };
+  delete next[id];
+  return { deleted: next };
+}
+
 interface AppStore extends AppData {
   // Journal
   addJournalEntry: (entry: JournalEntry) => void;
@@ -212,7 +227,12 @@ export const useAppStore = create<AppStore>()(
         })),
 
       addJournalEntry: (entry) =>
-        set((s) => ({ journalEntries: [{ ...entry, updatedAt: Date.now() }, ...s.journalEntries] })),
+        set((s) => ({
+          journalEntries: [{ ...entry, updatedAt: Date.now() }, ...s.journalEntries],
+          // Re-adding an id that was just deleted (Undo) must lift its tombstone,
+          // else the next cloud merge's `alive()` filter deletes it right back.
+          ...clearTombstone(s.deleted, entry.id),
+        })),
 
       updateJournalEntry: (id, updates) =>
         set((s) => ({
@@ -275,7 +295,11 @@ export const useAppStore = create<AppStore>()(
       },
 
       addTransaction: (tx) =>
-        set((s) => ({ transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions] })),
+        set((s) => ({
+          transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions],
+          // Re-adding a just-deleted id (Undo) must lift its tombstone (see above).
+          ...clearTombstone(s.deleted, tx.id),
+        })),
 
       updateTransaction: (id, updates) =>
         set((s) => ({
