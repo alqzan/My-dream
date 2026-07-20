@@ -1,7 +1,7 @@
 import {
   doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
 } from "firebase/firestore";
-import { ref as storageRef, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 import { db, storage, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios, dedupeJournalEntries, mergeEntryMedia } from "./utils";
@@ -453,10 +453,19 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   };
 }
 
-// Upload new media to Storage and delete any no longer referenced. Non-fatal:
-// a file that fails to upload just isn't added to the returned set, so the
-// manifest stays honest and it's retried on the next save. No per-file size
-// limit (Storage), so long voice notes now sync too.
+// Upload new media to Storage. Non-fatal: a file that fails to upload just
+// isn't added to the returned set, so the manifest stays honest and it's
+// retried on the next save. No per-file size limit (Storage), so long voice
+// notes sync too.
+//
+// We deliberately NEVER delete from Storage here. The old pass deleted any
+// cloud hash not present in `allRefs` — but `allRefs` is only THIS device's
+// current snapshot, so a device syncing with a stale/incomplete view would
+// destroy a photo another device still references (data loss). Until a proper
+// soft-delete + server-side GC exists, unreferenced media simply accumulates;
+// that's cheap and safe. The manifest therefore only ever grows (union of what
+// we knew was in the cloud and what we just referenced), so no real file is
+// ever dropped from it.
 async function syncMediaToStorage(
   uid: string,
   sub: string,
@@ -472,13 +481,10 @@ async function syncMediaToStorage(
       uploaded.add(h);
       urlCache.delete(h); // a fresh download URL will be fetched on next resolve
     }
-    // Delete media that's in the cloud but no longer referenced by any entry.
-    for (const h of [...known]) {
-      if (!allRefs.has(h)) {
-        try { await deleteObject(storageRef(storage, mediaPath(uid, sub, h))); } catch { /* already gone */ }
-      }
-    }
-    return new Set(allRefs); // everything referenced is now present
+    // Everything we already knew is in the cloud (never deleted) plus everything
+    // this device references and just uploaded — union, never shrink.
+    for (const h of allRefs) uploaded.add(h);
+    return uploaded;
   } catch {
     return uploaded; // honest partial progress → failed ones retried next save
   }
