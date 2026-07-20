@@ -5,7 +5,11 @@
 // the whole app to work with no connection.
 // v2: bounded cache — old hashed chunks used to accumulate forever; now the
 // runtime cache is trimmed to MAX_ENTRIES so app storage stays lean over time.
-const CACHE = "madar-v2";
+// v3: bump the cache name so activate() purges every v2 entry. Combined with
+// skipWaiting + clients.claim this forces a stale standalone PWA (iOS caches the
+// start_url aggressively and won't refresh on reopen alone) onto the newest
+// deploy — the SW file itself changing is what makes the browser re-check.
+const CACHE = "madar-v3";
 const MAX_ENTRIES = 100;
 
 self.addEventListener("install", () => {
