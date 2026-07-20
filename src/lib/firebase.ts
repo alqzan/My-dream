@@ -46,7 +46,14 @@ if (isFirebaseEnabled) {
   // Safari and some cellular networks silently block WebChannel, which makes
   // Firestore look permanently "offline" even though plain HTTPS works — this
   // routes everything (reads, writes, live listeners) over HTTP long-polling.
-  dbInstance = initializeFirestore(app, { experimentalForceLongPolling: true });
+  // ignoreUndefinedProperties: Firestore rejects any `undefined` field value and
+  // throws from setDoc, aborting the whole save (media upload included). Optional
+  // fields left undefined (e.g. quranHifz.lastTestDate before the first test) are
+  // legitimate here, so drop them on write instead of crashing the sync.
+  dbInstance = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+    ignoreUndefinedProperties: true,
+  });
 }
 
 export const db = dbInstance;
