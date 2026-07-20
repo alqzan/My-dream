@@ -336,7 +336,12 @@ export const useAppStore = create<AppStore>()(
             if (!dueDates.length) return r;
             for (const dueStr of dueDates) {
               newTx.push({
-                id: uid(),
+                // Deterministic id from the rule + occurrence date so two devices
+                // that each generate the same due occurrence produce the SAME id —
+                // the sync merge (byId) then collapses them into one instead of
+                // leaving a duplicate rent/subscription. Manual transactions keep
+                // their random uid(); only auto-generated recurring ones are keyed.
+                id: `rec_${r.id}_${dueStr}`,
                 date: dueStr,
                 amount: r.amount,
                 category: r.category,
