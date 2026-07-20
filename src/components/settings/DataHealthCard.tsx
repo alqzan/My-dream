@@ -2,8 +2,11 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
+import { inventoryMedia, reuploadAllMedia, type MediaInventory } from "@/lib/sync";
+import { getSyncSpace } from "@/lib/firebase";
+import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
-import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
 
@@ -14,6 +17,37 @@ const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
 export function DataHealthCard() {
   const snapshot = useAppStore((s) => s.snapshot);
   const { mediaPending, lastSyncedAt, enabled } = useSync();
+  const [scan, setScan] = useState<MediaInventory | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [reuploading, setReuploading] = useState(false);
+
+  async function runScan() {
+    const space = getSyncSpace();
+    if (!space) { showToast("المزامنة غير مفعّلة على هذا الجهاز", "warning"); return; }
+    setScanning(true);
+    try {
+      setScan(await inventoryMedia(space, snapshot()));
+    } catch {
+      showToast("تعذّر فحص الصور — تحقق من الاتصال", "warning");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function reupload() {
+    const space = getSyncSpace();
+    if (!space) return;
+    setReuploading(true);
+    try {
+      await reuploadAllMedia(space, snapshot());
+      showToast("أُعيد رفع الوسائط — أعد الفحص للتأكد", "success");
+      await runScan();
+    } catch {
+      showToast("تعذّر إعادة الرفع — تحقق من الاتصال", "warning");
+    } finally {
+      setReuploading(false);
+    }
+  }
   const [info, setInfo] = useState<{
     bytes: number;
     photos: number;
@@ -114,7 +148,62 @@ export function DataHealthCard() {
           )}
         </div>
       )}
+
+      {/* فحص الصور: مطابقة المحلي بالسحابي وكشف المراجع المكسورة (طمأنينة قبل الترحيل) */}
+      {enabled && (
+        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/10">
+          <button
+            onClick={runScan}
+            disabled={scanning}
+            className="w-full flex items-center justify-center gap-2 text-sm font-medium text-brand-600 bg-brand-50 rounded-xl py-2.5 press disabled:opacity-60"
+          >
+            {scanning ? <Loader2 size={15} className="animate-spin" /> : <ScanSearch size={15} />}
+            {scanning ? "جارٍ فحص الصور..." : "فحص الصور والمزامنة"}
+          </button>
+
+          {scan && (
+            <div className="mt-3 space-y-3 animate-fade-up">
+              <ScanRow title="الصور" r={scan.photos} />
+              <ScanRow title="الأصوات" r={scan.audios} />
+              {(scan.photos.broken > 0 || scan.audios.broken > 0) && (
+                <p className="text-[11px] text-red-500 leading-relaxed">
+                  ⚠️ يوجد {scan.photos.broken + scan.audios.broken} مرجع مكسور (ملف مفقود من السحابة ولا نسخة محلية له).
+                  إعادة الرفع تُصلح المعلّق المحلي فقط؛ المكسور تمامًا يُستعاد من نسخة احتياطية إن وُجدت.
+                </p>
+              )}
+              {(scan.photos.pendingUpload > 0 || scan.audios.pendingUpload > 0 || scan.photos.broken > 0 || scan.audios.broken > 0) && (
+                <button
+                  onClick={reupload}
+                  disabled={reuploading}
+                  className="w-full flex items-center justify-center gap-2 text-sm font-medium text-white bg-finance rounded-xl py-2.5 press disabled:opacity-60"
+                >
+                  {reuploading ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+                  {reuploading ? "جارٍ إعادة الرفع..." : "إعادة رفع كل الوسائط"}
+                </button>
+              )}
+              {scan.photos.broken === 0 && scan.audios.broken === 0 &&
+               scan.photos.pendingUpload === 0 && scan.audios.pendingUpload === 0 && (
+                <p className="text-[11px] text-finance">✓ كل الوسائط المُشار إليها موجودة في السحابة</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </Card>
+  );
+}
+
+function ScanRow({ title, r }: { title: string; r: import("@/lib/sync").MediaTypeReport }) {
+  return (
+    <div className="rounded-lg bg-white/70 dark:bg-white/5 p-2.5">
+      <div className="text-[11px] font-semibold text-gray-600 mb-1.5">{title} · {r.referenced} مُشار إليها</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+        <span className="flex justify-between"><span className="text-gray-500">في السحابة</span><span className="text-finance font-semibold">{r.inCloud}</span></span>
+        <span className="flex justify-between"><span className="text-gray-500">بانتظار الرفع</span><span className={r.pendingUpload ? "text-amber-600 font-semibold" : "text-gray-400"}>{r.pendingUpload}</span></span>
+        <span className="flex justify-between"><span className="text-gray-500">مكسورة</span><span className={r.broken ? "text-red-500 font-semibold" : "text-gray-400"}>{r.broken}</span></span>
+        <span className="flex justify-between"><span className="text-gray-500">يتيمة</span><span className="text-gray-400">{r.orphans}</span></span>
+      </div>
+    </div>
   );
 }
 

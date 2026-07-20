@@ -1,7 +1,7 @@
 import {
   doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
 } from "firebase/firestore";
-import { ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadString, getDownloadURL, listAll } from "firebase/storage";
 import { db, storage, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry, HifzMistake } from "./types";
 import { entryPhotos, entryAudios, dedupeJournalEntries, mergeEntryMedia } from "./utils";
@@ -605,4 +605,82 @@ export async function reuploadAllMedia(uid: string, data: AppData): Promise<void
   knownCloudHashes = new Set();
   knownCloudAudioHashes = new Set();
   await saveUserData(uid, data);
+}
+
+// ===================== Media inventory / verification =====================
+// Read-only audit that reconciles what the entries REFERENCE against what
+// actually lives in Cloud Storage — the check the migration prep requires
+// before any restructure (§10). Touches nothing; it only lists and compares.
+export interface MediaTypeReport {
+  referenced: number;   // distinct hashes referenced by entries
+  inCloud: number;      // referenced AND present in Storage (healthy)
+  pendingUpload: number;// referenced, not in cloud, but still held locally → will upload
+  broken: number;       // referenced, not in cloud, and NO local copy → the file is gone
+  orphans: number;      // in Storage but referenced by nothing → safe to ignore/GC later
+}
+export interface MediaInventory {
+  photos: MediaTypeReport;
+  audios: MediaTypeReport;
+  brokenSamples: string[]; // a few hashes with a missing file, for reference
+}
+
+async function referencedHashes(
+  items: string[]
+): Promise<Map<string, "local" | "cloud">> {
+  const map = new Map<string, "local" | "cloud">();
+  for (const it of items) {
+    if (!it) continue;
+    if (isStorageUrl(it)) {
+      const h = hashFromStorageUrl(it);
+      if (h && !map.has(h)) map.set(h, "cloud"); // only a cloud pointer, no local bytes
+    } else {
+      const h = await photoHash(it);
+      map.set(h, "local"); // held locally as data: → recoverable by re-upload
+    }
+  }
+  return map;
+}
+
+async function listCloudHashes(uid: string, sub: string): Promise<Set<string>> {
+  if (!storage) return new Set();
+  try {
+    const res = await listAll(storageRef(storage, `${COLLECTION}/${uid}/${sub}`));
+    return new Set(res.items.map((i) => i.name));
+  } catch {
+    return new Set();
+  }
+}
+
+function reconcile(
+  refs: Map<string, "local" | "cloud">,
+  cloud: Set<string>
+): { report: MediaTypeReport; broken: string[] } {
+  let inCloud = 0, pendingUpload = 0, broken = 0;
+  const brokenList: string[] = [];
+  for (const [h, source] of refs) {
+    if (cloud.has(h)) inCloud++;
+    else if (source === "local") pendingUpload++;
+    else { broken++; brokenList.push(h); }
+  }
+  let orphans = 0;
+  for (const h of cloud) if (!refs.has(h)) orphans++;
+  return { report: { referenced: refs.size, inCloud, pendingUpload, broken, orphans }, broken: brokenList };
+}
+
+export async function inventoryMedia(uid: string, data: AppData): Promise<MediaInventory> {
+  const photoItems: string[] = [];
+  const audioItems: string[] = [];
+  for (const e of data.journalEntries) {
+    photoItems.push(...entryPhotos(e));
+    audioItems.push(...entryAudios(e));
+  }
+  const [photoRefs, audioRefs, cloudPhotos, cloudAudios] = await Promise.all([
+    referencedHashes(photoItems),
+    referencedHashes(audioItems),
+    listCloudHashes(uid, "photos"),
+    listCloudHashes(uid, "audios"),
+  ]);
+  const p = reconcile(photoRefs, cloudPhotos);
+  const a = reconcile(audioRefs, cloudAudios);
+  return { photos: p.report, audios: a.report, brokenSamples: [...p.broken, ...a.broken].slice(0, 5) };
 }
