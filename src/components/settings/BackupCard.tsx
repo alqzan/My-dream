@@ -67,6 +67,78 @@ async function embedAllMedia(
   return { data: { ...data, journalEntries }, allEmbedded };
 }
 
+// Backup file format version (2 = carries a __meta block with counts +
+// checksum; 1/absent = the older flat AppData files, still restorable).
+const BACKUP_VERSION = 2;
+const SCHEMA_VERSION = 1;
+
+interface BackupMeta {
+  app: "madar";
+  backupVersion: number;
+  schemaVersion: number;
+  createdAt: string;
+  counts: BackupCounts;
+  checksum: string;
+}
+
+interface BackupCounts {
+  journalEntries: number;
+  transactions: number;
+  books: number;
+  readingLogs: number;
+  photos: number;
+  audios: number;
+}
+
+// Order-stable FNV-1a over a string — enough to catch a truncated/corrupted
+// file, not a security hash. Used for the backup integrity check.
+function hashString(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+function countItems(d: AppData): BackupCounts {
+  let photos = 0;
+  let audios = 0;
+  for (const e of d.journalEntries) {
+    photos += (e.photos?.length ?? 0) + (e.photo ? 1 : 0);
+    audios += (e.audios?.length ?? 0) + (e.audio ? 1 : 0);
+  }
+  return {
+    journalEntries: d.journalEntries.length,
+    transactions: d.transactions.length,
+    books: d.books.length,
+    readingLogs: d.readingLogs.length,
+    photos,
+    audios,
+  };
+}
+
+// Validate + describe a parsed backup object before restore: normalize it to a
+// full AppData, count what it holds (for the preview), and integrity-check it
+// against its embedded checksum when present.
+function inspectBackup(parsed: Record<string, unknown>): {
+  data: AppData;
+  counts: BackupCounts;
+  createdAt: string | null;
+  integrity: "ok" | "mismatch" | "none";
+} {
+  const meta = parsed.__meta as BackupMeta | undefined;
+  const data = normalizeBackup(parsed);
+  let integrity: "ok" | "mismatch" | "none" = "none";
+  if (meta?.checksum) {
+    // Recompute over the data payload exactly as it was checksummed at export:
+    // the parsed object minus __meta (spread preserves the original key order).
+    const { __meta: _drop, ...rest } = parsed;
+    integrity = hashString(JSON.stringify(rest)) === meta.checksum ? "ok" : "mismatch";
+  }
+  return { data, counts: countItems(data), createdAt: meta?.createdAt ?? null, integrity };
+}
+
 // Fill any fields a legacy/partial backup is missing so it's a full AppData —
 // mergeAppData walks every collection, and the store tolerates extra fields.
 function normalizeBackup(d: Record<string, unknown>): AppData {
@@ -109,6 +181,10 @@ export function BackupCard() {
   const [error, setError] = useState("");
   // A validated backup waiting for the user to choose merge vs. replace.
   const [pending, setPending] = useState<AppData | null>(null);
+  // What the pending backup holds (for the pre-restore preview) + integrity.
+  const [pendingMeta, setPendingMeta] = useState<
+    { counts: BackupCounts; createdAt: string | null; integrity: "ok" | "mismatch" | "none" } | null
+  >(null);
   const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
   // Optional export encryption.
   const [encrypt, setEncrypt] = useState(false);
@@ -121,8 +197,21 @@ export function BackupCard() {
     const raw = snapshot();
     setExporting({ done: 0, total: raw.journalEntries.length });
     const { data, allEmbedded } = await embedAllMedia(raw, (done, total) => setExporting({ done, total }));
+    // Wrap with a self-describing __meta block (version, date, counts, and a
+    // checksum over the data) so a restore can preview and integrity-check it.
+    // __meta sits alongside the flat AppData fields, so older readers (and
+    // normalizeBackup, which only picks known keys) ignore it — fully back-compat.
+    const meta: BackupMeta = {
+      app: "madar",
+      backupVersion: BACKUP_VERSION,
+      schemaVersion: SCHEMA_VERSION,
+      createdAt: new Date().toISOString(),
+      counts: countItems(data),
+      checksum: hashString(JSON.stringify(data)),
+    };
+    const withMeta = { __meta: meta, ...data };
     const useEnc = encrypt && exportPassword.trim().length > 0;
-    const payload = useEnc ? await encryptJson(data, exportPassword.trim()) : JSON.stringify(data);
+    const payload = useEnc ? await encryptJson(withMeta, exportPassword.trim()) : JSON.stringify(withMeta);
     setExporting(null);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -143,6 +232,7 @@ export function BackupCard() {
   async function importJson(file: File) {
     setError("");
     setPending(null);
+    setPendingMeta(null);
     setEncPending(null);
     setImportPassword("");
     try {
@@ -155,8 +245,10 @@ export function BackupCard() {
       if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.transactions)) {
         throw new Error("bad shape");
       }
-      // Don't apply yet — let the user pick merge vs. replace first.
-      setPending(normalizeBackup(parsed));
+      // Don't apply yet — let the user preview it and pick merge vs. replace.
+      const info = inspectBackup(parsed);
+      setPending(info.data);
+      setPendingMeta({ counts: info.counts, createdAt: info.createdAt, integrity: info.integrity });
     } catch {
       setError("الملف غير صالح — تأكد أنه نسخة مدار الاحتياطية");
     }
@@ -172,7 +264,9 @@ export function BackupCard() {
       }
       setEncPending(null);
       setImportPassword("");
-      setPending(normalizeBackup(obj as Record<string, unknown>));
+      const info = inspectBackup(obj as Record<string, unknown>);
+      setPending(info.data);
+      setPendingMeta({ counts: info.counts, createdAt: info.createdAt, integrity: info.integrity });
     } catch {
       setError("كلمة المرور غير صحيحة أو الملف تالف");
     }
@@ -183,6 +277,7 @@ export function BackupCard() {
     const before = snapshot();
     hydrate(mode === "merge" ? mergeAppData(before, pending) : pending);
     setPending(null);
+    setPendingMeta(null);
     showUndo(mode === "merge" ? "دمجت النسخة الاحتياطية" : "استعدت النسخة الاحتياطية", () => hydrate(before));
   }
 
@@ -291,6 +386,30 @@ export function BackupCard() {
 
       {pending && (
         <div className="mt-3 rounded-xl bg-gray-50 p-3 animate-fade-up">
+          {/* معاينة ما ستُستعيده قبل التطبيق (§صحة البيانات) */}
+          {pendingMeta && (
+            <div className="mb-2.5 rounded-lg bg-white/70 dark:bg-white/5 p-2.5">
+              <div className="text-[11px] font-semibold text-gray-600 mb-1.5">
+                محتوى النسخة{pendingMeta.createdAt ? ` · ${pendingMeta.createdAt.slice(0, 10)}` : ""}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 text-[11px] text-gray-500">
+                <span>مذكرات: {pendingMeta.counts.journalEntries}</span>
+                <span>عمليات: {pendingMeta.counts.transactions}</span>
+                <span>كتب: {pendingMeta.counts.books}</span>
+                <span>سجلات قراءة: {pendingMeta.counts.readingLogs}</span>
+                <span>صور: {pendingMeta.counts.photos}</span>
+                <span>أصوات: {pendingMeta.counts.audios}</span>
+              </div>
+              {pendingMeta.integrity === "mismatch" && (
+                <p className="text-[11px] text-amber-600 mt-2 leading-relaxed">
+                  ⚠️ فحص السلامة لا يطابق — قد يكون الملف عُدّل أو نقص جزء منه. راجِع المحتوى قبل الاستبدال.
+                </p>
+              )}
+              {pendingMeta.integrity === "ok" && (
+                <p className="text-[11px] text-finance mt-2">✓ فحص السلامة سليم</p>
+              )}
+            </div>
+          )}
           <p className="text-xs text-gray-600 mb-2.5">
             كيف تستعيد النسخة؟ <strong>الدمج</strong> يضيف عناصرها لبياناتك الحالية دون حذف،
             و<strong>الاستبدال</strong> يستبدل كل شيء بها.
@@ -310,7 +429,7 @@ export function BackupCard() {
             </button>
           </div>
           <button
-            onClick={() => setPending(null)}
+            onClick={() => { setPending(null); setPendingMeta(null); }}
             className="w-full text-[11px] text-gray-400 mt-2 press"
           >
             إلغاء
