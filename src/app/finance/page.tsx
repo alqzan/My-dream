@@ -114,7 +114,7 @@ export default function FinancePage() {
             className="gap-1.5"
           >
             <Smartphone size={14} />
-            SMS / CSV
+            رسائل البنك
           </Button>
           <Button
             size="sm"

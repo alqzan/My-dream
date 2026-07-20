@@ -1,5 +1,4 @@
-import type { Transaction, FinanceCategoryDef } from "./types";
-import { uid, today } from "./utils";
+import type { FinanceCategoryDef } from "./types";
 
 // ========== Smart Categorization ==========
 // Maps to the seeded default category ids (src/lib/types.ts). If the user
@@ -318,77 +317,7 @@ export function parseBankSmsBulk(
   return { transactions: results, skippedIncome };
 }
 
-// ========== CSV Bank Statement Parser ==========
-interface CsvRow {
-  date: string;
-  description: string;
-  debit: number;
-  credit: number;
-}
-
-function parseDate(raw: string): string {
-  // Handle formats: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY
-  const cleaned = raw.trim();
-  const parts = cleaned.split(/[\/\-]/);
-  if (parts.length === 3) {
-    if (parts[0].length === 4) return cleaned; // already YYYY-MM-DD
-    const [d, m, y] = parts;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  return today();
-}
-
-function parseAmount(raw: string): number {
-  return parseFloat(normalizeDigits(raw).replace(/[,،\s]/g, "")) || 0;
-}
-
-export function parseBankCsv(csvText: string): { transactions: Transaction[]; skippedIncome: number } {
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return { transactions: [], skippedIncome: 0 };
-
-  // Detect header
-  const header = lines[0].toLowerCase();
-  const cols = header.split(/,|\t/);
-
-  const idx = {
-    date: cols.findIndex((c) => /date|تاريخ/.test(c)),
-    desc: cols.findIndex((c) => /desc|بيان|detail|narrat|وصف/.test(c)),
-    debit: cols.findIndex((c) => /debit|سحب|خصم|مدين/.test(c)),
-    credit: cols.findIndex((c) => /credit|إيداع|دائن/.test(c)),
-    amount: cols.findIndex((c) => /amount|مبلغ/.test(c)),
-    type: cols.findIndex((c) => /type|نوع/.test(c)),
-  };
-
-  const transactions: Transaction[] = [];
-  let skippedIncome = 0;
-
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(/,|\t/);
-    if (row.length < 2) continue;
-
-    const rawDate = idx.date >= 0 ? row[idx.date] : row[0];
-    const desc = idx.desc >= 0 ? row[idx.desc] : row[1] ?? "";
-    const debit = idx.debit >= 0 ? parseAmount(row[idx.debit]) : 0;
-    const credit = idx.credit >= 0 ? parseAmount(row[idx.credit]) : 0;
-    const amount = idx.amount >= 0 ? parseAmount(row[idx.amount]) : debit || credit;
-
-    if (!amount) continue;
-
-    // Expense-only tracker: skip incoming deposits/credits entirely.
-    const isIncome = credit > 0 && debit === 0;
-    if (isIncome) { skippedIncome++; continue; }
-
-    const date = parseDate(rawDate);
-    const descText = desc.replace(/"/g, "").trim();
-
-    transactions.push({
-      id: uid(),
-      date,
-      amount,
-      category: keywordCategory(descText),
-      note: descText.slice(0, 80),
-    });
-  }
-
-  return { transactions, skippedIncome };
-}
+// Bank-statement file import (CSV/Excel) was intentionally removed: it saved
+// rows straight to disk with no reliable dedup, and the recommendation is to
+// keep only the SMS path, which goes through an explicit preview + confirm.
+// See src/components/finance/BankImport.tsx.

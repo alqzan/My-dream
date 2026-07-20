@@ -1,13 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { parseBankSmsBulk, parseBankCsv, suggestCategory } from "@/lib/bankParser";
+import { parseBankSmsBulk, suggestCategory } from "@/lib/bankParser";
 import { today, getCategoryInfo, formatAmount, uid } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/lib/types";
-import { MessageSquare, FileText, CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
-
-type Mode = "sms" | "csv";
+import { CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
 
 export function BankImport({ onClose, initialSms }: { onClose: () => void; initialSms?: string }) {
   const { categories, merchantRules, addTransaction } = useAppStore();
@@ -17,7 +15,6 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
   function classify(tx: Transaction): Transaction {
     return { ...tx, category: suggestCategory(tx.note ?? "", categories, merchantRules) };
   }
-  const [mode, setMode] = useState<Mode>("sms");
   const [smsText, setSmsText] = useState(initialSms ?? "");
   const [date, setDate] = useState(today());
   const [preview, setPreview] = useState<Transaction[]>([]);
@@ -66,31 +63,6 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
     setSkippedIncome(skipped);
   }
 
-  function handleCsvFile(file: File) {
-    setError("");
-    setSkippedIncome(0);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const csv = e.target?.result as string;
-        const { transactions: txs, skippedIncome: skipped } = parseBankCsv(csv);
-        if (!txs.length) {
-          setError(
-            skipped > 0
-              ? `لقيت ${skipped} معاملة دخل وتجاهلتها (التطبيق للمصاريف بس) — ما فيه أي مصروف لأستورده.`
-              : "لم أجد معاملات في الملف. تأكد أن الملف CSV صحيح."
-          );
-          return;
-        }
-        setPreview(txs.map(classify));
-        setSkippedIncome(skipped);
-      } catch {
-        setError("خطأ في قراءة الملف");
-      }
-    };
-    reader.readAsText(file, "utf-8");
-  }
-
   function handleConfirm() {
     preview.forEach((tx) => addTransaction(tx));
     setDone(true);
@@ -112,75 +84,38 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
 
   return (
     <div className="space-y-4">
-      {/* Mode Selector */}
-      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
-        <button
-          onClick={() => { setMode("sms"); setPreview([]); setError(""); }}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-colors ${mode === "sms" ? "bg-white shadow-sm text-gray-900" : "text-gray-500"}`}
-        >
-          <MessageSquare size={15} /> رسالة SMS
-        </button>
-        <button
-          onClick={() => { setMode("csv"); setPreview([]); setError(""); }}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-colors ${mode === "csv" ? "bg-white shadow-sm text-gray-900" : "text-gray-500"}`}
-        >
-          <FileText size={15} /> ملف CSV بنكي
-        </button>
+      <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 leading-relaxed">
+        <strong>الصق كل الرسائل دفعة وحدة 👇</strong><br />
+        من تطبيق الرسائل، حدّد رسائل البنك وانسخها كلها مرة وحدة والصقها هنا — التطبيق يفصلها ويسجّل المصاريف فيها تلقائياً (المبلغ + التصنيف + التاريخ)، ويتجاهل رسائل الإيداع/الراتب.
       </div>
-
-      {mode === "sms" && (
-        <>
-          <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 leading-relaxed">
-            <strong>الصق كل الرسائل دفعة وحدة 👇</strong><br />
-            من تطبيق الرسائل، حدّد رسائل البنك وانسخها كلها مرة وحدة والصقها هنا — التطبيق يفصلها ويسجّل المصاريف فيها تلقائياً (المبلغ + التصنيف + التاريخ)، ويتجاهل رسائل الإيداع/الراتب.
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">رسائل البنك (واحدة أو أكثر)</label>
-            <textarea
-              value={smsText}
-              onChange={(e) => setSmsText(e.target.value)}
-              rows={7}
-              placeholder={'الصق رسائلك هنا، مثال:\n\nشراء بقيمة 150.00 ريال من ماكدونالدز 30/06/2026\n\nشراء بقيمة 95.00 ريال من محطة وقود 29/06/2026\n\nإيداع راتب 12000 ريال'}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40 resize-none"
-              dir="auto"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ افتراضي (للرسائل بدون تاريخ)</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40" />
-          </div>
-          <Button onClick={() => handleSmsPreview()} className="w-full bg-finance hover:bg-finance/90" disabled={!smsText.trim()}>
-            استخراج الكل تلقائياً 🤖
-          </Button>
-          <button
-            onClick={handlePasteClipboard}
-            className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-finance bg-finance/10 rounded-xl py-2.5 press"
-          >
-            <ClipboardPaste size={15} /> استورد من الحافظة
-          </button>
-          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-            انسخ رسالة البنك من تطبيق الرسائل، ثم ارجع واضغط «استورد من الحافظة».
-          </p>
-        </>
-      )}
-
-      {mode === "csv" && (
-        <>
-          <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700 leading-relaxed">
-            <strong>كيف تحصل على ملف CSV؟</strong><br />
-            الراجحي: حساباتي ← كشف الحساب ← تصدير Excel/CSV<br />
-            SNB: الخدمات الإلكترونية ← كشف الحساب ← تصدير
-          </div>
-          <label className="block border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-finance/40 transition-colors">
-            <FileText size={28} className="mx-auto text-gray-400 mb-2" />
-            <p className="text-sm font-medium text-gray-700">اختر ملف CSV</p>
-            <p className="text-xs text-gray-400 mt-1">يدعم ملفات جميع البنوك السعودية</p>
-            <input type="file" accept=".csv,.xlsx,.xls" className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); }} />
-          </label>
-        </>
-      )}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">رسائل البنك (واحدة أو أكثر)</label>
+        <textarea
+          value={smsText}
+          onChange={(e) => setSmsText(e.target.value)}
+          rows={7}
+          placeholder={'الصق رسائلك هنا، مثال:\n\nشراء بقيمة 150.00 ريال من ماكدونالدز 30/06/2026\n\nشراء بقيمة 95.00 ريال من محطة وقود 29/06/2026\n\nإيداع راتب 12000 ريال'}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40 resize-none"
+          dir="auto"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ افتراضي (للرسائل بدون تاريخ)</label>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40" />
+      </div>
+      <Button onClick={() => handleSmsPreview()} className="w-full bg-finance hover:bg-finance/90" disabled={!smsText.trim()}>
+        استخراج الكل تلقائياً 🤖
+      </Button>
+      <button
+        onClick={handlePasteClipboard}
+        className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-finance bg-finance/10 rounded-xl py-2.5 press"
+      >
+        <ClipboardPaste size={15} /> استورد من الحافظة
+      </button>
+      <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+        انسخ رسالة البنك من تطبيق الرسائل، ثم ارجع واضغط «استورد من الحافظة».
+      </p>
 
       {error && (
         <div className="flex items-start gap-2 bg-red-50 text-red-600 rounded-xl p-3 text-sm">
