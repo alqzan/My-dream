@@ -161,7 +161,14 @@ export function DataHealthCard() {
             {scanning ? "جارٍ فحص الصور..." : "فحص الصور والمزامنة"}
           </button>
 
-          {scan && (
+          {scan && !scan.storageReachable && (
+            <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-500 leading-relaxed animate-fade-up">
+              ⚠️ تعذّر الوصول لتخزين الصور من هذا الجهاز الآن (شبكة محجوبة أو انقطاع مؤقت).
+              هذا <strong>لا يعني أن صورك مفقودة</strong> — غالبًا هي سليمة في السحابة، لكن هذا الجهاز
+              ما قدر يقرأها. جرّب على واي فاي، أو أعد الفحص بعد قليل. لا تضغط «إعادة الرفع» الآن.
+            </div>
+          )}
+          {scan && scan.storageReachable && (
             <div className="mt-3 space-y-3 animate-fade-up">
               <ScanRow title="الصور" r={scan.photos} />
               <ScanRow title="الأصوات" r={scan.audios} />

@@ -562,6 +562,11 @@ export interface MediaInventory {
   photos: MediaTypeReport;
   audios: MediaTypeReport;
   brokenSamples: string[]; // a few hashes with a missing file, for reference
+  // False when Cloud Storage couldn't be listed at all (network blocked, offline,
+  // a Storage outage) — so the UI never reports a misleading "0 in cloud" when the
+  // truth is "couldn't reach Storage". The referenced photos may be perfectly safe
+  // in the cloud; we just couldn't see them from here right now.
+  storageReachable: boolean;
 }
 
 async function referencedHashes(
@@ -581,13 +586,13 @@ async function referencedHashes(
   return map;
 }
 
-async function listCloudHashes(uid: string, sub: string): Promise<Set<string>> {
-  if (!storage) return new Set();
+async function listCloudHashes(uid: string, sub: string): Promise<{ hashes: Set<string>; ok: boolean }> {
+  if (!storage) return { hashes: new Set(), ok: false };
   try {
     const res = await listAll(storageRef(storage, `${COLLECTION}/${uid}/${sub}`));
-    return new Set(res.items.map((i) => i.name));
+    return { hashes: new Set(res.items.map((i) => i.name)), ok: true };
   } catch {
-    return new Set();
+    return { hashes: new Set(), ok: false }; // couldn't reach Storage — NOT "empty"
   }
 }
 
@@ -620,7 +625,12 @@ export async function inventoryMedia(uid: string, data: AppData): Promise<MediaI
     listCloudHashes(uid, "photos"),
     listCloudHashes(uid, "audios"),
   ]);
-  const p = reconcile(photoRefs, cloudPhotos);
-  const a = reconcile(audioRefs, cloudAudios);
-  return { photos: p.report, audios: a.report, brokenSamples: [...p.broken, ...a.broken].slice(0, 5) };
+  const p = reconcile(photoRefs, cloudPhotos.hashes);
+  const a = reconcile(audioRefs, cloudAudios.hashes);
+  return {
+    photos: p.report,
+    audios: a.report,
+    brokenSamples: [...p.broken, ...a.broken].slice(0, 5),
+    storageReachable: cloudPhotos.ok && cloudAudios.ok,
+  };
 }
