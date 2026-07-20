@@ -357,6 +357,20 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const byId = <T extends { id: string }>(p: T[], s: T[]) =>
     alive(unionOrdered(p, s, (x) => x.id));
 
+  // Like byId, but on a conflicting id keep the copy whose own `updatedAt` is
+  // newer — so a per-item edit survives even when the OTHER device holds the
+  // newer document-level `lastUpdated`. Missing/equal stamps fall back to the
+  // primary copy (prior behavior), so legacy items are untouched.
+  const byIdNewer = <T extends { id: string; updatedAt?: number }>(p: T[], s: T[]) => {
+    const sById = new Map(s.map((it) => [it.id, it]));
+    const merged = p.map((it) => {
+      const other = sById.get(it.id);
+      return other && (other.updatedAt ?? 0) > (it.updatedAt ?? 0) ? other : it;
+    });
+    const seen = new Set(p.map((it) => it.id));
+    return alive([...merged, ...s.filter((it) => !seen.has(it.id))]);
+  };
+
   // Habits: union by id, then union each habit's logged dates from both sides.
   const habits = byId(primary.habits, secondary.habits).map((h) => {
     const pLogs = primary.habits.find((x) => x.id === h.id)?.logs ?? [];
@@ -411,7 +425,14 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     unionOrdered(
       pJournal.map((e) => {
         const other = sJournalById.get(e.id);
-        return other ? mergeEntryMedia(e, other) : e;
+        if (!other) return e;
+        // Keep the text of whichever copy was edited more recently (per-item
+        // updatedAt), then fill any media the winner lacks from the other side
+        // so a newer text edit never wipes a photo/voice note the older copy
+        // still holds. Falls back to primary (e) when stamps are equal/missing.
+        const base = (other.updatedAt ?? 0) > (e.updatedAt ?? 0) ? other : e;
+        const from = base === e ? other : e;
+        return mergeEntryMedia(base, from);
       }),
       sJournal,
       (e) => e.id
@@ -419,7 +440,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   );
 
   return {
-    transactions: byId(primary.transactions, secondary.transactions),
+    transactions: byIdNewer(primary.transactions, secondary.transactions),
     books: byId(primary.books, secondary.books),
     readingLogs: byId(primary.readingLogs, secondary.readingLogs),
     journalEntries,

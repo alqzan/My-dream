@@ -212,12 +212,12 @@ export const useAppStore = create<AppStore>()(
         })),
 
       addJournalEntry: (entry) =>
-        set((s) => ({ journalEntries: [entry, ...s.journalEntries] })),
+        set((s) => ({ journalEntries: [{ ...entry, updatedAt: Date.now() }, ...s.journalEntries] })),
 
       updateJournalEntry: (id, updates) =>
         set((s) => ({
           journalEntries: s.journalEntries.map((e) =>
-            e.id === id ? { ...e, ...updates } : e
+            e.id === id ? { ...e, ...updates, updatedAt: Date.now() } : e
           ),
         })),
 
@@ -275,12 +275,12 @@ export const useAppStore = create<AppStore>()(
       },
 
       addTransaction: (tx) =>
-        set((s) => ({ transactions: [tx, ...s.transactions] })),
+        set((s) => ({ transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions] })),
 
       updateTransaction: (id, updates) =>
         set((s) => ({
           transactions: s.transactions.map((t) =>
-            t.id === id ? { ...t, ...updates } : t
+            t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
           ),
         })),
 
@@ -346,6 +346,7 @@ export const useAppStore = create<AppStore>()(
                 amount: r.amount,
                 category: r.category,
                 note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
+                updatedAt: Date.now(),
               });
               generated++;
             }

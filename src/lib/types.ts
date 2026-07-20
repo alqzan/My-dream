@@ -47,6 +47,9 @@ export interface Transaction {
   note: string;
   linkedJournalId?: string;
   reserveSplits?: ReserveSplit[];
+  // ختم آخر تعديل (ms). يستخدمه دمج المزامنة ليفوز التعديل الأحدث لهذا العنصر
+  // بعينه، لا التعديل من الجهاز صاحب أحدث ختم على مستوى المستند كله.
+  updatedAt?: number;
 }
 
 // ===================== Reserve funds (الاحتياطي) =====================
@@ -114,6 +117,9 @@ export interface JournalEntry {
   source?: "dayOne" | "manual";
   dayOneUUID?: string;
   starred?: boolean;
+  // ختم آخر تعديل (ms) — يفوز به التعديل الأحدث لهذه المذكرة بعينها في دمج
+  // المزامنة، فلا يضيع تعديلٌ حديث على جهاز بسبب ختم مستندٍ أحدث على جهاز آخر.
+  updatedAt?: number;
 }
 
 export interface Habit {
