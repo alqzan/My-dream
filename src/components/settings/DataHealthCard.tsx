@@ -84,7 +84,11 @@ export function DataHealthCard() {
       setScan(report);
       const pending = report.photos.pendingUpload + report.audios.pendingUpload;
       const broken = report.photos.broken + report.audios.broken;
-      if (!report.storageReachable) {
+      if (report.uploadError) {
+        // A concrete failure from the upload path (bad R2 key, oversize,
+        // CORS/network) — name it instead of a generic message.
+        showToast(report.uploadError, "warning");
+      } else if (!report.storageReachable) {
         showToast(
           report.storageError === "auth"
             ? "مفتاح المزامنة لا يطابق الخادم (401) — لم يتم الرفع"
@@ -222,6 +226,11 @@ export function DataHealthCard() {
           )}
           {scan && scan.storageReachable && (
             <div className="mt-3 space-y-3 animate-fade-up">
+              {scan.uploadError && (
+                <p className="rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-500 leading-relaxed">
+                  ⚠️ فشل رفع بعض الملفات: {scan.uploadError}
+                </p>
+              )}
               <ScanRow title="الصور" r={scan.photos} />
               <ScanRow title="الأصوات" r={scan.audios} />
               {(scan.photos.broken > 0 || scan.audios.broken > 0) && (

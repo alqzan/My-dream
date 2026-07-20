@@ -42,6 +42,40 @@ function classifyMediaError(err: unknown): MediaAccessError {
   return "network"; // fetch threw → couldn't reach the Worker at all
 }
 
+// Thrown when the direct browser→R2 PUT (the presigned S3 URL) is rejected. This
+// path is separate from the Worker call: it exercises the R2 S3 credentials and
+// the bucket's CORS, so its status pinpoints a different class of misconfig than
+// a Worker error does. We surface it verbatim instead of swallowing it.
+class R2PutError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// Turn any upload failure into an actionable Arabic message. Uploads fail for
+// reasons the owner can act on — a bad R2 S3 key (403), an oversize file (413),
+// a missing bucket CORS rule (opaque network error) — and the old code hid all
+// of them behind "تحقق من الاتصال". Naming the real cause is the whole point.
+function describeUploadError(err: unknown): string {
+  if (err instanceof R2PutError) {
+    if (err.status === 403)
+      return "رفض R2 الرفع (403) — غالبًا مفاتيح R2 (S3) في الـWorker غير صحيحة، أو CORS للـbucket";
+    if (err.status === 413) return "الملف كبير جدًا — رفضه R2 (413)";
+    return `رفض R2 الرفع (${err.status})`;
+  }
+  if (err instanceof MediaGatewayError) {
+    if (err.status === 401) return "مفتاح المزامنة لا يطابق الخادم (401)";
+    if (err.status === 403) return "الأصل غير مسموح في الـWorker (403)";
+    if (err.status === 413) return "الملف كبير جدًا (413)";
+    if (err.status === 415) return "نوع الملف غير مسموح";
+    return `الخادم رفض طلب الرفع (${err.status})`;
+  }
+  // A fetch that threw (not an HTTP response) — the PUT never completed. On a
+  // presigned R2 URL that almost always means the bucket CORS is missing/wrong,
+  // or the device is offline / on a blocked network.
+  return "تعذّر الوصول إلى R2 للرفع — تحقق من CORS للـbucket أو من الاتصال";
+}
+
 async function mediaGateway<T>(
   syncKey: string,
   path: string,
@@ -599,7 +633,13 @@ async function uploadMediaToR2(
     headers: ticket.headers ?? { "Content-Type": contentType },
     body: blob,
   });
-  if (!uploaded.ok) throw new Error(`رفض R2 الرفع (${uploaded.status})`);
+  if (!uploaded.ok) {
+    // R2/S3 errors return an XML body with a <Code> (e.g. SignatureDoesNotMatch);
+    // keep a short slice for diagnostics without assuming it's readable.
+    let code = "";
+    try { code = /<Code>([^<]+)<\/Code>/.exec(await uploaded.text())?.[1] ?? ""; } catch { /* opaque */ }
+    throw new R2PutError(uploaded.status, `R2 PUT ${uploaded.status}${code ? ` ${code}` : ""}`);
+  }
   await mediaGateway(syncKey, "/v1/media/complete", request);
 }
 
@@ -608,10 +648,11 @@ async function syncMediaToR2(
   sub: MediaKind,
   toUpload: Map<string, string>,
   known: Set<string>
-): Promise<Set<string>> {
+): Promise<{ uploaded: Set<string>; error?: string }> {
   const uploaded = new Set(known);
   const queue = [...toUpload];
   let next = 0;
+  let firstError: unknown;
   // A small pool makes a 2000-photo Day One migration practical without
   // flooding the browser, Worker, or R2 with thousands of simultaneous calls.
   const worker = async () => {
@@ -622,14 +663,17 @@ async function syncMediaToR2(
         await uploadMediaToR2(uid, sub, hash, dataUrl);
         uploaded.add(hash);
         urlCache.delete(hash);
-      } catch {
+      } catch (err) {
         // Continue other files. The honest manifest below excludes this hash,
         // and mediaComplete keeps the UI in "pending" state for a later retry.
+        // But remember WHY the first one failed so the UI can name the cause
+        // instead of showing a generic "check your connection".
+        if (firstError === undefined) firstError = err;
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
-  return uploaded;
+  return { uploaded, error: firstError === undefined ? undefined : describeUploadError(firstError) };
 }
 
 // Result of a save. `mediaComplete` is false when some referenced photo/voice
@@ -638,6 +682,9 @@ async function syncMediaToR2(
 // still pending. It's retried on the next save.
 export interface SaveResult {
   mediaComplete: boolean;
+  // When some media failed to upload, an actionable reason for the first
+  // failure (bad R2 key, oversize, CORS/network) — undefined on success.
+  uploadError?: string;
 }
 
 export async function saveUserData(uid: string, data: AppData): Promise<SaveResult> {
@@ -646,8 +693,11 @@ export async function saveUserData(uid: string, data: AppData): Promise<SaveResu
 
   // 1) Upload new media to R2 first. Text-only edits have none, so this is
   //    a no-op and stays fast.
-  knownCloudHashes = await syncMediaToR2(uid, "photos", newPhotos, knownCloudHashes);
-  knownCloudAudioHashes = await syncMediaToR2(uid, "audios", newAudios, knownCloudAudioHashes);
+  const photoUpload = await syncMediaToR2(uid, "photos", newPhotos, knownCloudHashes);
+  const audioUpload = await syncMediaToR2(uid, "audios", newAudios, knownCloudAudioHashes);
+  knownCloudHashes = photoUpload.uploaded;
+  knownCloudAudioHashes = audioUpload.uploaded;
+  const uploadError = photoUpload.error ?? audioUpload.error;
 
   // 2) Write the journal shards (only the ones that changed) — this is what
   //    keeps the journal off the 1MB single-doc cap. Then write the main doc
@@ -666,7 +716,7 @@ export async function saveUserData(uid: string, data: AppData): Promise<SaveResu
   const allIn = (refs: Set<string>, known: Set<string>) => [...refs].every((h) => known.has(h));
   const mediaComplete =
     allIn(photoRefs, knownCloudHashes) && allIn(audioRefs, knownCloudAudioHashes);
-  return { mediaComplete };
+  return { mediaComplete, uploadError };
 }
 
 // The whole main doc (transactions/settings/etc. — media is stored separately
@@ -709,12 +759,9 @@ export async function reuploadAllMedia(uid: string, data: AppData): Promise<Medi
   knownCloudAudioHashes = new Set();
   const result = await saveUserData(uid, data);
   const inventory = await inventoryMedia(uid, data);
-  if (!result.mediaComplete && inventory.storageReachable) {
-    // The detailed inventory is returned to the UI; no generic success is
-    // claimed when R2 still lacks a referenced local file.
-    return inventory;
-  }
-  return inventory;
+  // Carry the concrete upload failure reason (if any) to the UI, so a failed
+  // re-upload names its cause instead of a generic "check your connection".
+  return { ...inventory, uploadError: result.uploadError };
 }
 
 // ===================== Media inventory / verification =====================
@@ -740,6 +787,9 @@ export interface MediaInventory {
   // When storageReachable is false, why — so the UI can tell "wrong sync key"
   // (401) apart from "no network". Undefined when reachable.
   storageError?: MediaAccessError;
+  // Set by reuploadAllMedia when an upload attempt failed: an actionable reason
+  // for the first failing file. Undefined when nothing was uploaded or all did.
+  uploadError?: string;
 }
 
 async function referencedHashes(
