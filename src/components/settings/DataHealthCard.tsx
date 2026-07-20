@@ -2,13 +2,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
-import { inventoryMedia, reuploadAllMedia, type MediaInventory, type MediaAccessError } from "@/lib/sync";
+import { inventoryMedia, reuploadAllMedia, describeUploadError, type MediaInventory, type MediaAccessError } from "@/lib/sync";
 import { getSyncSpace } from "@/lib/firebase";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
+const BUILD_TAG = "r2-diag-4"; // bump each diagnostic deploy to confirm freshness.
 
 // When the media scan can't read R2, WHY matters: a mismatched sync key (401)
 // is a config problem the owner must fix, and is completely different from "no
@@ -61,6 +62,9 @@ export function DataHealthCard() {
   const [scan, setScan] = useState<MediaInventory | null>(null);
   const [scanning, setScanning] = useState(false);
   const [reuploading, setReuploading] = useState(false);
+  // A concrete reason surfaced when a re-upload fails (thrown or per-file), kept
+  // visible after the toast fades so the owner can read/report it.
+  const [reuploadError, setReuploadError] = useState<string | null>(null);
 
   async function runScan() {
     const space = getSyncSpace();
@@ -79,6 +83,7 @@ export function DataHealthCard() {
     const space = getSyncSpace();
     if (!space) return;
     setReuploading(true);
+    setReuploadError(null);
     try {
       const report = await reuploadAllMedia(space, snapshot());
       setScan(report);
@@ -87,6 +92,7 @@ export function DataHealthCard() {
       if (report.uploadError) {
         // A concrete failure from the upload path (bad R2 key, oversize,
         // CORS/network) — name it instead of a generic message.
+        setReuploadError(report.uploadError);
         showToast(report.uploadError, "warning");
       } else if (!report.storageReachable) {
         showToast(
@@ -100,8 +106,11 @@ export function DataHealthCard() {
       } else {
         showToast("تم ترحيل الوسائط إلى R2 والتحقق منها", "success");
       }
-    } catch {
-      showToast("تعذّر إعادة الرفع — تحقق من الاتصال", "warning");
+    } catch (e) {
+      // Even when the re-upload throws (not just a swallowed per-file failure),
+      // name the real cause instead of a generic "check your connection".
+      setReuploadError(describeUploadError(e));
+      showToast(describeUploadError(e), "warning");
     } finally {
       setReuploading(false);
     }
@@ -153,6 +162,9 @@ export function DataHealthCard() {
       <div className="flex items-center gap-2 mb-3">
         <Activity size={16} className="text-brand-600" />
         <span className="text-sm font-semibold text-gray-700">صحة البيانات</span>
+        {/* Build marker: lets us confirm which deployed build a device is running
+            while diagnosing sync issues. Bump on each diagnostic deploy. */}
+        <span className="ms-auto text-[10px] text-gray-400 font-mono" dir="ltr">{BUILD_TAG}</span>
       </div>
 
       {/* حجم مستند المزامنة مقابل حد 1MB */}
@@ -218,6 +230,12 @@ export function DataHealthCard() {
             {scanning ? <Loader2 size={15} className="animate-spin" /> : <ScanSearch size={15} />}
             {scanning ? "جارٍ فحص الصور..." : "فحص الصور والمزامنة"}
           </button>
+
+          {reuploadError && (
+            <p className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-500 leading-relaxed break-words" dir="auto">
+              ⚠️ سبب فشل الرفع: {reuploadError}
+            </p>
+          )}
 
           {scan && !scan.storageReachable && (
             <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-500 leading-relaxed animate-fade-up">

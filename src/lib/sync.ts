@@ -56,7 +56,7 @@ class R2PutError extends Error {
 // reasons the owner can act on — a bad R2 S3 key (403), an oversize file (413),
 // a missing bucket CORS rule (opaque network error) — and the old code hid all
 // of them behind "تحقق من الاتصال". Naming the real cause is the whole point.
-function describeUploadError(err: unknown): string {
+export function describeUploadError(err: unknown): string {
   if (err instanceof R2PutError) {
     if (err.status === 403)
       return "رفض R2 الرفع (403) — غالبًا مفاتيح R2 (S3) في الـWorker غير صحيحة، أو CORS للـbucket";
@@ -70,10 +70,15 @@ function describeUploadError(err: unknown): string {
     if (err.status === 415) return "نوع الملف غير مسموح";
     return `الخادم رفض طلب الرفع (${err.status})`;
   }
-  // A fetch that threw (not an HTTP response) — the PUT never completed. On a
-  // presigned R2 URL that almost always means the bucket CORS is missing/wrong,
-  // or the device is offline / on a blocked network.
-  return "تعذّر الوصول إلى R2 للرفع — تحقق من CORS للـbucket أو من الاتصال";
+  // A thrown error that isn't one of our typed cases. On the direct R2 PUT this
+  // is usually a fetch TypeError (bucket CORS missing/wrong, or offline). Include
+  // the underlying name/message so an unexpected cause (e.g. a Firestore write)
+  // is visible instead of hidden behind a generic guess.
+  const detail =
+    err instanceof Error && err.message
+      ? `${err.name}: ${err.message}`.slice(0, 140)
+      : String(err).slice(0, 140);
+  return `تعذّر الرفع إلى R2 — تحقق من CORS للـbucket أو الاتصال (${detail})`;
 }
 
 async function mediaGateway<T>(
