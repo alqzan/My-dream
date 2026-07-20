@@ -21,6 +21,27 @@ class MediaGatewayError extends Error {
   }
 }
 
+// A media request can fail for reasons that need very different responses from
+// the owner. Collapsing them all into "network blocked" (the old behavior) hid
+// a mismatched sync key behind a misleading message. We classify instead:
+//   auth    → 401: this device's sync key doesn't match the Worker (the media
+//             is likely safe in R2; this device just isn't authorized).
+//   origin  → 403: the page origin isn't in the Worker's CORS allow-list.
+//   server  → 5xx (or any other non-2xx): the Worker/R2 itself is failing.
+//   config  → the Worker URL isn't baked into this build (stale cached PWA).
+//   network → fetch never reached the Worker (offline / blocked network).
+export type MediaAccessError = "auth" | "origin" | "server" | "config" | "network";
+
+function classifyMediaError(err: unknown): MediaAccessError {
+  if (err instanceof MediaGatewayError) {
+    if (!R2_WORKER_URL) return "config";
+    if (err.status === 401) return "auth";
+    if (err.status === 403) return "origin";
+    return "server";
+  }
+  return "network"; // fetch threw → couldn't reach the Worker at all
+}
+
 async function mediaGateway<T>(
   syncKey: string,
   path: string,
@@ -716,6 +737,9 @@ export interface MediaInventory {
   // truth is "couldn't reach R2". The referenced photos may be perfectly safe
   // in the cloud; we just couldn't see them from here right now.
   storageReachable: boolean;
+  // When storageReachable is false, why — so the UI can tell "wrong sync key"
+  // (401) apart from "no network". Undefined when reachable.
+  storageError?: MediaAccessError;
 }
 
 async function referencedHashes(
@@ -735,7 +759,10 @@ async function referencedHashes(
   return map;
 }
 
-async function listCloudHashes(uid: string, sub: MediaKind): Promise<{ hashes: Set<string>; ok: boolean }> {
+async function listCloudHashes(
+  uid: string,
+  sub: MediaKind
+): Promise<{ hashes: Set<string>; ok: boolean; error?: MediaAccessError }> {
   try {
     const res = await mediaGateway<{ hashes: string[] }>(
       uid,
@@ -743,8 +770,10 @@ async function listCloudHashes(uid: string, sub: MediaKind): Promise<{ hashes: S
       { kind: sub }
     );
     return { hashes: new Set(res.hashes), ok: true };
-  } catch {
-    return { hashes: new Set(), ok: false }; // couldn't reach R2 — NOT "empty"
+  } catch (err) {
+    // couldn't read R2 — NOT "empty". Keep WHY so the UI can distinguish a
+    // mismatched sync key (401) from a genuine network problem.
+    return { hashes: new Set(), ok: false, error: classifyMediaError(err) };
   }
 }
 
@@ -784,5 +813,6 @@ export async function inventoryMedia(uid: string, data: AppData): Promise<MediaI
     audios: a.report,
     brokenSamples: [...p.broken, ...a.broken].slice(0, 5),
     storageReachable: cloudPhotos.ok && cloudAudios.ok,
+    storageError: cloudPhotos.error ?? cloudAudios.error,
   };
 }

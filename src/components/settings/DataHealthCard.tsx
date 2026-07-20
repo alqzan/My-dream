@@ -1,14 +1,55 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
-import { inventoryMedia, reuploadAllMedia, type MediaInventory } from "@/lib/sync";
+import { inventoryMedia, reuploadAllMedia, type MediaInventory, type MediaAccessError } from "@/lib/sync";
 import { getSyncSpace } from "@/lib/firebase";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
+
+// When the media scan can't read R2, WHY matters: a mismatched sync key (401)
+// is a config problem the owner must fix, and is completely different from "no
+// network". Each case gets an honest, actionable message — and every one keeps
+// the reassurance that the media itself is very likely safe in the cloud, so
+// nobody panics or hits "re-upload" over a transient/authorization issue.
+const STORAGE_ERROR_MESSAGE: Record<MediaAccessError, ReactNode> = {
+  auth: (
+    <>
+      ⚠️ مفتاح المزامنة على هذا الجهاز <strong>لا يطابق</strong> الخادم (401).
+      صورك على الأغلب <strong>سليمة في السحابة</strong>، لكن هذا الجهاز غير مخوّل لقراءتها.
+      افتح بطاقة «مفتاح المزامنة» وتأكد أنه المفتاح الصحيح (أو أن سر الخادم يطابقه).
+      لا تضغط «إعادة الرفع» حتى يتطابق المفتاح.
+    </>
+  ),
+  origin: (
+    <>
+      ⚠️ الخادم رفض أصل هذه الصفحة (403) — إعداد CORS في الـWorker لا يسمح لهذا الموقع.
+      صورك على الأغلب سليمة في السحابة. راجع قائمة الأصول المسموحة في الـWorker.
+    </>
+  ),
+  server: (
+    <>
+      ⚠️ الخادم/التخزين لا يستجيب حاليًا (خطأ خادم). صورك على الأغلب سليمة في السحابة —
+      أعد الفحص بعد قليل. لا تضغط «إعادة الرفع» الآن.
+    </>
+  ),
+  config: (
+    <>
+      ⚠️ رابط الـWorker غير مضمّن في هذه النسخة من التطبيق — غالبًا نسخة قديمة مخزّنة.
+      أغلق التطبيق وافتحه (أو حدّثه) ثم أعد الفحص. لا تضغط «إعادة الرفع» الآن.
+    </>
+  ),
+  network: (
+    <>
+      ⚠️ تعذّر الوصول إلى Worker/R2 من هذا الجهاز الآن (شبكة محجوبة أو انقطاع مؤقت).
+      هذا <strong>لا يعني أن صورك مفقودة</strong> — غالبًا هي سليمة في السحابة، لكن هذا الجهاز
+      ما قدر يقرأها. جرّب على واي فاي، أو أعد الفحص بعد قليل. لا تضغط «إعادة الرفع» الآن.
+    </>
+  ),
+};
 
 // "صحة البيانات" (§12): a plain, honest read-out of where the owner's data
 // stands — how close the sync document is to the 1MB cap, when the last backup
@@ -44,7 +85,12 @@ export function DataHealthCard() {
       const pending = report.photos.pendingUpload + report.audios.pendingUpload;
       const broken = report.photos.broken + report.audios.broken;
       if (!report.storageReachable) {
-        showToast("تم الرفع لكن تعذّر التحقق من R2 الآن", "warning");
+        showToast(
+          report.storageError === "auth"
+            ? "مفتاح المزامنة لا يطابق الخادم (401) — لم يتم الرفع"
+            : "تعذّر الوصول إلى R2 الآن — تحقق من الاتصال",
+          "warning"
+        );
       } else if (pending || broken) {
         showToast(`اكتمل الرفع جزئيًا — بقي ${pending + broken} ملف`, "warning");
       } else {
@@ -171,9 +217,7 @@ export function DataHealthCard() {
 
           {scan && !scan.storageReachable && (
             <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-500 leading-relaxed animate-fade-up">
-              ⚠️ تعذّر الوصول إلى Worker/R2 من هذا الجهاز الآن (شبكة محجوبة أو انقطاع مؤقت).
-              هذا <strong>لا يعني أن صورك مفقودة</strong> — غالبًا هي سليمة في السحابة، لكن هذا الجهاز
-              ما قدر يقرأها. جرّب على واي فاي، أو أعد الفحص بعد قليل. لا تضغط «إعادة الرفع» الآن.
+              {STORAGE_ERROR_MESSAGE[scan.storageError ?? "network"]}
             </div>
           )}
           {scan && scan.storageReachable && (
