@@ -204,10 +204,25 @@ function isR2StorageUrl(s: string): boolean {
     return false;
   }
 }
+// True for a Worker download link: GET /v1/media/blob?hash=…&exp=…&sig=…. These
+// are our own short-lived, already-in-cloud pointers — NOT local bytes to upload.
+function isWorkerDownloadUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.pathname.endsWith("/v1/media/blob") && /^[a-f0-9]{32}$/.test(u.searchParams.get("hash") ?? "");
+  } catch {
+    return false;
+  }
+}
+
 function hashFromStorageUrl(url: string): string | null {
   try {
+    const u = new URL(url);
+    // New Worker download links carry the content hash as a query param.
+    const q = (u.searchParams.get("hash") ?? "").toLowerCase();
+    if (/^[a-f0-9]{32}$/.test(q)) return q;
     const legacy = url.match(/\/o\/([^?]+)/);
-    const path = legacy ? decodeURIComponent(legacy[1]) : new URL(url).pathname;
+    const path = legacy ? decodeURIComponent(legacy[1]) : u.pathname;
     const last = path.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
     return /^[a-f0-9]{32}$/.test(last) ? last : null;
   } catch {
@@ -218,6 +233,11 @@ function hashFromStorageUrl(url: string): string | null {
 function presignedExpiry(url: string): number {
   try {
     const parsed = new URL(url);
+    // Worker download links carry their own absolute-ms expiry in `exp`.
+    const workerExp = Number(parsed.searchParams.get("exp"));
+    if (isWorkerDownloadUrl(url) && Number.isSafeInteger(workerExp) && workerExp > 0) {
+      return workerExp;
+    }
     const rawDate = parsed.searchParams.get("X-Amz-Date");
     const rawTtl = parsed.searchParams.get("X-Amz-Expires");
     if (!rawDate || !rawTtl || !/^\d{8}T\d{6}Z$/.test(rawDate)) return Infinity;
@@ -407,8 +427,8 @@ async function prepareForCloud(
       let h: string | null;
       if (isStorageUrl(it)) {
         h = hashFromStorageUrl(it);
-        if (h && isR2StorageUrl(it)) {
-          cacheMediaUrl(h, it); // already hydrated from R2
+        if (h && (isR2StorageUrl(it) || isWorkerDownloadUrl(it))) {
+          cacheMediaUrl(h, it); // already in the cloud (R2 presigned or Worker link)
         } else if (h) {
           // A legacy Firebase URL still contains retrievable bytes. Queue it
           // for the R2 migration; if it has expired, verification reports the

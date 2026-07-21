@@ -182,7 +182,9 @@ async function downloadUrl(request, env) {
   const object = await env.MEDIA_BUCKET.head(key);
   if (!object) throw new HttpError(404, "Media object was not found");
 
-  const ttl = Math.min(parsePositiveInt(env.DOWNLOAD_URL_TTL_SECONDS, 300), 3600);
+  // At least 1 day so images don't go stale mid-session on a device without a
+  // local copy (the download link is HMAC-signed, so a longer life is safe).
+  const ttl = Math.min(Math.max(parsePositiveInt(env.DOWNLOAD_URL_TTL_SECONDS, 86400), 86400), 604800);
   const exp = Date.now() + ttl * 1000;
   const sig = await hmacHex(env.SYNC_KEY_SHA256, `${kind}/${hash}/${exp}`);
   const origin = new URL(request.url).origin;
