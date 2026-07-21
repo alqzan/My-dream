@@ -614,12 +614,6 @@ async function mediaSourceBlob(source: string): Promise<Blob> {
   return blob;
 }
 
-interface UploadTicket {
-  exists: boolean;
-  url?: string;
-  headers?: Record<string, string>;
-}
-
 async function uploadMediaToR2(
   syncKey: string,
   kind: MediaKind,
@@ -627,25 +621,28 @@ async function uploadMediaToR2(
   source: string
 ): Promise<void> {
   const blob = await mediaSourceBlob(source);
-  const contentType = blob.type.split(";", 1)[0].toLowerCase();
-  const request = { kind, hash, contentType, size: blob.size };
-  const ticket = await mediaGateway<UploadTicket>(syncKey, "/v1/media/upload-url", request);
-  if (ticket.exists) return;
-  if (!ticket.url) throw new Error("لم يُرجع Worker رابط رفع");
-
-  const uploaded = await fetch(ticket.url, {
-    method: "PUT",
-    headers: ticket.headers ?? { "Content-Type": contentType },
+  const contentType = blob.type.split(";", 1)[0].toLowerCase() || "application/octet-stream";
+  // Upload THROUGH the Worker (it writes to R2 via its internal binding) instead
+  // of a direct browser→R2 presigned PUT. The direct PUT needed the R2 *bucket's*
+  // CORS + S3 signing and failed on iOS with an opaque "Load failed"; this POST
+  // rides the Worker's own CORS, which already works (inventory uses it). The
+  // bytes are the body; kind/hash/content-type travel as query params.
+  const url =
+    `${R2_WORKER_URL}/v1/media/put?kind=${kind}&hash=${hash}` +
+    `&ct=${encodeURIComponent(contentType)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${syncKey}`, "Content-Type": contentType },
     body: blob,
   });
-  if (!uploaded.ok) {
-    // R2/S3 errors return an XML body with a <Code> (e.g. SignatureDoesNotMatch);
-    // keep a short slice for diagnostics without assuming it's readable.
-    let code = "";
-    try { code = /<Code>([^<]+)<\/Code>/.exec(await uploaded.text())?.[1] ?? ""; } catch { /* opaque */ }
-    throw new R2PutError(uploaded.status, `R2 PUT ${uploaded.status}${code ? ` ${code}` : ""}`);
+  if (!res.ok) {
+    let message = `R2 Worker returned ${res.status}`;
+    try {
+      const payload = await res.json() as { error?: string };
+      if (payload.error) message = payload.error;
+    } catch { /* non-JSON gateway error */ }
+    throw new MediaGatewayError(res.status, message);
   }
-  await mediaGateway(syncKey, "/v1/media/complete", request);
 }
 
 async function syncMediaToR2(
