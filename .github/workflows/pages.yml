@@ -50,6 +50,9 @@ jobs:
       - name: Build static site (with base path for project pages)
         env:
           BASE_PATH: /My-dream
+          # Shown in the Data Health card so a device's running build is
+          # identifiable while diagnosing sync — replaces the hand-bumped tag.
+          NEXT_PUBLIC_BUILD_TAG: ${{ github.sha }}
           # Cloud sync activates automatically once these repo secrets are
           # set (Settings → Secrets and variables → Actions). Empty secrets
           # keep Firebase disabled and the app fully on-device.

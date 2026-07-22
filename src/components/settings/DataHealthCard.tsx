@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
 import { inventoryMedia, reuploadAllMedia, describeUploadError, type MediaInventory, type MediaAccessError } from "@/lib/sync";
+import { journalShardId } from "@/lib/merge";
 import { getSyncSpace } from "@/lib/firebase";
 import { entryPhotos } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
@@ -10,7 +11,9 @@ import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
-const BUILD_TAG = "local-media-16"; // bump each diagnostic deploy to confirm freshness.
+// Build marker, injected at build time (CI sets NEXT_PUBLIC_BUILD_TAG to the
+// commit SHA) instead of a hand-bumped string that drifts. "dev" when unset.
+const BUILD_TAG = (process.env.NEXT_PUBLIC_BUILD_TAG || "dev").slice(0, 7);
 
 // When the media scan can't read R2, WHY matters: a mismatched sync key (401)
 // is a config problem the owner must fix, and is completely different from "no
@@ -117,7 +120,9 @@ export function DataHealthCard() {
     }
   }
   const [info, setInfo] = useState<{
-    bytes: number;
+    mainBytes: number;
+    shardBytes: number;
+    shardId: string | null;
     photos: number;
     entries: number;
     transactions: number;
@@ -126,25 +131,38 @@ export function DataHealthCard() {
 
   useEffect(() => {
     const snap = snapshot();
-    // Approximate the Firestore doc size: it stores media as refs, not the
-    // base64 blobs, so strip those to gauge the text weight against the cap.
-    const textOnly = {
-      ...snap,
-      journalEntries: snap.journalEntries.map((e) => ({
-        ...e, photo: undefined, photos: undefined, audio: undefined, audios: undefined,
-      })),
-    };
-    const bytes = new Blob([JSON.stringify(textOnly)]).size;
+    // The 1MB cap is PER Firestore document. The journal isn't in the main doc —
+    // it's sharded one document per month (see sync.ts). So gauge the MAIN doc
+    // (everything except the journal) and the LARGEST monthly shard separately;
+    // the old code summed the whole journal into one number and cried "1MB"
+    // over a main doc that was actually fine.
+    const { journalEntries, ...mainNoJournal } = snap;
+    const mainBytes = new Blob([JSON.stringify(mainNoJournal)]).size;
+    // Media is stored as refs, not base64 — strip blobs to gauge text weight.
+    const shards = new Map<string, unknown[]>();
+    for (const e of journalEntries) {
+      const stripped = { ...e, photo: undefined, photos: undefined, audio: undefined, audios: undefined };
+      const sid = journalShardId(e.date);
+      (shards.get(sid) ?? shards.set(sid, []).get(sid)!).push(stripped);
+    }
+    let shardBytes = 0;
+    let shardId: string | null = null;
+    for (const [sid, arr] of shards) {
+      const b = new Blob([JSON.stringify({ entries: arr })]).size;
+      if (b > shardBytes) { shardBytes = b; shardId = sid; }
+    }
     // entryPhotos already reconciles the legacy `photo` with `photos` (photo is
     // just photos[0]) — using it avoids counting the first image twice.
     let photos = 0;
-    for (const e of snap.journalEntries) photos += entryPhotos(e).length;
+    for (const e of journalEntries) photos += entryPhotos(e).length;
     let lastBackup: string | null = null;
     try { lastBackup = localStorage.getItem("madar-last-backup"); } catch { /* ignore */ }
     setInfo({
-      bytes,
+      mainBytes,
+      shardBytes,
+      shardId,
       photos,
-      entries: snap.journalEntries.length,
+      entries: journalEntries.length,
       transactions: snap.transactions.length,
       lastBackup,
     });
@@ -152,8 +170,13 @@ export function DataHealthCard() {
 
   if (!info) return null;
 
-  const pct = Math.min(100, Math.round((info.bytes / DOC_LIMIT) * 100));
-  const kb = Math.round(info.bytes / 1024);
+  // The busier of the two documents (main vs. largest month) is what actually
+  // approaches the cap — drive the bar off that so the warning is honest.
+  const worstBytes = Math.max(info.mainBytes, info.shardBytes);
+  const pct = Math.min(100, Math.round((worstBytes / DOC_LIMIT) * 100));
+  const kb = Math.round(worstBytes / 1024);
+  const mainKb = Math.round(info.mainBytes / 1024);
+  const shardKb = Math.round(info.shardBytes / 1024);
   const barColor = pct >= 80 ? "bg-red-500" : pct >= 65 ? "bg-amber-500" : "bg-finance";
 
   const backupAgeDays = info.lastBackup
@@ -170,11 +193,11 @@ export function DataHealthCard() {
         <span className="ms-auto text-[10px] text-gray-400 font-mono" dir="ltr">{BUILD_TAG}</span>
       </div>
 
-      {/* حجم مستند المزامنة مقابل حد 1MB */}
+      {/* حجم المستندات مقابل حد 1MB لكلّ مستند (رئيسي + أكبر شهر يوميات) */}
       <div className="mb-3">
         <div className="flex items-center justify-between text-xs mb-1.5">
           <span className="flex items-center gap-1.5 text-gray-500">
-            <HardDrive size={13} /> حجم بيانات المزامنة
+            <HardDrive size={13} /> أكبر مستند مزامنة
           </span>
           <span className={pct >= 65 ? "font-semibold text-amber-600" : "text-gray-400"}>
             {kb}KB / 1MB · {pct}%
@@ -183,9 +206,13 @@ export function DataHealthCard() {
         <div className="h-1.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(2, pct)}%` }} />
         </div>
+        <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1.5" dir="rtl">
+          <span>المستند الرئيسي: {mainKb}KB</span>
+          <span>{info.shardId ? `أكبر شهر (${info.shardId}): ${shardKb}KB` : "لا مذكرات بعد"}</span>
+        </div>
         {pct >= 65 && (
           <p className="text-[11px] text-amber-600 mt-1.5 leading-relaxed">
-            قاربت بيانات المزامنة الحد الأقصى — الصور محفوظة منفصلة، لكن كثرة النصوص قد توقف المزامنة عند 1MB.
+            قارب أحد المستندات الحد الأقصى — الصور محفوظة منفصلة، واليوميات موزّعة على مستند لكل شهر، لكن مستنداً واحداً كثُرت نصوصه قد يتوقف عند 1MB.
           </p>
         )}
       </div>
