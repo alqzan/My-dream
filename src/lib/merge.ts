@@ -13,6 +13,17 @@ export function journalShardId(dateStr: string | undefined): string {
   return dateStr && /^\d{4}-\d{2}/.test(dateStr) ? dateStr.slice(0, 7) : "misc";
 }
 
+// Tombstone keys for the collections that AREN'T keyed by a top-level item id,
+// so a delete/un-complete on one device can't be undone by the other's union.
+// All namespaced (prefix + ":") so they never collide with a real item id in
+// the shared `deleted` map, and `alive()` (which checks `x.id in deleted`)
+// never mistakes one for an item. Store writes these on delete/un-complete and
+// lifts them on re-add; mergeAppData filters them out below. Same pruning TTL.
+export const budgetTombKey = (category: string) => `budget:${category}`;
+export const depositTombKey = (depositId: string) => `deposit:${depositId}`;
+export const habitLogTombKey = (habitId: string, date: string) => `habitlog:${habitId}:${date}`;
+export const wirdTombKey = (date: string) => `wird:${date}`;
+
 // ===================== Multi-device merge =====================
 // Combine a local and a cloud snapshot so neither device's edits are lost to a
 // last-writer-wins overwrite. Every collection is unioned by its id/key; on a
@@ -78,18 +89,28 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     return alive([...merged, ...s.filter((it) => !seen.has(it.id))]);
   };
 
-  // Habits: union by id, then union each habit's logged dates from both sides.
+  // Habits: union by id, then union each habit's logged dates — but drop any day
+  // the user un-completed (tombstoned habitlog:<id>:<date>), so un-checking a day
+  // on one device isn't undone by the other's still-logged copy.
   const habits = byId(primary.habits, secondary.habits).map((h) => {
     const pLogs = primary.habits.find((x) => x.id === h.id)?.logs ?? [];
     const sLogs = secondary.habits.find((x) => x.id === h.id)?.logs ?? [];
-    return { ...h, logs: [...new Set([...pLogs, ...sLogs])].sort() };
+    const logs = [...new Set([...pLogs, ...sLogs])]
+      .filter((d) => !(habitLogTombKey(h.id, d) in deleted))
+      .sort();
+    return { ...h, logs };
   });
 
-  // Reserve funds: union by id, and union each fund's deposits by deposit id.
+  // Reserve funds: union by id, and union each fund's deposits by deposit id —
+  // dropping any deposit the user deleted (tombstoned deposit:<id>), so removing
+  // a deposit on one device isn't resurrected from the other's copy.
   const reserves = byId(primary.reserves, secondary.reserves).map((f) => {
     const pDep = primary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
     const sDep = secondary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
-    return { ...f, deposits: unionOrdered(pDep, sDep, (d) => d.id) };
+    const deposits = unionOrdered(pDep, sDep, (d) => d.id).filter(
+      (d) => !(depositTombKey(d.id) in deleted)
+    );
+    return { ...f, deposits };
   });
 
   // Prayer logs: union by date; on a shared date merge the per-prayer maps
@@ -174,7 +195,11 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     journalEntries,
     habits,
     recurring: byId(primary.recurring, secondary.recurring),
-    budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category),
+    // Budgets are keyed by category (no item id), so a removed cap is tombstoned
+    // as budget:<category> and filtered here — else the union re-adds it.
+    budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category).filter(
+      (b) => !(budgetTombKey(b.category) in deleted)
+    ),
     categories: alive(unionOrdered(primary.categories, secondary.categories, (c) => c.id)),
     reserves,
     prayerLogs,
@@ -182,7 +207,11 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // كتواريخ (كسجلّات العادات) فلا يضيع وِردٌ سُجّل على جهاز.
     quranReflections: byId(primary.quranReflections ?? [], secondary.quranReflections ?? []),
     quranHifz,
-    quranWird: [...new Set([...(primary.quranWird ?? []), ...(secondary.quranWird ?? [])])].sort(),
+    // الوِرد يُوحَّد كتواريخ، مع إسقاط أيّ يومٍ أُلغِيَ (شاهد wird:<date>) فلا
+    // يُعيده اتحادٌ من جهازٍ ما زال يحمله.
+    quranWird: [...new Set([...(primary.quranWird ?? []), ...(secondary.quranWird ?? [])])]
+      .filter((d) => !(wirdTombKey(d) in deleted))
+      .sort(),
     quranKhatma,
     // الإعدادات المفردة (الميزانية اليومية والدخل الشهري): الأحدث يفوز، لكن إن
     // لم يضبطها الجهاز الأحدث نأخذها من الآخر — فلا يمحو جهازٌ لم تُضبَط فيه

@@ -11,6 +11,7 @@ import { TOTAL_AYAT } from "./quran/meta";
 import { nextReviewCursor } from "./quran/hifz";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
+import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
@@ -487,12 +488,11 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const entry = { category, limit: cap.limit, pct: cap.pct };
           const existing = s.budgets.find((b) => b.category === category);
-          if (existing) {
-            return {
-              budgets: s.budgets.map((b) => (b.category === category ? entry : b)),
-            };
-          }
-          return { budgets: [...s.budgets, entry] };
+          const budgets = existing
+            ? s.budgets.map((b) => (b.category === category ? entry : b))
+            : [...s.budgets, entry];
+          // (Re-)setting a cap lifts any tombstone so the merge keeps it.
+          return { budgets, ...clearTombstone(s.deleted, budgetTombKey(category)) };
         }),
 
       setMonthlyIncome: (amount) =>
@@ -501,6 +501,10 @@ export const useAppStore = create<AppStore>()(
       removeBudget: (category) =>
         set((s) => ({
           budgets: s.budgets.filter((b) => b.category !== category),
+          // Budgets are keyed by category, not a top-level id, so the auto-
+          // tombstoner doesn't see this delete — record it explicitly so a
+          // second device can't re-add the cap through the merge union.
+          deleted: { ...s.deleted, [budgetTombKey(category)]: Date.now() },
         })),
 
       addCategory: (def) =>
@@ -577,6 +581,8 @@ export const useAppStore = create<AppStore>()(
           reserves: s.reserves.map((f) =>
             f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
           ),
+          // Re-adding a deposit (undo) lifts its tombstone so it isn't re-dropped.
+          ...clearTombstone(s.deleted, depositTombKey(deposit.id)),
         })),
 
       deleteReserveDeposit: (fundId, depositId) =>
@@ -586,6 +592,10 @@ export const useAppStore = create<AppStore>()(
               ? { ...f, deposits: f.deposits.filter((d) => d.id !== depositId) }
               : f
           ),
+          // Deposits are nested inside a fund, so the auto-tombstoner (which only
+          // watches top-level ids) doesn't see this delete — record it explicitly
+          // so the deposit union in mergeAppData can't pull it back.
+          deleted: { ...s.deleted, [depositTombKey(depositId)]: Date.now() },
         })),
 
       setDailyBudget: (amount, source) =>
@@ -749,15 +759,23 @@ export const useAppStore = create<AppStore>()(
         })),
 
       toggleHabitLog: (habitId, date) =>
-        set((s) => ({
-          habits: s.habits.map((h) => {
+        set((s) => {
+          const uncompleting = s.habits.find((h) => h.id === habitId)?.logs.includes(date) ?? false;
+          const habits = s.habits.map((h) => {
             if (h.id !== habitId) return h;
             const logs = h.logs.includes(date)
               ? h.logs.filter((d) => d !== date)
               : [...h.logs, date];
             return { ...h, logs };
-          }),
-        })),
+          });
+          // Un-checking a day is a real edit: tombstone habitlog:<id>:<date> so
+          // the log-union merge can't re-check it from another device. Checking
+          // it lifts the tombstone.
+          const key = habitLogTombKey(habitId, date);
+          return uncompleting
+            ? { habits, deleted: { ...s.deleted, [key]: Date.now() } }
+            : { habits, ...clearTombstone(s.deleted, key) };
+        }),
 
       deleteHabit: (id) =>
         set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
@@ -953,11 +971,18 @@ export const useAppStore = create<AppStore>()(
         }),
 
       toggleWird: (date) =>
-        set((s) => ({
-          quranWird: s.quranWird.includes(date)
+        set((s) => {
+          const uncompleting = s.quranWird.includes(date);
+          const quranWird = uncompleting
             ? s.quranWird.filter((d) => d !== date)
-            : [...s.quranWird, date],
-        })),
+            : [...s.quranWird, date];
+          // Same as habit logs: un-marking a wird day tombstones wird:<date> so
+          // the date-union merge can't restore it; re-marking lifts it.
+          const key = wirdTombKey(date);
+          return uncompleting
+            ? { quranWird, deleted: { ...s.deleted, [key]: Date.now() } }
+            : { quranWird, ...clearTombstone(s.deleted, key) };
+        }),
 
       // Read a juz — fill one more segment of the ring, up to the full 30.
       // Sealing the finished ring into a completed khatma is an explicit step

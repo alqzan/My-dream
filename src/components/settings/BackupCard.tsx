@@ -105,8 +105,11 @@ function countItems(d: AppData): BackupCounts {
   let photos = 0;
   let audios = 0;
   for (const e of d.journalEntries) {
-    photos += (e.photos?.length ?? 0) + (e.photo ? 1 : 0);
-    audios += (e.audios?.length ?? 0) + (e.audio ? 1 : 0);
+    // The legacy single `photo`/`audio` is a mirror of `photos[0]`/`audios[0]`,
+    // so count the array when present and only fall back to the legacy field —
+    // adding both double-counted the first item on migrated entries.
+    photos += e.photos?.length ?? (e.photo ? 1 : 0);
+    audios += e.audios?.length ?? (e.audio ? 1 : 0);
   }
   return {
     journalEntries: d.journalEntries.length,
@@ -165,8 +168,12 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     lastSalaryConfirm: g("lastSalaryConfirm", null),
     readingGoal: g("readingGoal", null),
     merchantRules: g("merchantRules", {}),
-    // نُبقي شواهد الحذف (tombstones) فلا تُبعث العناصر المحذوفة عند الدمج.
+    // نُبقي شواهد الحذف (tombstones) فلا تُبعث العناصر المحذوفة عند الدمج —
+    // بما فيها شواهد الوسائط (deletedMedia)، وإلا عادت صورةٌ/صوتٌ محذوفٌ عند
+    // الاستعادة ثم المزامنة. الدمج (mergeAppData) يوحّدها بأحدث طابعٍ لكل مفتاح
+    // فلا تمحو استعادةُ نسخةٍ قديمةٍ شواهدَ أحدثَ منها.
     deleted: g("deleted", {}),
+    deletedMedia: g("deletedMedia", {}),
     lastUpdated: g("lastUpdated", new Date().toISOString()),
   };
 }
@@ -274,6 +281,16 @@ export function BackupCard() {
 
   function applyRestore(mode: "merge" | "replace") {
     if (!pending) return;
+    // Replacing wipes current data, so a file whose integrity check FAILED must
+    // not overwrite everything on a single tap — require an explicit second yes.
+    // (Merge is non-destructive and additive, so it needs no extra guard.)
+    if (
+      mode === "replace" &&
+      pendingMeta?.integrity === "mismatch" &&
+      !window.confirm("فحص السلامة لا يطابق — قد يكون الملف تالفاً أو معدّلاً. متأكد أنك تريد استبدال كل بياناتك الحالية به؟")
+    ) {
+      return;
+    }
     const before = snapshot();
     hydrate(mode === "merge" ? mergeAppData(before, pending) : pending);
     setPending(null);

@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { mergeAppData, unionOrdered, journalShardId } from "./merge";
+import {
+  mergeAppData, unionOrdered, journalShardId,
+  budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey,
+} from "./merge";
 import { mediaTombKey } from "./mediaHash";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
-import type { AppData, JournalEntry, Transaction } from "./types";
+import type { AppData, JournalEntry, Transaction, ReserveFund, Habit } from "./types";
 
 // Minimal valid AppData; override only what a test cares about.
 function base(overrides: Partial<AppData> = {}): AppData {
@@ -223,6 +226,78 @@ describe("mergeAppData — tombstones", () => {
     const merged = mergeAppData(local, cloud);
     // With cloud's tombstone present, E1 is filtered — expected convergence cost.
     expect(merged.journalEntries.find((e) => e.id === "E1")).toBeUndefined();
+  });
+});
+
+describe("mergeAppData — deletions that aren't top-level ids stay deleted", () => {
+  const fund = (id: string, deposits: ReserveFund["deposits"]): ReserveFund => ({
+    id, name: "صندوق", icon: "💰", color: "#000", deposits, createdAt: "2026-01-01",
+  });
+  const dep = (id: string, amount = 100) => ({ id, date: "2026-01-01", amount });
+  const habit = (id: string, logs: string[]): Habit => ({ id, name: "ورد", icon: "📿", color: "#000", logs });
+
+  it("a deleted budget cap is not re-added by the other device's union", () => {
+    // A holds the cap; B deleted it (tombstone) and has the newer stamp.
+    const withCap = base({
+      lastUpdated: "2026-05-10T10:00:00.000Z",
+      budgets: [{ category: "groceries", limit: 500 }],
+    });
+    const deletedIt = base({
+      lastUpdated: "2026-05-10T11:00:00.000Z",
+      budgets: [],
+      deleted: { [budgetTombKey("groceries")]: Date.now() },
+    });
+    expect(mergeAppData(withCap, deletedIt).budgets).toEqual([]);
+    expect(mergeAppData(deletedIt, withCap).budgets).toEqual([]); // order-independent
+  });
+
+  it("a deleted reserve deposit is not resurrected from the other fund copy", () => {
+    const hasDep = base({
+      lastUpdated: "2026-05-10T10:00:00.000Z",
+      reserves: [fund("F1", [dep("D1"), dep("D2")])],
+    });
+    const removedDep = base({
+      lastUpdated: "2026-05-10T11:00:00.000Z",
+      reserves: [fund("F1", [dep("D1")])],
+      deleted: { [depositTombKey("D2")]: Date.now() },
+    });
+    const merged = mergeAppData(hasDep, removedDep);
+    expect(merged.reserves[0].deposits.map((d) => d.id)).toEqual(["D1"]);
+  });
+
+  it("an un-checked habit day is not re-checked by the other device", () => {
+    const checked = base({
+      lastUpdated: "2026-05-10T10:00:00.000Z",
+      habits: [habit("H1", ["2026-05-01", "2026-05-02"])],
+    });
+    const unchecked = base({
+      lastUpdated: "2026-05-10T11:00:00.000Z",
+      habits: [habit("H1", ["2026-05-01"])],
+      deleted: { [habitLogTombKey("H1", "2026-05-02")]: Date.now() },
+    });
+    const merged = mergeAppData(checked, unchecked);
+    expect(merged.habits[0].logs).toEqual(["2026-05-01"]);
+  });
+
+  it("an un-marked wird day stays removed after the union", () => {
+    const marked = base({
+      lastUpdated: "2026-05-10T10:00:00.000Z",
+      quranWird: ["2026-05-01", "2026-05-02"],
+    });
+    const unmarked = base({
+      lastUpdated: "2026-05-10T11:00:00.000Z",
+      quranWird: ["2026-05-01"],
+      deleted: { [wirdTombKey("2026-05-02")]: Date.now() },
+    });
+    expect(mergeAppData(marked, unmarked).quranWird).toEqual(["2026-05-01"]);
+  });
+
+  it("re-adding after delete (tombstone lifted on BOTH sides) keeps the item", () => {
+    // After undo, the store lifts the tombstone locally; once it converges the
+    // cap comes back. Model the converged state: neither side tombstones it.
+    const a = base({ budgets: [{ category: "groceries", limit: 500 }], deleted: {} });
+    const b = base({ budgets: [{ category: "groceries", limit: 500 }], deleted: {} });
+    expect(mergeAppData(a, b).budgets).toHaveLength(1);
   });
 });
 

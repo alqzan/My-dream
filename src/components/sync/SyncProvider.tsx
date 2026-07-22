@@ -47,41 +47,72 @@ export const useSync = () => useContext(SyncContext);
 // Does this snapshot hold any real user data? Used so a fresh, empty device
 // can never overwrite a cloud space that already holds the owner's data —
 // timestamps alone aren't enough, since a brand-new device starts with a
-// "now" stamp that would otherwise look newer than older real data.
+// "now" stamp that would otherwise look newer than older real data. Covers
+// EVERY user-authored collection (the old version missed Quran, categories,
+// single-value settings and deletions — so a device holding only those was
+// wrongly judged "empty" and refused to seed the cloud). Deliberately excludes
+// fields a fresh install already ships with — DEFAULT_CATEGORIES, the two seed
+// habits (counted only via logged days), salaryDay 27 — or every device would
+// look non-empty and the fresh-device guard would never fire.
 function hasData(d: Partial<AppData>): boolean {
-  const nonEmpty =
-    (d.transactions?.length ?? 0) > 0 ||
-    (d.journalEntries?.length ?? 0) > 0 ||
-    (d.books?.length ?? 0) > 0 ||
-    (d.readingLogs?.length ?? 0) > 0 ||
-    (d.recurring?.length ?? 0) > 0 ||
-    (d.budgets?.length ?? 0) > 0 ||
-    (d.reserves?.length ?? 0) > 0 ||
-    (d.prayerLogs?.length ?? 0) > 0 ||
-    (d.futureLetters?.length ?? 0) > 0;
-  const habitsLogged = (d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0);
-  return nonEmpty || habitsLogged;
+  const arr = (a?: { length: number }) => (a?.length ?? 0) > 0;
+  if (
+    arr(d.transactions) || arr(d.journalEntries) || arr(d.books) ||
+    arr(d.readingLogs) || arr(d.recurring) || arr(d.budgets) ||
+    arr(d.reserves) || arr(d.prayerLogs) || arr(d.futureLetters) ||
+    arr(d.quranReflections) || arr(d.quranWird)
+  ) return true;
+  if ((d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0)) return true;
+  const hifz = d.quranHifz;
+  if (hifz && (hifz.plan || (hifz.sessions?.length ?? 0) > 0 ||
+    (hifz.reviews?.length ?? 0) > 0 || (hifz.frontierId ?? 0) > 0 ||
+    (hifz.mistakes?.length ?? 0) > 0)) return true;
+  if ((d.quranKhatma?.completed ?? 0) > 0 || (d.quranKhatma?.juz ?? 0) > 0) return true;
+  if (d.dailyBudget || (d.monthlyIncome ?? 0) > 0 || (d.readingGoal ?? 0) > 0) return true;
+  if (Object.keys(d.merchantRules ?? {}).length > 0) return true;
+  // A device whose only "state" is having deleted things still has real intent
+  // to preserve — otherwise its tombstones can't seed a cloud that lacks them.
+  if (Object.keys(d.deleted ?? {}).length > 0) return true;
+  return false;
 }
 
-// True when the cloud snapshot carries any id/date-keyed item this device
-// doesn't have locally. Used so a lagging top-level `lastUpdated` (e.g. the
-// other device's clock runs a few minutes behind) can never hide a genuinely
-// new entry written elsewhere — we pull on unseen content, not just on a newer
-// timestamp.
+// True when the cloud snapshot carries anything this device hasn't seen yet —
+// a new id, a new date, or a deletion. Used so a lagging top-level `lastUpdated`
+// (e.g. the other device's clock runs a few minutes behind) can never hide a
+// genuinely new change written elsewhere — we pull on unseen content, not just
+// on a newer timestamp. Now covers every collection plus tombstones, so a
+// remote delete/un-complete propagates live instead of waiting for the next
+// unrelated edit.
 function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean {
-  const has = (localItems: { id: string }[], cloudItems?: { id: string }[]) => {
+  const hasNewId = (localItems: { id: string }[], cloudItems?: { id: string }[]) => {
     const ids = new Set(localItems.map((i) => i.id));
     return (cloudItems ?? []).some((i) => !ids.has(i.id));
   };
-  const localDates = new Set(local.prayerLogs.map((p) => p.date));
-  return (
-    has(local.journalEntries, cloud.journalEntries) ||
-    has(local.transactions, cloud.transactions) ||
-    has(local.books, cloud.books) ||
-    has(local.readingLogs, cloud.readingLogs) ||
-    has(local.futureLetters, cloud.futureLetters) ||
-    (cloud.prayerLogs ?? []).some((p) => !localDates.has(p.date))
-  );
+  if (
+    hasNewId(local.journalEntries, cloud.journalEntries) ||
+    hasNewId(local.transactions, cloud.transactions) ||
+    hasNewId(local.books, cloud.books) ||
+    hasNewId(local.readingLogs, cloud.readingLogs) ||
+    hasNewId(local.futureLetters, cloud.futureLetters) ||
+    hasNewId(local.recurring, cloud.recurring) ||
+    hasNewId(local.reserves, cloud.reserves) ||
+    hasNewId(local.habits, cloud.habits) ||
+    hasNewId(local.categories, cloud.categories) ||
+    hasNewId(local.quranReflections ?? [], cloud.quranReflections)
+  ) return true;
+  const localPrayers = new Set(local.prayerLogs.map((p) => p.date));
+  if ((cloud.prayerLogs ?? []).some((p) => !localPrayers.has(p.date))) return true;
+  const localBudgets = new Set(local.budgets.map((b) => b.category));
+  if ((cloud.budgets ?? []).some((b) => !localBudgets.has(b.category))) return true;
+  const localWird = new Set(local.quranWird ?? []);
+  if ((cloud.quranWird ?? []).some((wd) => !localWird.has(wd))) return true;
+  const localHabitLogs = new Map((local.habits ?? []).map((h) => [h.id, new Set(h.logs ?? [])]));
+  if ((cloud.habits ?? []).some((h) => (h.logs ?? []).some((wd) => !localHabitLogs.get(h.id)?.has(wd)))) return true;
+  const localDeleted = local.deleted ?? {};
+  if (Object.keys(cloud.deleted ?? {}).some((k) => !(k in localDeleted))) return true;
+  const localDelMedia = local.deletedMedia ?? {};
+  if (Object.keys(cloud.deletedMedia ?? {}).some((k) => !(k in localDelMedia))) return true;
+  return false;
 }
 
 // Login-free sync: every device shares one Firestore document keyed by a
