@@ -586,17 +586,29 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
       .map((e) => [e.id, { photo: e.photo, photos: e.photos, audio: e.audio, audios: e.audios }])
   );
   if (!localMedia.size) return cloud;
+  // Locally-held bytes are `data:` URLs — permanent and always render. Cloud
+  // pointers are short-lived download links that can expire or fail to load.
+  const hasBytes = (arr: (string | undefined)[]) =>
+    arr.some((u) => typeof u === "string" && u.startsWith("data:"));
   return {
     ...cloud,
     journalEntries: cloud.journalEntries.map((e) => {
       const kept = localMedia.get(e.id);
       if (!kept) return e;
       const patch: Partial<JournalEntry> = {};
-      if (!(e.photo || e.photos?.length) && (kept.photo || kept.photos?.length)) {
+      // Re-attach local media when the cloud entry has none OR when the cloud
+      // only carries fragile remote links but we still hold the actual bytes.
+      const cloudHasPhotos = !!(e.photo || e.photos?.length);
+      const keptHasPhotos = !!(kept.photo || kept.photos?.length);
+      if (keptHasPhotos && (!cloudHasPhotos ||
+          (hasBytes([kept.photo, ...(kept.photos ?? [])]) && !hasBytes([e.photo, ...(e.photos ?? [])])))) {
         patch.photo = kept.photo;
         patch.photos = kept.photos;
       }
-      if (!(e.audio || e.audios?.length) && (kept.audio || kept.audios?.length)) {
+      const cloudHasAudio = !!(e.audio || e.audios?.length);
+      const keptHasAudio = !!(kept.audio || kept.audios?.length);
+      if (keptHasAudio && (!cloudHasAudio ||
+          (hasBytes([kept.audio, ...(kept.audios ?? [])]) && !hasBytes([e.audio, ...(e.audios ?? [])])))) {
         patch.audio = kept.audio;
         patch.audios = kept.audios;
       }
