@@ -359,5 +359,10 @@ export interface AppData {
   // multi-device union-merge can't resurrect it from a device that still holds
   // a copy. Pruned after a wide window so the map can't grow forever.
   deleted?: Record<string, number>;
+  // Media tombstones: content-hash → deletedAt (ms). When a single photo/voice
+  // note is removed from an entry (the rest kept), its hash is recorded here so
+  // the media-ref union in mergeEntryMedia can't pull the deleted one back from
+  // a device/cloud copy that still references it. Pruned on the same window.
+  deletedMedia?: Record<string, number>;
   lastUpdated: string;
 }

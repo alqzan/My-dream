@@ -9,7 +9,8 @@ import type {
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { nextReviewCursor } from "./quran/hifz";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries } from "./utils";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
+import { mediaHashOf } from "./mediaHash";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
@@ -189,6 +190,51 @@ export const useAppStore = create<AppStore>()(
       rawSet(patch as Partial<AppStore>, replace as false);
     }) as typeof rawSet;
 
+    // Record/lift media tombstones when a single photo/voice note is removed
+    // (or re-added) within an entry. Async because content hashing is async —
+    // the hash MUST equal the ref hash sync uses (both go through mediaHashOf),
+    // or the tombstone would never match and the deleted photo would ride back
+    // in via the media-ref union on the next merge. A hash that's simultaneously
+    // re-added is never tombstoned; a re-added hash lifts any prior tombstone.
+    const applyMediaTombstones = async (removed: string[], added: string[]) => {
+      const [remHashes, addHashes] = await Promise.all([
+        Promise.all(removed.map(mediaHashOf)),
+        Promise.all(added.map(mediaHashOf)),
+      ]);
+      const add = new Set(addHashes.filter(Boolean) as string[]);
+      const toTomb = (remHashes.filter(Boolean) as string[]).filter((h) => !add.has(h));
+      if (!toTomb.length && !add.size) return;
+      set((s) => {
+        const dm = { ...(s.deletedMedia ?? {}) };
+        let changed = false;
+        const t = Date.now();
+        for (const h of toTomb) if (dm[h] !== t) { dm[h] = t; changed = true; }
+        for (const h of add) if (h in dm) { delete dm[h]; changed = true; }
+        return changed ? { deletedMedia: dm } : {};
+      });
+    };
+
+    // Diff an entry's media before/after an edit and feed the change to the
+    // tombstone recorder. `after` uses the incoming update when it set the field,
+    // else the entry's current media (untouched fields aren't removals).
+    const trackMediaChange = (before: JournalEntry, updates: Partial<JournalEntry>) => {
+      const removed: string[] = [];
+      const added: string[] = [];
+      const diff = (was: string[], now: string[]) => {
+        const wasSet = new Set(was);
+        const nowSet = new Set(now);
+        for (const it of was) if (!nowSet.has(it)) removed.push(it);
+        for (const it of now) if (!wasSet.has(it)) added.push(it);
+      };
+      if (updates.photos !== undefined || updates.photo !== undefined) {
+        diff(entryPhotos(before), entryPhotos({ ...before, ...updates }));
+      }
+      if (updates.audios !== undefined || updates.audio !== undefined) {
+        diff(entryAudios(before), entryAudios({ ...before, ...updates }));
+      }
+      if (removed.length || added.length) void applyMediaTombstones(removed, added);
+    };
+
     return {
       transactions: [],
       books: [],
@@ -216,6 +262,7 @@ export const useAppStore = create<AppStore>()(
       frozenHabits: [],
       merchantRules: {},
       deleted: {},
+      deletedMedia: {},
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
@@ -234,12 +281,17 @@ export const useAppStore = create<AppStore>()(
           ...clearTombstone(s.deleted, entry.id),
         })),
 
-      updateJournalEntry: (id, updates) =>
+      updateJournalEntry: (id, updates) => {
+        // Tombstone any photo/voice note this edit removed (kept the rest), so a
+        // later merge can't resurrect it from a copy that still references it.
+        const before = get().journalEntries.find((e) => e.id === id);
+        if (before) trackMediaChange(before, updates);
         set((s) => ({
           journalEntries: s.journalEntries.map((e) =>
             e.id === id ? { ...e, ...updates, updatedAt: Date.now() } : e
           ),
-        })),
+        }));
+      },
 
       deleteJournalEntry: (id) =>
         set((s) => ({
@@ -946,6 +998,7 @@ export const useAppStore = create<AppStore>()(
           frozenHabits: data.frozenHabits ?? [],
           merchantRules: data.merchantRules ?? {},
           deleted: data.deleted ?? {},
+          deletedMedia: data.deletedMedia ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -975,6 +1028,7 @@ export const useAppStore = create<AppStore>()(
           frozenHabits: s.frozenHabits ?? [],
           merchantRules: s.merchantRules,
           deleted: s.deleted ?? {},
+          deletedMedia: s.deletedMedia ?? {},
           lastUpdated: s.lastUpdated,
         };
       },

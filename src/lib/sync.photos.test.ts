@@ -245,6 +245,52 @@ describe("inventoryMedia — a pending ref counts as in-cloud, not orphan", () =
   });
 });
 
+describe("inlineCachedMedia — drops a tombstoned photo so a delete doesn't resurrect", () => {
+  it("removes a deleted data: photo a merge may have filled back", async () => {
+    const { photoHash } = await import("./mediaHash");
+    const p = "data:image/png;base64,ZZZZ";
+    const h = await photoHash(p);
+    const entry = { id: "e1", date: "2026-01-01", content: "x", photos: [p], photo: p } as JournalEntry;
+    const data = { ...appData([entry]), deletedMedia: { [h]: Date.now() } };
+
+    const out = await sync.inlineCachedMedia("space", data);
+    const e = out.journalEntries![0];
+    expect(e.photos).toEqual([]);
+    expect(e.photo).toBeUndefined();
+  });
+});
+
+describe("saveUserData — a tombstoned photo is never pushed back", () => {
+  it("drops a deleted media hash from the written refs and manifest", async () => {
+    const workerUrl = (h: string) =>
+      `https://worker.example/v1/media/blob?hash=${h}&exp=9999999999999&sig=x`;
+    // Entry still carries both photos (a merge could have filled B back), but B
+    // is tombstoned — the save must not re-reference it.
+    const entry = {
+      id: "e1", date: "2026-01-01", content: "x",
+      photos: [workerUrl(HASH_A), workerUrl(HASH_B)], photo: workerUrl(HASH_A),
+    } as unknown as JournalEntry;
+    const data = { ...appData([entry]), deletedMedia: { [HASH_B]: Date.now() } };
+
+    await sync.saveUserData("space", data);
+
+    const shardCall = setDocMock.mock.calls.find(
+      (c) => Array.isArray((c[0] as { __doc?: unknown[] })?.__doc) &&
+             ((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal")
+    );
+    const written = (shardCall![1] as { entries: Array<{ id: string; photoRefs?: string[] }> }).entries;
+    const saved = written.find((x) => x.id === "e1")!;
+    expect(saved.photoRefs).toEqual([HASH_A]); // B dropped, not orphaned-and-kept
+
+    const mainCall = setDocMock.mock.calls.find(
+      (c) => Array.isArray((c[0] as { __doc?: unknown[] })?.__doc) &&
+             !((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal")
+    );
+    const mainDoc = mainCall![1] as { photoManifest: string[] };
+    expect(mainDoc.photoManifest).not.toContain(HASH_B);
+  });
+});
+
 describe("saveUserData — a surviving ref is never orphaned", () => {
   it("re-emits refs kept by a failed hydrate into the written shard + manifest", async () => {
     // Mirror production exactly: load the cloud doc (which seeds the manifest and

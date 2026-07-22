@@ -130,6 +130,45 @@ describe("mergeAppData — journal media never lost", () => {
   });
 });
 
+describe("mergeAppData — media tombstones (a single-photo delete sticks)", () => {
+  const withRefs = (id: string, updatedAt: number, photoRefs: string[]): JournalEntry =>
+    ({ id, date: "2026-01-01", content: "", updatedAt, photoRefs } as unknown as JournalEntry);
+
+  it("does not resurrect a deleted photo's ref through the media union (R2 down)", () => {
+    const ts = Date.now();
+    // Newer device deleted B → keeps [A,C] and tombstoned B's hash.
+    const local = base({
+      lastUpdated: "2026-05-10T13:00:00.000Z",
+      journalEntries: [withRefs("E1", 2000, ["A", "C"])],
+      deletedMedia: { B: ts },
+    });
+    // Cloud hasn't seen the delete and still references [A,B,C] (as pending refs).
+    const cloud = base({
+      lastUpdated: "2026-05-10T12:00:00.000Z",
+      journalEntries: [withRefs("E1", 1000, ["A", "B", "C"])],
+    });
+    const merged = mergeAppData(local, cloud);
+    const e = merged.journalEntries[0] as JournalEntry & { photoRefs?: string[] };
+    expect(e.photoRefs).toEqual(["A", "C"]); // B is NOT pulled back in
+    expect(merged.deletedMedia).toEqual({ B: ts }); // tombstone carried forward
+  });
+
+  it("strips a tombstoned ref even from an entry only one side holds", () => {
+    const ts = Date.now();
+    const local = base({
+      lastUpdated: "2026-05-10T13:00:00.000Z",
+      deletedMedia: { B: ts },
+    });
+    const cloud = base({
+      lastUpdated: "2026-05-10T12:00:00.000Z",
+      journalEntries: [withRefs("E9", 1000, ["A", "B"])],
+    });
+    const merged = mergeAppData(local, cloud);
+    const e = merged.journalEntries[0] as JournalEntry & { photoRefs?: string[] };
+    expect(e.photoRefs).toEqual(["A"]);
+  });
+});
+
 describe("mergeAppData — tombstones", () => {
   it("does not resurrect an item the other device deleted", () => {
     const local = base({

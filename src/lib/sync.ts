@@ -5,6 +5,7 @@ import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
+import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf } from "./mediaHash";
 import { journalShardId } from "./merge";
 import { showToast } from "@/components/ui/UndoToast";
 
@@ -246,12 +247,6 @@ interface CachedMediaUrl { url: string; expiresAt: number }
 const urlCache = new Map<string, CachedMediaUrl>();
 const URL_EXPIRY_SAFETY_MS = 15_000;
 
-// A media string is either a local `data:` URL (needs uploading) or a cloud
-// download URL. Parse both R2 presigned URLs and legacy Firebase Storage URLs
-// so an already-hydrated entry keeps its hash rather than hashing the URL text.
-function isStorageUrl(s: string): boolean {
-  return /^https?:\/\//.test(s) && hashFromStorageUrl(s) !== null;
-}
 function isR2StorageUrl(s: string): boolean {
   try {
     return new URL(s).hostname.endsWith(".r2.cloudflarestorage.com");
@@ -267,21 +262,6 @@ function isWorkerDownloadUrl(url: string): boolean {
     return u.pathname.endsWith("/v1/media/blob") && /^[a-f0-9]{32}$/.test(u.searchParams.get("hash") ?? "");
   } catch {
     return false;
-  }
-}
-
-function hashFromStorageUrl(url: string): string | null {
-  try {
-    const u = new URL(url);
-    // New Worker download links carry the content hash as a query param.
-    const q = (u.searchParams.get("hash") ?? "").toLowerCase();
-    if (/^[a-f0-9]{32}$/.test(q)) return q;
-    const legacy = url.match(/\/o\/([^?]+)/);
-    const path = legacy ? decodeURIComponent(legacy[1]) : u.pathname;
-    const last = path.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
-    return /^[a-f0-9]{32}$/.test(last) ? last : null;
-  } catch {
-    return null;
   }
 }
 
@@ -318,23 +298,6 @@ function cachedMediaUrl(hash: string): string | null {
     return null;
   }
   return cached.url;
-}
-
-// A photo's bytes are immutable, so its content hash never changes. Memoize
-// data→hash so a save re-hashes only genuinely new images. Bounded so a very
-// long session can't grow it without limit.
-const hashCache = new Map<string, string>();
-const HASH_CACHE_LIMIT = 4000;
-
-async function photoHash(data: string): Promise<string> {
-  const cached = hashCache.get(data);
-  if (cached) return cached;
-  const bytes = new TextEncoder().encode(data);
-  const buf = await crypto.subtle.digest("SHA-256", bytes);
-  const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
-  if (hashCache.size >= HASH_CACHE_LIMIT) hashCache.clear();
-  hashCache.set(data, hex);
-  return hex;
 }
 
 interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio" | "audios"> {
@@ -471,6 +434,10 @@ async function prepareForCloud(
   const newAudios = new Map<string, string>();
   const photoRefs = new Set<string>();
   const audioRefs = new Set<string>();
+  // Media the user deleted — never re-reference or re-upload it, even if a merge
+  // left its bytes on a filled entry. This is the authoritative save-side guard
+  // that keeps a single-photo deletion from ever being pushed back to R2.
+  const mediaTomb = new Set(Object.keys(data.deletedMedia ?? {}));
 
   const attach = async (
     items: string[],
@@ -482,20 +449,24 @@ async function prepareForCloud(
       let h: string | null;
       if (isStorageUrl(it)) {
         h = hashFromStorageUrl(it);
-        if (h && (isR2StorageUrl(it) || isWorkerDownloadUrl(it))) {
+      } else {
+        h = await photoHash(it);
+      }
+      if (!h || mediaTomb.has(h)) continue; // unknown, or a deleted photo → drop
+      if (isStorageUrl(it)) {
+        if (isR2StorageUrl(it) || isWorkerDownloadUrl(it)) {
           cacheMediaUrl(h, it); // already in the cloud (R2 presigned or Worker link)
-        } else if (h) {
+        } else {
           // A legacy Firebase URL still contains retrievable bytes. Queue it
           // for the R2 migration; if it has expired, verification reports the
           // hash as broken rather than falsely adding it to the R2 manifest.
           newMap.set(h, it);
         }
       } else {
-        h = await photoHash(it);
         newMap.set(h, it); // a local data: URL to upload
         void localMediaPut(h, it); // keep our own bytes locally → never re-fetch
       }
-      if (h) { refs.push(h); allRefs.add(h); }
+      refs.push(h); allRefs.add(h);
     }
     return refs;
   };
@@ -514,8 +485,9 @@ async function prepareForCloud(
       const src = e as JournalEntry & MediaOrderFields;
       const imgs = entryPhotos(e);
       const auds = entryAudios(e);
-      const survivingPhotoRefs = src.photoRefs ?? [];
-      const survivingAudioRefs = src.audioRefs ?? [];
+      // Drop any surviving ref the user has since deleted (tombstoned).
+      const survivingPhotoRefs = (src.photoRefs ?? []).filter((h) => !mediaTomb.has(h));
+      const survivingAudioRefs = (src.audioRefs ?? []).filter((h) => !mediaTomb.has(h));
       const { photo: _p, photos: _ps, audio: _a, audios: _as,
               photoRefs: _pr, audioRefs: _aur, photoOrder: _po, audioOrder: _ao, ...rest } = src;
       const out: CloudEntry = rest;
@@ -635,19 +607,40 @@ async function fetchInlineMedia(uid: string, sub: MediaKind, h: string): Promise
 // link for the real image and it renders offline forever after.
 export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string, data: T): Promise<T> {
   if (!data.journalEntries) return data;
+  // A photo the user deleted can be filled back onto an entry by a merge (from a
+  // copy that still has it). Drop such media here — the final pass before the
+  // store hydrates — so a deletion doesn't visibly resurrect.
+  const tomb = new Set(Object.keys(data.deletedMedia ?? {}));
   const inlineOne = async (u: string | undefined, sub: MediaKind): Promise<string | undefined> => {
-    if (!u || u.startsWith("data:") || !isStorageUrl(u)) return u;
+    if (!u) return u;
+    if (tomb.size) {
+      const h = await mediaHashOf(u);
+      if (h && tomb.has(h)) return undefined; // deleted media → drop it
+    }
+    if (u.startsWith("data:") || !isStorageUrl(u)) return u;
     const h = hashFromStorageUrl(u);
     if (!h) return u;
     return (await fetchInlineMedia(uid, sub, h)) ?? u;
   };
+  const inlineList = async (list: string[], sub: MediaKind) =>
+    (await Promise.all(list.map((u) => inlineOne(u, sub)))).filter(Boolean) as string[];
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e) => {
       const patch: Partial<JournalEntry> = {};
-      if (e.photos?.length) patch.photos = (await Promise.all(e.photos.map((u) => inlineOne(u, "photos")))).filter(Boolean) as string[];
-      if (e.photo) patch.photo = await inlineOne(e.photo, "photos");
-      if (e.audios?.length) patch.audios = (await Promise.all(e.audios.map((u) => inlineOne(u, "audios")))).filter(Boolean) as string[];
-      if (e.audio) patch.audio = await inlineOne(e.audio, "audios");
+      if (e.photos?.length) {
+        const photos = await inlineList(e.photos, "photos");
+        patch.photos = photos;
+        patch.photo = photos[0]; // keep the legacy single field consistent
+      } else if (e.photo) {
+        patch.photo = await inlineOne(e.photo, "photos");
+      }
+      if (e.audios?.length) {
+        const audios = await inlineList(e.audios, "audios");
+        patch.audios = audios;
+        patch.audio = audios[0];
+      } else if (e.audio) {
+        patch.audio = await inlineOne(e.audio, "audios");
+      }
       return Object.keys(patch).length ? { ...e, ...patch } : e;
     })
   );

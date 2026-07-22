@@ -419,6 +419,24 @@ export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): Journa
   return out as JournalEntry;
 }
 
+// أسقِط من مراجع المذكرة أيّ هاشٍ يحمل شاهد حذفٍ للوسائط (صورة/صوت حذفها المستخدم
+// إفرادياً). بدونها كان اتحاد المراجع في mergeEntryMedia يُعيد المرجع المحذوف من
+// نسخةٍ لا تزال تشير إليه، فترجع الصورة عند عودة R2. تُطبَّق على كل مذكرة بعد الدمج
+// (لا المدموجة فقط) لتشمل المذكرات الفريدة لطرفٍ واحد.
+export function stripTombstonedMediaRefs(e: JournalEntry, tomb: Set<string>): JournalEntry {
+  if (!tomb.size) return e;
+  const x = e as EntryMediaRefs;
+  const pr = x.photoRefs?.filter((h) => !tomb.has(h));
+  const ar = x.audioRefs?.filter((h) => !tomb.has(h));
+  const prChanged = !!x.photoRefs && pr!.length !== x.photoRefs.length;
+  const arChanged = !!x.audioRefs && ar!.length !== x.audioRefs.length;
+  if (!prChanged && !arChanged) return e;
+  const out = { ...x } as EntryMediaRefs;
+  if (prChanged) { if (pr!.length) out.photoRefs = pr; else delete out.photoRefs; }
+  if (arChanged) { if (ar!.length) out.audioRefs = ar; else delete out.audioRefs; }
+  return out as JournalEntry;
+}
+
 // توحيد المعرّفات (Day One → معرّف ثابت مشتقّ من UUID) ودمج المكرّرات التي تشترك
 // في معرّف واحد مع الحفاظ على وسائطها. يُحفظ الترتيب حسب أوّل ظهور. يُستخدَم في
 // ترقية المتجر المحلّي وفي كل دمج سحابيّ، فتتلاقى المكرّرات القديمة (باختلاف

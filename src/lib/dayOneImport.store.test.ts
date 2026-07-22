@@ -10,11 +10,16 @@ vi.mock("idb-keyval", () => ({
 }));
 
 import { useAppStore } from "./store";
+import { photoHash } from "./mediaHash";
 import type { JournalEntry } from "./types";
 
 const doEntry = (uuid: string, o: Partial<JournalEntry> = {}): JournalEntry => ({
   id: `do-${uuid}`, date: "2026-01-01", content: "c", source: "dayOne", dayOneUUID: uuid, ...o,
 });
+
+const flush = () => new Promise((r) => setTimeout(r, 30));
+const P1 = "data:image/png;base64,AAAA";
+const P2 = "data:image/png;base64,BBBB";
 
 beforeEach(() => {
   useAppStore.setState({ journalEntries: [], deleted: {} });
@@ -62,5 +67,34 @@ describe("importDayOneEntries — completes partially-missing media", () => {
       .getState()
       .importDayOneEntries([doEntry("u3", { photos: ["p1", "p2"], photo: "p1" })]);
     expect(touched).toBe(0);
+  });
+});
+
+describe("updateJournalEntry — records media tombstones on single-photo delete", () => {
+  it("tombstones the removed photo's hash (and not the kept one)", async () => {
+    useAppStore.setState({
+      journalEntries: [doEntry("m1", { photos: [P1, P2], photo: P1 })],
+      deletedMedia: {},
+    });
+    useAppStore.getState().updateJournalEntry("do-m1", { photos: [P1], photo: P1 });
+    await flush();
+
+    const dm = useAppStore.getState().deletedMedia ?? {};
+    expect(dm[await photoHash(P2)]).toBeGreaterThan(0); // removed → tombstoned
+    expect(dm[await photoHash(P1)]).toBeUndefined(); // kept → not tombstoned
+  });
+
+  it("lifts the tombstone when the same photo is re-added", async () => {
+    useAppStore.setState({
+      journalEntries: [doEntry("m2", { photos: [P1, P2], photo: P1 })],
+      deletedMedia: {},
+    });
+    useAppStore.getState().updateJournalEntry("do-m2", { photos: [P1], photo: P1 }); // delete P2
+    await flush();
+    expect((useAppStore.getState().deletedMedia ?? {})[await photoHash(P2)]).toBeGreaterThan(0);
+
+    useAppStore.getState().updateJournalEntry("do-m2", { photos: [P1, P2], photo: P1 }); // re-add P2
+    await flush();
+    expect((useAppStore.getState().deletedMedia ?? {})[await photoHash(P2)]).toBeUndefined();
   });
 });

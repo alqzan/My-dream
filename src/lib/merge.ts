@@ -3,7 +3,7 @@
 // exports mergeAppData, so existing importers are unaffected. Pure functions of
 // (local, cloud) → merged AppData; touches no I/O.
 import type { AppData, JournalEntry, HifzMistake } from "./types";
-import { dedupeJournalEntries, mergeEntryMedia } from "./utils";
+import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 
 // Which journal shard a given entry belongs to: one document per YYYY-MM of the
 // entry's own date (stable across devices, naturally bounded). Malformed/absent
@@ -46,6 +46,17 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   for (const id of Object.keys(deleted)) {
     if (deleted[id] < cutoff) delete deleted[id];
   }
+  // Media tombstones (content-hash → deletedAt): same union+prune. These record
+  // a single photo/voice note removed from an entry, so the media-ref union
+  // below can't pull the deleted one back from a copy that still references it.
+  const deletedMedia: Record<string, number> = { ...(cloud.deletedMedia ?? {}) };
+  for (const [h, ts] of Object.entries(local.deletedMedia ?? {})) {
+    deletedMedia[h] = Math.max(deletedMedia[h] ?? 0, ts);
+  }
+  for (const h of Object.keys(deletedMedia)) {
+    if (deletedMedia[h] < cutoff) delete deletedMedia[h];
+  }
+  const mediaTomb = new Set(Object.keys(deletedMedia));
   // Drop any id-keyed item that carries a live tombstone — this is what stops a
   // resurrected copy from a second device.
   const alive = <T extends { id: string }>(arr: T[]) => arr.filter((x) => !(x.id in deleted));
@@ -151,7 +162,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
       sJournal,
       (e) => e.id
     )
-  );
+    // Drop refs to media the user deleted — applied to EVERY entry (merged or
+    // unique) so a deleted photo can't ride back in on either side's copy.
+  ).map((e) => stripTombstonedMediaRefs(e, mediaTomb));
 
   return {
     transactions: byIdNewer(primary.transactions, secondary.transactions),
@@ -184,6 +197,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     frozenHabits: primary.frozenHabits ?? secondary.frozenHabits ?? [],
     merchantRules: { ...secondary.merchantRules, ...primary.merchantRules },
     deleted,
+    deletedMedia,
     lastUpdated: (local.lastUpdated ?? "") > (cloud.lastUpdated ?? "") ? local.lastUpdated : cloud.lastUpdated,
   };
 }
