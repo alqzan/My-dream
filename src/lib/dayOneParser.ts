@@ -337,6 +337,23 @@ export interface BatchImportResult {
 
 interface MediaSlot { keys: string[]; kind: "photo" | "audio"; resolved: boolean; url?: string }
 
+// Past ~4GB a ZIP uses the ZIP64 extension, which in-browser unzip libraries
+// handle poorly, so a huge export fails to open at all. A Day One library that
+// big is almost entirely VIDEO — which مدار never stores — so the fix is to drop
+// the videos folder before importing. Return a targeted, actionable message for
+// that case (null → not obviously a size problem, keep the generic message).
+const ZIP64_THRESHOLD = 4 * 1024 * 1024 * 1024; // 4 GB
+function hugeZipHint(file: Blob): string | null {
+  if (file.size < ZIP64_THRESHOLD) return null;
+  const gb = Math.round(file.size / (1024 * 1024 * 1024));
+  return (
+    `الملف ضخم جداً (~${gb}GB) وتعذّر فتحه في المتصفّح — الأرشيفات فوق 4GB ` +
+    `تستخدم صيغة لا تفكّها المتصفّحات بثبات، والحجم غالباً كلّه مقاطع فيديو ` +
+    `لا يحفظها مدار أصلاً. الحل: فُكّ الأرشيف على جهازك، احذف مجلّد «videos»، ` +
+    `ثم أعد ضغط الباقي (JSON + photos + audios) — سيصغر كثيراً ويُستورد بسلاسة.`
+  );
+}
+
 export async function streamDayOneZipImport(
   file: Blob,
   cb: BatchImportCallbacks
@@ -349,9 +366,11 @@ export async function streamDayOneZipImport(
     await streamZip(file, (n) => n.toLowerCase().endsWith(".json"),
       (name, bytes) => { jsonFiles[name] = bytes; });
   } catch {
-    throw new Error("تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
+    throw new Error(hugeZipHint(file) ?? "تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
   }
-  if (!Object.keys(jsonFiles).length) throw new Error("لم يُعثر على ملف JSON داخل الأرشيف");
+  if (!Object.keys(jsonFiles).length) {
+    throw new Error(hugeZipHint(file) ?? "لم يُعثر على ملف JSON داخل الأرشيف");
+  }
   const allEntries: DayOneEntry[] = [];
   for (const jp of Object.keys(jsonFiles)) {
     try {
