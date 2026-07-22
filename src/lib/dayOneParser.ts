@@ -323,6 +323,11 @@ export interface BatchImportCallbacks {
   onProgress?: (p: BatchImportProgress) => void;
   shouldCancel?: () => boolean;
   batchSize?: number; // default 40
+  // Keep only the FIRST photo of each entry (drop the rest). For a giant
+  // library this turns "one photo per memory" on: it keeps the sync doc's photo
+  // manifest small (thousands, not tens of thousands) and the app light, while
+  // still giving every day a picture. Audio is unaffected.
+  onePhotoPerEntry?: boolean;
 }
 
 export interface BatchImportResult {
@@ -383,10 +388,12 @@ export async function streamDayOneZipImport(
   // Base entries (no media yet) + per-entry media slots. A slot resolves when
   // ANY of its keys (md5 or identifier) streams in; an entry becomes ready when
   // all its slots resolve (or the stream ends without them — a missing file).
+  const onePhoto = cb.onePhotoPerEntry ?? false;
   const bases = allEntries.map(baseEntry);
   const slotsPerEntry: (MediaSlot[] | null)[] = allEntries.map((e) => {
     const slots: MediaSlot[] = [];
-    for (const p of e.photos ?? []) slots.push({ keys: [p.md5, p.identifier].filter(Boolean) as string[], kind: "photo", resolved: false });
+    const photos = onePhoto ? (e.photos ?? []).slice(0, 1) : (e.photos ?? []);
+    for (const p of photos) slots.push({ keys: [p.md5, p.identifier].filter(Boolean) as string[], kind: "photo", resolved: false });
     for (const a of e.audios ?? []) slots.push({ keys: [a.md5, a.identifier].filter(Boolean) as string[], kind: "audio", resolved: false });
     return slots;
   });

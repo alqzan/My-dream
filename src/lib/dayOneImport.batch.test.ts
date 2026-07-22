@@ -24,6 +24,24 @@ function dayOneZip(): Blob {
   return new Blob([zipped], { type: "application/zip" });
 }
 
+// A ZIP whose one entry references THREE photos. We assert on photosReferenced
+// (derived from the media SLOTS, before any decode) so onePhotoPerEntry is
+// provable without a browser canvas — image bytes never need to decode here.
+function threePhotoZip(): Blob {
+  const json = {
+    entries: [
+      { uuid: "x", creationDate: "2026-05-01T10:00:00Z", text: "متعدّد", photos: [{ md5: "P1" }, { md5: "P2" }, { md5: "P3" }] },
+    ],
+  };
+  const zipped = zipSync({
+    "journal.json": strToU8(JSON.stringify(json)),
+    "photos/P1.jpeg": new Uint8Array([1]),
+    "photos/P2.jpeg": new Uint8Array([2]),
+    "photos/P3.jpeg": new Uint8Array([3]),
+  });
+  return new Blob([zipped], { type: "application/zip" });
+}
+
 describe("streamDayOneZipImport — batched, bounded, resumable", () => {
   it("flushes all entries in batches and attaches streamed media", async () => {
     const batches: JournalEntry[][] = [];
@@ -59,6 +77,14 @@ describe("streamDayOneZipImport — batched, bounded, resumable", () => {
     const ids = batches.flat().map((e) => e.id);
     expect(ids).toContain("do-b");
     expect(ids).toContain("do-c");
+  });
+
+  it("onePhotoPerEntry keeps only the first photo of an entry", async () => {
+    const off = await streamDayOneZipImport(threePhotoZip(), { onBatch: () => {} });
+    expect(off.photosReferenced).toBe(3); // default: all three slots kept
+
+    const on = await streamDayOneZipImport(threePhotoZip(), { onBatch: () => {}, onePhotoPerEntry: true });
+    expect(on.photosReferenced).toBe(1); // only the first photo is referenced
   });
 
   it("awaits each onBatch before the next (backpressure)", async () => {

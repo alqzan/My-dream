@@ -34,6 +34,9 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
   // Live progress for a big ZIP + a cancel flag the parser polls between files.
   const [progress, setProgress] = useState<BatchImportProgress | null>(null);
   const cancelRef = useRef(false);
+  // Default ON: keep just one photo per memory. For a large archive this keeps
+  // the sync doc small and the app light while still giving each day a picture.
+  const [onePhotoPerEntry, setOnePhotoPerEntry] = useState(true);
 
   const dayOneCount = journalEntries.filter((e) => e.source === "dayOne").length;
   const photoCount = journalEntries.filter((e) => e.photos?.length || e.photo).length;
@@ -81,6 +84,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           // not the whole library — each batch is persisted before the next.
           const result = await streamDayOneZipImport(file, {
             batchSize: 40,
+            onePhotoPerEntry,
             shouldCancel: () => cancelRef.current,
             onProgress: setProgress,
             onBatch: (entries) => {
@@ -141,25 +145,42 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       </div>
 
       {status === "idle" && (
-        <label
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-          className={`block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${
-            dragging ? "border-journal bg-journal/5" : "border-gray-200 hover:border-gray-300"
-          }`}
-        >
-          <Upload size={28} className="mx-auto text-gray-400 mb-3" />
-          <p className="text-sm font-medium text-gray-700">اسحب ملفات ZIP أو JSON هنا</p>
-          <p className="text-xs text-gray-400 mt-1">أو اضغط للاختيار — يمكن اختيار عدة ملفات</p>
-          <input
-            type="file"
-            accept=".json,.zip,application/zip,application/json"
-            multiple
-            className="hidden"
-            onChange={(e) => { if (e.target.files?.length) handleFiles([...e.target.files]); }}
-          />
-        </label>
+        <>
+          <label className="flex items-start gap-2.5 rounded-xl bg-gray-50 dark:bg-white/5 p-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={onePhotoPerEntry}
+              onChange={(e) => setOnePhotoPerEntry(e.target.checked)}
+              className="accent-journal w-4 h-4 mt-0.5 shrink-0"
+            />
+            <span className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+              <strong>صورة واحدة لكل مذكرة</strong> — يأخذ أول صورة من كل يوم ويتجاهل الباقي.
+              موصى به بشدّة للأرشيفات الكبيرة: يُبقي مدار خفيفاً والمزامنة سليمة.
+              <span className="block text-[11px] text-gray-400 mt-0.5">
+                أزِل العلامة لاستيراد كل صور كل مذكرة (مناسب للأرشيفات الصغيرة فقط).
+              </span>
+            </span>
+          </label>
+          <label
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            className={`block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${
+              dragging ? "border-journal bg-journal/5" : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <Upload size={28} className="mx-auto text-gray-400 mb-3" />
+            <p className="text-sm font-medium text-gray-700">اسحب ملفات ZIP أو JSON هنا</p>
+            <p className="text-xs text-gray-400 mt-1">أو اضغط للاختيار — يمكن اختيار عدة ملفات</p>
+            <input
+              type="file"
+              accept=".json,.zip,application/zip,application/json"
+              multiple
+              className="hidden"
+              onChange={(e) => { if (e.target.files?.length) handleFiles([...e.target.files]); }}
+            />
+          </label>
+        </>
       )}
 
       {status === "working" && (
