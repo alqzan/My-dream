@@ -68,7 +68,7 @@ export function ReadingLogForm({ books, defaultBookId, defaultMinutes, initial, 
     return (
       <div className="text-center py-6 text-gray-400 text-sm space-y-2">
         <p>لا توجد كتب تقرأها الآن</p>
-        <p className="text-xs">أضف كتاباً وغيّر حالته إلى "أقرأه الآن"</p>
+        <p className="text-xs">أضف كتاباً وغيّر حالته إلى «أقرأه الآن»</p>
       </div>
     );
   }

@@ -109,15 +109,26 @@
 
 ### المرحلة 3 — وقاية وبوابة جودة
 
-1. **CI**: إضافة `npm test` (وtypecheck الـWorker) إلى `pages.yml` قبل build —
-   يبقى `main` مصدر النشر الوحيد كما هو، لكن لا ينشر بناء باختبارات حمراء.
-2. **ESLint**: إعداد flat config ثابت + إصلاح الخطأين المعروفين في
-   `ReadingLogForm.tsx`، وتشغيله في CI.
-3. **مفتاح المزامنة**: توليد عشوائي ≥128 بت في `SyncKeyCard` (مع نسخ/QR)
-   ورفض العبارات القصيرة؛ **rate limiting** على الـWorker لكل IP/مفتاح.
-4. تحديثات patch/minor للاعتماديات ثم إعادة audit/build/test. لا
-   `npm audit fix --force` ولا ترقيات رئيسية (React/Next/Recharts) الآن.
-5. مراجعة قواعد Firestore الإنتاجية من الـConsole وتوثيق قالبها هنا دون السر.
+> الحالة: **البوابة البرمجية منجزة**؛ يبقى بندان يحتاجان لوحة Cloudflare/Firebase.
+
+1. ✅ **CI**: `pages.yml` صار يشغّل `npm test` ثم `npm run lint` ثم typecheck
+   الـWorker قبل build (الأرخص أولاً). فشل أيٍّ منها يمنع النشر — و`main` يبقى
+   مصدر النشر الوحيد. (`.github/workflows/pages.yml`)
+2. ✅ **ESLint**: `.eslintrc.json` (`next/core-web-vitals`) يعمل بلا مطالبة
+   تفاعلية؛ أُصلح خطآ الاقتباس في `ReadingLogForm.tsx` (« » بدل " ")؛ يمرّ
+   أخضر (تبقى تحذيرات `<img>`/deps غير حاجزة، مقصودة لصور `data:`).
+3. ◑ **مفتاح المزامنة**: ✅ زر «توليد مفتاح قوي» (160 بت من CSPRNG) + نُصح غير
+   حاجز عند مفتاح ضعيف + إظهار/إخفاء الإدخال للنسخ قبل الحفظ (`SyncKeyCard.tsx`).
+   ⏳ **rate limiting على الـWorker مؤجّل**: يتطلب ربط Rate-Limiting/KV من لوحة
+   Cloudflare (لا يمكن سنّه من الكود وحده دون كسر البوابة الحيّة)، والمصادقة
+   الحالية HMAC ثابت الزمن بمفتاح 160 بت تجعل التخمين غير عملي أصلاً. الخطوات
+   موثّقة في `cloudflare-worker/README.md`.
+4. ⏳ **تحديثات الاعتماديات** مؤجّلة: patch/minor لـNext/Firebase ثم إعادة
+   audit/build/test — تُجرى في جلسة مركّزة باختبار regression، لا مع بوابة
+   الجودة. لا `npm audit fix --force` ولا ترقية رئيسية.
+5. ⏳ **قواعد Firestore الإنتاجية**: تُراجَع من Firebase Console (لا يمكن من هنا)؛
+   يبقى `firestore.rules` في المستودع قالباً شكلياً، والقواعد الفعلية تُنشر من
+   الـConsole حصراً كما في `CLAUDE.md`.
 
 ### المرحلة 4 — التجربة اليومية (الأثر المباشر على المالك)
 

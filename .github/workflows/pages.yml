@@ -32,6 +32,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Quality gate — a red check blocks the deploy (main is the only publish
+      # source, so nothing broken reaches the live site). Order is cheapest-first
+      # so an obvious failure fails fast before the slower build.
+      - name: Unit tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Worker typecheck
+        working-directory: cloudflare-worker
+        run: |
+          npm ci
+          npm run typecheck
+
       - name: Build static site (with base path for project pages)
         env:
           BASE_PATH: /My-dream
