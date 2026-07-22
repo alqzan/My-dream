@@ -1,11 +1,45 @@
 import {
   doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
 } from "firebase/firestore";
+import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
 import { journalShardId } from "./merge";
 import { showToast } from "@/components/ui/UndoToast";
+
+// ===================== Permanent local media store =====================
+// The root cure for "broken images": every device keeps the actual bytes of a
+// photo/voice note LOCALLY, keyed by its content hash, and displays from there
+// forever. The cloud (R2) is only ever used to fetch a hash the ONCE, the first
+// time this device sees it. After that, rendering never touches the network — no
+// live URL, no expiry, no CORS, nothing left to break. Content hashes are
+// immutable, so a cached entry is valid permanently.
+const MEDIA_CACHE_PREFIX = "madar-media:";
+async function localMediaGet(hash: string): Promise<string | null> {
+  try {
+    const v = await idbGet(MEDIA_CACHE_PREFIX + hash);
+    return typeof v === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+async function localMediaPut(hash: string, dataUrl: string): Promise<void> {
+  // Best-effort: only inline data: bytes belong in the permanent store (never a
+  // transient remote URL), so a later render can rely on it offline.
+  if (!dataUrl.startsWith("data:")) return;
+  try {
+    await idbSet(MEDIA_CACHE_PREFIX + hash, dataUrl);
+  } catch { /* quota/availability — rendering still works from the live fetch */ }
+}
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
 
 const COLLECTION = "userData";
 
@@ -438,6 +472,7 @@ async function prepareForCloud(
       } else {
         h = await photoHash(it);
         newMap.set(h, it); // a local data: URL to upload
+        void localMediaPut(h, it); // keep our own bytes locally → never re-fetch
       }
       if (h) { refs.push(h); allRefs.add(h); }
     }
@@ -529,20 +564,33 @@ export function subscribeUserMain(
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
   const resolve = async (h: string, sub: MediaKind): Promise<string | null> => {
-    const cached = cachedMediaUrl(h);
-    if (cached) return cached;
+    // 1) Already held locally → return the permanent inline bytes. Rendering
+    //    from here never depends on the network, a live URL, or expiry.
+    const local = await localMediaGet(h);
+    if (local) return local;
+    // 2) First sighting on this device → fetch the bytes ONCE from R2, inline
+    //    them, and keep them locally forever. We deliberately return the data:
+    //    bytes (not the short-lived URL) so the image can never break later.
     try {
       const signed = await mediaGateway<{ url: string; expiresAt: number }>(
         uid,
         "/v1/media/download-url",
         { kind: sub, hash: h }
       );
-      cacheMediaUrl(h, signed.url, signed.expiresAt);
-      return signed.url;
+      const res = await fetch(signed.url);
+      if (res.ok) {
+        const dataUrl = await blobToDataUrl(await res.blob());
+        await localMediaPut(h, dataUrl);
+        return dataUrl;
+      }
     } catch { /* not in R2 yet — try the legacy Firestore doc */ }
     try {
       const snap = await getDoc(doc(db!, COLLECTION, uid, sub, h));
-      if (snap.exists()) return (snap.data() as { data: string }).data;
+      if (snap.exists()) {
+        const data = (snap.data() as { data: string }).data;
+        await localMediaPut(h, data);
+        return data;
+      }
     } catch { /* ignore */ }
     return null;
   };
