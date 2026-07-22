@@ -231,7 +231,7 @@ export default function SpendInsightsPage() {
   const spentFromDaily = periodTx.reduce((s, t) => s + dailyShare(t), 0);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
       <div className="animate-fade-up">
         <h1 className="text-2xl font-bold text-gray-900">متابعة الصرف</h1>
         <p className="text-sm text-gray-400 mt-0.5">{ranges.label}</p>

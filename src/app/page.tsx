@@ -120,7 +120,7 @@ export default function Dashboard() {
   const yearPct = yearProgress();
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
       {celebrate && <Confetti />}
 
       <div className="flex items-center justify-between gap-4 animate-fade-up">

@@ -145,7 +145,7 @@ export default function StatsPage() {
   const hasReadingData = readingMonthly.some((m) => m.صفحات > 0);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
       <div className="animate-fade-up">
         <div className="flex items-center gap-2.5">
           <SectionSignet href="/stats" />

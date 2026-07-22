@@ -54,7 +54,7 @@ export default function PrayersPage() {
   const editCounts = countDayPrayers(editLog);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2.5">
