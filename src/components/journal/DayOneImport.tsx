@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { parseDayOneJson, parseDayOneZip } from "@/lib/dayOneParser";
-import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud } from "lucide-react";
+import { parseDayOneJson, streamDayOneZipImport, type BatchImportProgress } from "@/lib/dayOneParser";
+import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import { reuploadAllMedia } from "@/lib/sync";
@@ -18,6 +18,8 @@ interface ImportStats {
   // How many photo/audio files the export referenced but couldn't be decoded —
   // surfaced so a partial import isn't shown as a clean success.
   mediaMissing: number;
+  // True when the owner cancelled mid-import — re-running resumes (dedupes).
+  cancelled: boolean;
 }
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
@@ -29,6 +31,9 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletedCount, setDeletedCount] = useState<number | null>(null);
   const [reupload, setReupload] = useState<"idle" | "working" | "done" | "error">("idle");
+  // Live progress for a big ZIP + a cancel flag the parser polls between files.
+  const [progress, setProgress] = useState<BatchImportProgress | null>(null);
+  const cancelRef = useRef(false);
 
   const dayOneCount = journalEntries.filter((e) => e.source === "dayOne").length;
   const photoCount = journalEntries.filter((e) => e.photos?.length || e.photo).length;
@@ -65,31 +70,54 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       return;
     }
     setStatus("working");
-    const total: ImportStats = { files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0 };
+    cancelRef.current = false;
+    setProgress(null);
+    const total: ImportStats = { files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0, cancelled: false };
     try {
       for (const file of chosen) {
-        const result = isZip(file)
-          ? await parseDayOneZip(file)
-          : parseDayOneJson(await file.text());
-        // The store returns exact counts (new / completed / with media) — no need
-        // to guess which parsed entries changed by slicing.
-        const r = importDayOneEntries(result.entries);
-        total.files++;
-        total.added += r.added;
-        total.completed += r.completed;
-        total.duplicates += result.entries.length - r.added - r.completed;
-        total.skippedEmpty += result.skippedEmpty;
-        total.photos += r.photos;
-        total.audio += r.audio;
-        total.mediaMissing +=
-          (result.photosReferenced - result.photosImported) +
-          (result.audiosReferenced - result.audiosImported);
+        if (cancelRef.current) { total.cancelled = true; break; }
+        if (isZip(file)) {
+          // Big archives stream in BATCHES so peak memory stays near one batch,
+          // not the whole library — each batch is persisted before the next.
+          const result = await streamDayOneZipImport(file, {
+            batchSize: 40,
+            shouldCancel: () => cancelRef.current,
+            onProgress: setProgress,
+            onBatch: (entries) => {
+              const r = importDayOneEntries(entries);
+              total.added += r.added;
+              total.completed += r.completed;
+              total.duplicates += entries.length - r.added - r.completed;
+              total.photos += r.photos;
+              total.audio += r.audio;
+            },
+          });
+          total.files++;
+          total.skippedEmpty += result.skippedEmpty;
+          total.mediaMissing +=
+            (result.photosReferenced - result.photosImported) +
+            (result.audiosReferenced - result.audiosImported);
+          if (result.cancelled) { total.cancelled = true; break; }
+        } else {
+          // JSON is text-only and small — no need to batch.
+          const result = parseDayOneJson(await file.text());
+          const r = importDayOneEntries(result.entries);
+          total.files++;
+          total.added += r.added;
+          total.completed += r.completed;
+          total.duplicates += result.entries.length - r.added - r.completed;
+          total.skippedEmpty += result.skippedEmpty;
+          total.photos += r.photos;
+          total.audio += r.audio;
+        }
       }
       setStats(total);
       setStatus("success");
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "خطأ في قراءة الملف");
+    } finally {
+      setProgress(null);
     }
   }
 
@@ -135,18 +163,55 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       )}
 
       {status === "working" && (
-        <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
-          <Loader2 size={20} className="animate-spin" />
-          <p className="text-sm">جارٍ الاستيراد والتنظيف...</p>
+        <div className="py-6 space-y-4">
+          <div className="flex items-center justify-center gap-3 text-gray-500">
+            <Loader2 size={20} className="animate-spin" />
+            <p className="text-sm">
+              {cancelRef.current ? "جارٍ الإيقاف بعد حفظ الدفعة الحالية…" : "جارٍ الاستيراد والتنظيف..."}
+            </p>
+          </div>
+          {progress && progress.entriesTotal > 0 && (
+            <div className="max-w-xs mx-auto space-y-1.5">
+              <div className="h-1.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-journal transition-all"
+                  style={{ width: `${Math.max(2, Math.round((progress.entriesDone / progress.entriesTotal) * 100))}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 text-center">
+                {progress.entriesDone} / {progress.entriesTotal} مذكرة
+                {progress.mediaTotal > 0 && ` · ${progress.mediaDone}/${progress.mediaTotal} وسائط`}
+              </p>
+            </div>
+          )}
+          <button
+            onClick={() => { cancelRef.current = true; }}
+            disabled={cancelRef.current}
+            className="mx-auto flex items-center gap-1.5 text-xs text-red-500 hover:text-red-600 press disabled:opacity-50"
+          >
+            <X size={13} /> إيقاف الاستيراد
+          </button>
+          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+            ما استُورد حتى الآن محفوظ. لو أوقفت أو انقطع، أعد نفس الملف لاحقاً — نُكمل من حيث توقّفنا بلا تكرار.
+          </p>
         </div>
       )}
 
       {status === "success" && stats && (
-        <div className="bg-green-50 rounded-xl p-4 space-y-2">
-          <div className="flex items-center gap-2 text-green-700">
-            <CheckCircle size={20} />
-            <p className="text-sm font-bold">تم استيراد {stats.added} مذكرة بنجاح ✨</p>
+        <div className={`rounded-xl p-4 space-y-2 ${stats.cancelled ? "bg-amber-50" : "bg-green-50"}`}>
+          <div className={`flex items-center gap-2 ${stats.cancelled ? "text-amber-700" : "text-green-700"}`}>
+            {stats.cancelled ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
+            <p className="text-sm font-bold">
+              {stats.cancelled
+                ? `أوقفت الاستيراد — حُفظت ${stats.added} مذكرة`
+                : `تم استيراد ${stats.added} مذكرة بنجاح ✨`}
+            </p>
           </div>
+          {stats.cancelled && (
+            <p className="text-xs text-amber-700/80 pr-7 leading-relaxed">
+              أعد رفع نفس الملف متى شئت لإكمال الباقي — لن يتكرّر ما استُورد.
+            </p>
+          )}
           <div className="text-xs text-green-700/80 space-y-0.5 pr-7">
             {stats.files > 1 && <p>• من {stats.files} ملفات</p>}
             {stats.completed > 0 && <p>• أكملنا وسائط {stats.completed} مذكرة موجودة</p>}

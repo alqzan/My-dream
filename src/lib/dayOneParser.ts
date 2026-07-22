@@ -295,97 +295,181 @@ function mediaInfo(path: string): { key: string; ext: string } {
   };
 }
 
-export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
-  // Pass 1 — read ONLY the JSON(s) to learn the entries and which media to keep.
-  // Merge EVERY journal JSON: an "all journals" export splits into one JSON per
-  // journal, and reading only one dropped most entries (e.g. 130 of 800).
+// --- Batched, resumable ZIP import (bounded memory) ---------------------------
+// The ZIP import flushes entries to the caller in small BATCHES as their media
+// resolves, freeing each batch's bytes immediately — so peak memory stays near
+// one batch, not the whole archive (an earlier version held every compressed
+// photo and every entry in memory at once, which a tens-of-GB library could
+// exhaust). It's cancellable, reports progress, and — because the store dedupes
+// by stable id — re-running after a cancel/crash just resumes: already-saved
+// entries are skipped, unfinished ones complete.
+
+export class DayOneImportCancelled extends Error {
+  constructor() { super("cancelled"); this.name = "DayOneImportCancelled"; }
+}
+
+export interface BatchImportProgress {
+  entriesDone: number;
+  entriesTotal: number;
+  mediaDone: number;
+  mediaTotal: number;
+}
+
+export interface BatchImportCallbacks {
+  // Persist one batch of ready entries (e.g. importDayOneEntries). Awaited, so
+  // the next batch doesn't start until this one is stored — that's the
+  // backpressure that keeps memory bounded.
+  onBatch: (entries: JournalEntry[]) => void | Promise<void>;
+  onProgress?: (p: BatchImportProgress) => void;
+  shouldCancel?: () => boolean;
+  batchSize?: number; // default 40
+}
+
+export interface BatchImportResult {
+  totalInFile: number;
+  skippedEmpty: number;
+  photosReferenced: number;
+  photosImported: number;
+  audiosReferenced: number;
+  audiosImported: number;
+  cancelled: boolean;
+}
+
+interface MediaSlot { keys: string[]; kind: "photo" | "audio"; resolved: boolean; url?: string }
+
+export async function streamDayOneZipImport(
+  file: Blob,
+  cb: BatchImportCallbacks
+): Promise<BatchImportResult> {
+  const batchSize = Math.max(1, cb.batchSize ?? 40);
+
+  // Pass 1 — read only the JSON(s) to learn the entries (bounded: text only).
   const jsonFiles: Record<string, Uint8Array> = {};
   try {
-    await streamZip(
-      file,
-      (n) => n.toLowerCase().endsWith(".json"),
-      (name, bytes) => { jsonFiles[name] = bytes; }
-    );
+    await streamZip(file, (n) => n.toLowerCase().endsWith(".json"),
+      (name, bytes) => { jsonFiles[name] = bytes; });
   } catch {
     throw new Error("تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
   }
   if (!Object.keys(jsonFiles).length) throw new Error("لم يُعثر على ملف JSON داخل الأرشيف");
-
   const allEntries: DayOneEntry[] = [];
   for (const jp of Object.keys(jsonFiles)) {
     try {
       const d = JSON.parse(new TextDecoder().decode(jsonFiles[jp])) as DayOneExport;
       if (d.entries && Array.isArray(d.entries)) allEntries.push(...d.entries);
-    } catch {
-      /* skip a JSON that isn't a Day One journal */
-    }
+    } catch { /* not a Day One journal */ }
   }
   if (!allEntries.length) throw new Error("لم يتم العثور على مدخلات Day One في الأرشيف");
 
-  // Which media does any entry reference? (matched by md5 and by identifier)
-  const photoKeys = new Set<string>();
-  const audioKeys = new Set<string>();
-  for (const e of allEntries) {
-    for (const p of e.photos ?? []) { if (p.md5) photoKeys.add(p.md5); if (p.identifier) photoKeys.add(p.identifier); }
-    for (const a of e.audios ?? []) { if (a.md5) audioKeys.add(a.md5); if (a.identifier) audioKeys.add(a.identifier); }
-  }
+  // Base entries (no media yet) + per-entry media slots. A slot resolves when
+  // ANY of its keys (md5 or identifier) streams in; an entry becomes ready when
+  // all its slots resolve (or the stream ends without them — a missing file).
+  const bases = allEntries.map(baseEntry);
+  const slotsPerEntry: (MediaSlot[] | null)[] = allEntries.map((e) => {
+    const slots: MediaSlot[] = [];
+    for (const p of e.photos ?? []) slots.push({ keys: [p.md5, p.identifier].filter(Boolean) as string[], kind: "photo", resolved: false });
+    for (const a of e.audios ?? []) slots.push({ keys: [a.md5, a.identifier].filter(Boolean) as string[], kind: "audio", resolved: false });
+    return slots;
+  });
+  const pending = slotsPerEntry.map((slots) => slots!.filter((s) => s.keys.length).length);
+  const keyIndex = new Map<string, { e: number; s: number }[]>();
+  slotsPerEntry.forEach((slots, e) => slots!.forEach((slot, s) => slot.keys.forEach((k) => {
+    (keyIndex.get(k) ?? keyIndex.set(k, []).get(k)!).push({ e, s });
+  })));
 
-  // Pass 2 — stream the media, compressing each photo the moment it arrives and
-  // releasing its raw bytes, so a huge library never sits in memory all at once.
-  const photoData = new Map<string, string>();
-  const audioData = new Map<string, string>();
-  if (photoKeys.size || audioKeys.size) {
-    await streamZip(
-      file,
-      (n) => { const { key } = mediaInfo(n); return photoKeys.has(key) || audioKeys.has(key); },
-      async (name, bytes) => {
-        const { key, ext } = mediaInfo(name);
-        const isAudio = /(?:^|\/)audios\//i.test(name) || (audioKeys.has(key) && !photoKeys.has(key));
-        if (isAudio) {
-          audioData.set(key, bytesToDataUrl(bytes, AUDIO_MIME[ext] || "audio/mp4"));
-        } else {
-          try {
-            const url = await compressImageSmart(new Blob([bytes as BlobPart], { type: IMG_MIME[ext] || "image/jpeg" }), 140);
-            photoData.set(key, url);
-          } catch {
-            /* skip an image the browser can't decode */
+  const photosReferenced = slotsPerEntry.reduce((n, s) => n + s!.filter((x) => x.kind === "photo").length, 0);
+  const audiosReferenced = slotsPerEntry.reduce((n, s) => n + s!.filter((x) => x.kind === "audio").length, 0);
+  const mediaTotal = pending.reduce((a, b) => a + b, 0);
+  let photosImported = 0, audiosImported = 0, mediaDone = 0, entriesDone = 0, keptCount = 0;
+  const flushed = new Array(bases.length).fill(false);
+  let batch: JournalEntry[] = [];
+
+  const finalize = (idx: number) => {
+    if (flushed[idx]) return;
+    flushed[idx] = true;
+    entriesDone++;
+    const slots = slotsPerEntry[idx]!;
+    const photos = slots.filter((s) => s.kind === "photo" && s.url).map((s) => s.url!);
+    const audios = slots.filter((s) => s.kind === "audio" && s.url).map((s) => s.url!);
+    const je = bases[idx];
+    if (photos.length) { je.photos = photos; je.photo = photos[0]; photosImported += photos.length; }
+    if (audios.length) { je.audios = audios; je.audio = audios[0]; audiosImported += audios.length; }
+    slotsPerEntry[idx] = null; // free this entry's media buffers now
+    if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) {
+      batch.push(je);
+      keptCount++;
+    }
+  };
+
+  const flush = async (force = false) => {
+    while (batch.length >= batchSize || (force && batch.length)) {
+      const chunk = batch.splice(0, batchSize);
+      await cb.onBatch(chunk);
+      cb.onProgress?.({ entriesDone, entriesTotal: bases.length, mediaDone, mediaTotal });
+    }
+  };
+
+  // Entries with no media are ready immediately.
+  for (let i = 0; i < bases.length; i++) if (pending[i] === 0) finalize(i);
+  await flush();
+
+  let cancelled = false;
+  if (mediaTotal > 0) {
+    try {
+      await streamZip(
+        file,
+        (n) => { const { key } = mediaInfo(n); return keyIndex.has(key); },
+        async (name, bytes) => {
+          if (cb.shouldCancel?.()) throw new DayOneImportCancelled();
+          const { key, ext } = mediaInfo(name);
+          const refs = keyIndex.get(key);
+          if (!refs) return;
+          const isAudio = /(?:^|\/)audios\//i.test(name);
+          let url: string | null = null;
+          if (isAudio) {
+            url = bytesToDataUrl(bytes, AUDIO_MIME[ext] || "audio/mp4");
+          } else {
+            try {
+              url = await compressImageSmart(new Blob([bytes as BlobPart], { type: IMG_MIME[ext] || "image/jpeg" }), 140);
+            } catch { url = null; }
           }
+          for (const { e, s } of refs) {
+            const slots = slotsPerEntry[e];
+            if (!slots) continue; // entry already flushed
+            const slot = slots[s];
+            if (!slot || slot.resolved) continue;
+            slot.resolved = true;
+            if (url) slot.url = url;
+            mediaDone++;
+            if (--pending[e] === 0) finalize(e);
+          }
+          await flush();
         }
-      }
-    );
+      );
+    } catch (err) {
+      if (err instanceof DayOneImportCancelled) cancelled = true;
+      else throw err;
+    }
   }
 
-  // Build entries, attaching the processed media by key. Tally every referenced
-  // slot against what actually decoded so the caller can flag silent drops
-  // (an image whose bytes failed to unzip or that compressImageSmart rejected).
-  const entries: JournalEntry[] = [];
-  let photosReferenced = 0, photosImported = 0, audiosReferenced = 0, audiosImported = 0;
-  for (const entry of allEntries) {
-    const je = baseEntry(entry);
-    const imgs: string[] = [];
-    for (const p of entry.photos ?? []) {
-      photosReferenced++;
-      const url = (p.md5 && photoData.get(p.md5)) || (p.identifier && photoData.get(p.identifier));
-      if (url) { imgs.push(url); photosImported++; }
-    }
-    if (imgs.length) { je.photos = imgs; je.photo = imgs[0]; }
-    const auds: string[] = [];
-    for (const a of entry.audios ?? []) {
-      audiosReferenced++;
-      const url = (a.md5 && audioData.get(a.md5)) || (a.identifier && audioData.get(a.identifier));
-      if (url) { auds.push(url); audiosImported++; }
-    }
-    if (auds.length) { je.audios = auds; je.audio = auds[0]; }
-    if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) entries.push(je);
+  if (!cancelled) {
+    // Flush entries whose media never arrived (missing files) with what resolved.
+    for (let i = 0; i < bases.length; i++) if (!flushed[i]) finalize(i);
+    await flush(true);
+  } else {
+    // Persist whatever's already staged so a resume has less to redo.
+    await flush(true);
   }
 
   return {
-    entries,
     totalInFile: allEntries.length,
-    skippedEmpty: allEntries.length - entries.length,
+    // Only entries we actually finalized-but-dropped (empty) — not the ones a
+    // cancel left unprocessed, so the number stays honest on a partial run.
+    skippedEmpty: entriesDone - keptCount,
     photosReferenced,
     photosImported,
     audiosReferenced,
     audiosImported,
+    cancelled,
   };
 }
