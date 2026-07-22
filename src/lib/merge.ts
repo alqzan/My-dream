@@ -46,9 +46,10 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   for (const id of Object.keys(deleted)) {
     if (deleted[id] < cutoff) delete deleted[id];
   }
-  // Media tombstones (content-hash → deletedAt): same union+prune. These record
-  // a single photo/voice note removed from an entry, so the media-ref union
-  // below can't pull the deleted one back from a copy that still references it.
+  // Media tombstones (entryId:kind:hash → deletedAt): same union+prune. These
+  // record a single photo/voice note removed from ONE entry, so the media-ref
+  // union below can't pull the deleted one back from a copy that still
+  // references it — and a shared photo deleted from one entry stays in others.
   const deletedMedia: Record<string, number> = { ...(cloud.deletedMedia ?? {}) };
   for (const [h, ts] of Object.entries(local.deletedMedia ?? {})) {
     deletedMedia[h] = Math.max(deletedMedia[h] ?? 0, ts);

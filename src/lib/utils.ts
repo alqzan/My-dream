@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { mediaTombKey } from "./mediaHash";
 import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
 
@@ -419,15 +420,16 @@ export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): Journa
   return out as JournalEntry;
 }
 
-// أسقِط من مراجع المذكرة أيّ هاشٍ يحمل شاهد حذفٍ للوسائط (صورة/صوت حذفها المستخدم
-// إفرادياً). بدونها كان اتحاد المراجع في mergeEntryMedia يُعيد المرجع المحذوف من
-// نسخةٍ لا تزال تشير إليه، فترجع الصورة عند عودة R2. تُطبَّق على كل مذكرة بعد الدمج
-// (لا المدموجة فقط) لتشمل المذكرات الفريدة لطرفٍ واحد.
+// أسقِط من مراجع المذكرة أيّ هاشٍ يحمل شاهد حذفٍ للوسائط لهذه المذكرة بعينها
+// (صورة/صوت حذفها المستخدم إفرادياً). الشاهد مفتاحه entryId:kind:hash، فحذف صورة
+// من مذكرة لا يمسّ الصورة نفسها في مذكرة أخرى. بدونها كان اتحاد المراجع في
+// mergeEntryMedia يُعيد المرجع المحذوف من نسخةٍ لا تزال تشير إليه. تُطبَّق على كل
+// مذكرة بعد الدمج (لا المدموجة فقط) لتشمل المذكرات الفريدة لطرفٍ واحد.
 export function stripTombstonedMediaRefs(e: JournalEntry, tomb: Set<string>): JournalEntry {
   if (!tomb.size) return e;
   const x = e as EntryMediaRefs;
-  const pr = x.photoRefs?.filter((h) => !tomb.has(h));
-  const ar = x.audioRefs?.filter((h) => !tomb.has(h));
+  const pr = x.photoRefs?.filter((h) => !tomb.has(mediaTombKey(e.id, "photos", h)));
+  const ar = x.audioRefs?.filter((h) => !tomb.has(mediaTombKey(e.id, "audios", h)));
   const prChanged = !!x.photoRefs && pr!.length !== x.photoRefs.length;
   const arChanged = !!x.audioRefs && ar!.length !== x.audioRefs.length;
   if (!prChanged && !arChanged) return e;

@@ -52,3 +52,14 @@ export async function mediaHashOf(item: string): Promise<string | null> {
   if (item.startsWith("data:")) return photoHash(item);
   return null;
 }
+
+export type MediaKindTag = "photos" | "audios";
+
+// A media tombstone is keyed by ENTRY + kind + content-hash, not by hash alone.
+// The same photo can live in two entries (common with Day One imports); deleting
+// it from one entry must not drop it from the other. Entry ids never contain
+// ':', kind is a fixed word, and the hash is 32 hex — so this composite is
+// collision-free. Both store.ts (writes) and merge/sync (reads) go through here.
+export function mediaTombKey(entryId: string, kind: MediaKindTag, hash: string): string {
+  return `${entryId}:${kind}:${hash}`;
+}

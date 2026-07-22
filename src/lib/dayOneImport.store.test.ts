@@ -10,7 +10,7 @@ vi.mock("idb-keyval", () => ({
 }));
 
 import { useAppStore } from "./store";
-import { photoHash } from "./mediaHash";
+import { photoHash, mediaTombKey } from "./mediaHash";
 import type { JournalEntry } from "./types";
 
 const doEntry = (uuid: string, o: Partial<JournalEntry> = {}): JournalEntry => ({
@@ -71,7 +71,7 @@ describe("importDayOneEntries — completes partially-missing media", () => {
 });
 
 describe("updateJournalEntry — records media tombstones on single-photo delete", () => {
-  it("tombstones the removed photo's hash (and not the kept one)", async () => {
+  it("tombstones the removed photo for THIS entry (and not the kept one)", async () => {
     useAppStore.setState({
       journalEntries: [doEntry("m1", { photos: [P1, P2], photo: P1 })],
       deletedMedia: {},
@@ -80,21 +80,42 @@ describe("updateJournalEntry — records media tombstones on single-photo delete
     await flush();
 
     const dm = useAppStore.getState().deletedMedia ?? {};
-    expect(dm[await photoHash(P2)]).toBeGreaterThan(0); // removed → tombstoned
-    expect(dm[await photoHash(P1)]).toBeUndefined(); // kept → not tombstoned
+    expect(dm[mediaTombKey("do-m1", "photos", await photoHash(P2))]).toBeGreaterThan(0); // removed
+    expect(dm[mediaTombKey("do-m1", "photos", await photoHash(P1))]).toBeUndefined(); // kept
   });
 
-  it("lifts the tombstone when the same photo is re-added", async () => {
+  it("deleting a shared photo from one entry leaves it in the other", async () => {
+    // Same photo P2 in two entries; delete it from m3 only.
+    useAppStore.setState({
+      journalEntries: [
+        doEntry("m3", { photos: [P1, P2], photo: P1 }),
+        doEntry("m4", { photos: [P2], photo: P2 }),
+      ],
+      deletedMedia: {},
+    });
+    useAppStore.getState().updateJournalEntry("do-m3", { photos: [P1], photo: P1 });
+    await flush();
+
+    const dm = useAppStore.getState().deletedMedia ?? {};
+    const h2 = await photoHash(P2);
+    expect(dm[mediaTombKey("do-m3", "photos", h2)]).toBeGreaterThan(0); // tombstoned for m3
+    expect(dm[mediaTombKey("do-m4", "photos", h2)]).toBeUndefined(); // NOT for m4
+    // m4 still shows P2.
+    expect(useAppStore.getState().journalEntries.find((e) => e.id === "do-m4")!.photos).toEqual([P2]);
+  });
+
+  it("lifts the tombstone when the same photo is re-added to the same entry", async () => {
     useAppStore.setState({
       journalEntries: [doEntry("m2", { photos: [P1, P2], photo: P1 })],
       deletedMedia: {},
     });
+    const key = mediaTombKey("do-m2", "photos", await photoHash(P2));
     useAppStore.getState().updateJournalEntry("do-m2", { photos: [P1], photo: P1 }); // delete P2
     await flush();
-    expect((useAppStore.getState().deletedMedia ?? {})[await photoHash(P2)]).toBeGreaterThan(0);
+    expect((useAppStore.getState().deletedMedia ?? {})[key]).toBeGreaterThan(0);
 
     useAppStore.getState().updateJournalEntry("do-m2", { photos: [P1, P2], photo: P1 }); // re-add P2
     await flush();
-    expect((useAppStore.getState().deletedMedia ?? {})[await photoHash(P2)]).toBeUndefined();
+    expect((useAppStore.getState().deletedMedia ?? {})[key]).toBeUndefined();
   });
 });

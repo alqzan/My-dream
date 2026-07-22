@@ -5,7 +5,7 @@ import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
-import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf } from "./mediaHash";
+import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
 import { journalShardId } from "./merge";
 import { showToast } from "@/components/ui/UndoToast";
 
@@ -434,15 +434,17 @@ async function prepareForCloud(
   const newAudios = new Map<string, string>();
   const photoRefs = new Set<string>();
   const audioRefs = new Set<string>();
-  // Media the user deleted — never re-reference or re-upload it, even if a merge
-  // left its bytes on a filled entry. This is the authoritative save-side guard
-  // that keeps a single-photo deletion from ever being pushed back to R2.
+  // Media the user deleted — keyed by entry+kind+hash so a shared photo removed
+  // from one entry is dropped ONLY there. Never re-reference or re-upload it,
+  // even if a merge left its bytes on a filled entry. This is the authoritative
+  // save-side guard that keeps a single-photo deletion from reaching R2.
   const mediaTomb = new Set(Object.keys(data.deletedMedia ?? {}));
 
   const attach = async (
     items: string[],
     newMap: Map<string, string>,
-    allRefs: Set<string>
+    allRefs: Set<string>,
+    isDeleted: (hash: string) => boolean
   ): Promise<string[]> => {
     const refs: string[] = [];
     for (const it of items) {
@@ -452,7 +454,7 @@ async function prepareForCloud(
       } else {
         h = await photoHash(it);
       }
-      if (!h || mediaTomb.has(h)) continue; // unknown, or a deleted photo → drop
+      if (!h || isDeleted(h)) continue; // unknown, or a deleted photo → drop
       if (isStorageUrl(it)) {
         if (isR2StorageUrl(it) || isWorkerDownloadUrl(it)) {
           cacheMediaUrl(h, it); // already in the cloud (R2 presigned or Worker link)
@@ -485,20 +487,23 @@ async function prepareForCloud(
       const src = e as JournalEntry & MediaOrderFields;
       const imgs = entryPhotos(e);
       const auds = entryAudios(e);
-      // Drop any surviving ref the user has since deleted (tombstoned).
-      const survivingPhotoRefs = (src.photoRefs ?? []).filter((h) => !mediaTomb.has(h));
-      const survivingAudioRefs = (src.audioRefs ?? []).filter((h) => !mediaTomb.has(h));
+      // This entry's own delete-guards (a photo deleted elsewhere doesn't count).
+      const photoDeleted = (h: string) => mediaTomb.has(mediaTombKey(src.id, "photos", h));
+      const audioDeleted = (h: string) => mediaTomb.has(mediaTombKey(src.id, "audios", h));
+      // Drop any surviving ref the user has since deleted from THIS entry.
+      const survivingPhotoRefs = (src.photoRefs ?? []).filter((h) => !photoDeleted(h));
+      const survivingAudioRefs = (src.audioRefs ?? []).filter((h) => !audioDeleted(h));
       const { photo: _p, photos: _ps, audio: _a, audios: _as,
               photoRefs: _pr, audioRefs: _aur, photoOrder: _po, audioOrder: _ao, ...rest } = src;
       const out: CloudEntry = rest;
       if (imgs.length || survivingPhotoRefs.length) {
-        const refs = await attach(imgs, newPhotos, photoRefs);
+        const refs = await attach(imgs, newPhotos, photoRefs, photoDeleted);
         mergeSurviving(refs, survivingPhotoRefs, photoRefs);
         // Restore the original order so a survivor lands back in its slot.
         if (refs.length) out.photoRefs = orderRefs(refs, src.photoOrder);
       }
       if (auds.length || survivingAudioRefs.length) {
-        const refs = await attach(auds, newAudios, audioRefs);
+        const refs = await attach(auds, newAudios, audioRefs, audioDeleted);
         mergeSurviving(refs, survivingAudioRefs, audioRefs);
         if (refs.length) out.audioRefs = orderRefs(refs, src.audioOrder);
       }
@@ -611,35 +616,35 @@ export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string,
   // copy that still has it). Drop such media here — the final pass before the
   // store hydrates — so a deletion doesn't visibly resurrect.
   const tomb = new Set(Object.keys(data.deletedMedia ?? {}));
-  const inlineOne = async (u: string | undefined, sub: MediaKind): Promise<string | undefined> => {
+  const inlineOne = async (u: string | undefined, sub: MediaKind, entryId: string): Promise<string | undefined> => {
     if (!u) return u;
     if (tomb.size) {
       const h = await mediaHashOf(u);
-      if (h && tomb.has(h)) return undefined; // deleted media → drop it
+      if (h && tomb.has(mediaTombKey(entryId, sub, h))) return undefined; // deleted here → drop
     }
     if (u.startsWith("data:") || !isStorageUrl(u)) return u;
     const h = hashFromStorageUrl(u);
     if (!h) return u;
     return (await fetchInlineMedia(uid, sub, h)) ?? u;
   };
-  const inlineList = async (list: string[], sub: MediaKind) =>
-    (await Promise.all(list.map((u) => inlineOne(u, sub)))).filter(Boolean) as string[];
+  const inlineList = async (list: string[], sub: MediaKind, entryId: string) =>
+    (await Promise.all(list.map((u) => inlineOne(u, sub, entryId)))).filter(Boolean) as string[];
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e) => {
       const patch: Partial<JournalEntry> = {};
       if (e.photos?.length) {
-        const photos = await inlineList(e.photos, "photos");
+        const photos = await inlineList(e.photos, "photos", e.id);
         patch.photos = photos;
         patch.photo = photos[0]; // keep the legacy single field consistent
       } else if (e.photo) {
-        patch.photo = await inlineOne(e.photo, "photos");
+        patch.photo = await inlineOne(e.photo, "photos", e.id);
       }
       if (e.audios?.length) {
-        const audios = await inlineList(e.audios, "audios");
+        const audios = await inlineList(e.audios, "audios", e.id);
         patch.audios = audios;
         patch.audio = audios[0];
       } else if (e.audio) {
-        patch.audio = await inlineOne(e.audio, "audios");
+        patch.audio = await inlineOne(e.audio, "audios", e.id);
       }
       return Object.keys(patch).length ? { ...e, ...patch } : e;
     })

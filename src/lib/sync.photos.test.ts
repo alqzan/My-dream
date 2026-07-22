@@ -247,16 +247,30 @@ describe("inventoryMedia — a pending ref counts as in-cloud, not orphan", () =
 
 describe("inlineCachedMedia — drops a tombstoned photo so a delete doesn't resurrect", () => {
   it("removes a deleted data: photo a merge may have filled back", async () => {
-    const { photoHash } = await import("./mediaHash");
+    const { photoHash, mediaTombKey } = await import("./mediaHash");
     const p = "data:image/png;base64,ZZZZ";
     const h = await photoHash(p);
     const entry = { id: "e1", date: "2026-01-01", content: "x", photos: [p], photo: p } as JournalEntry;
-    const data = { ...appData([entry]), deletedMedia: { [h]: Date.now() } };
+    const data = { ...appData([entry]), deletedMedia: { [mediaTombKey("e1", "photos", h)]: Date.now() } };
 
     const out = await sync.inlineCachedMedia("space", data);
     const e = out.journalEntries![0];
     expect(e.photos).toEqual([]);
     expect(e.photo).toBeUndefined();
+  });
+
+  it("keeps a shared photo in another entry that did NOT delete it", async () => {
+    const { photoHash, mediaTombKey } = await import("./mediaHash");
+    const p = "data:image/png;base64,SHARED";
+    const h = await photoHash(p);
+    const e1 = { id: "e1", date: "2026-01-01", content: "x", photos: [p], photo: p } as JournalEntry;
+    const e2 = { id: "e2", date: "2026-01-01", content: "y", photos: [p], photo: p } as JournalEntry;
+    const data = { ...appData([e1, e2]), deletedMedia: { [mediaTombKey("e1", "photos", h)]: Date.now() } };
+
+    const out = await sync.inlineCachedMedia("space", data);
+    const byId = new Map(out.journalEntries!.map((e) => [e.id, e]));
+    expect(byId.get("e1")!.photos).toEqual([]); // dropped from e1
+    expect(byId.get("e2")!.photos).toEqual([p]); // kept in e2
   });
 });
 
@@ -270,7 +284,7 @@ describe("saveUserData — a tombstoned photo is never pushed back", () => {
       id: "e1", date: "2026-01-01", content: "x",
       photos: [workerUrl(HASH_A), workerUrl(HASH_B)], photo: workerUrl(HASH_A),
     } as unknown as JournalEntry;
-    const data = { ...appData([entry]), deletedMedia: { [HASH_B]: Date.now() } };
+    const data = { ...appData([entry]), deletedMedia: { [`e1:photos:${HASH_B}`]: Date.now() } };
 
     await sync.saveUserData("space", data);
 

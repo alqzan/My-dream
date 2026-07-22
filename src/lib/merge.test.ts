@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mergeAppData, unionOrdered, journalShardId } from "./merge";
+import { mediaTombKey } from "./mediaHash";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type { AppData, JournalEntry, Transaction } from "./types";
 
@@ -136,11 +137,12 @@ describe("mergeAppData — media tombstones (a single-photo delete sticks)", () 
 
   it("does not resurrect a deleted photo's ref through the media union (R2 down)", () => {
     const ts = Date.now();
-    // Newer device deleted B → keeps [A,C] and tombstoned B's hash.
+    const key = mediaTombKey("E1", "photos", "B");
+    // Newer device deleted B FROM E1 → keeps [A,C] and tombstoned E1's B.
     const local = base({
       lastUpdated: "2026-05-10T13:00:00.000Z",
       journalEntries: [withRefs("E1", 2000, ["A", "C"])],
-      deletedMedia: { B: ts },
+      deletedMedia: { [key]: ts },
     });
     // Cloud hasn't seen the delete and still references [A,B,C] (as pending refs).
     const cloud = base({
@@ -150,14 +152,32 @@ describe("mergeAppData — media tombstones (a single-photo delete sticks)", () 
     const merged = mergeAppData(local, cloud);
     const e = merged.journalEntries[0] as JournalEntry & { photoRefs?: string[] };
     expect(e.photoRefs).toEqual(["A", "C"]); // B is NOT pulled back in
-    expect(merged.deletedMedia).toEqual({ B: ts }); // tombstone carried forward
+    expect(merged.deletedMedia).toEqual({ [key]: ts }); // tombstone carried forward
+  });
+
+  it("only strips the ref from the entry it was deleted from (shared photo safe)", () => {
+    const ts = Date.now();
+    // SHARED lives in both E1 and E2; deleted from E1 only.
+    const local = base({
+      lastUpdated: "2026-05-10T13:00:00.000Z",
+      journalEntries: [withRefs("E1", 2000, ["SHARED"]), withRefs("E2", 2000, ["SHARED"])],
+      deletedMedia: { [mediaTombKey("E1", "photos", "SHARED")]: ts },
+    });
+    const cloud = base({
+      lastUpdated: "2026-05-10T12:00:00.000Z",
+      journalEntries: [withRefs("E1", 1000, ["SHARED"]), withRefs("E2", 1000, ["SHARED"])],
+    });
+    const merged = mergeAppData(local, cloud);
+    const byId = new Map(merged.journalEntries.map((e) => [e.id, e as JournalEntry & { photoRefs?: string[] }]));
+    expect(byId.get("E1")!.photoRefs ?? []).toEqual([]); // gone from E1
+    expect(byId.get("E2")!.photoRefs).toEqual(["SHARED"]); // still in E2
   });
 
   it("strips a tombstoned ref even from an entry only one side holds", () => {
     const ts = Date.now();
     const local = base({
       lastUpdated: "2026-05-10T13:00:00.000Z",
-      deletedMedia: { B: ts },
+      deletedMedia: { [mediaTombKey("E9", "photos", "B")]: ts },
     });
     const cloud = base({
       lastUpdated: "2026-05-10T12:00:00.000Z",

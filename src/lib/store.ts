@@ -10,7 +10,7 @@ import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from 
 import { TOTAL_AYAT } from "./quran/meta";
 import { nextReviewCursor } from "./quran/hifz";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
-import { mediaHashOf } from "./mediaHash";
+import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
@@ -194,22 +194,27 @@ export const useAppStore = create<AppStore>()(
     // (or re-added) within an entry. Async because content hashing is async —
     // the hash MUST equal the ref hash sync uses (both go through mediaHashOf),
     // or the tombstone would never match and the deleted photo would ride back
-    // in via the media-ref union on the next merge. A hash that's simultaneously
-    // re-added is never tombstoned; a re-added hash lifts any prior tombstone.
-    const applyMediaTombstones = async (removed: string[], added: string[]) => {
-      const [remHashes, addHashes] = await Promise.all([
-        Promise.all(removed.map(mediaHashOf)),
-        Promise.all(added.map(mediaHashOf)),
-      ]);
-      const add = new Set(addHashes.filter(Boolean) as string[]);
-      const toTomb = (remHashes.filter(Boolean) as string[]).filter((h) => !add.has(h));
+    // in via the media-ref union on the next merge. Keyed by ENTRY+kind+hash, so
+    // deleting a photo from one entry never touches the same photo in another.
+    // A key that's simultaneously re-added is never tombstoned; a re-added key
+    // lifts any prior tombstone.
+    type MediaChange = { item: string; kind: MediaKindTag };
+    const applyMediaTombstones = async (entryId: string, removed: MediaChange[], added: MediaChange[]) => {
+      const keysOf = async (list: MediaChange[]) =>
+        (await Promise.all(list.map(async (c) => {
+          const h = await mediaHashOf(c.item);
+          return h ? mediaTombKey(entryId, c.kind, h) : null;
+        }))).filter(Boolean) as string[];
+      const [remKeys, addKeys] = await Promise.all([keysOf(removed), keysOf(added)]);
+      const add = new Set(addKeys);
+      const toTomb = remKeys.filter((k) => !add.has(k));
       if (!toTomb.length && !add.size) return;
       set((s) => {
         const dm = { ...(s.deletedMedia ?? {}) };
         let changed = false;
         const t = Date.now();
-        for (const h of toTomb) if (dm[h] !== t) { dm[h] = t; changed = true; }
-        for (const h of add) if (h in dm) { delete dm[h]; changed = true; }
+        for (const k of toTomb) if (dm[k] !== t) { dm[k] = t; changed = true; }
+        for (const k of add) if (k in dm) { delete dm[k]; changed = true; }
         return changed ? { deletedMedia: dm } : {};
       });
     };
@@ -218,21 +223,21 @@ export const useAppStore = create<AppStore>()(
     // tombstone recorder. `after` uses the incoming update when it set the field,
     // else the entry's current media (untouched fields aren't removals).
     const trackMediaChange = (before: JournalEntry, updates: Partial<JournalEntry>) => {
-      const removed: string[] = [];
-      const added: string[] = [];
-      const diff = (was: string[], now: string[]) => {
+      const removed: MediaChange[] = [];
+      const added: MediaChange[] = [];
+      const diff = (was: string[], now: string[], kind: MediaKindTag) => {
         const wasSet = new Set(was);
         const nowSet = new Set(now);
-        for (const it of was) if (!nowSet.has(it)) removed.push(it);
-        for (const it of now) if (!wasSet.has(it)) added.push(it);
+        for (const it of was) if (!nowSet.has(it)) removed.push({ item: it, kind });
+        for (const it of now) if (!wasSet.has(it)) added.push({ item: it, kind });
       };
       if (updates.photos !== undefined || updates.photo !== undefined) {
-        diff(entryPhotos(before), entryPhotos({ ...before, ...updates }));
+        diff(entryPhotos(before), entryPhotos({ ...before, ...updates }), "photos");
       }
       if (updates.audios !== undefined || updates.audio !== undefined) {
-        diff(entryAudios(before), entryAudios({ ...before, ...updates }));
+        diff(entryAudios(before), entryAudios({ ...before, ...updates }), "audios");
       }
-      if (removed.length || added.length) void applyMediaTombstones(removed, added);
+      if (removed.length || added.length) void applyMediaTombstones(before.id, removed, added);
     };
 
     return {
