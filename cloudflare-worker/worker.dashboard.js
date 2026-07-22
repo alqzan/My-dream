@@ -210,11 +210,15 @@ async function serveBlob(request, env) {
   const object = await env.MEDIA_BUCKET.get(objectKey(kind, hash));
   if (!object) throw new HttpError(404, "Media object was not found");
 
+  // Serve straight from R2 the Cloudflare-recommended way. writeHttpMetadata sets
+  // the stored Content-Type; we deliberately do NOT send nosniff (it can stop an
+  // <img> rendering when the stored type is imperfect) and let the Worker length
+  // the streamed body itself.
   const headers = corsHeaders(request, env);
-  headers.set("Content-Type", object.httpMetadata?.contentType ?? "application/octet-stream");
-  headers.set("Cache-Control", "private, max-age=3600");
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Length", String(object.size));
+  object.writeHttpMetadata(headers);
+  headers.set("Cache-Control", "private, max-age=86400");
+  if (object.httpEtag) headers.set("ETag", object.httpEtag);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/octet-stream");
   return new Response(object.body, { status: 200, headers });
 }
 
