@@ -223,6 +223,28 @@ describe("saveUserData — the surviving ref keeps its original slot", () => {
   });
 });
 
+describe("inventoryMedia — a pending ref counts as in-cloud, not orphan", () => {
+  it("classifies a photoRef that's present in R2 but not downloaded here", async () => {
+    global.fetch = vi.fn(async (url: unknown, opts: unknown) => {
+      const u = String(url);
+      if (u.includes("/v1/media/inventory")) {
+        const kind = JSON.parse((opts as { body: string }).body).kind;
+        return { ok: true, status: 200, json: async () => ({ hashes: kind === "photos" ? [HASH_A] : [] }) };
+      }
+      return { ok: false, status: 503, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    // An entry that holds ONLY a pending ref (bytes never fetched on this device).
+    const inv = await sync.inventoryMedia("space", appData([cloudEntry("e1", { photoRefs: [HASH_A] })]));
+
+    expect(inv.storageReachable).toBe(true);
+    expect(inv.photos.referenced).toBe(1); // the ref is counted …
+    expect(inv.photos.inCloud).toBe(1); // … and recognized as safe in R2 …
+    expect(inv.photos.orphans).toBe(0); // … so it is NOT mislabeled an orphan.
+    expect(inv.photos.broken).toBe(0);
+  });
+});
+
 describe("saveUserData — a surviving ref is never orphaned", () => {
   it("re-emits refs kept by a failed hydrate into the written shard + manifest", async () => {
     // Mirror production exactly: load the cloud doc (which seeds the manifest and

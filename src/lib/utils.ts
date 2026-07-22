@@ -380,30 +380,43 @@ export function canonicalEntryId(
   return e.id;
 }
 
-function entryHasPhotos(e: Pick<JournalEntry, "photo" | "photos">): boolean {
-  return !!(e.photos?.length || e.photo);
-}
-function entryHasAudios(e: Pick<JournalEntry, "audio" | "audios">): boolean {
-  return !!(e.audios?.length || e.audio);
+// المراجع (photoRefs/audioRefs) تُرافق المذكرة محلياً كمؤشّرات هاش لوسائط لم
+// تُنزَّل بعد. نُعرّفها هنا كي يوحّدها دمج الوسائط دون استيراد sync.ts (فيجرّ Firebase).
+type EntryMediaRefs = JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
+
+// توحيد قائمتَي مراجع (يحفظ الترتيب ويزيل التكرار). المراجع هاشاتُ محتوى، فتوحيدها
+// آمنٌ دائماً — بخلاف بايتات الوسائط، الهاشان المتساويان محتواهما واحد.
+function unionRefs(a?: string[], b?: string[]): string[] | undefined {
+  if (!a?.length && !b?.length) return undefined;
+  return [...new Set([...(a ?? []), ...(b ?? [])])];
 }
 
 // دمج نسختين من المذكرة نفسها بحيث لا تضيع الوسائط أبداً. النصّ وبقية الحقول من
-// `base`؛ أمّا الصور والملاحظات الصوتية وإشارات الفيديو فتُؤخذ من أيّ نسخة تملكها
-// فعلاً (base يفوز عند وجودها في الاثنتين). هذه شبكة الأمان التي تمنع جهازاً
-// طابَعه الزمنيّ الأحدث من محو صورةٍ أضافها الجهاز الآخر لنفس المذكرة — ومن دفع
-// تلك النسخة المجرّدة فيحذف الصورة من Cloud Storage.
+// `base`. الصور/الأصوات تُملأ فقط إن كانت `base` خاليةً منها — لا نستبدل مجموعةً
+// موجودة، وإلا عادت صورةٌ حذفها المستخدم عمداً على جهاز الـbase (الحذف الإفرادي
+// متاح في المحرّر). أمّا المراجع المعلّقة (photoRefs/audioRefs) فتُوحَّد من
+// الطرفين — لأنها هاشات محتوى، فمرجعٌ لم يُنزَّل على جهاز (كان R2 متعذّراً) لا
+// يسقط حين تفوز النسخة الأخرى فتتيتّم الصورة في R2 (الثغرة التي بقيت بعد
+// local-media-12). هذه شبكة الأمان التي تمنع محو وسائطٍ يملكها الجهاز الآخر.
 export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): JournalEntry {
-  let out = base;
-  if (!entryHasPhotos(base) && entryHasPhotos(other)) {
-    out = { ...out, photos: other.photos, photo: other.photo };
+  const b = base as EntryMediaRefs;
+  const o = other as EntryMediaRefs;
+  let out: EntryMediaRefs = b;
+  // املأ فقط حين تكون base خاليةً — لا تستبدل مجموعةً موجودة (فيعود المحذوف).
+  if (entryPhotos(base).length === 0 && entryPhotos(other).length > 0) {
+    out = { ...out, photos: o.photos, photo: o.photo };
   }
-  if (!entryHasAudios(base) && entryHasAudios(other)) {
-    out = { ...out, audios: other.audios, audio: other.audio };
+  if (entryAudios(base).length === 0 && entryAudios(other).length > 0) {
+    out = { ...out, audios: o.audios, audio: o.audio };
   }
+  const photoRefs = unionRefs(b.photoRefs, o.photoRefs);
+  if (photoRefs) out = { ...out, photoRefs };
+  const audioRefs = unionRefs(b.audioRefs, o.audioRefs);
+  if (audioRefs) out = { ...out, audioRefs };
   if (!(base.videoRefs?.length) && other.videoRefs?.length) {
     out = { ...out, videoRefs: other.videoRefs };
   }
-  return out;
+  return out as JournalEntry;
 }
 
 // توحيد المعرّفات (Day One → معرّف ثابت مشتقّ من UUID) ودمج المكرّرات التي تشترك

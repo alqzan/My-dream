@@ -37,6 +37,14 @@ export interface DayOneParseResult {
   entries: JournalEntry[];
   totalInFile: number;
   skippedEmpty: number;
+  // Media accounting so a partial import is never reported as a clean success.
+  // *Referenced* = how many photo/audio slots the export's entries point at;
+  // *Imported* = how many were actually decoded and attached. A gap means some
+  // files couldn't be unzipped/decoded (e.g. a HEIC the browser can't render).
+  photosReferenced: number;
+  photosImported: number;
+  audiosReferenced: number;
+  audiosImported: number;
 }
 
 // Clean Day One markdown noise:
@@ -185,6 +193,12 @@ export function parseDayOneJson(jsonString: string): DayOneParseResult {
     entries,
     totalInFile: data.entries.length,
     skippedEmpty: data.entries.length - entries.length,
+    // JSON import is text-only by design (media lives in the ZIP), so nothing
+    // is "referenced" here — the UI steers the owner to the ZIP for media.
+    photosReferenced: 0,
+    photosImported: 0,
+    audiosReferenced: 0,
+    audiosImported: 0,
   };
 }
 
@@ -341,20 +355,25 @@ export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
     );
   }
 
-  // Build entries, attaching the processed media by key.
+  // Build entries, attaching the processed media by key. Tally every referenced
+  // slot against what actually decoded so the caller can flag silent drops
+  // (an image whose bytes failed to unzip or that compressImageSmart rejected).
   const entries: JournalEntry[] = [];
+  let photosReferenced = 0, photosImported = 0, audiosReferenced = 0, audiosImported = 0;
   for (const entry of allEntries) {
     const je = baseEntry(entry);
     const imgs: string[] = [];
     for (const p of entry.photos ?? []) {
+      photosReferenced++;
       const url = (p.md5 && photoData.get(p.md5)) || (p.identifier && photoData.get(p.identifier));
-      if (url) imgs.push(url);
+      if (url) { imgs.push(url); photosImported++; }
     }
     if (imgs.length) { je.photos = imgs; je.photo = imgs[0]; }
     const auds: string[] = [];
     for (const a of entry.audios ?? []) {
+      audiosReferenced++;
       const url = (a.md5 && audioData.get(a.md5)) || (a.identifier && audioData.get(a.identifier));
-      if (url) auds.push(url);
+      if (url) { auds.push(url); audiosImported++; }
     }
     if (auds.length) { je.audios = auds; je.audio = auds[0]; }
     if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) entries.push(je);
@@ -364,5 +383,9 @@ export async function parseDayOneZip(file: Blob): Promise<DayOneParseResult> {
     entries,
     totalInFile: allEntries.length,
     skippedEmpty: allEntries.length - entries.length,
+    photosReferenced,
+    photosImported,
+    audiosReferenced,
+    audiosImported,
   };
 }

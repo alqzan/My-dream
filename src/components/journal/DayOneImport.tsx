@@ -15,6 +15,9 @@ interface ImportStats {
   skippedEmpty: number;
   photos: number;
   audio: number;
+  // How many photo/audio files the export referenced but couldn't be decoded —
+  // surfaced so a partial import isn't shown as a clean success.
+  mediaMissing: number;
 }
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
@@ -62,7 +65,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       return;
     }
     setStatus("working");
-    const total: ImportStats = { files: 0, added: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0 };
+    const total: ImportStats = { files: 0, added: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0 };
     try {
       for (const file of chosen) {
         const result = isZip(file)
@@ -77,6 +80,9 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
         total.skippedEmpty += result.skippedEmpty;
         total.photos += [...addedSet].filter((e) => e.photos?.length || e.photo).length;
         total.audio += [...addedSet].filter((e) => e.audio).length;
+        total.mediaMissing +=
+          (result.photosReferenced - result.photosImported) +
+          (result.audiosReferenced - result.audiosImported);
       }
       setStats(total);
       setStatus("success");
@@ -147,6 +153,15 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
             {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (بلا تكرار)</p>}
             {stats.skippedEmpty > 0 && <p>• تجاهلنا {stats.skippedEmpty} مدخلة فارغة</p>}
           </div>
+          {stats.mediaMissing > 0 && (
+            <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-1">
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+              <p className="text-xs leading-relaxed">
+                تعذّر قراءة {stats.mediaMissing} ملف وسائط (صورة/صوت) من التصدير — غالباً صيغة لم يستطع
+                المتصفح فكّها. أعد الاستيراد من نفس الملف لاحقاً؛ سنُكمل الناقص دون تكرار.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

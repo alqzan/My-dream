@@ -1050,12 +1050,25 @@ function reconcile(
   return { report: { referenced: refs.size, inCloud, pendingUpload, broken, orphans }, broken: brokenList };
 }
 
+// Fold pending content-hash refs (media this device holds only as a ref — the
+// bytes weren't re-downloaded from R2 this session) into the referenced map as
+// cloud-sourced. Without this the audit ignores them: a photo that's perfectly
+// safe in R2 gets miscounted as an orphan, and the "referenced" total is short.
+function addPendingRefs(refs: Map<string, "local" | "cloud">, pending: Set<string>): void {
+  for (const h of pending) if (!refs.has(h)) refs.set(h, "cloud");
+}
+
 export async function inventoryMedia(uid: string, data: AppData): Promise<MediaInventory> {
   const photoItems: string[] = [];
   const audioItems: string[] = [];
+  const pendingPhotoRefs = new Set<string>();
+  const pendingAudioRefs = new Set<string>();
   for (const e of data.journalEntries) {
     photoItems.push(...entryPhotos(e));
     audioItems.push(...entryAudios(e));
+    const ce = e as { photoRefs?: string[]; audioRefs?: string[] };
+    for (const h of ce.photoRefs ?? []) pendingPhotoRefs.add(h);
+    for (const h of ce.audioRefs ?? []) pendingAudioRefs.add(h);
   }
   const [photoRefs, audioRefs, cloudPhotos, cloudAudios] = await Promise.all([
     referencedHashes(photoItems),
@@ -1063,6 +1076,8 @@ export async function inventoryMedia(uid: string, data: AppData): Promise<MediaI
     listCloudHashes(uid, "photos"),
     listCloudHashes(uid, "audios"),
   ]);
+  addPendingRefs(photoRefs, pendingPhotoRefs);
+  addPendingRefs(audioRefs, pendingAudioRefs);
   const p = reconcile(photoRefs, cloudPhotos.hashes);
   const a = reconcile(audioRefs, cloudAudios.hashes);
   return {

@@ -256,30 +256,47 @@ export const useAppStore = create<AppStore>()(
           );
           const toAdd: JournalEntry[] = [];
           const patches = new Map<string, Partial<JournalEntry>>();
+          // Ids we add or complete — their tombstones (if any) MUST be lifted,
+          // or the cloud merge's alive() drops them right back on the next sync.
+          const touchedIds: string[] = [];
           for (const e of entries) {
             const existing = e.dayOneUUID ? byUuid.get(e.dayOneUUID) : undefined;
             if (!existing) {
               toAdd.push(e);
+              touchedIds.push(e.id);
               continue;
             }
-            // إعادة الاستيراد تُكمّل الوسائط الناقصة لمذكرة موجودة (مثلاً صور
-            // سقطت في استيراد سابق قبل دعم HEIC) بدل تخطّيها كمكرر.
+            // إعادة الاستيراد تُكمّل النقص الجزئي: إن حمل الاستيراد صوراً/أصواتاً
+            // أكثر مما لدى المذكرة (سقط بعضها سابقاً قبل دعم HEIC مثلاً)، نعتمد
+            // المجموعة الأكمل بدل تخطّيها لمجرّد أنها «تحتوي صوراً».
             const patch: Partial<JournalEntry> = {};
-            if (!(existing.photos?.length || existing.photo) && (e.photos?.length || e.photo)) {
-              patch.photos = e.photos;
-              patch.photo = e.photo;
+            const existingPhotos = existing.photos?.length ?? (existing.photo ? 1 : 0);
+            const incomingPhotos = e.photos?.length ?? (e.photo ? 1 : 0);
+            if (incomingPhotos > existingPhotos) { patch.photos = e.photos; patch.photo = e.photo; }
+            const existingAudios = existing.audios?.length ?? (existing.audio ? 1 : 0);
+            const incomingAudios = e.audios?.length ?? (e.audio ? 1 : 0);
+            if (incomingAudios > existingAudios) { patch.audios = e.audios; patch.audio = e.audio; }
+            if (Object.keys(patch).length) {
+              patches.set(existing.id, patch);
+              touchedIds.push(existing.id);
             }
-            if (!(existing.audios?.length || existing.audio) && (e.audios?.length || e.audio)) {
-              patch.audios = e.audios;
-              patch.audio = e.audio;
-            }
-            if (Object.keys(patch).length) patches.set(existing.id, patch);
           }
           touched = toAdd.length + patches.size;
+          if (!touched) return {}; // إعادة استيرادٍ مطابقة تماماً — لا نبصم تحديثاً
           const updated = s.journalEntries.map((en) =>
             patches.has(en.id) ? { ...en, ...patches.get(en.id) } : en
           );
-          return { journalEntries: [...toAdd, ...updated] };
+          // ارفع شواهد الحذف عن كل معرّفٍ أُعيد استيراده — وإلا اعتبره الدمج محذوفاً
+          // فيظهر محلياً ثم يختفي بعد المزامنة (خلل «حذف ثم إعادة استيراد»).
+          let deleted = s.deleted;
+          if (deleted && touchedIds.some((id) => id in deleted!)) {
+            deleted = { ...deleted };
+            for (const id of touchedIds) delete deleted[id];
+          }
+          return {
+            journalEntries: [...toAdd, ...updated],
+            ...(deleted !== s.deleted ? { deleted } : {}),
+          };
         });
         return touched;
       },

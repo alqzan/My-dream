@@ -4,12 +4,13 @@ import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
 import { inventoryMedia, reuploadAllMedia, describeUploadError, type MediaInventory, type MediaAccessError } from "@/lib/sync";
 import { getSyncSpace } from "@/lib/firebase";
+import { entryPhotos } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
-const BUILD_TAG = "local-media-12"; // bump each diagnostic deploy to confirm freshness.
+const BUILD_TAG = "local-media-13"; // bump each diagnostic deploy to confirm freshness.
 
 // When the media scan can't read R2, WHY matters: a mismatched sync key (401)
 // is a config problem the owner must fix, and is completely different from "no
@@ -134,8 +135,10 @@ export function DataHealthCard() {
       })),
     };
     const bytes = new Blob([JSON.stringify(textOnly)]).size;
+    // entryPhotos already reconciles the legacy `photo` with `photos` (photo is
+    // just photos[0]) — using it avoids counting the first image twice.
     let photos = 0;
-    for (const e of snap.journalEntries) photos += (e.photos?.length ?? 0) + (e.photo ? 1 : 0);
+    for (const e of snap.journalEntries) photos += entryPhotos(e).length;
     let lastBackup: string | null = null;
     try { lastBackup = localStorage.getItem("madar-last-backup"); } catch { /* ignore */ }
     setInfo({
