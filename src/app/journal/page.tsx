@@ -318,6 +318,8 @@ export default function JournalPage() {
       <div className="relative animate-fade-up stagger-3">
         <Search size={15} className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400" />
         <input
+          type="search"
+          aria-label="ابحث في المذكرات"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ابحث في العناوين والنصوص والأسئلة..."

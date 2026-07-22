@@ -268,6 +268,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           value={title}
           onChange={(e) => setTitle(expandTimeCommand(e.target.value))}
           placeholder="عنوان اليوم ✨"
+          aria-label="عنوان المذكرة"
           dir="auto"
           className="w-full text-xl font-black border-0 border-b-2 border-gray-100 focus:border-journal bg-transparent px-1 py-2 focus:outline-none placeholder:text-gray-300 placeholder:font-bold"
         />
@@ -368,6 +369,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
             value={content}
             onChange={(e) => setContent(expandTimeCommand(e.target.value))}
             placeholder="اكتب مذكرتك هنا…"
+            aria-label="نص المذكرة"
             className="w-full min-h-[220px] block bg-transparent px-4 py-3.5 text-[15px] leading-loose focus:outline-none resize-none"
             dir="auto"
           />

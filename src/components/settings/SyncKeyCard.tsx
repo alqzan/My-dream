@@ -125,6 +125,7 @@ export function SyncKeyCard() {
         <div className="relative flex-1 min-w-0">
           <input
             type={revealInput ? "text" : "password"}
+            aria-label="مفتاح المزامنة"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="الصق مفتاح المزامنة"

@@ -361,6 +361,7 @@ export function BackupCard() {
         {encrypt && (
           <input
             type="password"
+            aria-label="كلمة مرور تشفير النسخة"
             value={exportPassword}
             onChange={(e) => setExportPassword(e.target.value)}
             placeholder="كلمة مرور التشفير"
@@ -381,6 +382,7 @@ export function BackupCard() {
             <input
               autoFocus
               type="password"
+              aria-label="كلمة مرور فك تشفير النسخة"
               value={importPassword}
               onChange={(e) => setImportPassword(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") decryptPending(); }}

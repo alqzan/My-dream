@@ -121,6 +121,11 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           value={amount}
           onChange={setAmount}
           placeholder="0.00"
+          // Land the cursor on the amount when the form opens — the task is to
+          // type a number, not to hunt for the field (or focus the close button
+          // the modal would otherwise focus first). Only when adding, so an edit
+          // doesn't yank focus/scroll on mount.
+          autoFocus={!initial}
           className="w-full border border-gray-200 rounded-xl px-4 py-3 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
           inputMode="decimal"
         />

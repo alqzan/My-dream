@@ -72,7 +72,10 @@ body {
 .dark .text-gray-700 { color: #e2d6c1 !important; }
 .dark .text-gray-600 { color: #cbbda2 !important; }
 .dark .text-gray-500 { color: #a2947a !important; }
-.dark .text-gray-400 { color: #897c63 !important; }
+/* كان #897c63 ≈ 4.1:1 على الرقّ الداكن — دون حدّ AA (4.5) للنصّ الصغير.
+   رُفع إلى #9d8f74 (~5.3:1 على البطاقة) مع بقائه أخفت من gray-500 فتُحفظ
+   الهرمية. */
+.dark .text-gray-400 { color: #9d8f74 !important; }
 .dark .text-gray-300 { color: #6f6450 !important; }
 
 .dark .border-gray-100 { border-color: #3a2e1e !important; }
@@ -118,6 +121,10 @@ body {
 .dark .text-brand-700  { color: #ecc078 !important; }
 /* أخضر القرآن العميق يعتم على الرقّ الداكن — يُرفع إلى زمرّدٍ أفتح للنصّ. */
 .dark .text-quran { color: #46c091 !important; }
+/* تركوازي الصلاة (#1f7a6c ≈ 3.25:1) وأخضر المال (#3d9640) يعتمان كنصٍّ صغير
+   على الداكن — يُرفعان إلى حدّ AA (≥4.5:1). الخلفيات/الأشرطة تبقى باللون الأصل. */
+.dark .text-prayer  { color: #36b09b !important; }
+.dark .text-finance { color: #4faf52 !important; }
 
 /* Hover states of remapped surfaces */
 .dark .hover\:bg-gray-100:hover { background-color: #382c1d !important; }
