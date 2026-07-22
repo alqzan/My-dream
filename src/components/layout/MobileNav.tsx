@@ -36,8 +36,10 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.label}
               className={cn(
-                "flex-1 flex flex-col items-center gap-0.5 px-0.5 py-1.5 rounded-xl transition-all press",
+                // min-h-[44px]: a comfortable touch target (WCAG 2.2 target-size).
+                "flex-1 min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-xl transition-all press",
                 active ? "text-brand-600" : "text-gray-400"
               )}
             >
@@ -47,7 +49,7 @@ export function MobileNav() {
               )}>
                 <item.icon size={20} />
               </span>
-              <span className="text-[9.5px] font-medium">{item.label}</span>
+              <span className="text-[10.5px] leading-none font-medium whitespace-nowrap">{item.shortLabel ?? item.label}</span>
             </Link>
           );
         })}

@@ -12,6 +12,9 @@ export interface NavItem {
   href: string;
   icon: ElementType;
   label: string;
+  // Optional shorter label for the cramped mobile bottom bar (falls back to
+  // `label`). Keeps the sidebar's full wording while the phone stays legible.
+  shortLabel?: string;
   color: string;
 }
 
@@ -22,5 +25,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/finance", icon: Wallet, label: "الأموال", color: "text-finance" },
   { href: "/reading", icon: BookOpen, label: "القراءة", color: "text-reading" },
   { href: "/quran", icon: QuranIcon, label: "قرآن", color: "text-quran" },
-  { href: "/stats", icon: BarChart3, label: "الإحصائيات", color: "text-brand-600" },
+  { href: "/stats", icon: BarChart3, label: "الإحصائيات", shortLabel: "إحصاء", color: "text-brand-600" },
 ];
