@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseDayOneJson, parseDayOneZip } from "@/lib/dayOneParser";
-import type { JournalEntry } from "@/lib/types";
 import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
@@ -11,6 +10,7 @@ import { reuploadAllMedia } from "@/lib/sync";
 interface ImportStats {
   files: number;
   added: number;
+  completed: number; // existing entries whose missing media we filled in
   duplicates: number;
   skippedEmpty: number;
   photos: number;
@@ -65,21 +65,22 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       return;
     }
     setStatus("working");
-    const total: ImportStats = { files: 0, added: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0 };
+    const total: ImportStats = { files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0 };
     try {
       for (const file of chosen) {
         const result = isZip(file)
           ? await parseDayOneZip(file)
           : parseDayOneJson(await file.text());
-        const added = importDayOneEntries(result.entries);
-        // Count media only among entries that were actually added (not dupes).
-        const addedSet = new Set<JournalEntry>(result.entries.slice(0, added));
+        // The store returns exact counts (new / completed / with media) — no need
+        // to guess which parsed entries changed by slicing.
+        const r = importDayOneEntries(result.entries);
         total.files++;
-        total.added += added;
-        total.duplicates += result.entries.length - added;
+        total.added += r.added;
+        total.completed += r.completed;
+        total.duplicates += result.entries.length - r.added - r.completed;
         total.skippedEmpty += result.skippedEmpty;
-        total.photos += [...addedSet].filter((e) => e.photos?.length || e.photo).length;
-        total.audio += [...addedSet].filter((e) => e.audio).length;
+        total.photos += r.photos;
+        total.audio += r.audio;
         total.mediaMissing +=
           (result.photosReferenced - result.photosImported) +
           (result.audiosReferenced - result.audiosImported);
@@ -148,6 +149,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           </div>
           <div className="text-xs text-green-700/80 space-y-0.5 pr-7">
             {stats.files > 1 && <p>• من {stats.files} ملفات</p>}
+            {stats.completed > 0 && <p>• أكملنا وسائط {stats.completed} مذكرة موجودة</p>}
             {stats.photos > 0 && <p>• مع {stats.photos} مذكرة فيها صور</p>}
             {stats.audio > 0 && <p>• مع {stats.audio} مذكرة فيها صوت</p>}
             {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (بلا تكرار)</p>}

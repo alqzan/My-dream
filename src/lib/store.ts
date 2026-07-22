@@ -37,12 +37,25 @@ function clearTombstone(
   return { deleted: next };
 }
 
+// Outcome of a Day One import: `added` = new entries, `completed` = existing
+// entries whose partially-missing media was filled, and how many of the touched
+// entries carry photos/audio (for an honest summary — not a slice() guess).
+export interface ImportResult {
+  added: number;
+  completed: number;
+  photos: number;
+  audio: number;
+}
+
 interface AppStore extends AppData {
   // Journal
   addJournalEntry: (entry: JournalEntry) => void;
   updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
-  importDayOneEntries: (entries: JournalEntry[]) => number; // returns count actually added
+  // Returns an accurate breakdown: entries newly added, existing entries whose
+  // missing media was completed, and how many of those carry photos/audio — so
+  // the import summary never has to guess which of the parsed entries changed.
+  importDayOneEntries: (entries: JournalEntry[]) => ImportResult;
   deleteDayOneImports: () => number; // يحذف كل المذكرات المستوردة من Day One؛ يرجع العدد
 
   // Finance
@@ -304,7 +317,7 @@ export const useAppStore = create<AppStore>()(
         })),
 
       importDayOneEntries: (entries) => {
-        let touched = 0;
+        let result: ImportResult = { added: 0, completed: 0, photos: 0, audio: 0 };
         set((s) => {
           const byUuid = new Map(
             s.journalEntries
@@ -338,8 +351,19 @@ export const useAppStore = create<AppStore>()(
               touchedIds.push(existing.id);
             }
           }
-          touched = toAdd.length + patches.size;
-          if (!touched) return {}; // إعادة استيرادٍ مطابقة تماماً — لا نبصم تحديثاً
+          if (!toAdd.length && !patches.size) return {}; // مطابق تماماً — لا بصمة
+          // Media counts across the entries that actually changed (added or
+          // completed) — no ordering assumption, so the summary is exact.
+          let photos = 0, audio = 0;
+          for (const e of toAdd) {
+            if (e.photos?.length || e.photo) photos++;
+            if (e.audios?.length || e.audio) audio++;
+          }
+          for (const p of patches.values()) {
+            if (p.photos?.length || p.photo) photos++;
+            if (p.audios?.length || p.audio) audio++;
+          }
+          result = { added: toAdd.length, completed: patches.size, photos, audio };
           const updated = s.journalEntries.map((en) =>
             patches.has(en.id) ? { ...en, ...patches.get(en.id) } : en
           );
@@ -355,7 +379,7 @@ export const useAppStore = create<AppStore>()(
             ...(deleted !== s.deleted ? { deleted } : {}),
           };
         });
-        return touched;
+        return result;
       },
 
       deleteDayOneImports: () => {

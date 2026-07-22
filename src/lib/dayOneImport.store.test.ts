@@ -32,10 +32,10 @@ describe("importDayOneEntries — delete then re-import stays visible after sync
     // Precondition: deleting recorded a tombstone for the entry's id.
     expect(useAppStore.getState().deleted?.["do-u1"]).toBeGreaterThan(0);
 
-    const touched = useAppStore.getState().importDayOneEntries([doEntry("u1")]);
+    const r = useAppStore.getState().importDayOneEntries([doEntry("u1")]);
     const st = useAppStore.getState();
 
-    expect(touched).toBe(1);
+    expect(r.added).toBe(1);
     expect(st.journalEntries.find((x) => x.id === "do-u1")).toBeTruthy();
     expect(st.deleted?.["do-u1"]).toBeUndefined(); // tombstone lifted → survives sync
   });
@@ -45,12 +45,14 @@ describe("importDayOneEntries — completes partially-missing media", () => {
   it("adds the missing photos to an entry that already has one", () => {
     useAppStore.setState({ journalEntries: [doEntry("u2", { photos: ["p1"], photo: "p1" })] });
 
-    const touched = useAppStore
+    const r = useAppStore
       .getState()
       .importDayOneEntries([doEntry("u2", { photos: ["p1", "p2", "p3"], photo: "p1" })]);
 
     const e = useAppStore.getState().journalEntries.find((x) => x.id === "do-u2")!;
-    expect(touched).toBe(1);
+    expect(r.completed).toBe(1); // an existing entry was completed, not newly added
+    expect(r.added).toBe(0);
+    expect(r.photos).toBe(1); // the completed entry carries photos
     expect(e.photos).toEqual(["p1", "p2", "p3"]);
   });
 
@@ -63,10 +65,24 @@ describe("importDayOneEntries — completes partially-missing media", () => {
 
   it("does nothing when the entry already holds the full set (no churn)", () => {
     useAppStore.setState({ journalEntries: [doEntry("u3", { photos: ["p1", "p2"], photo: "p1" })] });
-    const touched = useAppStore
+    const r = useAppStore
       .getState()
       .importDayOneEntries([doEntry("u3", { photos: ["p1", "p2"], photo: "p1" })]);
-    expect(touched).toBe(0);
+    expect(r.added + r.completed).toBe(0);
+  });
+
+  it("reports added, completed and media counts accurately in one import", () => {
+    // n1 already exists with one photo (will be completed); n2 is brand new.
+    useAppStore.setState({ journalEntries: [doEntry("n1", { photos: ["p1"], photo: "p1" })] });
+    const r = useAppStore.getState().importDayOneEntries([
+      doEntry("n1", { photos: ["p1", "p2"], photo: "p1" }), // completes n1
+      doEntry("n2", { photos: ["q1"], photo: "q1" }), // new, has a photo
+      doEntry("n3", {}), // new, no media
+    ]);
+    expect(r.added).toBe(2); // n2, n3
+    expect(r.completed).toBe(1); // n1
+    expect(r.photos).toBe(2); // n1 (completed) + n2
+    expect(r.audio).toBe(0);
   });
 });
 
