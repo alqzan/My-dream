@@ -16,12 +16,17 @@ import {
   subscribeUserMain,
   primeUrlCache,
   inlineCachedMedia,
+  lastShardLoadOk,
+  RevisionConflictError,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
 import { showToast } from "@/components/ui/UndoToast";
 import type { AppData } from "@/lib/types";
 
-type SyncState = "idle" | "syncing" | "synced" | "offline";
+// "partial": the main doc synced but the picture is incomplete — a journal
+// shard couldn't be read, or some media hasn't reached the cloud yet. Honest
+// middle state between "synced" and "offline" so the UI never over-claims.
+type SyncState = "idle" | "syncing" | "synced" | "partial" | "offline";
 
 const RETRY_BASE_MS = 2000;
 const RETRY_MAX_MS = 30000;
@@ -133,6 +138,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // the cloud doc; if it advanced past this, another device wrote in the
   // meantime and we merge instead of overwriting.
   const lastCloudUpdatedRef = useRef<string>("");
+  // The main doc's revision we last adopted/wrote — passed as expectedRevision
+  // on the next save so a concurrent write (another device) is caught by the
+  // transaction (RevisionConflictError) instead of silently overwriting it.
+  const lastRevisionRef = useRef<number>(0);
   // Failed-save retry with exponential backoff (2s → 4s → … capped at 30s).
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryDelay = useRef(RETRY_BASE_MS);
@@ -149,6 +158,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     let unsubStore: () => void = () => {};
     let unsubSnap: () => void = () => {};
 
+    // Mark a clean sync — but downgrade to "partial" when the picture is
+    // incomplete (a shard we couldn't read, or media still pending), so the UI
+    // never claims a full "متزامن" over a partial state.
+    const markSynced = (mediaComplete = true) => {
+      setStatus(!lastShardLoadOk() || !mediaComplete ? "partial" : "synced");
+      setLastSyncedAt(Date.now());
+    };
+
     (async () => {
       // Reuse any Storage URLs we already hold locally so hydrate doesn't
       // re-fetch every media download URL from scratch.
@@ -163,6 +180,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const local = snapshot();
         const cloudHasData = !!cloudMain && hasData(cloudMain);
         const localHasData = hasData(local);
+        let mediaComplete = true;
 
         if (cloudMain && cloudHasData && localHasData) {
           // Both sides hold data. ALWAYS union them — never let the device with
@@ -177,10 +195,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, local)));
           applyingRemoteRef.current = false;
           // Push the union back up so the cloud gains any entries that lived
-          // only on this device; other devices then pull them.
-          const r = await saveUserData(space, merged);
+          // only on this device; other devices then pull them. We just read the
+          // cloud doc, so pass its revision for the transaction's CAS.
+          const r = await saveUserData(space, merged, cloudMain.revision ?? 0);
+          mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
           lastCloudUpdatedRef.current = merged.lastUpdated ?? cloudMain.lastUpdated ?? "";
+          lastRevisionRef.current = r.revision;
         } else if (cloudMain && cloudHasData) {
           // Only the cloud has data → adopt it wholesale onto this fresh device.
           const full = await hydrateCloudPhotos(space, cloudMain);
@@ -188,86 +209,75 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           hydrate(await inlineCachedMedia(space, mergeLocalPhotos(full, local)));
           applyingRemoteRef.current = false;
           lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
+          lastRevisionRef.current = cloudMain.revision ?? 0;
         } else if (localHasData) {
           // Only this device has data → seed the cloud from it.
-          const r = await saveUserData(space, local);
+          const r = await saveUserData(space, local, cloudMain?.revision ?? 0);
+          mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
           lastCloudUpdatedRef.current = local.lastUpdated ?? "";
+          lastRevisionRef.current = r.revision;
         } else {
           lastCloudUpdatedRef.current = cloudMain?.lastUpdated ?? "";
+          lastRevisionRef.current = cloudMain?.revision ?? 0;
         }
-        setStatus("synced");
-        setLastSyncedAt(Date.now());
+        markSynced(mediaComplete);
       } catch {
         setStatus("offline");
       }
       if (cancelled) return;
       hydratedRef.current = true;
 
-      // 2) Live updates coming from the owner's other devices.
-      unsubSnap = subscribeUserMain(space, (cloudMain) => {
-        if (!cloudMain) return;
-        // Receiving a snapshot at all means we're connected — clear any
-        // lingering "offline" state even when there's nothing new to apply.
-        setStatus("synced");
-        setLastSyncedAt(Date.now());
-        const state = useAppStore.getState();
-        const localUpdated = state.lastUpdated ?? "";
-        const cloudNewer = (cloudMain.lastUpdated ?? "") > localUpdated;
-        // Apply when the cloud is newer OR when it holds items we haven't seen
-        // yet — a stale top-level stamp (device clocks drift) must never hide a
-        // real new entry written on another device.
-        if (!cloudNewer && !cloudHasUnseen(cloudMain, state)) return;
-        (async () => {
-          try {
-            const full = await hydrateCloudPhotos(space, cloudMain);
-            const local = snapshot();
-            // Merge, so unsynced local edits aren't overwritten by the incoming
-            // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
-            const merged = mergeAppData(local, full);
-            const inlined = await inlineCachedMedia(space, mergeLocalPhotos(merged, local));
-            applyingRemoteRef.current = true;
-            hydrate(inlined);
-            setTimeout(() => {
-              applyingRemoteRef.current = false;
-            }, 0);
-            lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
-            setStatus("synced");
-            setLastSyncedAt(Date.now());
-          } catch {
-            setStatus("offline");
-          }
-        })();
-      });
-
       // Push the local snapshot up. Before overwriting, re-read the cloud doc;
       // if another device wrote since we last synced, merge its data in first
-      // so a concurrent edit is never clobbered by last-writer-wins.
-      const pushLocal = async () => {
-        let toSave = snapshot();
-        const cloudMain = await loadUserMain(space);
-        if (
-          cloudMain &&
-          hasData(cloudMain) &&
-          (cloudMain.lastUpdated ?? "") > lastCloudUpdatedRef.current
-        ) {
-          const full = await hydrateCloudPhotos(space, cloudMain);
-          const merged = mergeAppData(toSave, full);
+      // so a concurrent edit is never clobbered by last-writer-wins. The main
+      // doc write goes through a transaction keyed on `revision`: if the cloud
+      // advanced between our read and our write (a narrow race the re-read can't
+      // close), saveUserData throws RevisionConflictError and we re-merge and
+      // retry — bounded, so a persistent conflict can't spin forever.
+      const pushLocal = async (): Promise<boolean> => {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          let toSave = snapshot();
+          const cloudMain = await loadUserMain(space);
+          if (
+            cloudMain &&
+            hasData(cloudMain) &&
+            ((cloudMain.lastUpdated ?? "") > lastCloudUpdatedRef.current ||
+              (cloudMain.revision ?? 0) > lastRevisionRef.current)
+          ) {
+            const full = await hydrateCloudPhotos(space, cloudMain);
+            const merged = mergeAppData(toSave, full);
+            applyingRemoteRef.current = true;
+            hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, toSave)));
+            applyingRemoteRef.current = false;
+            toSave = merged;
+            lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
+          }
+          const stamp = new Date().toISOString();
+          toSave = { ...toSave, lastUpdated: stamp };
+          // Reflect the stamp locally (guarded) so the echoed snapshot is a
+          // no-op instead of triggering another save.
           applyingRemoteRef.current = true;
-          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, toSave)));
+          useAppStore.setState({ lastUpdated: stamp });
           applyingRemoteRef.current = false;
-          toSave = merged;
+          try {
+            const res = await saveUserData(space, toSave, lastRevisionRef.current);
+            lastCloudUpdatedRef.current = stamp;
+            lastRevisionRef.current = res.revision;
+            return res.mediaComplete;
+          } catch (err) {
+            if (err instanceof RevisionConflictError) {
+              // Another device wrote between our read and our transaction. Adopt
+              // its revision and loop to re-read + re-merge before retrying.
+              lastRevisionRef.current = err.cloudRevision;
+              continue;
+            }
+            throw err;
+          }
         }
-        const stamp = new Date().toISOString();
-        toSave = { ...toSave, lastUpdated: stamp };
-        // Reflect the stamp locally (guarded) so the echoed snapshot is a
-        // no-op instead of triggering another save.
-        applyingRemoteRef.current = true;
-        useAppStore.setState({ lastUpdated: stamp });
-        applyingRemoteRef.current = false;
-        const res = await saveUserData(space, toSave);
-        lastCloudUpdatedRef.current = stamp;
-        return res.mediaComplete;
+        // Exhausted retries against a moving target — treat as a transient
+        // failure so the backoff/retry path takes over rather than looping hot.
+        throw new Error("revision conflict: retries exhausted");
       };
 
       // Attempt a push; on failure surface a toast (once per streak) and retry
@@ -279,8 +289,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             retryDelay.current = RETRY_BASE_MS;
             failNotified.current = false;
             setMediaPending(!mediaComplete);
-            setStatus("synced");
-            setLastSyncedAt(Date.now());
+            markSynced(mediaComplete);
           })
           .catch(() => {
             setStatus("offline");
@@ -293,6 +302,50 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             retryDelay.current = Math.min(retryDelay.current * 2, RETRY_MAX_MS);
           });
       };
+
+      // 2) Live updates coming from the owner's other devices.
+      unsubSnap = subscribeUserMain(space, (cloudMain) => {
+        if (!cloudMain) return;
+        // Receiving a snapshot at all means we're connected — clear any
+        // lingering "offline" state even when there's nothing new to apply.
+        markSynced();
+        const state = useAppStore.getState();
+        const localUpdated = state.lastUpdated ?? "";
+        const cloudNewer = (cloudMain.lastUpdated ?? "") > localUpdated;
+        // Apply when the cloud is newer OR when it holds items we haven't seen
+        // yet — a stale top-level stamp (device clocks drift) must never hide a
+        // real new entry written on another device.
+        if (!cloudNewer && !cloudHasUnseen(cloudMain, state)) return;
+        (async () => {
+          try {
+            const full = await hydrateCloudPhotos(space, cloudMain);
+            const local = snapshot();
+            // Does THIS device hold changes the incoming cloud snapshot lacks?
+            // (reverse of cloudHasUnseen). If so, the merge below will contain
+            // data the cloud doesn't have yet, so we must push the union back —
+            // the guarded hydrate won't trigger the store subscription itself.
+            const localHasUnpushed = cloudHasUnseen(local, cloudMain);
+            // Merge, so unsynced local edits aren't overwritten by the incoming
+            // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
+            const merged = mergeAppData(local, full);
+            const inlined = await inlineCachedMedia(space, mergeLocalPhotos(merged, local));
+            applyingRemoteRef.current = true;
+            hydrate(inlined);
+            setTimeout(() => {
+              applyingRemoteRef.current = false;
+            }, 0);
+            lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
+            lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
+            markSynced();
+            // Converge the cloud: push the merged union up so the entry that
+            // lived only here reaches the other devices. Guarded by
+            // localHasUnpushed so two idle devices don't ping-pong saves.
+            if (localHasUnpushed) attemptSave();
+          } catch {
+            setStatus("offline");
+          }
+        })();
+      });
 
       // 3) Push local edits up (debounced).
       unsubStore = useAppStore.subscribe(() => {

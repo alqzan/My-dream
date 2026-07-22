@@ -58,6 +58,21 @@ export function SyncStatus() {
     );
   }
 
+  // Honest middle state: the main doc synced but a journal shard couldn't be
+  // read this round, so the picture may be incomplete. Not an error (we're
+  // online), but not a clean "متزامن" either — it reconciles on the next load.
+  if (!syncing && status === "partial") {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+        title="تزامن جزئي — تعذّرت قراءة جزء من المذكرات هذه المرة، سيكتمل عند التحديث التالي"
+      >
+        <CloudOff size={13} />
+        <span className="hidden sm:inline">مزامنة جزئية</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex items-center gap-1.5 text-xs text-gray-500"

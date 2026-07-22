@@ -39,9 +39,13 @@ export function unionOrdered<T>(primary: T[], secondary: T[], keyOf: (t: T) => s
   return [...primary, ...secondary.filter((it) => !seen.has(keyOf(it)))];
 }
 
-// Keep tombstones for a wide window so every device has time to converge, then
-// drop them so the map can't grow without bound.
-const TOMBSTONE_TTL_MS = 120 * 24 * 60 * 60 * 1000; // 120 days
+// Keep tombstones for a full year so every device has ample time to converge,
+// then drop them so the map can't grow without bound. Deliberate trade-off
+// (documented in ROADMAP): a device left offline for MORE than a year can still
+// resurrect data it never saw deleted — acceptable for one owner's few devices;
+// the cure there is to clear the returning device and re-adopt the cloud, not a
+// heavier per-device watermark scheme.
+const TOMBSTONE_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
 
 export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const localNewer = (local.lastUpdated ?? "") >= (cloud.lastUpdated ?? "");

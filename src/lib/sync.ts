@@ -1,5 +1,5 @@
 import {
-  doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc,
+  doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc, runTransaction,
 } from "firebase/firestore";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
@@ -310,6 +310,10 @@ interface CloudMediaMeta {
   photoManifest?: string[];
   audioManifest?: string[];
   mediaProvider?: string;
+  // Monotonic write counter on the main doc, bumped in saveUserData's
+  // transaction. Absent on legacy docs (treated as 0). The provider reads it to
+  // pass expectedRevision on the next save so a concurrent write is caught.
+  revision?: number;
 }
 
 function seedKnownMedia(main: CloudMediaMeta): void {
@@ -346,6 +350,14 @@ function splitJournalShards(entries: CloudEntry[]): Map<string, CloudEntry[]> {
 let shardSignatures = new Map<string, string>();
 const shardSig = (entries: unknown[]): string => JSON.stringify(entries);
 
+// True when the last shard read completed without an error. When false, the
+// snapshot we handed back may be missing a month we couldn't fetch — so the UI
+// must show "جزئي" instead of claiming a clean "متزامن". Read via lastShardLoadOk().
+let shardLoadOk = true;
+export function lastShardLoadOk(): boolean {
+  return shardLoadOk;
+}
+
 // Read all journal shards and fold them (plus any legacy entries still inline in
 // the main doc, pre-migration) into one CloudEntry[]. Shard copies win a clash.
 // Seeds shardSignatures so the next save diffs correctly.
@@ -361,6 +373,7 @@ async function loadJournalShards(
   // Legacy inline entries first (overwritten by a shard copy if one exists).
   for (const e of (mainData.journalEntries as CloudEntry[] | undefined) ?? []) put(e);
   const sigs = new Map<string, string>();
+  shardLoadOk = true;
   if (db) {
     try {
       const snap = await getDocs(collection(db, COLLECTION, uid, JOURNAL_SUB));
@@ -369,7 +382,12 @@ async function loadJournalShards(
         sigs.set(d.id, shardSig(entries));
         for (const e of entries) put(e);
       });
-    } catch { /* offline — fall back to legacy inline / local */ }
+    } catch {
+      // Couldn't read the shards (offline / transient). We fall back to legacy
+      // inline + local, but flag the load as incomplete so the UI is honest
+      // (the returned snapshot may be missing a month we couldn't fetch).
+      shardLoadOk = false;
+    }
   }
   shardSignatures = sigs;
   return [...byId.values()];
@@ -530,7 +548,7 @@ async function prepareForCloud(
 // Main doc + journal shards (no photo bytes — entries still carry photoRefs,
 // resolved later by hydrateCloudPhotos). Seeds the known-hash cache from the
 // manifest and the shard-signature cache so a subsequent save diffs correctly.
-export async function loadUserMain(uid: string): Promise<AppData | null> {
+export async function loadUserMain(uid: string): Promise<(AppData & CloudMediaMeta) | null> {
   if (!db) return null;
   const snap = await getDoc(doc(db, COLLECTION, uid));
   if (!snap.exists()) {
@@ -890,10 +908,29 @@ export interface SaveResult {
   // When some media failed to upload, an actionable reason for the first
   // failure (bad R2 key, oversize, CORS/network) — undefined on success.
   uploadError?: string;
+  // The main doc's revision AFTER this save. The caller stores it and passes it
+  // back as `expectedRevision` on the next save so a concurrent write is caught.
+  revision: number;
 }
 
-export async function saveUserData(uid: string, data: AppData): Promise<SaveResult> {
-  if (!db) return { mediaComplete: true };
+// Thrown by saveUserData when the main doc's revision moved past what the caller
+// based its write on — another device wrote in between. The caller must re-read
+// the cloud, re-merge its local snapshot, and retry the save. Nothing was
+// written to the main doc (the transaction aborted); shards/media are additive.
+export class RevisionConflictError extends Error {
+  constructor(public cloudRevision: number) {
+    super("revision conflict");
+    this.name = "RevisionConflictError";
+  }
+}
+
+export async function saveUserData(
+  uid: string,
+  data: AppData,
+  expectedRevision?: number
+): Promise<SaveResult> {
+  if (!db) return { mediaComplete: true, revision: 0 };
+  const database = db;
   const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
 
   // 1) Upload new media to R2 first. Text-only edits have none, so this is
@@ -915,13 +952,30 @@ export async function saveUserData(uid: string, data: AppData): Promise<SaveResu
     audioManifest: [...knownCloudAudioHashes],
   };
   warnIfDocSizeNearLimit(honestMain);
-  await setDoc(doc(db, COLLECTION, uid), honestMain, { merge: false });
+
+  // 3) Write the main doc through a transaction that bumps a monotonic
+  //    `revision`. When `expectedRevision` is given (a debounced push that read
+  //    the cloud a while ago), the transaction aborts with RevisionConflictError
+  //    if another device advanced the revision since — closing the read-merge-
+  //    write race on the MAIN DOC (its scope; shards/media stay additive and
+  //    reconcile on the next merge). Legacy docs without a revision read as 0.
+  const revision = await runTransaction(database, async (txn) => {
+    const ref = doc(database, COLLECTION, uid);
+    const snap = await txn.get(ref);
+    const current = snap.exists() ? Number((snap.data() as { revision?: number }).revision ?? 0) : 0;
+    if (expectedRevision !== undefined && current !== expectedRevision) {
+      throw new RevisionConflictError(current);
+    }
+    const nextRevision = current + 1;
+    txn.set(ref, { ...honestMain, revision: nextRevision }, { merge: false });
+    return nextRevision;
+  });
 
   // Honest signal: did every referenced photo/audio actually land in the cloud?
   const allIn = (refs: Set<string>, known: Set<string>) => [...refs].every((h) => known.has(h));
   const mediaComplete =
     allIn(photoRefs, knownCloudHashes) && allIn(audioRefs, knownCloudAudioHashes);
-  return { mediaComplete, uploadError };
+  return { mediaComplete, uploadError, revision };
 }
 
 // The whole main doc (transactions/settings/etc. — media is stored separately

@@ -18,6 +18,15 @@ vi.mock("firebase/firestore", () => ({
   getDocs: (...a: unknown[]) => getDocsMock(...(a as [])),
   onSnapshot: vi.fn(),
   deleteDoc: vi.fn(async () => {}),
+  // The main-doc write now runs inside a transaction; the mock forwards txn.get
+  // to getDocMock and txn.set to setDocMock so existing assertions (which scan
+  // setDocMock.mock.calls for the main/shard writes) keep working, and the CAS
+  // conflict path is exercisable by pointing getDocMock at a higher revision.
+  runTransaction: async (_db: unknown, fn: (txn: unknown) => Promise<unknown>) =>
+    fn({
+      get: (...a: unknown[]) => getDocMock(...(a as [])),
+      set: (...a: unknown[]) => { setDocMock(...(a as [])); },
+    }),
 }));
 
 vi.mock("./firebase", () => ({ db: { __db: true }, getSyncSpace: () => "space" }));
@@ -220,6 +229,33 @@ describe("saveUserData — the surviving ref keeps its original slot", () => {
     const saved = written.find((x) => x.id === "e1")!;
     // Without the fix this would be [A, C, B]; the order stash restores [A, B, C].
     expect(saved.photoRefs).toEqual([A, B, C]);
+  });
+});
+
+describe("saveUserData — revision CAS", () => {
+  it("bumps revision from the current cloud value and returns it", async () => {
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ revision: 4 }) });
+    const res = await sync.saveUserData("space", appData([]), 4);
+    expect(res.revision).toBe(5);
+    // The main-doc write carries the bumped revision.
+    const mainCall = setDocMock.mock.calls.find(
+      (c) => Array.isArray((c[0] as { __doc?: unknown[] })?.__doc) &&
+             !((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal")
+    );
+    expect((mainCall![1] as { revision: number }).revision).toBe(5);
+  });
+
+  it("throws RevisionConflictError when the cloud advanced past expectedRevision", async () => {
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ revision: 9 }) });
+    await expect(sync.saveUserData("space", appData([]), 3)).rejects.toBeInstanceOf(
+      sync.RevisionConflictError
+    );
+  });
+
+  it("does not CAS-check when no expectedRevision is passed (initial seed)", async () => {
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ revision: 7 }) });
+    const res = await sync.saveUserData("space", appData([])); // no expectedRevision
+    expect(res.revision).toBe(8); // just bumps, never conflicts
   });
 });
 
