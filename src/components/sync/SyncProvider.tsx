@@ -15,6 +15,7 @@ import {
   mergeAppData,
   subscribeUserMain,
   primeUrlCache,
+  inlineCachedMedia,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
 import { showToast } from "@/components/ui/UndoToast";
@@ -142,7 +143,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           const full = await hydrateCloudPhotos(space, cloudMain);
           const merged = mergeAppData(local, full);
           applyingRemoteRef.current = true;
-          hydrate(mergeLocalPhotos(merged, local));
+          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, local)));
           applyingRemoteRef.current = false;
           // Push the union back up so the cloud gains any entries that lived
           // only on this device; other devices then pull them.
@@ -153,7 +154,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // Only the cloud has data → adopt it wholesale onto this fresh device.
           const full = await hydrateCloudPhotos(space, cloudMain);
           applyingRemoteRef.current = true;
-          hydrate(mergeLocalPhotos(full, local));
+          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(full, local)));
           applyingRemoteRef.current = false;
           lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
         } else if (localHasData) {
@@ -193,8 +194,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             // Merge, so unsynced local edits aren't overwritten by the incoming
             // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
             const merged = mergeAppData(local, full);
+            const inlined = await inlineCachedMedia(space, mergeLocalPhotos(merged, local));
             applyingRemoteRef.current = true;
-            hydrate(mergeLocalPhotos(merged, local));
+            hydrate(inlined);
             setTimeout(() => {
               applyingRemoteRef.current = false;
             }, 0);
@@ -221,7 +223,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           const full = await hydrateCloudPhotos(space, cloudMain);
           const merged = mergeAppData(toSave, full);
           applyingRemoteRef.current = true;
-          hydrate(mergeLocalPhotos(merged, toSave));
+          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, toSave)));
           applyingRemoteRef.current = false;
           toSave = merged;
         }

@@ -561,39 +561,65 @@ export function subscribeUserMain(
 // Resolve each entry's refs to a short-lived R2 download URL (cached until just
 // before expiry), falling back to the pre-migration Firestore media doc (base64)
 // so old photos still appear until the migration tool uploads them to R2.
+// Resolve one hash to permanent inline bytes: local copy first, else fetch the
+// bytes ONCE from R2 (or the legacy Firestore doc) and keep them forever. Returns
+// a `data:` URL so rendering never again depends on a live URL, expiry, or CORS.
+async function fetchInlineMedia(uid: string, sub: MediaKind, h: string): Promise<string | null> {
+  const local = await localMediaGet(h);
+  if (local) return local;
+  try {
+    const signed = await mediaGateway<{ url: string; expiresAt: number }>(
+      uid,
+      "/v1/media/download-url",
+      { kind: sub, hash: h }
+    );
+    const res = await fetch(signed.url);
+    if (res.ok) {
+      const dataUrl = await blobToDataUrl(await res.blob());
+      await localMediaPut(h, dataUrl);
+      return dataUrl;
+    }
+  } catch { /* not in R2 yet — try the legacy Firestore doc */ }
+  try {
+    const snap = await getDoc(doc(db!, COLLECTION, uid, sub, h));
+    if (snap.exists()) {
+      const data = (snap.data() as { data: string }).data;
+      await localMediaPut(h, data);
+      return data;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+// Final display guarantee, applied AFTER merging: replace every remaining remote
+// media URL on an entry with permanent local bytes (from cache, or downloaded
+// once). This fixes the case where a merge kept a device's entry whose photo was
+// a stale/broken cloud URL — the bytes exist (same content hash), so we swap the
+// link for the real image and it renders offline forever after.
+export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string, data: T): Promise<T> {
+  if (!data.journalEntries) return data;
+  const inlineOne = async (u: string | undefined, sub: MediaKind): Promise<string | undefined> => {
+    if (!u || u.startsWith("data:") || !isStorageUrl(u)) return u;
+    const h = hashFromStorageUrl(u);
+    if (!h) return u;
+    return (await fetchInlineMedia(uid, sub, h)) ?? u;
+  };
+  const journalEntries = await Promise.all(
+    data.journalEntries.map(async (e) => {
+      const patch: Partial<JournalEntry> = {};
+      if (e.photos?.length) patch.photos = (await Promise.all(e.photos.map((u) => inlineOne(u, "photos")))).filter(Boolean) as string[];
+      if (e.photo) patch.photo = await inlineOne(e.photo, "photos");
+      if (e.audios?.length) patch.audios = (await Promise.all(e.audios.map((u) => inlineOne(u, "audios")))).filter(Boolean) as string[];
+      if (e.audio) patch.audio = await inlineOne(e.audio, "audios");
+      return Object.keys(patch).length ? { ...e, ...patch } : e;
+    })
+  );
+  return { ...data, journalEntries };
+}
+
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
-  const resolve = async (h: string, sub: MediaKind): Promise<string | null> => {
-    // 1) Already held locally → return the permanent inline bytes. Rendering
-    //    from here never depends on the network, a live URL, or expiry.
-    const local = await localMediaGet(h);
-    if (local) return local;
-    // 2) First sighting on this device → fetch the bytes ONCE from R2, inline
-    //    them, and keep them locally forever. We deliberately return the data:
-    //    bytes (not the short-lived URL) so the image can never break later.
-    try {
-      const signed = await mediaGateway<{ url: string; expiresAt: number }>(
-        uid,
-        "/v1/media/download-url",
-        { kind: sub, hash: h }
-      );
-      const res = await fetch(signed.url);
-      if (res.ok) {
-        const dataUrl = await blobToDataUrl(await res.blob());
-        await localMediaPut(h, dataUrl);
-        return dataUrl;
-      }
-    } catch { /* not in R2 yet — try the legacy Firestore doc */ }
-    try {
-      const snap = await getDoc(doc(db!, COLLECTION, uid, sub, h));
-      if (snap.exists()) {
-        const data = (snap.data() as { data: string }).data;
-        await localMediaPut(h, data);
-        return data;
-      }
-    } catch { /* ignore */ }
-    return null;
-  };
+  const resolve = (h: string, sub: MediaKind) => fetchInlineMedia(uid, sub, h);
   const journalEntries = await Promise.all(
     main.journalEntries.map(async (e) => {
       const ce = e as CloudEntry & { audioRef?: string };

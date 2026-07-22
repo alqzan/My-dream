@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
-const BUILD_TAG = "local-media-10"; // bump each diagnostic deploy to confirm freshness.
+const BUILD_TAG = "local-media-11"; // bump each diagnostic deploy to confirm freshness.
 
 // When the media scan can't read R2, WHY matters: a mismatched sync key (401)
 // is a config problem the owner must fix, and is completely different from "no
