@@ -179,6 +179,50 @@ describe("hydrateCloudPhotos — bounded concurrency", () => {
   });
 });
 
+describe("hydrateCloudPhotos — photo order is preserved across a partial failure", () => {
+  it("stashes the original ref order when a middle photo fails to resolve", async () => {
+    const [A, B, C] = [HASH_A, HASH_B, "c".repeat(32)];
+    idbStore.set(MEDIA_CACHE_PREFIX + A, "data:image/png;base64,AAAA");
+    idbStore.set(MEDIA_CACHE_PREFIX + C, "data:image/png;base64,CCCC");
+    // B is not cached and R2 is down → it fails.
+    const out = await sync.hydrateCloudPhotos("space", appData([cloudEntry("e1", { photoRefs: [A, B, C] })]));
+    const e = out.journalEntries[0] as JournalEntry & { photoRefs?: string[]; photoOrder?: string[] };
+
+    expect(e.photos).toEqual(["data:image/png;base64,AAAA", "data:image/png;base64,CCCC"]);
+    expect(e.photoRefs).toEqual([B]); // only the unresolved one survives …
+    expect(e.photoOrder).toEqual([A, B, C]); // … but the full order is remembered.
+  });
+});
+
+describe("saveUserData — the surviving ref keeps its original slot", () => {
+  it("splices the survivor back into place instead of appending it", async () => {
+    const [A, B, C] = [HASH_A, HASH_B, "c".repeat(32)];
+    const workerUrl = (h: string) =>
+      `https://worker.example/v1/media/blob?hash=${h}&exp=9999999999999&sig=x`;
+    // The entry as it looks right after a partial hydrate: A and C resolved (held
+    // as cloud pointers here), B still a bare surviving ref, order remembered.
+    const entry = {
+      id: "e1",
+      date: "2026-01-01",
+      content: "x",
+      photos: [workerUrl(A), workerUrl(C)],
+      photoRefs: [B],
+      photoOrder: [A, B, C],
+    } as unknown as JournalEntry;
+
+    await sync.saveUserData("space", appData([entry]));
+
+    const shardCall = setDocMock.mock.calls.find(
+      (c) => Array.isArray((c[0] as { __doc?: unknown[] })?.__doc) &&
+             ((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal")
+    );
+    const written = (shardCall![1] as { entries: Array<{ id: string; photoRefs?: string[] }> }).entries;
+    const saved = written.find((x) => x.id === "e1")!;
+    // Without the fix this would be [A, C, B]; the order stash restores [A, B, C].
+    expect(saved.photoRefs).toEqual([A, B, C]);
+  });
+});
+
 describe("saveUserData — a surviving ref is never orphaned", () => {
   it("re-emits refs kept by a failed hydrate into the written shard + manifest", async () => {
     // Mirror production exactly: load the cloud doc (which seeds the manifest and

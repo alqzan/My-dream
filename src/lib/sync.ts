@@ -511,23 +511,24 @@ async function prepareForCloud(
   };
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e): Promise<CloudEntry> => {
-      const src = e as JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
+      const src = e as JournalEntry & MediaOrderFields;
       const imgs = entryPhotos(e);
       const auds = entryAudios(e);
       const survivingPhotoRefs = src.photoRefs ?? [];
       const survivingAudioRefs = src.audioRefs ?? [];
       const { photo: _p, photos: _ps, audio: _a, audios: _as,
-              photoRefs: _pr, audioRefs: _aur, ...rest } = src;
+              photoRefs: _pr, audioRefs: _aur, photoOrder: _po, audioOrder: _ao, ...rest } = src;
       const out: CloudEntry = rest;
       if (imgs.length || survivingPhotoRefs.length) {
         const refs = await attach(imgs, newPhotos, photoRefs);
         mergeSurviving(refs, survivingPhotoRefs, photoRefs);
-        if (refs.length) out.photoRefs = refs;
+        // Restore the original order so a survivor lands back in its slot.
+        if (refs.length) out.photoRefs = orderRefs(refs, src.photoOrder);
       }
       if (auds.length || survivingAudioRefs.length) {
         const refs = await attach(auds, newAudios, audioRefs);
         mergeSurviving(refs, survivingAudioRefs, audioRefs);
-        if (refs.length) out.audioRefs = refs;
+        if (refs.length) out.audioRefs = orderRefs(refs, src.audioOrder);
       }
       return out;
     })
@@ -657,10 +658,35 @@ export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string,
 // can't fire thousands of simultaneous R2 fetches (see mapWithConcurrency).
 const HYDRATE_CONCURRENCY = 6;
 
+// Local-only, never written to the cloud: the original ref order an entry had
+// when hydrate couldn't resolve one of its photos. prepareForCloud reads it to
+// re-sort the emitted refs, then strips it. (The cloud's own photoRefs array is
+// the ordered source of truth; this just bridges a partial hydrate → save.)
+interface MediaOrderFields {
+  photoRefs?: string[];
+  audioRefs?: string[];
+  photoOrder?: string[];
+  audioOrder?: string[];
+}
+
 const photoRefsOf = (e: CloudEntry & { audioRef?: string }): string[] => e.photoRefs ?? [];
 // Back-compat: older docs stored a single audioRef; newer store audioRefs.
 const audioRefsOf = (e: CloudEntry & { audioRef?: string }): string[] =>
   e.audioRefs ?? (e.audioRef ? [e.audioRef] : []);
+
+// Reorder `refs` to follow `order` (the entry's original ref sequence). Hashes
+// present in `order` take their original position; any not in it (a photo the
+// user added after the partial hydrate) keep their relative order at the end.
+// Delete-safe: a ref dropped from `refs` simply doesn't appear — order of the
+// rest is preserved. A no-op when there's no stashed order.
+function orderRefs(refs: string[], order?: string[]): string[] {
+  if (!order?.length) return refs;
+  const pos = new Map(order.map((h, i) => [h, i]));
+  return refs
+    .map((h, i) => ({ h, key: pos.has(h) ? pos.get(h)! : order.length + i }))
+    .sort((a, b) => a.key - b.key)
+    .map((x) => x.h);
+}
 
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
@@ -689,22 +715,26 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
   //    no ref and the object is orphaned in R2. Keeping the ref means the photo
   //    re-hydrates on the next successful load and the object stays owned.
   const journalEntries = main.journalEntries.map((e) => {
-    const ce = e as CloudEntry & { audioRef?: string };
+    const ce = e as CloudEntry & { audioRef?: string; photoOrder?: string[]; audioOrder?: string[] };
     const refs = photoRefsOf(ce);
     const arefs = audioRefsOf(ce);
-    const { photoRefs: _r, audioRefs: _ars, audioRef: _ar, ...rest } = ce;
-    let out = rest as JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
+    const { photoRefs: _r, audioRefs: _ars, audioRef: _ar,
+            photoOrder: _po, audioOrder: _ao, ...rest } = ce;
+    let out = rest as JournalEntry & MediaOrderFields;
     if (refs.length) {
       const imgs = refs.map((h) => resolved.get(`photos:${h}`)).filter(Boolean) as string[];
       if (imgs.length) out = { ...out, photos: imgs, photo: imgs[0] };
       const keep = refs.filter((h) => !resolved.has(`photos:${h}`));
-      if (keep.length) out = { ...out, photoRefs: keep };
+      // Some refs survived unresolved → stash the FULL original order so the
+      // next save can splice the survivor back into its slot instead of tacking
+      // it onto the end (which would silently reorder the entry's photos).
+      if (keep.length) out = { ...out, photoRefs: keep, photoOrder: refs };
     }
     if (arefs.length) {
       const auds = arefs.map((h) => resolved.get(`audios:${h}`)).filter(Boolean) as string[];
       if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
       const keep = arefs.filter((h) => !resolved.has(`audios:${h}`));
-      if (keep.length) out = { ...out, audioRefs: keep };
+      if (keep.length) out = { ...out, audioRefs: keep, audioOrder: arefs };
     }
     return out as JournalEntry;
   });
