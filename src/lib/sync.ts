@@ -41,6 +41,27 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+// Run `fn` over `items` with a bounded number of concurrent tasks. A big Day One
+// library holds thousands of photos; firing every download at once (Promise.all
+// over all of them) floods the browser/Worker/R2 and can hang the app. A small
+// pool keeps memory and sockets bounded while staying fully parallel up to the
+// limit. Resolves once every item is done.
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      await fn(items[index]);
+    }
+  };
+  const size = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: size }, worker));
+}
+
 const COLLECTION = "userData";
 
 // Public Worker endpoint only. The sync key remains device-local and is sent
@@ -479,18 +500,33 @@ async function prepareForCloud(
     return refs;
   };
 
+  // Fold any refs a partial hydrate kept on the entry (bytes that R2 couldn't
+  // hand us this session) into the emitted refs, so an object that's already in
+  // the cloud but not yet re-downloaded here is never dropped from the entry —
+  // which would leave it orphaned in R2 (referenced by nothing).
+  const mergeSurviving = (refs: string[], surviving: string[], allRefs: Set<string>): void => {
+    for (const h of surviving) {
+      if (!refs.includes(h)) { refs.push(h); allRefs.add(h); }
+    }
+  };
   const journalEntries = await Promise.all(
     data.journalEntries.map(async (e): Promise<CloudEntry> => {
+      const src = e as JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
       const imgs = entryPhotos(e);
       const auds = entryAudios(e);
-      const { photo: _p, photos: _ps, audio: _a, audios: _as, ...rest } = e;
+      const survivingPhotoRefs = src.photoRefs ?? [];
+      const survivingAudioRefs = src.audioRefs ?? [];
+      const { photo: _p, photos: _ps, audio: _a, audios: _as,
+              photoRefs: _pr, audioRefs: _aur, ...rest } = src;
       const out: CloudEntry = rest;
-      if (imgs.length) {
+      if (imgs.length || survivingPhotoRefs.length) {
         const refs = await attach(imgs, newPhotos, photoRefs);
+        mergeSurviving(refs, survivingPhotoRefs, photoRefs);
         if (refs.length) out.photoRefs = refs;
       }
-      if (auds.length) {
+      if (auds.length || survivingAudioRefs.length) {
         const refs = await attach(auds, newAudios, audioRefs);
+        mergeSurviving(refs, survivingAudioRefs, audioRefs);
         if (refs.length) out.audioRefs = refs;
       }
       return out;
@@ -617,28 +653,61 @@ export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string,
   return { ...data, journalEntries };
 }
 
+// How many media downloads hydrate runs at once. Bounded so a large import
+// can't fire thousands of simultaneous R2 fetches (see mapWithConcurrency).
+const HYDRATE_CONCURRENCY = 6;
+
+const photoRefsOf = (e: CloudEntry & { audioRef?: string }): string[] => e.photoRefs ?? [];
+// Back-compat: older docs stored a single audioRef; newer store audioRefs.
+const audioRefsOf = (e: CloudEntry & { audioRef?: string }): string[] =>
+  e.audioRefs ?? (e.audioRef ? [e.audioRef] : []);
+
 export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
   if (!db) return main;
-  const resolve = (h: string, sub: MediaKind) => fetchInlineMedia(uid, sub, h);
-  const journalEntries = await Promise.all(
-    main.journalEntries.map(async (e) => {
-      const ce = e as CloudEntry & { audioRef?: string };
-      const refs = ce.photoRefs;
-      // Back-compat: older docs stored a single audioRef; newer store audioRefs.
-      const arefs = ce.audioRefs ?? (ce.audioRef ? [ce.audioRef] : []);
-      const { photoRefs: _r, audioRefs: _ars, audioRef: _ar, ...rest } = ce;
-      let out = rest as JournalEntry;
-      if (refs?.length) {
-        const imgs = (await Promise.all(refs.map((h) => resolve(h, "photos")))).filter(Boolean) as string[];
-        if (imgs.length) out = { ...out, photos: imgs, photo: imgs[0] };
-      }
-      if (arefs.length) {
-        const auds = (await Promise.all(arefs.map((h) => resolve(h, "audios")))).filter(Boolean) as string[];
-        if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
-      }
-      return out;
-    })
-  );
+
+  // 1) Collect every (kind, hash) referenced across ALL entries and resolve the
+  //    distinct ones through a single bounded pool. Deduping means a photo shared
+  //    by several entries is fetched once, and the pool caps concurrency so a
+  //    thousands-strong Day One library can't hang the app.
+  const jobs = new Map<string, MediaKind>(); // `${kind}:${hash}` → kind
+  for (const e of main.journalEntries) {
+    const ce = e as CloudEntry & { audioRef?: string };
+    for (const h of photoRefsOf(ce)) jobs.set(`photos:${h}`, "photos");
+    for (const h of audioRefsOf(ce)) jobs.set(`audios:${h}`, "audios");
+  }
+  const resolved = new Map<string, string>(); // `${kind}:${hash}` → data: URL
+  await mapWithConcurrency([...jobs.entries()], HYDRATE_CONCURRENCY, async ([key, kind]) => {
+    const hash = key.slice(kind.length + 1);
+    const url = await fetchInlineMedia(uid, kind, hash);
+    if (url) resolved.set(key, url);
+  });
+
+  // 2) Rebuild each entry from the resolved map. CRITICAL: a ref whose bytes we
+  //    couldn't fetch this time (R2 hiccup, offline) is KEPT on the entry as a
+  //    ref — never silently dropped. Dropping it would return the memo with no
+  //    photo AND no pointer, so the next save (prepareForCloud) writes it with
+  //    no ref and the object is orphaned in R2. Keeping the ref means the photo
+  //    re-hydrates on the next successful load and the object stays owned.
+  const journalEntries = main.journalEntries.map((e) => {
+    const ce = e as CloudEntry & { audioRef?: string };
+    const refs = photoRefsOf(ce);
+    const arefs = audioRefsOf(ce);
+    const { photoRefs: _r, audioRefs: _ars, audioRef: _ar, ...rest } = ce;
+    let out = rest as JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
+    if (refs.length) {
+      const imgs = refs.map((h) => resolved.get(`photos:${h}`)).filter(Boolean) as string[];
+      if (imgs.length) out = { ...out, photos: imgs, photo: imgs[0] };
+      const keep = refs.filter((h) => !resolved.has(`photos:${h}`));
+      if (keep.length) out = { ...out, photoRefs: keep };
+    }
+    if (arefs.length) {
+      const auds = arefs.map((h) => resolved.get(`audios:${h}`)).filter(Boolean) as string[];
+      if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
+      const keep = arefs.filter((h) => !resolved.has(`audios:${h}`));
+      if (keep.length) out = { ...out, audioRefs: keep };
+    }
+    return out as JournalEntry;
+  });
   return { ...main, journalEntries };
 }
 
