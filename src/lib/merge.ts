@@ -69,6 +69,21 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     if (deletedMedia[h] < cutoff) delete deletedMedia[h];
   }
   const mediaTomb = new Set(Object.keys(deletedMedia));
+
+  // Single-value settings: merge per-field edit stamps (newest per field), then
+  // pick each value from whichever device set it last — so a clear-to-null wins
+  // over the other device's stale value. When NEITHER side carries a stamp
+  // (legacy data), fall back to the old non-null pick so nothing regresses.
+  const fieldUpdatedAt: Record<string, number> = { ...(cloud.fieldUpdatedAt ?? {}) };
+  for (const [f, ts] of Object.entries(local.fieldUpdatedAt ?? {})) {
+    fieldUpdatedAt[f] = Math.max(fieldUpdatedAt[f] ?? 0, ts);
+  }
+  const pickSingleton = <K extends keyof AppData>(field: K, fallback: AppData[K]): AppData[K] => {
+    const pt = primary.fieldUpdatedAt?.[field as string] ?? 0;
+    const st = secondary.fieldUpdatedAt?.[field as string] ?? 0;
+    if (pt === 0 && st === 0) return fallback; // legacy: no stamps either side
+    return pt >= st ? primary[field] : secondary[field];
+  };
   // Drop any id-keyed item that carries a live tombstone — this is what stops a
   // resurrected copy from a second device.
   const alive = <T extends { id: string }>(arr: T[]) => arr.filter((x) => !(x.id in deleted));
@@ -213,21 +228,22 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
       .filter((d) => !(wirdTombKey(d) in deleted))
       .sort(),
     quranKhatma,
-    // الإعدادات المفردة (الميزانية اليومية والدخل الشهري): الأحدث يفوز، لكن إن
-    // لم يضبطها الجهاز الأحدث نأخذها من الآخر — فلا يمحو جهازٌ لم تُضبَط فيه
-    // إعداداً موجوداً على الجهاز الثاني (كان سبب «الإعدادات ما تظهر بالآيباد»).
-    dailyBudget: primary.dailyBudget ?? secondary.dailyBudget,
-    monthlyIncome: primary.monthlyIncome ?? secondary.monthlyIncome,
+    // الإعدادات المفردة: يفوز آخر جهازٍ ضبطها (عبر fieldUpdatedAt)، فيسري المسح
+    // إلى null بدل أن يطغى عليه قيمةٌ قديمة من الجهاز الآخر. عند غياب الطوابع
+    // (بيانات قديمة) نرجع للسلوك السابق (non-null) فلا يتراجع شيء.
+    dailyBudget: pickSingleton("dailyBudget", primary.dailyBudget ?? secondary.dailyBudget),
+    monthlyIncome: pickSingleton("monthlyIncome", primary.monthlyIncome ?? secondary.monthlyIncome),
     futureLetters: byId(primary.futureLetters, secondary.futureLetters),
-    salaryDay: primary.salaryDay,
-    lastSalaryConfirm: primary.lastSalaryConfirm,
-    readingGoal: primary.readingGoal ?? secondary.readingGoal ?? null,
-    // العادات المجمّدة إعدادٌ مفرد (تبديل مقصود): يفوز الأحدث كي يسري
+    salaryDay: pickSingleton("salaryDay", primary.salaryDay),
+    lastSalaryConfirm: pickSingleton("lastSalaryConfirm", primary.lastSalaryConfirm),
+    readingGoal: pickSingleton("readingGoal", primary.readingGoal ?? secondary.readingGoal ?? null),
+    // العادات المجمّدة إعدادٌ مفرد (تبديل مقصود): آخر ضبطٍ يفوز كي يسري
     // الاستئناف/التجميد عبر الأجهزة بدل أن يُعيده اتحادٌ لا يعرف الإزالة.
-    frozenHabits: primary.frozenHabits ?? secondary.frozenHabits ?? [],
+    frozenHabits: pickSingleton("frozenHabits", primary.frozenHabits ?? secondary.frozenHabits ?? []),
     merchantRules: { ...secondary.merchantRules, ...primary.merchantRules },
     deleted,
     deletedMedia,
+    fieldUpdatedAt,
     lastUpdated: (local.lastUpdated ?? "") > (cloud.lastUpdated ?? "") ? local.lastUpdated : cloud.lastUpdated,
   };
 }

@@ -364,5 +364,12 @@ export interface AppData {
   // the media-ref union in mergeEntryMedia can't pull the deleted one back from
   // a device/cloud copy that still references it. Pruned on the same window.
   deletedMedia?: Record<string, number>;
+  // Per-field edit stamps for the single-value settings (dailyBudget,
+  // monthlyIncome, readingGoal, salaryDay, lastSalaryConfirm, frozenHabits):
+  // field name → last-set ms. The merge picks each setting from whichever
+  // device set it more recently, so CLEARING a value (to null) propagates
+  // instead of being overridden by the other device's stale non-null copy.
+  // Absent for legacy data → the merge falls back to the old non-null pick.
+  fieldUpdatedAt?: Record<string, number>;
   lastUpdated: string;
 }

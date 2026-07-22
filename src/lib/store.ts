@@ -23,6 +23,15 @@ const ID_COLLECTIONS = [
   "quranReflections",
 ] as const;
 
+// Single-value settings that carry a per-field edit stamp (see `set` wrapper
+// and mergeAppData). Stamping lets the merge pick the value from whichever
+// device set it last — so clearing one to null propagates instead of losing to
+// the other device's stale non-null copy.
+const SINGLETON_FIELDS = [
+  "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
+  "lastSalaryConfirm", "frozenHabits",
+] as const;
+
 // Undo of a delete re-adds the item with its original id — but the delete left
 // a tombstone in `deleted` (id → ts), and the cloud merge's `alive()` drops any
 // id that carries a live tombstone. So re-adding must also lift the tombstone,
@@ -199,8 +208,16 @@ export const useAppStore = create<AppStore>()(
         }
       }
 
+      // Stamp any single-value setting this change touches, so the merge can
+      // pick it by recency (and a clear-to-null wins over a stale value).
+      let stamped: Record<string, number> | undefined;
+      for (const f of SINGLETON_FIELDS) {
+        if (f in next) (stamped ??= {})[f] = Date.now();
+      }
+
       const patch: Record<string, unknown> = { ...next, lastUpdated: new Date().toISOString() };
       if (removed) patch.deleted = { ...prev.deleted, ...removed };
+      if (stamped) patch.fieldUpdatedAt = { ...prev.fieldUpdatedAt, ...stamped };
       rawSet(patch as Partial<AppStore>, replace as false);
     }) as typeof rawSet;
 
@@ -282,6 +299,7 @@ export const useAppStore = create<AppStore>()(
       merchantRules: {},
       deleted: {},
       deletedMedia: {},
+      fieldUpdatedAt: {},
       theme: "auto",
       lastUpdated: new Date().toISOString(),
 
@@ -1053,6 +1071,7 @@ export const useAppStore = create<AppStore>()(
           merchantRules: data.merchantRules ?? {},
           deleted: data.deleted ?? {},
           deletedMedia: data.deletedMedia ?? {},
+          fieldUpdatedAt: data.fieldUpdatedAt ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
         })),
 
@@ -1083,6 +1102,7 @@ export const useAppStore = create<AppStore>()(
           merchantRules: s.merchantRules,
           deleted: s.deleted ?? {},
           deletedMedia: s.deletedMedia ?? {},
+          fieldUpdatedAt: s.fieldUpdatedAt ?? {},
           lastUpdated: s.lastUpdated,
         };
       },

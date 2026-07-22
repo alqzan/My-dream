@@ -174,6 +174,9 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     // فلا تمحو استعادةُ نسخةٍ قديمةٍ شواهدَ أحدثَ منها.
     deleted: g("deleted", {}),
     deletedMedia: g("deletedMedia", {}),
+    // طوابع تعديل الإعدادات المفردة — تُحفظ فيبقى «آخر ضبطٍ يفوز» صحيحاً بعد
+    // الاستعادة والدمج (وإلا رجعت قيمةٌ مُسِحت عمداً).
+    fieldUpdatedAt: g("fieldUpdatedAt", {}),
     lastUpdated: g("lastUpdated", new Date().toISOString()),
   };
 }

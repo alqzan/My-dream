@@ -32,6 +32,7 @@ function base(overrides: Partial<AppData> = {}): AppData {
     readingGoal: null,
     merchantRules: {},
     deleted: {},
+    fieldUpdatedAt: {},
     lastUpdated: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
@@ -298,6 +299,48 @@ describe("mergeAppData — deletions that aren't top-level ids stay deleted", ()
     const a = base({ budgets: [{ category: "groceries", limit: 500 }], deleted: {} });
     const b = base({ budgets: [{ category: "groceries", limit: 500 }], deleted: {} });
     expect(mergeAppData(a, b).budgets).toHaveLength(1);
+  });
+});
+
+describe("mergeAppData — single-value settings by per-field stamp", () => {
+  it("propagates a clear-to-null (later stamp) over the other device's stale value", () => {
+    // A cleared the income at t=2000; B still holds 5000 but set it earlier (1000).
+    const cleared = base({
+      lastUpdated: "2026-05-10T10:00:00.000Z", // OLDER doc stamp on purpose
+      monthlyIncome: null,
+      fieldUpdatedAt: { monthlyIncome: 2000 },
+    });
+    const stale = base({
+      lastUpdated: "2026-05-10T11:00:00.000Z", // NEWER doc stamp, older field edit
+      monthlyIncome: 5000,
+      fieldUpdatedAt: { monthlyIncome: 1000 },
+    });
+    // The clear must win regardless of which side is primary (doc stamp).
+    expect(mergeAppData(cleared, stale).monthlyIncome).toBeNull();
+    expect(mergeAppData(stale, cleared).monthlyIncome).toBeNull();
+  });
+
+  it("keeps the more recently set value when both are non-null", () => {
+    const a = base({ dailyBudget: { amount: 100 } as AppData["dailyBudget"], fieldUpdatedAt: { dailyBudget: 1000 } });
+    const b = base({ dailyBudget: { amount: 200 } as AppData["dailyBudget"], fieldUpdatedAt: { dailyBudget: 2000 } });
+    expect(mergeAppData(a, b).dailyBudget).toEqual({ amount: 200 });
+    expect(mergeAppData(b, a).dailyBudget).toEqual({ amount: 200 });
+  });
+
+  it("falls back to the old non-null pick for legacy data (no stamps)", () => {
+    // Neither side has fieldUpdatedAt for salaryDay/readingGoal → prior behavior.
+    const withVal = base({ lastUpdated: "2026-05-10T12:00:00.000Z", readingGoal: 12, salaryDay: 25 });
+    const without = base({ lastUpdated: "2026-05-10T11:00:00.000Z", readingGoal: null });
+    const merged = mergeAppData(withVal, without);
+    expect(merged.readingGoal).toBe(12); // non-null survives (legacy fallback)
+    expect(merged.salaryDay).toBe(25);
+  });
+
+  it("unions the per-field stamps (newest per field) into the result", () => {
+    const a = base({ fieldUpdatedAt: { monthlyIncome: 2000, salaryDay: 500 } });
+    const b = base({ fieldUpdatedAt: { monthlyIncome: 1000, readingGoal: 900 } });
+    const merged = mergeAppData(a, b);
+    expect(merged.fieldUpdatedAt).toEqual({ monthlyIncome: 2000, salaryDay: 500, readingGoal: 900 });
   });
 });
 
