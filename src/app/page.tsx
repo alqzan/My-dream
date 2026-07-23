@@ -183,6 +183,7 @@ export default function Dashboard() {
           journalEntries={journalEntries}
           readingLogs={readingLogs}
           books={books}
+          quranHifz={quranHifz}
         />
       </div>
 

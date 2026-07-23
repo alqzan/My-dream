@@ -1,15 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { Transaction, JournalEntry, ReadingLog, Book } from "@/lib/types";
+import type { Transaction, JournalEntry, ReadingLog, Book, HifzState } from "@/lib/types";
 import { formatAmount, toDateStr, parseDate, formatDateShort } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
-import { Share2, Loader2 } from "lucide-react";
+import { Share2, Loader2, BookOpen } from "lucide-react";
 
 interface WeeklyWrapProps {
   transactions: Transaction[];
   journalEntries: JournalEntry[];
   readingLogs: ReadingLog[];
   books?: Book[];
+  quranHifz?: HifzState | null;
 }
 
 // Draw the week's summary onto a portrait canvas and share it (native share
@@ -191,7 +192,7 @@ const WEEKDAYS_FULL = ["الأحد", "الاثنين", "الثلاثاء", "ال
 const STAR_R = [1.3, 2.8, 3.7, 4.6];
 const STAR_O = [0.32, 0.6, 0.8, 1];
 
-export function WeeklyWrap({ transactions, journalEntries, readingLogs }: WeeklyWrapProps) {
+export function WeeklyWrap({ transactions, journalEntries, readingLogs, quranHifz }: WeeklyWrapProps) {
   const [sharing, setSharing] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -214,6 +215,11 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
   const journalDays = weekJournal.length;
   const readingDays = new Set(weekLogs.map((l) => l.date)).size;
 
+  // حصيلة قرآنية موجزة للأسبوع: جلسات حفظٍ ومراجعات ضمن الأسبوع.
+  const weekHifz = (quranHifz?.sessions ?? []).filter((x) => weekSet.has(x.date));
+  const weekReviews = (quranHifz?.reviews ?? []).filter((x) => weekSet.has(x.date));
+  const quranSessions = weekHifz.length + weekReviews.length;
+
   // Per-day breakdown — one star each. Activity level (0..3) combines the
   // signals this card already tracks: مذكرة + قراءة + حركة صرف that day.
   const dayInfo = week.map((d) => {
@@ -222,8 +228,9 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
     const dayTx = weekTx.filter((t) => t.date === d);
     const daySpent = dayTx.reduce((s, t) => s + t.amount, 0);
     const dayPages = weekLogs.filter((l) => l.date === d).reduce((s, l) => s + l.pagesRead, 0);
-    const level = (journaled ? 1 : 0) + (read ? 1 : 0) + (dayTx.length ? 1 : 0);
-    return { date: d, journaled, read, hasTx: dayTx.length > 0, daySpent, dayPages, level };
+    const quran = weekHifz.some((x) => x.date === d) || weekReviews.some((x) => x.date === d);
+    const level = (journaled ? 1 : 0) + (read ? 1 : 0) + (dayTx.length ? 1 : 0) + (quran ? 1 : 0);
+    return { date: d, journaled, read, hasTx: dayTx.length > 0, daySpent, dayPages, quran, level: Math.min(level, 3) };
   });
   const openInfo = openDay ? dayInfo.find((x) => x.date === openDay) ?? null : null;
 
@@ -279,6 +286,17 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
         />
         <StatPill icon="📖" label="أيام قراءة" value={`${readingDays}/7`} color="text-blue-300" />
       </div>
+
+      {/* حصيلة قرآنية موجزة */}
+      {quranSessions > 0 && (
+        <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2">
+          <BookOpen size={15} className="text-emerald-300 shrink-0" />
+          <span className="text-xs text-white/85">
+            قرآن هذا الأسبوع: <strong className="text-emerald-200">{weekHifz.length}</strong> جلسة حفظ
+            {weekReviews.length > 0 && <> · <strong className="text-emerald-200">{weekReviews.length}</strong> مراجعة</>}
+          </span>
+        </div>
+      )}
 
       {/* سماء الأسبوع — سبع نجوم على قوس خافت؛ حجم/سطوع كل نجمة = نشاط يومها */}
       <div className="pt-1">
@@ -388,6 +406,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs }: Weekly
                 <bdi>{formatDateShort(openInfo.date)}</bdi>
               </span>
               {openInfo.journaled && <DayBadge>📓 مذكرة</DayBadge>}
+              {openInfo.quran && <DayBadge>📖 قرآن</DayBadge>}
               {openInfo.dayPages > 0 && <DayBadge>📚 {formatAmount(openInfo.dayPages)} صفحة</DayBadge>}
               {openInfo.hasTx && <DayBadge>💰 {formatAmount(openInfo.daySpent)}</DayBadge>}
               {openInfo.level === 0 && <span className="text-[11px] text-white/55">ليلة هادئة 🌙</span>}

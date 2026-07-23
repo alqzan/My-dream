@@ -240,6 +240,7 @@ export interface QuranReflection {
   toAyah?: number;
   reference?: string; // مرجع نصّي مشتقّ (مثل «الرعد 28») — للعرض والتوافق القديم
   text: string; // نصّ التأمّل
+  tags?: string[]; // وسوم اختيارية (إيمان، صبر، رزق، دعاء…) — للبحث والفلترة
   createdAt: string; // YYYY-MM-DD وقت الإنشاء (للترتيب الثانوي)
 }
 

@@ -6,7 +6,11 @@ import { verseOfDay, verseRef, dayOfYear, QURAN_VERSES, type QuranVerse } from "
 import { SURAHS } from "@/lib/quran/meta";
 import { loadAyahText } from "@/lib/quran/text";
 import { AyahPicker, type AyahSelection } from "@/components/quran/AyahPicker";
-import { Sparkles, Plus, Trash2, Pencil, Shuffle, PenLine } from "lucide-react";
+import { Sparkles, Plus, Trash2, Pencil, Shuffle, PenLine, Search, Tag } from "lucide-react";
+
+// وسومٌ مقترحة شائعة — يبقى الإدخال حرّاً فوقها.
+const TAG_SUGGESTIONS = ["إيمان", "صبر", "رزق", "دعاء", "شكر", "توبة"];
+const DRAFT_KEY = "madar-tadabbur-draft";
 
 // التدبّر: «آية اليوم» ثمّ تأمّلاتك — تختار بحرّية أيّ سورة ومدى آيات، فيظهر
 // النصّ العثماني الحقيقي، وتكتب تأمّلك. النصّ كلّه من بيانات المصحف المحلية.
@@ -33,17 +37,38 @@ export function TadabburSection() {
   const [sel, setSel] = useState<AyahSelection>({ surah: 1, fromAyah: 1, toAyah: 1 });
   const [withRef, setWithRef] = useState(true); // هل يربط التأمّل بآية؟
   const [body, setBody] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filterTag, setFilterTag] = useState<string | null>(null);
 
-  const reflections = [...quranReflections].sort((a, b) =>
-    a.date < b.date ? 1 : a.date > b.date ? -1 : (a.createdAt < b.createdAt ? 1 : -1)
-  );
+  // حفظ مسودّة تلقائي للتأمّل الجديد (جهازي) — يُستعاد عند إعادة الفتح.
+  useEffect(() => {
+    if (showForm && !editId) {
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ body, tags, withRef, sel })); } catch { /* ignore */ }
+    }
+  }, [showForm, editId, body, tags, withRef, sel]);
+
+  const allTags = [...new Set(quranReflections.flatMap((r) => r.tags ?? []))].sort();
+
+  const reflections = [...quranReflections]
+    .filter((r) => (filterTag ? (r.tags ?? []).includes(filterTag) : true))
+    .filter((r) => {
+      const q = query.trim();
+      if (!q) return true;
+      return (r.text + " " + (r.reference ?? "") + " " + (r.tags ?? []).join(" ")).includes(q);
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.createdAt < b.createdAt ? 1 : -1)));
 
   function openNew(prefill?: AyahSelection) {
     setEditId(null);
-    setSel(prefill ?? { surah: 1, fromAyah: 1, toAyah: 1 });
-    setWithRef(true);
-    setBody("");
+    // استعادة المسودّة إن وُجدت (وبلا تمريرة prefill تغلبها).
+    let draft: { body?: string; tags?: string[]; withRef?: boolean; sel?: AyahSelection } | null = null;
+    if (!prefill) { try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); } catch { draft = null; } }
+    setSel(prefill ?? draft?.sel ?? { surah: 1, fromAyah: 1, toAyah: 1 });
+    setWithRef(prefill ? true : draft?.withRef ?? true);
+    setBody(draft?.body ?? "");
+    setTags(draft?.tags ?? []);
     setShowForm(true);
   }
   function openEdit(r: (typeof quranReflections)[number]) {
@@ -55,7 +80,11 @@ export function TadabburSection() {
       setWithRef(false);
     }
     setBody(r.text);
+    setTags(r.tags ?? []);
     setShowForm(true);
+  }
+  function toggleTag(t: string) {
+    setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
   }
   function save() {
     const t = body.trim();
@@ -63,12 +92,14 @@ export function TadabburSection() {
     const fields = withRef
       ? { surah: sel.surah, fromAyah: sel.fromAyah, toAyah: sel.toAyah, reference: refLabel(sel) }
       : { surah: undefined, fromAyah: undefined, toAyah: undefined, reference: undefined };
+    const tagList = tags.length ? tags : undefined;
     if (editId) {
-      updateReflection(editId, { ...fields, text: t });
+      updateReflection(editId, { ...fields, text: t, tags: tagList });
     } else {
-      addReflection({ id: uid(), date: today(), ...fields, text: t, createdAt: today() });
+      addReflection({ id: uid(), date: today(), ...fields, text: t, tags: tagList, createdAt: today() });
     }
-    setShowForm(false); setEditId(null); setBody("");
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setShowForm(false); setEditId(null); setBody(""); setTags([]);
   }
 
   // نصّ آيات مرجعٍ محفوظ (سورة + مدى) للعرض في القائمة.
@@ -147,12 +178,53 @@ export function TadabburSection() {
             placeholder="ماذا خطر لك عند تدبّرها؟"
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
           />
+
+          {/* الوسوم */}
+          <div>
+            <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-1.5"><Tag size={12} /> وسوم اختيارية</div>
+            <div className="flex flex-wrap gap-1.5">
+              {[...new Set([...TAG_SUGGESTIONS, ...tags])].map((t) => (
+                <button key={t} type="button" onClick={() => toggleTag(t)}
+                  className={`text-[11px] font-semibold rounded-full px-2.5 py-1 press ${tags.includes(t) ? "bg-quran text-white" : "bg-white dark:bg-[#241c12] text-gray-500 border border-gray-200 dark:border-transparent"}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex gap-2 justify-end">
+            {!editId && <span className="text-[11px] text-gray-400 self-center ms-1">محفوظ تلقائياً</span>}
+            <span className="flex-1" />
             <button onClick={() => { setShowForm(false); setEditId(null); }} className="text-sm text-gray-400 px-3 py-1.5 press">إلغاء</button>
             <button onClick={save} disabled={!body.trim()} className="bg-quran text-white text-sm px-4 py-1.5 rounded-lg press disabled:opacity-40">
               {editId ? "حفظ" : "أضف"}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* بحث وفلترة (تظهر عند وجود تأمّلات) */}
+      {quranReflections.length > 2 && (
+        <div className="space-y-2">
+          <div className="relative">
+            <Search size={14} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث في تأمّلاتك…"
+              className="w-full text-sm border border-gray-200 dark:border-transparent rounded-lg ps-8 pe-3 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
+            />
+          </div>
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {allTags.map((t) => (
+                <button key={t} onClick={() => setFilterTag(filterTag === t ? null : t)}
+                  className={`text-[11px] font-semibold rounded-full px-2.5 py-1 press ${filterTag === t ? "bg-quran text-white" : "bg-gray-100 dark:bg-[#382c1d] text-gray-500"}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -177,6 +249,13 @@ export function TadabburSection() {
                   </p>
                 )}
                 <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-line">{r.text}</p>
+                {(r.tags ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {r.tags!.map((t) => (
+                      <button key={t} onClick={() => setFilterTag(t)} className="text-[10px] font-semibold text-quran bg-quran/10 rounded-full px-2 py-0.5 press">#{t}</button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 dark:border-[#3a2e1e]">
                   <span className="text-[11px] text-gray-400">{formatDate(r.date)}</span>
                   <div className="flex items-center gap-1">

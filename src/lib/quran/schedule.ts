@@ -16,7 +16,7 @@
 import type { HifzState, HifzRating } from "../types";
 import type { Portion } from "./hifz";
 import { recentReviewBand, plannedPortion, openMistakes } from "./hifz";
-import { idToPage, pageRange } from "./meta";
+import { idToPage, pageRange, idToSurahAyah, SURAHS } from "./meta";
 import { parseDate, toDateStr } from "../utils";
 
 // سلّم الإتقان بالأيام: أوّل إتقانٍ 7، ثمّ 14، 30، 60 عند استمرار الإتقان.
@@ -150,4 +150,54 @@ export function todaySession(s: HifzState, todayStr: string, reviewGoalPages = 7
     Math.max(pagesInPortion(recentBand), due.pages.length) * 1 +
     openMk * 0.5;
   return { newPortion, recentBand, due, openMistakes: openMk, estMinutes: Math.max(1, Math.round(est)) };
+}
+
+// ===================== تقرير قرآني أسبوعي =====================
+// حصيلةٌ موجزة لآخر 7 أيام: ما حُفظ، ما رُوجع، عدد الجلسات، أقدم مراجعة مستحقّة،
+// وأكثر موضعٍ تكرّر فيه الخطأ — مُشتَقٌّ من السجلّ بلا حالةٍ جديدة.
+export interface QuranWeekReport {
+  memorizedAyat: number; // آيات حُفظت هذا الأسبوع
+  memorizedPages: number; // أوجه مُغطّاة بجلسات الأسبوع
+  reviewedCount: number; // عدد المراجعات هذا الأسبوع
+  sessions: number; // عدد جلسات الحفظ هذا الأسبوع
+  oldestDueDays: number; // أقدم مراجعة مستحقّة (بالأيام تأخّراً؛ 0 إن لا شيء)
+  dueTotal: number; // إجمالي الأوجه المستحقّة الآن
+  topMistake: { ayahId: number; ref: string; hits: number } | null;
+  hasActivity: boolean;
+}
+
+export function quranWeeklyReport(s: HifzState, todayStr: string): QuranWeekReport {
+  const weekStart = toDateStr(new Date(parseDate(todayStr).getTime() - 6 * 86400000));
+  const inWeek = (d: string) => d >= weekStart && d <= todayStr;
+  const weekSessions = (s.sessions ?? []).filter((x) => inWeek(x.date));
+  const weekReviews = (s.reviews ?? []).filter((x) => inWeek(x.date));
+
+  const pages = new Set<number>();
+  let memorizedAyat = 0;
+  for (const x of weekSessions) {
+    memorizedAyat += Math.max(0, x.toId - x.fromId + 1);
+    for (let p = idToPage(x.fromId); p <= idToPage(x.toId); p++) pages.add(p);
+  }
+
+  const due = duePages(s, todayStr);
+  const oldestDueDays = due[0]?.overdueDays ?? 0;
+
+  const worst = openMistakes(s)[0] ?? null;
+  const topMistake = worst
+    ? (() => {
+        const { surah, ayah } = idToSurahAyah(worst.ayahId);
+        return { ayahId: worst.ayahId, ref: `${SURAHS[surah - 1]?.name ?? ""} ${ayah}`, hits: worst.hits.length };
+      })()
+    : null;
+
+  return {
+    memorizedAyat,
+    memorizedPages: pages.size,
+    reviewedCount: weekReviews.length,
+    sessions: weekSessions.length,
+    oldestDueDays,
+    dueTotal: due.length,
+    topMistake,
+    hasActivity: weekSessions.length > 0 || weekReviews.length > 0,
+  };
 }

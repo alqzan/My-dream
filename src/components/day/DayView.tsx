@@ -1,13 +1,14 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
-import { PRAYERS, PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { PRAYERS, PRAYER_META, PRAYER_STATUS_META, EMPTY_HIFZ } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, entryPhotos, entryAudios } from "@/lib/utils";
+import { describeRange } from "@/lib/quran/meta";
 import { renderMarkdown } from "@/lib/markdown";
 import { Modal } from "@/components/ui/Modal";
 import { Photo } from "@/components/ui/Photo";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
-import { BookOpen, Wallet, BookMarked, CheckCircle2 } from "lucide-react";
+import { BookOpen, Wallet, BookMarked, CheckCircle2, Sprout, RefreshCw, Heart } from "lucide-react";
 
 interface DayViewProps {
   date: string | null;
@@ -15,11 +16,19 @@ interface DayViewProps {
 }
 
 export function DayView({ date, onClose }: DayViewProps) {
-  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories } = useAppStore();
+  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories, quranReflections, quranWird } = useAppStore();
+  const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
 
   if (!date) return null;
 
   const day = aggregateDay(date, { transactions, journalEntries, readingLogs, books, habits, prayerLogs });
+
+  // نشاط القرآن في هذا اليوم: حفظٌ، مراجعةٌ، تأمّلٌ، أو وِرد.
+  const hifzToday = (h.sessions ?? []).filter((x) => x.date === date);
+  const reviewToday = (h.reviews ?? []).filter((x) => x.date === date);
+  const reflectToday = (quranReflections ?? []).filter((r) => r.date === date);
+  const wirdToday = (quranWird ?? []).includes(date);
+  const quranActive = hifzToday.length > 0 || reviewToday.length > 0 || reflectToday.length > 0 || wirdToday;
 
   return (
     <Modal open={!!date} onClose={onClose} title={formatDate(date)} className="sm:max-w-xl">
@@ -49,6 +58,15 @@ export function DayView({ date, onClose }: DayViewProps) {
           >
             <span>🕌</span>
             <span>{day.prayersCount}/5 صلوات</span>
+          </div>
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+              quranActive ? "bg-quran/10 text-quran" : "bg-gray-100 text-gray-400"
+            }`}
+          >
+            <span>📖</span>
+            <span>قرآن</span>
+            {quranActive && <CheckCircle2 size={12} />}
           </div>
         </div>
 
@@ -82,6 +100,36 @@ export function DayView({ date, onClose }: DayViewProps) {
           </Section>
         ) : (
           <EmptyHint text="لم تُسجَّل صلوات هذا اليوم" />
+        )}
+
+        {/* القرآن — حفظ اليوم، مراجعته، تأمّله، ووِرده */}
+        {quranActive && (
+          <Section icon={<BookOpen size={15} />} title="القرآن" color="text-quran"
+            extra={wirdToday ? <span className="text-xs font-semibold text-quran">وِردٌ تمّ ✓</span> : undefined}>
+            <div className="space-y-1.5 text-sm">
+              {hifzToday.map((x) => (
+                <div key={x.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                  <Sprout size={13} className="text-quran shrink-0" />
+                  <span className="flex-1 truncate">حفظ: {describeRange(x.fromId, x.toId)}</span>
+                </div>
+              ))}
+              {reviewToday.map((x) => (
+                <div key={x.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                  <RefreshCw size={13} className="text-quran shrink-0" />
+                  <span className="flex-1 truncate">مراجعة: {describeRange(x.fromId, x.toId)}</span>
+                </div>
+              ))}
+              {reflectToday.map((r) => (
+                <div key={r.id} className="flex items-start gap-2 text-gray-600 dark:text-gray-300">
+                  <Heart size={13} className="text-quran shrink-0 mt-0.5" />
+                  <span className="flex-1">
+                    {r.reference && <span className="font-semibold text-quran">{r.reference}: </span>}
+                    <span className="line-clamp-2">{r.text}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Section>
         )}
 
         {day.completionScore === 2 && (

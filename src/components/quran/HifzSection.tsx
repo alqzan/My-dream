@@ -17,6 +17,7 @@ import { TodaySessionCard, TodaySessionFlow } from "@/components/quran/TodaySess
 import { HifzMap } from "@/components/quran/HifzMap";
 import { HifzChart } from "@/components/quran/HifzChart";
 import { HifzLog } from "@/components/quran/HifzLog";
+import { QuranWeekReport } from "@/components/quran/QuranWeekReport";
 import { MistakesPanel } from "@/components/quran/MistakesPanel";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -319,6 +320,9 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
         onReview={(p) => setCoach({ portion: p, mode: "recall", kind: "review" })}
         onRead={onRead}
       />
+
+      {/* 6.5) حصيلة الأسبوع القرآنية — تقريرٌ موجز وخطوة الأسبوع القادم */}
+      <QuranWeekReport />
 
       {/* 7) سجل الحفظ والمراجعة — تعديل/حذف/تراجع مع إعادة حساب الجبهة */}
       <HifzLog />

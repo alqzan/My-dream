@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   nextInterval, foldInterval, MASTERY_LADDER,
-  pageSchedules, duePages, dueQueue, todaySession,
+  pageSchedules, duePages, dueQueue, todaySession, quranWeeklyReport,
 } from "./schedule";
 import { pageRange } from "./meta";
 import type { HifzState, HifzSession, HifzReviewLog, HifzRating } from "../types";
@@ -142,5 +142,43 @@ describe("todaySession — the unified 'today' aggregate", () => {
     const t = todaySession(s, "2026-01-10");
     expect(t.due.total).toBe(0);
     expect(t.newPortion).toBeNull();
+  });
+});
+
+describe("quranWeeklyReport — last-7-days Quran tally", () => {
+  it("counts sessions and reviews within the week only", () => {
+    const p2 = pageRange(2);
+    const s = hz({
+      frontierId: p2.end,
+      sessions: [sess(1, 20, "2026-01-28", 3), sess(21, 40, "2026-01-20", 3)], // one in week, one out
+      reviews: [rev(1, p2.end, "2026-01-29", 2)],
+    });
+    const r = quranWeeklyReport(s, "2026-02-01");
+    expect(r.sessions).toBe(1); // only 2026-01-28 is within 7 days of 2026-02-01
+    expect(r.reviewedCount).toBe(1);
+    expect(r.memorizedAyat).toBe(20);
+    expect(r.hasActivity).toBe(true);
+  });
+
+  it("reports no activity for an empty week", () => {
+    const p2 = pageRange(2);
+    const s = hz({ frontierId: p2.end, sessions: [sess(1, 20, "2025-12-01", 3)] });
+    const r = quranWeeklyReport(s, "2026-02-01");
+    expect(r.hasActivity).toBe(false);
+    expect(r.sessions).toBe(0);
+  });
+
+  it("surfaces the most-repeated open mistake", () => {
+    const p2 = pageRange(2);
+    const s = hz({
+      frontierId: p2.end,
+      mistakes: [
+        { id: "m1", ayahId: 5, wordIndex: null, hits: ["2026-01-30", "2026-01-31"], resolved: false, updatedAt: "2026-01-31" },
+        { id: "m2", ayahId: 9, wordIndex: null, hits: ["2026-01-30"], resolved: false, updatedAt: "2026-01-30" },
+      ],
+    });
+    const r = quranWeeklyReport(s, "2026-02-01");
+    expect(r.topMistake?.ayahId).toBe(5);
+    expect(r.topMistake?.hits).toBe(2);
   });
 });
