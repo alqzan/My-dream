@@ -223,7 +223,9 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
         </button>
       )}
 
-      <div className="relative w-full" style={{ aspectRatio: `${VB_W} / ${VB_H}` }}>
+      {/* minHeight احتياطٌ لمتصفّحات لا تدعم aspect-ratio (Safari قديم على iOS/iPad):
+          دونها ينهار ارتفاع الحاوية إلى صفر فتختفي السماء بالكامل. */}
+      <div className="relative w-full" style={{ aspectRatio: `${VB_W} / ${VB_H}`, minHeight: 180 }}>
         <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="absolute inset-0 w-full h-full overflow-visible">
           <defs>
             <radialGradient id="skyHalo" cx="50%" cy="50%" r="50%">
