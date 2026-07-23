@@ -16,12 +16,10 @@ interface DayViewProps {
 }
 
 export function DayView({ date, onClose }: DayViewProps) {
-  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories, quranReflections, quranWird } = useAppStore();
+  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories, quranReflections, quranWird, frozenHabits } = useAppStore();
   const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
 
   if (!date) return null;
-
-  const day = aggregateDay(date, { transactions, journalEntries, readingLogs, books, habits, prayerLogs });
 
   // نشاط القرآن في هذا اليوم: حفظٌ، مراجعةٌ، تأمّلٌ، أو وِرد.
   const hifzToday = (h.sessions ?? []).filter((x) => x.date === date);
@@ -29,6 +27,12 @@ export function DayView({ date, onClose }: DayViewProps) {
   const reflectToday = (quranReflections ?? []).filter((r) => r.date === date);
   const wirdToday = (quranWird ?? []).includes(date);
   const quranActive = hifzToday.length > 0 || reviewToday.length > 0 || reflectToday.length > 0 || wirdToday;
+
+  // «اليوم المكتمل» يحترم الطقوس المجمّدة ويحتسب القرآن (يُمرَّران للمُجمِّع).
+  const day = aggregateDay(date, {
+    transactions, journalEntries, readingLogs, books, habits, prayerLogs,
+    quranActive, frozenHabits,
+  });
 
   return (
     <Modal open={!!date} onClose={onClose} title={formatDate(date)} className="sm:max-w-xl">
@@ -132,9 +136,9 @@ export function DayView({ date, onClose }: DayViewProps) {
           </Section>
         )}
 
-        {day.completionScore === 2 && (
+        {day.complete && (
           <div className="text-center text-sm font-bold text-orange-600 bg-orange-50 rounded-xl py-2">
-            🔥 يوم مكتمل — مذكرة وقراءة!
+            🔥 يوم مكتمل — {day.activeRitualLabels.join(" و")}!
           </div>
         )}
 

@@ -10,7 +10,12 @@ export interface DaySummary {
   readingLogs: { log: ReadingLog; book?: Book }[];
   pagesRead: number;
   habitsCompleted: { name: string; icon: string }[];
-  completionScore: number; // 0-2 (مذكرة + قراءة)
+  quranActive: boolean; // نشاطٌ قرآني في اليوم (وِرد/حفظ/مراجعة/تدبّر/ختمة)
+  // الطقوس الأساسية المطلوبة اليوم بعد استثناء المجمّدة، وكم أُتمّ منها.
+  activeRitualLabels: string[]; // أسماء الطقوس النشطة (لعرض شارة الاكتمال)
+  activeRitualCount: number; // عددها (المخرج منها المجمّد)
+  completionScore: number; // كم طقساً نشطاً أُتمّ اليوم (0..activeRitualCount)
+  complete: boolean; // أُتمّت كلّ الطقوس النشطة (يومٌ مكتمل)
   prayerLog?: PrayerLog;
   prayersCount: number; // 0-5
   mosqueCount: number; // 0-5
@@ -25,6 +30,11 @@ export function aggregateDay(
     books: Book[];
     habits: Habit[];
     prayerLogs: PrayerLog[];
+    // نشاطٌ قرآني في هذا اليوم (يُشتَقّ عادةً من quranActivityDates). غيابه = لا نشاط.
+    quranActive?: boolean;
+    // مفاتيح الطقوس المجمّدة مؤقتاً (core:journal · core:reading · core:wird):
+    // الطقس المجمّد لا يُطالَب به فلا يكسر «اليوم المكتمل» ولا يُحتسب ضمنه.
+    frozenHabits?: string[];
   }
 ): DaySummary {
   const journalEntries = data.journalEntries.filter((e) => e.date === date);
@@ -42,10 +52,23 @@ export function aggregateDay(
     .filter((h) => h.logs.includes(date))
     .map((h) => ({ name: h.name, icon: h.icon }));
 
-  const hasJournal = journalEntries.length > 0;
-  const hasReading = dayLogs.length > 0;
-  // السلسلة تحسب المذكرة والقراءة فقط — المالية خارجها.
-  const completionScore = [hasJournal, hasReading].filter(Boolean).length;
+  const quranActive = !!data.quranActive;
+
+  // «اليوم المكتمل» يحترم الطقوس المجمّدة والقرآن: الطقوس الأساسية الثلاثة
+  // (مذكرة · قراءة · وِرد قرآني)، ويُستثنى منها ما جُمّد فلا يُطالَب به. يومٌ
+  // مكتمل = أُتمّت كلّ الطقوس النشطة (غير المجمّدة)، فلا القرآن مُهمَل ولا الطقس
+  // المجمّد يكسر الاكتمال. (المالية والصلاة خارج هذا التعريف عمداً كما السلسلة.)
+  const frozen = new Set(data.frozenHabits ?? []);
+  const rituals = [
+    { key: "core:journal", label: "مذكرة", done: journalEntries.length > 0 },
+    { key: "core:reading", label: "قراءة", done: dayLogs.length > 0 },
+    { key: "core:wird", label: "وِرد", done: quranActive },
+  ].filter((r) => !frozen.has(r.key));
+
+  const activeRitualLabels = rituals.map((r) => r.label);
+  const activeRitualCount = rituals.length;
+  const completionScore = rituals.filter((r) => r.done).length;
+  const complete = activeRitualCount > 0 && completionScore === activeRitualCount;
 
   const prayerLog = data.prayerLogs.find((l) => l.date === date);
   const { prayed: prayersCount, mosque: mosqueCount } = countDayPrayers(prayerLog);
@@ -58,7 +81,11 @@ export function aggregateDay(
     readingLogs,
     pagesRead,
     habitsCompleted,
+    quranActive,
+    activeRitualLabels,
+    activeRitualCount,
     completionScore,
+    complete,
     prayerLog,
     prayersCount,
     mosqueCount,
