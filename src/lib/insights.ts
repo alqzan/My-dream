@@ -1,8 +1,11 @@
-// محرك التوصيات الذكية — يقرأ بياناتك محلياً ويولّد ملاحظات واقتراحات
-// مخصصة عبر مجموعة قواعد تحليلية (بدون إرسال أي بيانات خارج جهازك).
+// بوصلة مدار — محرّك توصيات محليّ وخصوصيّ: يقرأ بياناتك على جهازك ويولّد
+// «خطوةً الآن» وملاحظاتٍ مخصّصة عبر قواعد تحليلية صريحة. لا ذكاء اصطناعي ولا
+// إرسال لأي بيانات خارج الجهاز. كل توصية كائنٌ منظّم (لا نصّ خام) بمعرّفٍ ثابت
+// (dedupeKey) ووجهةِ إجراءٍ (href/actionLabel)، فلا حاجة لـ text.includes.
 import type {
   Transaction, JournalEntry, ReadingLog, Book, Habit, Budget,
   FinanceCategoryDef, ReserveFund, PrayerLog, DailyBudget, FutureLetter,
+  HifzState, KhatmaState,
 } from "./types";
 import { PRAYERS } from "./types";
 import {
@@ -10,12 +13,35 @@ import {
   computeDailyBudgetStatus, budgetLimit, getMainCategory, reserveBalance,
   formatAmount, today, toDateStr, parseDate,
 } from "./utils";
+import { idToSurahAyah, SURAHS, describeRange } from "./quran/meta";
+import {
+  plannedPortion, openMistakes, testDue, mistakeRecallSuccesses, MISTAKE_MASTERY_SUGGEST,
+} from "./quran/hifz";
+import { todaySession } from "./quran/schedule";
 
+export type InsightDomain = "quran" | "finance" | "prayer" | "journal" | "reading" | "habits" | "data";
+export type InsightTone = "positive" | "warning" | "tip" | "action";
+export type SnoozeOption = "today" | "tomorrow" | "week";
+
+// كائن التوصية المنظّم. `id` = `dedupeKey` (ثابت للتوصية المنطقية نفسها عبر
+// الرسمات، ومفتاح تخزين التأجيل/الإخفاء محلياً). `validUntil` تُخفي التوصية
+// بعد يومها (للمدح اليومي فلا يتكرّر). `href`/`actionLabel` تجعل لكلّ توصية
+// إجراءً واضحاً بدل الكشف عن نوعها من النصّ.
 export interface Insight {
+  id: string;
+  domain: InsightDomain;
   icon: string;
-  text: string;
-  tone: "positive" | "warning" | "tip";
+  title: string;
+  body: string;
+  tone: InsightTone;
   priority: number; // أعلى = أهم
+  dedupeKey: string;
+  href?: string;
+  actionLabel?: string;
+  validUntil?: string; // YYYY-MM-DD
+  reason?: string;
+  dismissible: boolean;
+  snoozeOptions?: SnoozeOption[];
 }
 
 interface InsightData {
@@ -31,10 +57,13 @@ interface InsightData {
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null;
   futureLetters: FutureLetter[];
+  quranHifz?: HifzState | null;
+  quranKhatma?: KhatmaState | null;
   lastBackup?: string | null; // YYYY-MM-DD لآخر تصدير نسخة احتياطية
 }
 
 const WEEKDAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const DEFAULT_SNOOZE: SnoozeOption[] = ["today", "tomorrow", "week"];
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -42,38 +71,127 @@ function daysAgo(n: number): string {
   return toDateStr(d);
 }
 
+// إدخالٌ جزئيّ يُكمَّل بقيمٍ افتراضية (قابل للتأجيل والإخفاء، id = dedupeKey).
+type InsightInput = Omit<Insight, "id" | "dismissible" | "snoozeOptions"> &
+  Partial<Pick<Insight, "dismissible" | "snoozeOptions">>;
+
 export function generateInsights(data: InsightData): Insight[] {
   const out: Insight[] = [];
+  const add = (i: InsightInput) => {
+    out.push({ dismissible: true, snoozeOptions: DEFAULT_SNOOZE, ...i, id: i.dedupeKey });
+  };
   const todayStr = today();
   const monthPrefix = todayStr.slice(0, 7);
   const {
     transactions, journalEntries, readingLogs, books, habits,
     budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
-    lastBackup,
+    quranHifz, quranKhatma, lastBackup,
   } = data;
+
+  /* ---------- القرآن (يقود «خطوتك الآن» حين يكون هناك محفوظ) ---------- */
+
+  const h = quranHifz;
+  if (h?.plan) {
+    const sess = todaySession(h, todayStr);
+    const dueTotal = sess.due.total;
+    const oldest = sess.due.pages[0];
+    const wirdToday = h.sessions.some((s) => s.date === todayStr);
+
+    if (dueTotal > 0) {
+      const od = oldest?.overdueDays ?? 0;
+      add({
+        domain: "quran", dedupeKey: "quran:due-review", icon: "🔁", title: "مراجعتك القرآنية",
+        body: od >= 2
+          ? `لديك ${dueTotal} وجهاً مستحقاً للمراجعة، أقدمها متأخّر ${od} يوم — ابدأ جلسة اليوم (~${sess.estMinutes} دقيقة).`
+          : `لديك ${dueTotal} وجهاً مستحقاً للمراجعة — ابدأ جلسة اليوم (~${sess.estMinutes} دقيقة).`,
+        tone: "action", priority: 88 + Math.min(od, 6), href: "/quran", actionLabel: "ابدأ جلسة اليوم",
+      });
+    }
+
+    const planned = plannedPortion(h);
+    if (planned && !wirdToday) {
+      add({
+        domain: "quran", dedupeKey: "quran:wird", icon: "🌱", title: "ورد اليوم",
+        body: `ورد حفظك اليوم بانتظارك: ${describeRange(planned.fromId, planned.toId)}.`,
+        tone: "action", priority: 84, href: "/quran", actionLabel: "احفظ الآن",
+      });
+    }
+
+    const openMk = openMistakes(h);
+    const worst = openMk[0]; // الأكثر تكراراً أوّلاً
+    if (worst && worst.hits.length >= 3) {
+      const { surah, ayah } = idToSurahAyah(worst.ayahId);
+      add({
+        domain: "quran", dedupeKey: `quran:mistake:${worst.id}`, icon: "🎯", title: "موطن خطأ متكرّر",
+        body: `أخطأت في الموضع نفسه ${worst.hits.length} مرات (${SURAHS[surah - 1]?.name ?? ""} ${ayah}) — راجعه الآن مع آيته السابقة واللاحقة.`,
+        tone: "warning", priority: 82, href: "/quran", actionLabel: "راجِع الموضع",
+      });
+    }
+
+    const closable = openMk.find((m) => mistakeRecallSuccesses(h, m) >= MISTAKE_MASTERY_SUGGEST);
+    if (closable) {
+      add({
+        domain: "quran", dedupeKey: "quran:mistake-close", icon: "✅", title: "خطأ جاهز للإغلاق",
+        body: "سمّعت موضع خطأ بنجاح عدة مرات بعد آخر خطأ — أغلِقه من لوحة أخطائي.",
+        tone: "tip", priority: 46, href: "/quran", actionLabel: "افتح أخطائي",
+      });
+    }
+
+    if (dueTotal === 0 && testDue(h, todayStr)) {
+      add({
+        domain: "quran", dedupeKey: "quran:test", icon: "🎲", title: "اختبار دوري",
+        body: "حان وقت اختبارك العشوائي — وجهٌ من كل ما حفظت يثبّت الحفظ.",
+        tone: "tip", priority: 44, href: "/quran", actionLabel: "اختبرني",
+      });
+    }
+
+    // خطوة تالية ذكية: اكتمل القرآن اليوم → اقترح قراءة كتابك (مدحٌ ليوميّه فقط).
+    if (dueTotal === 0 && wirdToday) {
+      const cur = books.find((b) => b.status === "أقرأ");
+      if (cur) {
+        add({
+          domain: "quran", dedupeKey: "quran:done-next-read", icon: "🌟", title: "أتممت قرآن اليوم",
+          body: `مراجعتك القرآنية مكتملة اليوم، تقبّل الله — الخطوة الأنسب الآن صفحاتٌ من «${cur.title}».`,
+          tone: "positive", priority: 50, href: "/reading", actionLabel: "اقرأ الآن", validUntil: todayStr,
+        });
+      }
+    }
+  }
+
+  // الختمة: متوقّفة منذ أيام (ولها بداية).
+  if (quranKhatma && (quranKhatma.juz > 0 || quranKhatma.startDate) && quranKhatma.lastReadDate) {
+    const gap = Math.floor((parseDate(todayStr).getTime() - parseDate(quranKhatma.lastReadDate).getTime()) / 86400000);
+    if (gap >= 3 && quranKhatma.juz < 30) {
+      add({
+        domain: "reading", dedupeKey: "quran:khatma-stall", icon: "📿", title: "ختمتك بانتظارك",
+        body: `مرّت ${gap} أيام على آخر تقدّمٍ في ختمتك (${quranKhatma.juz}/30 جزء) — صفحاتٌ اليوم تُعيد الزخم.`,
+        tone: "tip", priority: 41, href: "/quran", actionLabel: "سجّل تقدّمك",
+      });
+    }
+  }
 
   /* ---------- حماية البيانات وتذكير المساء ---------- */
 
-  // تذكير المذكرة المسائي: بعد الثامنة مساءً ولم تُكتب مذكرة اليوم
   const hour = new Date().getHours();
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   if (hour >= 20 && !hasTodayJournal) {
-    out.push({
-      icon: "🌙", tone: "tip", priority: 95,
-      text: "ما كتبت مذكرة اليوم بعد — سطران قبل النوم يحفظان يومك ويحيان سلسلتك.",
+    add({
+      domain: "journal", dedupeKey: "journal:evening", icon: "🌙", tone: "action", priority: 95,
+      title: "مذكرة الليلة", body: "ما كتبت مذكرة اليوم بعد — سطران قبل النوم يحفظان يومك ويحيان سلسلتك.",
+      href: "/journal", actionLabel: "اكتب الآن", validUntil: todayStr,
     });
   }
 
-  // تذكير النسخة الاحتياطية: بيانات معتبرة وما صُدّرت نسخة منذ 14+ يوم
   const dataSize = journalEntries.length + transactions.length + prayerLogs.length;
   if (dataSize >= 15) {
     const backupAge = lastBackup
       ? Math.floor((parseDate(todayStr).getTime() - parseDate(lastBackup).getTime()) / 86400000)
       : null;
     if (backupAge === null || backupAge >= 14) {
-      out.push({
-        icon: "🛡️", tone: "warning", priority: 76,
-        text: backupAge === null
+      add({
+        domain: "data", dedupeKey: "data:backup", icon: "🛡️", tone: "warning", priority: 76,
+        title: "نسخة احتياطية", href: "/settings", actionLabel: "صدّر نسخة",
+        body: backupAge === null
           ? "ما صدّرت نسخة احتياطية من بياناتك أبداً — سوّها الآن من صفحة الإعدادات، دقيقة وحدة تحمي سنواتك."
           : `آخر نسخة احتياطية قبل ${backupAge} يوم — صدّر نسخة جديدة من صفحة الإعدادات.`,
       });
@@ -84,22 +202,21 @@ export function generateInsights(data: InsightData): Insight[] {
 
   const dueLetter = futureLetters.find((l) => !l.opened && l.deliveryDate <= todayStr);
   if (dueLetter) {
-    out.push({
-      icon: "💌", tone: "positive", priority: 99,
-      text: "وصلتك رسالة من نفسك القديمة — افتحها في صفحة المذكرات!",
+    add({
+      domain: "journal", dedupeKey: "journal:letter-due", icon: "💌", tone: "action", priority: 99,
+      title: "رسالة من نفسك", body: "وصلتك رسالة من نفسك القديمة — افتحها في صفحة المذكرات!",
+      href: "/journal", actionLabel: "افتح الرسالة",
     });
   } else {
     const next = futureLetters
       .filter((l) => !l.opened && l.deliveryDate > todayStr)
       .sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate))[0];
     if (next) {
-      const left = Math.round(
-        (parseDate(next.deliveryDate).getTime() - parseDate(todayStr).getTime()) / 86400000
-      );
+      const left = Math.round((parseDate(next.deliveryDate).getTime() - parseDate(todayStr).getTime()) / 86400000);
       if (left <= 7) {
-        out.push({
-          icon: "✉️", tone: "tip", priority: 66,
-          text: `رسالتك لنفسك تُفتح بعد ${left === 1 ? "يوم واحد" : `${left} أيام`} — الترقب جميل!`,
+        add({
+          domain: "journal", dedupeKey: "journal:letter-soon", icon: "✉️", tone: "tip", priority: 66,
+          title: "رسالة قادمة", body: `رسالتك لنفسك تُفتح بعد ${left === 1 ? "يوم واحد" : `${left} أيام`} — الترقب جميل!`,
         });
       }
     }
@@ -109,25 +226,28 @@ export function generateInsights(data: InsightData): Insight[] {
 
   const pStreak = getPrayerStreak(prayerLogs);
   if (pStreak >= 7) {
-    out.push({
-      icon: "🕌", tone: "positive", priority: 80,
-      text: `${pStreak} يوم متواصل بالصلوات الخمس كاملة — ثبات يُغبط عليه، تقبل الله.`,
+    add({
+      domain: "prayer", dedupeKey: "prayer:streak", icon: "🕌", tone: "positive", priority: 80,
+      title: "ثبات الصلاة", body: `${pStreak} يوم متواصل بالصلوات الخمس كاملة — ثبات يُغبط عليه، تقبل الله.`,
+      validUntil: todayStr,
     });
   }
   const mStreak = getMosqueStreak(prayerLogs);
   if (mStreak >= 3) {
-    out.push({
-      icon: "🌟", tone: "positive", priority: 78,
-      text: `${mStreak} أيام متواصلة كل الصلوات بالمسجد — درجة لا يبلغها إلا قليل!`,
+    add({
+      domain: "prayer", dedupeKey: "prayer:mosque-streak", icon: "🌟", tone: "positive", priority: 78,
+      title: "صلاة الجماعة", body: `${mStreak} أيام متواصلة كل الصلوات بالمسجد — درجة لا يبلغها إلا قليل!`,
+      validUntil: todayStr,
     });
   }
   if (prayerLogs.length >= 7) {
     const consistency = prayerConsistency(prayerLogs);
     const weakest = PRAYERS.reduce((min, p) => (consistency[p] < consistency[min] ? p : min), PRAYERS[0]);
     if (consistency[weakest] < 0.6) {
-      out.push({
-        icon: "⏰", tone: "tip", priority: 63,
-        text: `صلاة ${weakest} هي الأقل انتظاماً عندك (${Math.round(consistency[weakest] * 100)}%) — اجعل لها منبهاً خاصاً.`,
+      add({
+        domain: "prayer", dedupeKey: "prayer:weakest", icon: "⏰", tone: "tip", priority: 63,
+        title: `صلاة ${weakest}`, href: "/prayers", actionLabel: "افتح الصلوات",
+        body: `صلاة ${weakest} هي الأقل انتظاماً عندك (${Math.round(consistency[weakest] * 100)}%) — اجعل لها منبهاً خاصاً.`,
       });
     }
   }
@@ -137,34 +257,37 @@ export function generateInsights(data: InsightData): Insight[] {
   if (dailyBudget) {
     const status = computeDailyBudgetStatus(dailyBudget, transactions);
     if (status.balance < 0) {
-      out.push({
-        icon: "🚨", tone: "warning", priority: 90,
-        text: `رصيدك اليومي بالسالب ${formatAmount(-status.balance)} ر.س — خفف الصرف أياماً حتى يتعافى.`,
+      add({
+        domain: "finance", dedupeKey: "finance:negative-balance", icon: "🚨", tone: "warning", priority: 90,
+        title: "رصيدك بالسالب", href: "/finance", actionLabel: "افتح الأموال",
+        body: `رصيدك اليومي بالسالب ${formatAmount(-status.balance)} ر.س — خفف الصرف أياماً حتى يتعافى.`,
       });
     } else if (status.balance >= dailyBudget.amount * 3) {
-      out.push({
-        icon: "🌟", tone: "positive", priority: 70,
-        text: `فائضك المتراكم ${formatAmount(status.balance)} ر.س — انضباط ممتاز! حوّله للاحتياطي أو اتركه للفوائض عند الراتب.`,
+      add({
+        domain: "finance", dedupeKey: "finance:surplus", icon: "🌟", tone: "positive", priority: 70,
+        title: "فائضٌ متراكم", href: "/finance", actionLabel: "حوّل للاحتياطي", validUntil: todayStr,
+        body: `فائضك المتراكم ${formatAmount(status.balance)} ر.س — انضباط ممتاز! حوّله للاحتياطي أو اتركه للفوائض عند الراتب.`,
       });
     }
   }
 
   const totalReserves = reserves.reduce((s, f) => s + reserveBalance(f, transactions), 0);
   if (totalReserves >= 1000) {
-    out.push({
-      icon: "🏦", tone: "positive", priority: 60,
-      text: `مجموع احتياطياتك ${formatAmount(totalReserves)} ر.س — أمان مالي يتراكم بهدوء.`,
+    add({
+      domain: "finance", dedupeKey: "finance:reserves-total", icon: "🏦", tone: "positive", priority: 60,
+      title: "أمانٌ متراكم", body: `مجموع احتياطياتك ${formatAmount(totalReserves)} ر.س — أمان مالي يتراكم بهدوء.`,
+      validUntil: todayStr,
     });
   }
   const drained = reserves.find((f) => reserveBalance(f, transactions) < 0);
   if (drained) {
-    out.push({
-      icon: "🪫", tone: "warning", priority: 73,
-      text: `احتياطي «${drained.name}» مسحوب أكثر من رصيده — عبّئه أو راجع مصاريفه.`,
+    add({
+      domain: "finance", dedupeKey: `finance:reserve-drained:${drained.id}`, icon: "🪫", tone: "warning", priority: 73,
+      title: "احتياطي مسحوب", href: "/finance", actionLabel: "راجِع الاحتياطي",
+      body: `احتياطي «${drained.name}» مسحوب أكثر من رصيده — عبّئه أو راجع مصاريفه.`,
     });
   }
 
-  // ميزانيات الفئات
   for (const b of budgets) {
     const cap = budgetLimit(b, monthlyIncome);
     if (!cap) continue;
@@ -175,56 +298,59 @@ export function generateInsights(data: InsightData): Insight[] {
     const info = categories.find((c) => c.id === b.category);
     const label = info?.label ?? "قسم";
     if (spent > cap) {
-      out.push({
-        icon: "📛", tone: "warning", priority: 85,
-        text: `تجاوزت سقف «${label}» بـ ${formatAmount(spent - cap)} ر.س هذا الشهر.`,
+      add({
+        domain: "finance", dedupeKey: `finance:budget-over:${b.category}`, icon: "📛", tone: "warning", priority: 85,
+        title: `تجاوز «${label}»`, href: "/finance", actionLabel: "افتح الأموال",
+        body: `تجاوزت سقف «${label}» بـ ${formatAmount(spent - cap)} ر.س هذا الشهر.`,
       });
     } else if (pct >= 80) {
-      out.push({
-        icon: "⚠️", tone: "warning", priority: 75,
-        text: `وصلت ${Math.round(pct)}% من سقف «${label}» — باقي ${formatAmount(cap - spent)} ر.س فقط.`,
+      add({
+        domain: "finance", dedupeKey: `finance:budget-near:${b.category}`, icon: "⚠️", tone: "warning", priority: 75,
+        title: `اقتربت من «${label}»`, href: "/finance", actionLabel: "افتح الأموال",
+        body: `وصلت ${Math.round(pct)}% من سقف «${label}» — باقي ${formatAmount(cap - spent)} ر.س فقط.`,
       });
     }
   }
 
-  // مقارنة أعلى قسم صرف بالشهر الماضي
+  // مقارنة أعلى قسم صرفٍ بنفس عدد الأيام من الشهر الماضي (لا شهر جزئي بشهر كامل).
+  const dayOfMonth = parseDate(todayStr).getDate();
   const lastMonthDate = new Date();
   lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
   const lastPrefix = toDateStr(lastMonthDate).slice(0, 7);
-  const catTotals = (prefix: string) => {
+  const catTotals = (prefix: string, maxDay?: number) => {
     const totals: Record<string, number> = {};
     for (const t of transactions) {
-      if (t.date.startsWith(prefix)) {
-        const main = getMainCategory(categories, t.category).id || "غير مصنف";
-        totals[main] = (totals[main] || 0) + t.amount;
-      }
+      if (!t.date.startsWith(prefix)) continue;
+      if (maxDay != null && parseDate(t.date).getDate() > maxDay) continue;
+      const main = getMainCategory(categories, t.category).id || "غير مصنف";
+      totals[main] = (totals[main] || 0) + t.amount;
     }
     return totals;
   };
   const thisTotals = catTotals(monthPrefix);
-  const prevTotals = catTotals(lastPrefix);
+  const prevTotals = catTotals(lastPrefix, dayOfMonth); // نفس عدد الأيام
   for (const [cat, amount] of Object.entries(thisTotals)) {
     const prev = prevTotals[cat];
     if (prev && prev >= 100 && amount > prev * 1.4) {
       const info = categories.find((c) => c.id === cat);
-      out.push({
-        icon: "📈", tone: "warning", priority: 65,
-        text: `صرفك على «${info?.label ?? "قسم"}» ارتفع ${Math.round(((amount - prev) / prev) * 100)}% عن الشهر الماضي (${formatAmount(amount)} مقابل ${formatAmount(prev)}).`,
+      add({
+        domain: "finance", dedupeKey: "finance:cat-rise", icon: "📈", tone: "warning", priority: 65,
+        title: `صرف «${info?.label ?? "قسم"}» يرتفع`, href: "/finance", actionLabel: "راجِع القسم",
+        body: `صرفك على «${info?.label ?? "قسم"}» ارتفع ${Math.round(((amount - prev) / prev) * 100)}% عن نفس الفترة من الشهر الماضي (${formatAmount(amount)} مقابل ${formatAmount(prev)}).`,
       });
-      break; // تكفي أعلى ملاحظة واحدة من هذا النوع
+      break;
     }
   }
 
-  // أيام بلا صرف هذا الأسبوع
+  // أيام بلا صرف — فقط حين تُميّز عدم الصرف عن عدم التسجيل (بيانات كافية).
   const weekDates = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
-  const spendDays = new Set(
-    transactions.filter((t) => weekDates.includes(t.date)).map((t) => t.date)
-  );
+  const spendDays = new Set(transactions.filter((t) => weekDates.includes(t.date)).map((t) => t.date));
   const noSpend = 7 - spendDays.size;
   if (noSpend >= 3 && transactions.length > 10) {
-    out.push({
-      icon: "🛡️", tone: "positive", priority: 45,
-      text: `${noSpend} أيام بلا أي مصروف هذا الأسبوع — قوة إرادة تُحسد عليها.`,
+    add({
+      domain: "finance", dedupeKey: "finance:no-spend", icon: "🛡️", tone: "positive", priority: 45,
+      title: "أيام بلا صرف", body: `${noSpend} أيام بلا أي مصروف هذا الأسبوع — قوة إرادة تُحسد عليها.`,
+      validUntil: todayStr,
     });
   }
 
@@ -232,22 +358,23 @@ export function generateInsights(data: InsightData): Insight[] {
 
   const jStreak = getJournalStreak(journalEntries);
   if (jStreak >= 7) {
-    out.push({
-      icon: "🔥", tone: "positive", priority: 72,
-      text: `${jStreak} يوم كتابة متواصلة — عادات الكبار تُبنى هكذا!`,
+    add({
+      domain: "journal", dedupeKey: "journal:streak", icon: "🔥", tone: "positive", priority: 72,
+      title: "سلسلة الكتابة", body: `${jStreak} يوم كتابة متواصلة — عادات الكبار تُبنى هكذا!`,
+      validUntil: todayStr,
     });
   } else if (jStreak === 0 && journalEntries.length > 0) {
     const latest = [...journalEntries].sort((a, b) => b.date.localeCompare(a.date))[0];
     const gap = Math.floor((parseDate(todayStr).getTime() - parseDate(latest.date).getTime()) / 86400000);
     if (gap >= 2) {
-      out.push({
-        icon: "📓", tone: "tip", priority: 68,
-        text: `مرت ${gap} أيام منذ آخر مذكرة — سطران الليلة يكفيان لإحياء العادة.`,
+      add({
+        domain: "journal", dedupeKey: "journal:gap", icon: "📓", tone: "tip", priority: 68,
+        title: "أحيِ العادة", href: "/journal", actionLabel: "اكتب الآن",
+        body: `مرت ${gap} أيام منذ آخر مذكرة — سطران الليلة يكفيان لإحياء العادة.`,
       });
     }
   }
 
-  // أفضل يوم كتابة
   if (journalEntries.length >= 10) {
     const byDay: Record<number, number> = {};
     for (const e of journalEntries) {
@@ -256,20 +383,20 @@ export function generateInsights(data: InsightData): Insight[] {
     }
     const best = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
     if (best && best[1] >= 3) {
-      out.push({
-        icon: "🗓️", tone: "tip", priority: 30,
-        text: `أكثر يوم تكتب فيه هو ${WEEKDAYS[parseInt(best[0])]} — اجعله موعدك الثابت مع نفسك.`,
+      add({
+        domain: "journal", dedupeKey: "journal:best-day", icon: "🗓️", tone: "tip", priority: 30,
+        title: "يومك الثابت", body: `أكثر يوم تكتب فيه هو ${WEEKDAYS[parseInt(best[0])]} — اجعله موعدك الثابت مع نفسك.`,
       });
     }
   }
 
-  // في مثل هذا اليوم
   const mmdd = todayStr.slice(5);
   const memory = journalEntries.find((e) => e.date.slice(5) === mmdd && e.date < todayStr);
   if (memory) {
-    out.push({
-      icon: "🕰️", tone: "tip", priority: 58,
-      text: `عندك مذكرة كتبتها في مثل هذا اليوم عام ${memory.date.slice(0, 4)} — ارجع لها في صفحة المذكرات.`,
+    add({
+      domain: "journal", dedupeKey: "journal:on-this-day", icon: "🕰️", tone: "tip", priority: 58,
+      title: "في مثل هذا اليوم", href: "/journal", actionLabel: "ارجع لها",
+      body: `عندك مذكرة كتبتها في مثل هذا اليوم عام ${memory.date.slice(0, 4)} — ارجع لها في صفحة المذكرات.`,
     });
   }
 
@@ -285,9 +412,9 @@ export function generateInsights(data: InsightData): Insight[] {
       const perDay = recentPages / 14;
       if (perDay > 0) {
         const eta = Math.ceil(pagesLeft / perDay);
-        out.push({
-          icon: "📚", tone: "positive", priority: 52,
-          text: `بوتيرتك الحالية ستنهي «${currentBook.title}» خلال ${eta} يوم تقريباً (باقي ${pagesLeft} صفحة).`,
+        add({
+          domain: "reading", dedupeKey: "reading:eta", icon: "📚", tone: "positive", priority: 52,
+          title: "قرب الإنهاء", body: `بوتيرتك الحالية ستنهي «${currentBook.title}» خلال ${eta} يوم تقريباً (باقي ${pagesLeft} صفحة).`,
         });
       }
     }
@@ -295,44 +422,50 @@ export function generateInsights(data: InsightData): Insight[] {
     if (lastLog) {
       const gap = Math.floor((parseDate(todayStr).getTime() - parseDate(lastLog.date).getTime()) / 86400000);
       if (gap >= 3) {
-        out.push({
-          icon: "🔖", tone: "tip", priority: 62,
-          text: `«${currentBook.title}» ينتظرك منذ ${gap} أيام — ١٠ صفحات الليلة ترجّع الزخم.`,
+        add({
+          domain: "reading", dedupeKey: "reading:gap", icon: "🔖", tone: "tip", priority: 62,
+          title: "كتابك ينتظر", href: "/reading", actionLabel: "اقرأ الآن",
+          body: `«${currentBook.title}» ينتظرك منذ ${gap} أيام — ١٠ صفحات الليلة ترجّع الزخم.`,
         });
       }
     }
   } else if (books.length > 0) {
-    out.push({
-      icon: "📖", tone: "tip", priority: 40,
-      text: "لا يوجد كتاب قيد القراءة حالياً — اختر التالي من قائمتك وابدأ الليلة.",
+    add({
+      domain: "reading", dedupeKey: "reading:pick-next", icon: "📖", tone: "tip", priority: 40,
+      title: "اختر كتابك", href: "/reading", actionLabel: "اختر التالي",
+      body: "لا يوجد كتاب قيد القراءة حالياً — اختر التالي من قائمتك وابدأ الليلة.",
     });
   }
 
-  // صفحات هذا الأسبوع مقابل الماضي
   const thisWeekPages = readingLogs.filter((l) => l.date >= daysAgo(6)).reduce((s, l) => s + l.pagesRead, 0);
   const lastWeekPages = readingLogs
     .filter((l) => l.date >= daysAgo(13) && l.date < daysAgo(6))
     .reduce((s, l) => s + l.pagesRead, 0);
   if (thisWeekPages > 0 && lastWeekPages > 0 && thisWeekPages > lastWeekPages * 1.25) {
-    out.push({
-      icon: "🚀", tone: "positive", priority: 48,
-      text: `قرأت ${thisWeekPages} صفحة هذا الأسبوع مقابل ${lastWeekPages} الماضي — تسارع جميل!`,
+    add({
+      domain: "reading", dedupeKey: "reading:accel", icon: "🚀", tone: "positive", priority: 48,
+      title: "تسارع القراءة", body: `قرأت ${thisWeekPages} صفحة هذا الأسبوع مقابل ${lastWeekPages} الماضي — تسارع جميل!`,
+      validUntil: todayStr,
     });
   }
 
   /* ---------- العادات ---------- */
 
-  for (const h of habits) {
-    const weekCount = h.logs.filter((d) => weekDates.includes(d)).length;
+  for (const hb of habits) {
+    const weekCount = hb.logs.filter((d) => weekDates.includes(d)).length;
     if (weekCount >= 5) {
-      out.push({
-        icon: h.icon || "✅", tone: "positive", priority: 42,
-        text: `«${h.name}» ${weekCount} مرات هذا الأسبوع — ثبات يستحق الإشادة.`,
+      add({
+        domain: "habits", dedupeKey: `habits:strong:${hb.id}`, icon: hb.icon || "✅", tone: "positive", priority: 42,
+        title: "عادةٌ ثابتة", body: `«${hb.name}» ${weekCount} مرات هذا الأسبوع — ثبات يستحق الإشادة.`,
+        validUntil: todayStr,
       });
       break;
     }
   }
 
-  out.sort((a, b) => b.priority - a.priority);
-  return out;
+  // إزالة أي تكرار بالمفتاح (احترازاً)، ثمّ ترتيب بالأهمية.
+  const seen = new Set<string>();
+  const deduped = out.filter((i) => (seen.has(i.dedupeKey) ? false : (seen.add(i.dedupeKey), true)));
+  deduped.sort((a, b) => b.priority - a.priority);
+  return deduped;
 }
