@@ -123,6 +123,20 @@ export function dueQueue(s: HifzState, todayStr: string, limit = 7): DueQueue {
   return { pages: all.slice(0, cap), total: all.length, hidden: Math.max(0, all.length - cap) };
 }
 
+// ما يحتاجه اليوم (للتذكير اللطيف في الرئيسية): هل بقي وردُ حفظٍ جديد؟ وهل بقيت
+// مراجعةٌ *مستحقّةٌ فعلاً* حسب جدول المباعدة؟ نعتمد `duePages` — لا مجرّد «لم
+// يُراجَع اليوم» — كي يختفي التذكير بمجرّد إنجاز مستحقّات اليوم، ولا يظهر أصلاً
+// حين لا يكون هناك ما يُستحقّ (كان الفحص القديم ينبّه كلَّ يومٍ لم يُسجَّل فيه أيُّ
+// مراجعة، فيبقى ظاهراً رغم إتمام الجلسة أو خلوّ اليوم من المستحقّ).
+export function hifzTodo(s: HifzState, todayStr: string): { needWird: boolean; needReview: boolean } {
+  if (!s.plan) return { needWird: false, needReview: false };
+  const sessionToday = (s.sessions ?? []).some((x) => x.date === todayStr);
+  return {
+    needWird: plannedPortion(s) != null && !sessionToday,
+    needReview: duePages(s, todayStr).length > 0,
+  };
+}
+
 // ===================== جلسة اليوم (تجميعة واحدة متدرّجة) =====================
 // بطاقة «جلسة اليوم» تعرض من هذه: مقدار الحفظ الجديد، عدد المستحقّ للمراجعة،
 // عدد الأخطاء المفتوحة، ووقتٌ تقريبي — بزرٍّ واحد «ابدأ جلسة اليوم».

@@ -289,18 +289,6 @@ export function smartReview(s: HifzState): SmartReview | null {
   return cyc ? { portion: cyc, reason: "cycle" } : null;
 }
 
-// ما يحتاجه اليوم: هل بقي وردٌ للحفظ؟ وهل بقيت مراجعة؟ (للتذكير في الرئيسية)
-export function hifzTodo(s: HifzState, todayStr: string): { needWird: boolean; needReview: boolean } {
-  if (!s.plan) return { needWird: false, needReview: false };
-  const sessionToday = s.sessions.some((x) => x.date === todayStr);
-  const reviewToday = s.reviews.some((x) => x.date === todayStr);
-  const hasMemorized = s.frontierId >= (s.plan.startId ?? 1);
-  return {
-    needWird: plannedPortion(s) != null && !sessionToday,
-    needReview: hasMemorized && !reviewToday,
-  };
-}
-
 // ===================== خريطة الحفظ =====================
 // حالة كل جزءٍ من الثلاثين للعرض في لوحة كاملة: ما حُفظ، ما رُوجع حديثاً، وما
 // يحتاج مراجعة. الفاصل الزمني الذي يُعدّ بعده الجزءُ «محتاجاً للمراجعة».

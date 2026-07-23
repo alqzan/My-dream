@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ } from "@/lib/types";
 import { today } from "@/lib/utils";
-import { hifzTodo } from "@/lib/quran/hifz";
+import { hifzTodo } from "@/lib/quran/schedule";
 import { GraduationCap, ChevronLeft } from "lucide-react";
 
 // تذكيرٌ لطيف في الرئيسية بورد الحفظ أو المراجعة المستحقّة اليوم — يظهر فقط حين
