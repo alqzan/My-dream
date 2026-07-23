@@ -1,8 +1,11 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parseDate, entryPhotos, formatDate } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Photo } from "@/components/ui/Photo";
+import { skyView, type MonthCluster } from "@/lib/memorySky";
 import type { JournalEntry } from "@/lib/types";
+import { ChevronRight, X } from "lucide-react";
 
 // ===================== سماء الذكريات =====================
 // A night-sky dome where every memory is a star, a sibling to PrayerOrbit's
@@ -83,8 +86,42 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
     );
   }, []);
 
+  // العرض التكيّفي: نجومٌ فردية عند القِلّة، وكوكباتٌ شهرية عند الكثرة.
+  const view = useMemo(() => skyView(entries), [entries]);
+  const [openMonth, setOpenMonth] = useState<string | null>(null);
+  const [preview, setPreview] = useState<JournalEntry | null>(null);
+  // مؤشّر التركيز المتنقّل (roving) — نجمةٌ واحدة قابلة للتركيز في كل لحظة.
+  const [focusIdx, setFocusIdx] = useState(0);
+  const nodeRefs = useRef<(SVGGElement | null)[]>([]);
+
+  // الكوكبات (عند الكثرة) والشهر المفتوح للتنقّل داخله.
+  const clusters = useMemo<MonthCluster[]>(() => (view.mode === "constellations" ? view.clusters : []), [view]);
+  const activeMonth = useMemo(() => (openMonth ? clusters.find((c) => c.key === openMonth) ?? null : null), [openMonth, clusters]);
+  // النجوم المعروضة الآن: كامل الأرشيف الصغير، أو نجوم الشهر المفتوح.
+  const starEntries = useMemo(
+    () => (view.mode === "stars" ? entries : activeMonth ? activeMonth.entries : []),
+    [view, entries, activeMonth]
+  );
+  const showConstellations = view.mode === "constellations" && !activeMonth;
+
+  // إعادة ضبط التركيز عند تبدّل ما يُعرض.
+  useEffect(() => { setFocusIdx(0); nodeRefs.current = []; }, [openMonth, view.mode]);
+
+  const interactiveCount = showConstellations ? clusters.length : starEntries.length;
+  function moveFocus(delta: number) {
+    if (interactiveCount === 0) return;
+    const next = (focusIdx + delta + interactiveCount) % interactiveCount;
+    setFocusIdx(next);
+    nodeRefs.current[next]?.focus();
+  }
+  function onNodeKey(e: React.KeyboardEvent, activate: () => void) {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); moveFocus(1); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); moveFocus(-1); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+  }
+
   const stars = useMemo<Star[]>(() => {
-    return entries.map((entry) => {
+    return starEntries.map((entry) => {
       const key = entry.id || entry.date;
       const doy = dayOfYear(entry.date);
       const jitter = (hashFrac(key, 0x811c9dc5) - 0.5) * 7; // ±3.5°
@@ -102,7 +139,18 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
         delay: hashFrac(key, 0x2a) * 3.6,
       };
     });
-  }, [entries]);
+  }, [starEntries]);
+
+  // مواقع الكوكبات الشهرية على القبّة (زاويتها من منتصف الشهر، وارتفاعها من هاش).
+  const constellations = useMemo(() => {
+    return clusters.map((c) => {
+      const doy = dayOfYear(`${c.key}-15`);
+      const f = 0.42 + hashFrac(c.key, 0x51ed) * 0.5;
+      const { x, y } = domePoint(baseAngle(doy), f);
+      const size = 1.4 + Math.min(1.6, Math.log2(c.count + 1) * 0.5);
+      return { cluster: c, x, y, size };
+    });
+  }, [clusters]);
 
   // Deterministic decorative dust — seeded so the sky is stable across renders.
   const bgStars = useMemo<BgStar[]>(() => {
@@ -152,10 +200,28 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
   return (
     <div className="relative rounded-2xl overflow-hidden card-shadow" style={SKY_BG}>
       {/* عنوان خافت أعلى اليمين — خط ثُمانية (serif) */}
-      <div className="absolute top-3 right-4 z-10 pointer-events-none text-right">
-        <p className="text-[13px] font-bold text-[#e8c99a] leading-tight">سماء الذكريات ✦</p>
-        <p className="text-[10px] text-[#b9a8d6]/80 mt-0.5">{stars.length} نجمة · اضغط أي نجمة لفتحها</p>
+      <div className="absolute top-3 right-4 z-10 text-right">
+        <p className="text-[13px] font-bold text-[#e8c99a] leading-tight">
+          {activeMonth ? activeMonth.label : "سماء الذكريات ✦"}
+        </p>
+        <p className="text-[10px] text-[#b9a8d6]/80 mt-0.5">
+          {showConstellations
+            ? `${clusters.length} كوكبة · ${entries.length} ذكرى`
+            : activeMonth
+              ? `${activeMonth.count} ذكرى`
+              : `${stars.length} نجمة · المس نجمةً للمعاينة`}
+        </p>
       </div>
+
+      {/* رجوعٌ من سماء الشهر إلى الكوكبات */}
+      {activeMonth && (
+        <button
+          onClick={() => { setOpenMonth(null); setPreview(null); }}
+          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1 text-[11px] font-semibold text-[#e8c99a] bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1 press"
+        >
+          <ChevronRight size={13} /> الكوكبات
+        </button>
+      )}
 
       <div className="relative w-full" style={{ aspectRatio: `${VB_W} / ${VB_H}` }}>
         <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="absolute inset-0 w-full h-full overflow-visible">
@@ -181,8 +247,8 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
             ))}
           </g>
 
-          {/* المذنّب — «في مثل هذا اليوم» */}
-          {comet && (
+          {/* المذنّب — «في مثل هذا اليوم» (في السماء العليا فقط) */}
+          {comet && !activeMonth && (
             <g
               role="button"
               tabIndex={0}
@@ -209,15 +275,40 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
             </g>
           )}
 
-          {/* نجوم الذكريات */}
-          {stars.map((st) => (
+          {/* الكوكبات الشهرية (عند الكثرة) — تركيزٌ متنقّل */}
+          {showConstellations && constellations.map((c, i) => (
+            <g
+              key={c.cluster.key}
+              ref={(el) => { nodeRefs.current[i] = el; }}
+              role="button"
+              tabIndex={i === focusIdx ? 0 : -1}
+              aria-label={`${c.cluster.label} — ${c.cluster.count} ذكرى`}
+              onFocus={() => setFocusIdx(i)}
+              onClick={() => { setOpenMonth(c.cluster.key); setPreview(null); }}
+              onKeyDown={(e) => onNodeKey(e, () => { setOpenMonth(c.cluster.key); setPreview(null); })}
+              style={{ cursor: "pointer" }}
+            >
+              <circle cx={c.x} cy={c.y} r={c.size * 2.6} fill="url(#skyHalo)" opacity={0.5} />
+              {/* عنقودٌ صغير من النجيمات يوحي بكوكبة */}
+              {[[0, 0], [0.8, -0.6], [-0.7, 0.5], [0.6, 0.8], [-0.9, -0.4]].map(([dx, dy], k) => (
+                <circle key={k} cx={c.x + dx * c.size} cy={c.y + dy * c.size} r={c.size * (k === 0 ? 0.5 : 0.3)} fill="#fdfbf5" opacity={0.9 - k * 0.12} />
+              ))}
+              {i === focusIdx && <circle cx={c.x} cy={c.y} r={c.size * 3} fill="none" stroke="#f4d488" strokeOpacity="0.8" strokeWidth="0.5" />}
+              <circle cx={c.x} cy={c.y} r={Math.max(4, c.size * 3)} fill="transparent" />
+            </g>
+          ))}
+
+          {/* نجوم الذكريات — تركيزٌ متنقّل ومعاينةٌ عند اللمس */}
+          {!showConstellations && stars.map((st, i) => (
             <g
               key={st.entry.id}
+              ref={(el) => { nodeRefs.current[i] = el; }}
               role="button"
-              tabIndex={0}
+              tabIndex={i === focusIdx ? 0 : -1}
               aria-label={st.entry.title ? `${st.entry.title} — ${formatDate(st.entry.date)}` : formatDate(st.entry.date)}
-              onClick={() => onOpen(st.entry)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpen(st.entry); }}
+              onFocus={() => setFocusIdx(i)}
+              onClick={() => setPreview(st.entry)}
+              onKeyDown={(e) => onNodeKey(e, () => setPreview(st.entry))}
               style={{ cursor: "pointer" }}
             >
               {st.halo && (
@@ -229,6 +320,9 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
                 className={reduceMotion ? undefined : "sky-star"}
                 style={reduceMotion ? { opacity: st.o } : ({ "--star-o": st.o, animationDelay: `${st.delay}s` } as React.CSSProperties)}
               />
+              {preview?.id === st.entry.id && (
+                <circle cx={st.x} cy={st.y} r={st.r + 1.6} fill="none" stroke="#f4d488" strokeOpacity="0.85" strokeWidth="0.6" />
+              )}
               {/* منطقة ضغط أوسع للنجوم الصغيرة */}
               <circle cx={st.x} cy={st.y} r={3.2} fill="transparent" />
             </g>
@@ -236,7 +330,7 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
         </svg>
 
         {/* تسمية المذنّب — بمحاذاة RTL قرب رأسه */}
-        {comet && (
+        {comet && !activeMonth && (
           <div
             className="absolute z-10 pointer-events-none"
             style={{
@@ -249,6 +343,31 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
           </div>
         )}
       </div>
+
+      {/* بطاقة معاينة النجمة — تاريخ، عنوان، سطر، صورة، وزر فتح */}
+      {preview && (
+        <div className="absolute inset-x-3 bottom-3 z-20 bg-[#1c1435]/95 border border-[#e8c99a]/25 rounded-2xl p-3 backdrop-blur animate-fade-up">
+          <div className="flex items-start gap-3">
+            {entryPhotos(preview).length > 0 && (
+              <Photo images={entryPhotos(preview)} index={0} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] text-[#b9a8d6]">{formatDate(preview.date)}</div>
+              {preview.title && <div className="text-sm font-bold text-[#f4ead6] truncate">{preview.title}</div>}
+              <p className="text-[11px] text-[#cfc4e6] line-clamp-2 mt-0.5">{preview.content}</p>
+            </div>
+            <button onClick={() => setPreview(null)} aria-label="إغلاق المعاينة" className="shrink-0 text-[#b9a8d6] hover:text-white press">
+              <X size={16} />
+            </button>
+          </div>
+          <button
+            onClick={() => { const e = preview; setPreview(null); onOpen(e); }}
+            className="mt-2.5 w-full text-xs font-bold text-[#1c1435] bg-[#e8c99a] hover:brightness-105 rounded-lg py-2 press"
+          >
+            افتح المذكرة
+          </button>
+        </div>
+      )}
 
       {/* أسطورة خفيفة أسفل السماء */}
       <div className="flex items-center justify-center gap-3 pb-3 pt-0.5 text-[10px] text-[#b9a8d6]/80">
