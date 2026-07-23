@@ -16,6 +16,7 @@ import { HifzCoach } from "@/components/quran/HifzCoach";
 import { TodaySessionCard, TodaySessionFlow } from "@/components/quran/TodaySession";
 import { HifzMap } from "@/components/quran/HifzMap";
 import { HifzChart } from "@/components/quran/HifzChart";
+import { HifzLog } from "@/components/quran/HifzLog";
 import { MistakesPanel } from "@/components/quran/MistakesPanel";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -319,7 +320,10 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
         onRead={onRead}
       />
 
-      {/* 4) رسم تقدّم الحفظ عبر الزمن */}
+      {/* 7) سجل الحفظ والمراجعة — تعديل/حذف/تراجع مع إعادة حساب الجبهة */}
+      <HifzLog />
+
+      {/* 8) رسم تقدّم الحفظ عبر الزمن */}
       <HifzChart />
 
       {coach && text && (

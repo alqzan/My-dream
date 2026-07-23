@@ -1,5 +1,5 @@
 import type { HifzState, HifzUnit, HifzRating, HifzMistake } from "../types";
-import { calcStreak, parseDate, toDateStr } from "../utils";
+import { calcStreak, parseDate, toDateStr, today } from "../utils";
 import {
   TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, TOTAL_HIZB, idToPage, idToJuz, idToHizb, idToSurahAyah,
   juzRange, hizbRange, pageRange, describeRange, SURAHS,
@@ -15,12 +15,20 @@ export function portionEnd(startId: number, unit: HifzUnit, amount: number): num
     const targetPage = Math.min(idToPage(startId) + amt - 1, TOTAL_PAGES);
     return Math.min(pageRange(targetPage).end, TOTAL_AYAT);
   }
-  // نصف/ربع وجه — نسبة من آيات الوجه الحالي (تراعي تفاوت طول الأوجه).
-  const pr = pageRange(idToPage(startId));
-  const pageLen = pr.end - pr.start + 1;
+  // نصف/ربع وجه — نتراكم آيةً آيةً بوزن صفحة كلٍّ منها (1/طول صفحتها)، فنبلغ
+  // المقدار المطلوب من الأوجه بدقّة حتى لو بدأ المقطع من وسط وجه أو عبَر عدة
+  // أوجه متفاوتة الطول (كان الحساب سابقاً نسبةً من الوجه الأول فقط ثم يُضرب).
   const frac = unit === "half" ? 0.5 : 0.25;
-  const step = Math.max(1, Math.round(pageLen * frac * amt));
-  return Math.min(startId + step - 1, TOTAL_AYAT);
+  const targetPages = frac * amt; // المقدار المطلوب مقيساً بالأوجه
+  let acc = 0;
+  let id = startId;
+  while (id <= TOTAL_AYAT) {
+    const pr = pageRange(idToPage(id));
+    acc += 1 / (pr.end - pr.start + 1);
+    if (acc >= targetPages - 1e-9) break;
+    id++;
+  }
+  return Math.min(id, TOTAL_AYAT);
 }
 
 // ورد اليوم: المقطع التالي من الجبهة حسب الخطة (null إن لا خطة أو أُتمّ المصحف).
@@ -52,7 +60,8 @@ export function hifzProgress(s: HifzState): HifzProgress {
   return {
     startId,
     spanAyat,
-    spanPages: Math.round((spanAyat / TOTAL_AYAT) * TOTAL_PAGES),
+    // الأوجه الفعلية بين بداية الخطة والجبهة من page metadata (لا نسبة عامة).
+    spanPages: s.frontierId >= startId ? idToPage(s.frontierId) - idToPage(startId) + 1 : 0,
     pct,
     page: s.frontierId >= 1 ? idToPage(s.frontierId) : 0,
     juz: s.frontierId >= 1 ? idToJuz(s.frontierId) : 0,
@@ -72,13 +81,17 @@ export function hifzStreak(s: HifzState): number {
   return calcStreak(s.sessions.map((x) => x.date));
 }
 
-// وتيرة الحفظ وتقدير موعد الإتمام من الجلسات.
+// وتيرة الحفظ وتقدير موعد الإتمام. نعرض وتيرتين: على أيام النشاط (متفائلة)،
+// والواقعية على آخر 30 يوماً *متضمّنةً الأيام بلا حفظ* — والتقدير يُبنى على
+// الواقعية. لا نعرض موعداً إذا كانت البيانات قليلةً جداً (`enough=false`).
 export interface HifzPace {
   perDay: number; // متوسط آيات/يوم على أيام النشاط
-  finishInDays: number | null;
+  perDayReal: number; // الوتيرة الواقعية (آخر 30 يوماً شاملةً الخمول)
+  finishInDays: number | null; // على الوتيرة الواقعية (null إن لم تكفِ البيانات)
   text: string;
+  enough: boolean; // هل البيانات كافية لعرض تقديرٍ موثوق؟
 }
-export function hifzPace(s: HifzState): HifzPace {
+export function hifzPace(s: HifzState, todayStr: string = today()): HifzPace {
   const byDay = new Map<string, number>();
   for (const x of s.sessions) {
     byDay.set(x.date, (byDay.get(x.date) ?? 0) + (x.toId - x.fromId + 1));
@@ -87,13 +100,31 @@ export function hifzPace(s: HifzState): HifzPace {
   const totalAyat = [...byDay.values()].reduce((a, b) => a + b, 0);
   const perDay = activeDays > 0 ? totalAyat / activeDays : 0;
   const remaining = Math.max(0, TOTAL_AYAT - s.frontierId);
-  if (perDay <= 0 || remaining <= 0) return { perDay, finishInDays: null, text: "" };
-  const days = Math.ceil(remaining / perDay);
-  let text: string;
-  if (days <= 45) text = `على وتيرتك تُتمّ خلال ~${days} يوماً`;
-  else if (days < 730) text = `على وتيرتك تُتمّ خلال ~${Math.round(days / 30)} شهراً`;
-  else text = `على وتيرتك تُتمّ خلال ~${(days / 365).toFixed(1)} سنة`;
-  return { perDay, finishInDays: days, text };
+
+  // الوتيرة الواقعية: مجموع آيات آخر نافذةٍ ÷ طول النافذة (بالأيام، شاملةً
+  // الخمول). النافذة = أقلّ من 30 يوماً وعمر الخطة (منذ أوّل جلسة).
+  const dates = [...byDay.keys()].sort();
+  let perDayReal = 0;
+  if (dates.length) {
+    const ageDays = Math.max(1, daysBetween(dates[0], todayStr) + 1);
+    const windowDays = Math.min(30, ageDays);
+    const windowStart = toDateStr(new Date(parseDate(todayStr).getTime() - (windowDays - 1) * 86400000));
+    let recent = 0;
+    for (const [d, n] of byDay) if (d >= windowStart && d <= todayStr) recent += n;
+    perDayReal = recent / windowDays;
+  }
+
+  // بياناتٌ كافية: 5 أيام نشاطٍ على الأقل وحفظٌ معتبر — وإلا لا نُقدّر موعداً.
+  const enough = activeDays >= 5 && totalAyat >= 50;
+  const finishInDays = enough && perDayReal > 0 && remaining > 0 ? Math.ceil(remaining / perDayReal) : null;
+
+  let text = "";
+  if (finishInDays != null) {
+    if (finishInDays <= 45) text = `على وتيرتك الواقعية تُتمّ خلال ~${finishInDays} يوماً`;
+    else if (finishInDays < 730) text = `على وتيرتك الواقعية تُتمّ خلال ~${Math.round(finishInDays / 30)} شهراً`;
+    else text = `على وتيرتك الواقعية تُتمّ خلال ~${(finishInDays / 365).toFixed(1)} سنة`;
+  }
+  return { perDay, perDayReal, finishInDays, text, enough };
 }
 
 // مقطع المراجعة الدورية: يدور بالوجه داخل المحفوظ [البداية .. الجبهة].

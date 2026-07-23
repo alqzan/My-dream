@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weakSpots, latestRatingByPage, mistakeRecallSuccesses } from "./hifz";
+import { weakSpots, latestRatingByPage, mistakeRecallSuccesses, portionEnd, hifzProgress, hifzPace } from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzRating } from "../types";
 
@@ -99,5 +99,51 @@ describe("weakSpots — page-overlap based (not exact range-string)", () => {
       reviews: [ev(1, p1.end, "2026-01-03", 2)],
     });
     expect(latestRatingByPage(s).get(1)).toEqual({ date: "2026-01-03", rating: 2 });
+  });
+});
+
+describe("portionEnd — quarter/half accumulate across pages (P2)", () => {
+  it("two halves (or four quarters) equal exactly one full page", () => {
+    const p = pageRange(3);
+    expect(portionEnd(p.start, "half", 2)).toBe(p.end);
+    expect(portionEnd(p.start, "quarter", 4)).toBe(p.end);
+  });
+  it("one half from a page start ends before the page end (partial)", () => {
+    const p = pageRange(3);
+    expect(portionEnd(p.start, "half", 1)).toBeLessThan(p.end);
+    expect(portionEnd(p.start, "half", 1)).toBeGreaterThanOrEqual(p.start);
+  });
+  it("crossing multiple pages weights each page by its own length", () => {
+    const p = pageRange(3);
+    // أربعة أنصاف = وجهان كاملان → نهاية الوجه التالي.
+    expect(portionEnd(p.start, "half", 4)).toBe(pageRange(4).end);
+  });
+});
+
+describe("hifzProgress.spanPages — exact page count (P2)", () => {
+  it("counts real pages between plan start and frontier", () => {
+    const p3 = pageRange(3);
+    const s = hz({ plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: p3.end });
+    // من الوجه 1 إلى الوجه 3 = 3 أوجه.
+    expect(hifzProgress(s).spanPages).toBe(3);
+  });
+});
+
+describe("hifzPace — realistic pace incl. idle days (P2)", () => {
+  it("no estimate when data is too little", () => {
+    const s = hz({ frontierId: 30, sessions: [ev(1, 10, "2026-01-30", 3), ev(11, 20, "2026-01-31", 3)] });
+    const pace = hifzPace(s, "2026-02-01");
+    expect(pace.enough).toBe(false);
+    expect(pace.finishInDays).toBeNull();
+  });
+  it("realistic pace is lower than active-day pace when there are idle days", () => {
+    const dates = ["2026-01-03", "2026-01-08", "2026-01-13", "2026-01-18", "2026-01-23", "2026-01-28"];
+    const sessions = dates.map((d, i) => ev(i * 10 + 1, i * 10 + 10, d, 3)); // 10 آيات لكل يوم نشاط
+    const s = hz({ frontierId: 60, sessions });
+    const pace = hifzPace(s, "2026-02-01");
+    expect(pace.enough).toBe(true);
+    expect(pace.perDay).toBeCloseTo(10, 5); // 60 آية / 6 أيام نشاط
+    expect(pace.perDayReal).toBeLessThan(pace.perDay); // موزّعة على 30 يوماً
+    expect(pace.finishInDays).not.toBeNull();
   });
 });

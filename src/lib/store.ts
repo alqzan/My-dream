@@ -4,7 +4,7 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter,
-  QuranReflection, HifzUnit, HifzRating, HifzMistake, HifzState,
+  QuranReflection, HifzUnit, HifzRating, HifzMistake, HifzState, HifzSession, HifzReviewLog,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -152,6 +152,14 @@ interface AppStore extends AppData {
   skipReview: (toId: number) => void; // move the review cursor on without logging
   setReviewWindow: (pages: number) => void; // حجم نافذة المراجعة المتحرّكة (أوجه)
   recordRandomTest: (fromId: number, toId: number, rating?: HifzRating) => void; // اختبار مفاجئ
+  // سجل الحفظ والمراجعة: تعديل التقييم أو حذف قيدٍ (مع إعادة حساب الجبهة من
+  // الجلسات) والتراجع بإعادة الإضافة.
+  updateHifzSession: (id: string, patch: { rating?: HifzRating }) => void;
+  deleteHifzSession: (id: string) => void;
+  restoreHifzSession: (session: HifzSession) => void;
+  updateHifzReview: (id: string, patch: { rating?: HifzRating }) => void;
+  deleteHifzReview: (id: string) => void;
+  restoreHifzReview: (review: HifzReviewLog) => void;
   toggleMistakeWord: (ayahId: number, wordIndex: number | null, word?: string) => void; // تحديد/إلغاء خطأ
   resolveMistake: (id: string) => void; // أُتقن الموضع (أُغلق)
   reopenMistake: (id: string) => void; // إعادة فتح خطأٍ مُتقن
@@ -959,6 +967,54 @@ export const useAppStore = create<AppStore>()(
           const h = s.quranHifz ?? EMPTY_HIFZ;
           const log = { id: uid(), date: today(), fromId, toId, rating };
           return { quranHifz: { ...h, reviews: [log, ...h.reviews], lastTestDate: today() } };
+        }),
+
+      // ---- سجل الحفظ: تعديل/حذف/تراجع مع إعادة حساب الجبهة من الجلسات ----
+      // الجبهة = أبعد آيةٍ في الجلسات الباقية (وإلا ما قبل البداية)؛ نختم
+      // frontierUpdatedAt فينتشر التصحيح ويبقى الرسمُ والسجلّ متّسقَين (لا رقمٌ
+      // يخالف السجلّ). التقييم تحريرٌ محضٌ لا يمسّ الجبهة.
+      updateHifzSession: (id, patch) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          return { quranHifz: { ...h, sessions: h.sessions.map((x) => (x.id === id ? { ...x, ...patch } : x)) } };
+        }),
+
+      deleteHifzSession: (id) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const sessions = h.sessions.filter((x) => x.id !== id);
+          const floor = Math.max(0, (h.plan?.startId ?? 1) - 1);
+          const frontierId = sessions.reduce((mx, x) => Math.max(mx, x.toId), floor);
+          return { quranHifz: { ...h, sessions, frontierId, frontierUpdatedAt: Date.now() } };
+        }),
+
+      restoreHifzSession: (session) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          if (h.sessions.some((x) => x.id === session.id)) return {};
+          const sessions = [session, ...h.sessions];
+          const floor = Math.max(0, (h.plan?.startId ?? 1) - 1);
+          const frontierId = sessions.reduce((mx, x) => Math.max(mx, x.toId), floor);
+          return { quranHifz: { ...h, sessions, frontierId, frontierUpdatedAt: Date.now() } };
+        }),
+
+      updateHifzReview: (id, patch) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          return { quranHifz: { ...h, reviews: h.reviews.map((x) => (x.id === id ? { ...x, ...patch } : x)) } };
+        }),
+
+      deleteHifzReview: (id) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          return { quranHifz: { ...h, reviews: h.reviews.filter((x) => x.id !== id) } };
+        }),
+
+      restoreHifzReview: (review) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          if (h.reviews.some((x) => x.id === review.id)) return {};
+          return { quranHifz: { ...h, reviews: [review, ...h.reviews] } };
         }),
 
       // تحديد خطأٍ في موضعٍ (كلمة أو آية كاملة) بمنطق التبديل: أوّل مرّة يُنشئ

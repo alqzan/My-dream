@@ -9,8 +9,9 @@ import {
   type Portion, type JuzState, type UnitCell, type MapUnit,
 } from "@/lib/quran/hifz";
 import { NumberInput } from "@/components/ui/NumberInput";
+import { downloadPlainBackup } from "@/lib/backupFile";
 import {
-  MapPin, Gauge, Flame, Pencil, RotateCcw, Headphones, BookOpen, X, CheckCircle2, RefreshCw, TriangleAlert, Sprout,
+  MapPin, Gauge, Flame, Pencil, RotateCcw, Headphones, BookOpen, X, CheckCircle2, RefreshCw, TriangleAlert, Sprout, Download,
 } from "lucide-react";
 
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
@@ -151,15 +152,33 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
           </div>
           <div className="flex items-center justify-between pt-1">
             <button onClick={() => setEditPos((v) => !v)} className="text-[11px] text-gray-500 hover:text-quran press flex items-center gap-1"><MapPin size={12} /> تعديل موضعي</button>
-            {confirmNew ? (
-              <span className="flex items-center gap-1.5 text-[11px]">
-                <button onClick={() => { store.clearHifz(); setConfirmNew(false); setEditPlan(false); }} className="text-red-500 font-semibold press">تأكيد المسح</button>
-                <button onClick={() => setConfirmNew(false)} className="text-gray-400 press">إلغاء</button>
-              </span>
-            ) : (
+            {!confirmNew && (
               <button onClick={() => setConfirmNew(true)} className="text-[11px] text-red-500 hover:text-red-600 press flex items-center gap-1"><RotateCcw size={12} /> خطة جديدة</button>
             )}
           </div>
+          {confirmNew && (
+            <div className="rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 p-3 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-[12px] font-bold text-red-700 dark:text-red-300">
+                <TriangleAlert size={14} /> بدء خطة جديدة يمسح الحالية
+              </div>
+              <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                سيُحذف: الخطة الحالية، وجبهة الحفظ ({prog.spanPages} وجه)، و{h.sessions.length} جلسة حفظ،
+                و{h.reviews.length} مراجعة، و{(h.mistakes ?? []).length} موضع خطأ. لا يمكن التراجع.
+                خُذ نسخة احتياطية أولاً حفاظاً على تاريخك.
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => downloadPlainBackup(store.snapshot(), "قبل-خطة-جديدة")}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg px-2.5 py-1.5 press"
+                >
+                  <Download size={13} /> صدّر نسخة احتياطية
+                </button>
+                <span className="flex-1" />
+                <button onClick={() => { store.clearHifz(); setConfirmNew(false); setEditPlan(false); }} className="text-[11px] font-bold text-white bg-red-500 rounded-lg px-3 py-1.5 press">تأكيد المسح</button>
+                <button onClick={() => setConfirmNew(false)} className="text-[11px] text-gray-500 rounded-lg px-2.5 py-1.5 press">إلغاء</button>
+              </div>
+            </div>
+          )}
           {editPos && <PositionEditor current={h.frontierId} onSave={(id) => { store.setFrontier(id); setEditPos(false); }} onCancel={() => setEditPos(false)} />}
         </div>
       )}
