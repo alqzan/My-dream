@@ -9,9 +9,11 @@ import { loadAyahText, textsInRange } from "@/lib/quran/text";
 import { today } from "@/lib/utils";
 import {
   plannedPortion, hifzProgress, weakSpots, recentReviewBand, randomTestPage,
-  testDue, reviewWindowPages, type Portion,
+  testDue, reviewWindowPages, openMistakes, type Portion,
 } from "@/lib/quran/hifz";
+import { dueQueue } from "@/lib/quran/schedule";
 import { HifzCoach } from "@/components/quran/HifzCoach";
+import { TodaySessionCard, TodaySessionFlow } from "@/components/quran/TodaySession";
 import { HifzMap } from "@/components/quran/HifzMap";
 import { HifzChart } from "@/components/quran/HifzChart";
 import { MistakesPanel } from "@/components/quran/MistakesPanel";
@@ -126,6 +128,7 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
   // المُدرّب الموجّه — للورد (memorize) أو للتسميع (recall) بأنواعه.
   const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; kind: CoachKind } | null>(null);
+  const [sessionGoal, setSessionGoal] = useState<number | null>(null); // تدفّق «جلسة اليوم» مفتوح؟
 
   const prog = hifzProgress(h);
   const portion = plannedPortion(h);
@@ -136,6 +139,9 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
   const todayStr = today();
   const showTest = testDue(h, todayStr);
   const wirdDoneToday = h.sessions.some((s) => s.date === todayStr);
+  // هل ثمّة «جلسة اليوم»؟ (سبقٌ جديد أو مراجعةٌ مستحقّة أو أخطاءٌ مفتوحة) — يقود
+  // إظهار بطاقة الجلسة والفاصل، فلا يظهر فاصلٌ بلا بطاقة.
+  const hasSession = !!plannedPortion(h) || dueQueue(h, todayStr).total > 0 || openMistakes(h).length > 0;
 
   // اختبار مفاجئ: يختار وجهاً عشوائياً من كامل المحفوظ ويفتح التسميع عليه.
   const startTest = () => {
@@ -145,6 +151,22 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
 
   return (
     <div className="space-y-4">
+      {/* 0) جلسة اليوم — المدخل الأساسي الموحّد (سبق + مراجعة مستحقّة + أخطاء) */}
+      {hasSession && (
+        <>
+          <TodaySessionCard onStart={(goal) => setSessionGoal(goal)} />
+          <div className="flex items-center gap-2 pt-1">
+            <div className="h-px flex-1 bg-quran/10" />
+            <span className="text-[10px] font-semibold text-gray-400">أو نفّذ كل قسم على حدة</span>
+            <div className="h-px flex-1 bg-quran/10" />
+          </div>
+        </>
+      )}
+
+      {sessionGoal != null && text && (
+        <TodaySessionFlow text={text} goal={sessionGoal} onClose={() => setSessionGoal(null)} />
+      )}
+
       {/* 1) ورد اليوم — الفعل اليومي الأول */}
       {prog.done ? (
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center">
