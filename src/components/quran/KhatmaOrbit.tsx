@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { formatAmount, formatDate } from "@/lib/utils";
+import { formatAmount, formatDate, today } from "@/lib/utils";
+import { khatmaPct, khatmaEta } from "@/lib/quran/khatma";
 import { Confetti } from "@/components/ui/Confetti";
-import { Plus, Minus, RotateCcw, Check } from "lucide-react";
+import { Plus, Minus, RotateCcw, Check, BookOpen } from "lucide-react";
 
 // «مدار الختمة» — أداةٌ إبداعية على عائلة أدوات التطبيق (PrayerOrbit، مدار
 // السنة، سباق المدارين): حلقةٌ ذهبية من ٣٠ جزءاً، كل جزءٍ مقروء يُضيء قوسه.
@@ -32,13 +33,23 @@ function juzArc(i: number): string {
 }
 
 export function KhatmaOrbit() {
-  const { quranKhatma, addKhatmaJuz, setKhatmaJuz, completeKhatma, resetKhatma } = useAppStore();
+  const { quranKhatma, addKhatmaJuz, setKhatmaJuz, setKhatmaPage, completeKhatma, resetKhatma } = useAppStore();
   const k = quranKhatma ?? { juz: 0, completed: 0 };
   const [celebrate, setCelebrate] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [pageInput, setPageInput] = useState("");
 
   const full = k.juz >= JUZ;
-  const pct = Math.round((k.juz / JUZ) * 100);
+  // النسبة من الصفحة إن سُجّلت (أدقّ)، وإلا من الأجزاء.
+  const pct = k.page != null && k.page > 0 ? khatmaPct(k.page) : Math.round((k.juz / JUZ) * 100);
+  const eta = khatmaEta(k.page ?? 0, k.startDate, today());
+
+  function savePage() {
+    const p = parseInt(pageInput);
+    if (!p || p < 1) return;
+    setKhatmaPage(Math.min(p, 604));
+    setPageInput("");
+  }
 
   function seal() {
     completeKhatma();
@@ -87,7 +98,9 @@ export function KhatmaOrbit() {
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <span className="text-4xl font-black text-quran tabular-nums leading-none">{k.juz}</span>
             <span className="text-[11px] text-gray-400 mt-1">من {JUZ} جزءاً</span>
-            <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">{pct}%</span>
+            <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
+              {k.page != null && k.page > 0 ? `صفحة ${k.page} · ${pct}%` : `${pct}%`}
+            </span>
           </div>
         </div>
 
@@ -102,8 +115,30 @@ export function KhatmaOrbit() {
             : ""}
         </p>
 
+        {/* تقدير الإتمام على وتيرة القراءة (عند تسجيل الصفحة وكفاية البيانات) */}
+        {eta.daysLeft != null && !full && (
+          <p className="text-[11px] text-quran font-semibold mt-1">
+            على وتيرتك (~{Math.round(eta.perDay)} صفحة/يوم) تُتمّ خلال ~{eta.daysLeft} يوماً
+          </p>
+        )}
+
         {/* أدوات التحكّم */}
         <div className="w-full mt-3 space-y-2">
+          {/* «قرأت حتى الصفحة…» — أسرع وأدقّ من زيادة جزءٍ كامل */}
+          {!full && (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 shrink-0"><BookOpen size={13} className="text-quran" /> قرأت حتى الصفحة</span>
+              <input
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ""))}
+                onKeyDown={(e) => e.key === "Enter" && savePage()}
+                inputMode="numeric"
+                placeholder={k.page ? String(k.page) : "١–٦٠٤"}
+                className="w-16 text-sm text-center border border-gray-200 dark:border-transparent rounded-lg px-1 py-1.5 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
+              />
+              <button onClick={savePage} disabled={!pageInput} className="text-[11px] font-bold text-white bg-quran rounded-lg px-3 py-1.5 press disabled:opacity-40">سجّل</button>
+            </div>
+          )}
           {full ? (
             <button
               onClick={seal}

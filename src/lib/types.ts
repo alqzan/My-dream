@@ -330,7 +330,8 @@ export const EMPTY_HIFZ: HifzState = {
 
 // حالة الختمة الجارية + عدّاد الختمات المكتملة (يقود «مدار الختمة»).
 export interface KhatmaState {
-  juz: number; // 0..30 عدد الأجزاء المقروءة في الختمة الحالية
+  juz: number; // 0..30 عدد الأجزاء المقروءة في الختمة الحالية (يُضيء الحلقة)
+  page?: number; // 0..604 الصفحة التي بلغها (مصدر التقدّم الأدقّ إن وُجد)
   startDate?: string; // YYYY-MM-DD بداية الختمة الحالية
   completed: number; // عدد الختمات المكتملة
   lastReadDate?: string; // YYYY-MM-DD آخر يوم سُجّل فيه جزء

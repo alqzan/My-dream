@@ -9,6 +9,7 @@ import type {
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { nextReviewCursor } from "./quran/hifz";
+import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
@@ -167,6 +168,7 @@ interface AppStore extends AppData {
   toggleWird: (date: string) => void; // mark/unmark today's daily wird
   addKhatmaJuz: () => void; // read one juz (caps at 30 — the full ring)
   setKhatmaJuz: (juz: number) => void; // set progress directly (0..30)
+  setKhatmaPage: (page: number) => void; // «قرأت حتى الصفحة…» (0..604) — أدقّ من الجزء
   completeKhatma: () => void; // seal a finished khatma (completed++, ring → 0)
   resetKhatma: () => void; // abandon current progress (juz → 0, completed kept)
 
@@ -1097,6 +1099,7 @@ export const useAppStore = create<AppStore>()(
             quranKhatma: {
               ...k,
               juz: k.juz + 1,
+              page: undefined, // العدّ بالجزء يُلغي تتبّع الصفحة (وضعان لا يختلطان)
               startDate: k.startDate ?? todayStr,
               lastReadDate: todayStr,
             },
@@ -1111,8 +1114,26 @@ export const useAppStore = create<AppStore>()(
             quranKhatma: {
               ...k,
               juz: clamped,
+              page: undefined, // تعديل الأجزاء يدوياً يُلغي التتبّع بالصفحة
               startDate: clamped > 0 ? (k.startDate ?? today()) : undefined,
               lastReadDate: clamped > 0 ? today() : k.lastReadDate,
+            },
+          };
+        }),
+
+      // تسجيل الصفحة التي بلغها (أدقّ من جزءٍ كامل): تُشتَقّ منها الأجزاء التي
+      // تُضيء الحلقة والنسبة، ويُقدَّر موعد الإتمام على الوتيرة.
+      setKhatmaPage: (page) =>
+        set((s) => {
+          const k = s.quranKhatma ?? EMPTY_KHATMA;
+          const p = Math.min(Math.max(Math.round(page) || 0, 0), 604);
+          return {
+            quranKhatma: {
+              ...k,
+              page: p,
+              juz: khatmaJuzForPage(p),
+              startDate: p > 0 ? (k.startDate ?? today()) : k.startDate,
+              lastReadDate: p > 0 ? today() : k.lastReadDate,
             },
           };
         }),
@@ -1120,11 +1141,11 @@ export const useAppStore = create<AppStore>()(
       completeKhatma: () =>
         set((s) => {
           const k = s.quranKhatma ?? EMPTY_KHATMA;
-          return { quranKhatma: { juz: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today() } };
+          return { quranKhatma: { juz: 0, page: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today() } };
         }),
 
       resetKhatma: () =>
-        set((s) => ({ quranKhatma: { juz: 0, completed: (s.quranKhatma ?? EMPTY_KHATMA).completed } })),
+        set((s) => ({ quranKhatma: { juz: 0, page: 0, completed: (s.quranKhatma ?? EMPTY_KHATMA).completed } })),
 
       // Uses rawSet so the cloud's own lastUpdated is preserved (stamping a
       // fresh one here would defeat the newer-wins merge comparison).
