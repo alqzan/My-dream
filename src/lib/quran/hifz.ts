@@ -188,6 +188,19 @@ export function mistakesInRange(s: HifzState, from: number, to: number): number 
   ).length;
 }
 
+// بعد كم مرّةٍ متتاليةٍ من التسميع الناجح نقترح إغلاق الخطأ تلقائياً.
+export const MISTAKE_MASTERY_SUGGEST = 2;
+
+// عدد مرّات تسميع موضع الخطأ بنجاح (تقييم ≥ 2) بعد آخر وقوعٍ له — مُشتقٌّ من
+// المراجعات/الجلسات المتداخلة مع آية الموضع، بلا حالةٍ جديدة. يقود اقتراح
+// الإغلاق التلقائي دون حذف تاريخ الخطأ (يُغلَق مع الاحتفاظ بالإحصائية).
+export function mistakeRecallSuccesses(s: HifzState, m: Pick<HifzMistake, "ayahId" | "hits">): number {
+  const lastHit = m.hits[m.hits.length - 1] ?? "";
+  return [...s.sessions, ...s.reviews].filter(
+    (e) => (e.rating ?? 0) >= 2 && e.fromId <= m.ayahId && e.toId >= m.ayahId && e.date > lastHit,
+  ).length;
+}
+
 // أحدث تقييمٍ مسّ كلَّ وجهٍ محفوظ (بتداخل الوجه لا بمطابقة المدى النصّي). هكذا
 // إذا كان وجهٌ ضعيفاً ثمّ راجعه المستخدم لاحقاً ضمن مدى مختلف وأتقنه، تتحدّث
 // حالتُه — كان المفتاح النصّي `fromId-toId` يُبقيه ضعيفاً لأنّ المدى اختلف.

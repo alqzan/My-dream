@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weakSpots, latestRatingByPage } from "./hifz";
+import { weakSpots, latestRatingByPage, mistakeRecallSuccesses } from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzRating } from "../types";
 
@@ -67,6 +67,28 @@ describe("weakSpots — page-overlap based (not exact range-string)", () => {
       reviews: [ev(1, p2.end, "2026-01-06", 3)], // مراجعة لاحقة أتقنت كل شيء
     });
     expect(weakSpots(s)).toHaveLength(0);
+  });
+
+  it("mistakeRecallSuccesses counts successful recalls after the last error only", () => {
+    const p2 = pageRange(2);
+    const s = hz({
+      frontierId: p2.end,
+      // آية الخطأ = 10 (ضمن الوجه المحفوظ).
+      reviews: [
+        ev(1, p2.end, "2026-01-02", 2), // قبل آخر خطأ → لا يُحتسب
+        ev(1, p2.end, "2026-01-06", 3), // بعد آخر خطأ، ناجح → يُحتسب
+        ev(1, p2.end, "2026-01-07", 2), // بعد آخر خطأ، ناجح → يُحتسب
+        ev(1, p2.end, "2026-01-08", 1), // بعد آخر خطأ لكنّه فشل → لا يُحتسب
+      ],
+    });
+    const mistake = { ayahId: 10, hits: ["2026-01-01", "2026-01-05"] };
+    expect(mistakeRecallSuccesses(s, mistake)).toBe(2);
+  });
+
+  it("mistakeRecallSuccesses ignores events not overlapping the mistake's ayah", () => {
+    const p2 = pageRange(2);
+    const s = hz({ frontierId: p2.end, reviews: [ev(1, 5, "2026-01-06", 3)] });
+    expect(mistakeRecallSuccesses(s, { ayahId: 500, hits: ["2026-01-01"] })).toBe(0);
   });
 
   it("latestRatingByPage keeps the newest event per page", () => {
