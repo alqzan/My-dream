@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  mergeAppData, unionOrdered, journalShardId,
+  mergeAppData, mergeHifz, legacyHifzGen, unionOrdered, journalShardId,
   budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey,
 } from "./merge";
 import { mediaTombKey } from "./mediaHash";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
-import type { AppData, JournalEntry, Transaction, ReserveFund, Habit } from "./types";
+import type { AppData, JournalEntry, Transaction, ReserveFund, Habit, HifzState, HifzPlan } from "./types";
 
 // Minimal valid AppData; override only what a test cares about.
 function base(overrides: Partial<AppData> = {}): AppData {
@@ -341,6 +341,130 @@ describe("mergeAppData — single-value settings by per-field stamp", () => {
     const b = base({ fieldUpdatedAt: { monthlyIncome: 1000, readingGoal: 900 } });
     const merged = mergeAppData(a, b);
     expect(merged.fieldUpdatedAt).toEqual({ monthlyIncome: 2000, salaryDay: 500, readingGoal: 900 });
+  });
+});
+
+// ===================== P0: سلامة دمج حفظ القرآن (الأجيال) =====================
+function hz(o: Partial<HifzState> = {}): HifzState {
+  return { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [], ...o };
+}
+const plan = (startId: number, extra: Partial<HifzPlan> = {}): HifzPlan => ({
+  startId, unit: "page", amount: 1, createdAt: "2026-01-01", ...extra,
+});
+
+describe("mergeHifz — plan generations & data safety (P0)", () => {
+  it("legacyHifzGen is deterministic per plan content (converges across devices)", () => {
+    expect(legacyHifzGen({ plan: plan(1) })).toBe(legacyHifzGen({ plan: plan(1) }));
+    expect(legacyHifzGen({ plan: null })).toBe("l:none");
+    expect(legacyHifzGen({ plan: plan(1) })).not.toBe(legacyHifzGen({ plan: plan(5673) }));
+  });
+
+  it("clearing a plan on one device wins over an old copy on another (both orders)", () => {
+    const cleared = hz({ plan: null, planId: "gen-clear", planUpdatedAt: 2000, frontierUpdatedAt: 2000 });
+    const old = hz({
+      plan: plan(1), frontierId: 50,
+      sessions: [{ id: "s1", date: "2026-01-02", fromId: 1, toId: 50, at: 1000 }],
+      planId: "gen-old", planUpdatedAt: 1000, frontierUpdatedAt: 1000,
+    });
+    for (const m of [mergeHifz(cleared, old), mergeHifz(old, cleared)]) {
+      expect(m.plan).toBeNull();
+      expect(m.frontierId).toBe(0);
+      expect(m.sessions).toHaveLength(0);
+      expect(m.planId).toBe("gen-clear");
+    }
+  });
+
+  it("a new plan (جزء عم) after an old one (البقرة) doesn't mix old records", () => {
+    const baqarah = hz({
+      plan: plan(1), frontierId: 100,
+      sessions: [{ id: "b1", date: "2026-01-05", fromId: 1, toId: 100, at: 1000 }],
+      reviews: [{ id: "rv1", date: "2026-01-06", fromId: 1, toId: 100 }],
+      mistakes: [{ id: "mk1", ayahId: 3, wordIndex: null, hits: ["2026-01-05"], resolved: false, updatedAt: "2026-01-05" }],
+      planId: "g-baq", planUpdatedAt: 1000, frontierUpdatedAt: 1000,
+    });
+    const amma = hz({
+      plan: plan(5673, { createdAt: "2026-02-01" }), frontierId: 5672,
+      planId: "g-amma", planUpdatedAt: 2000, frontierUpdatedAt: 2000,
+    });
+    const m = mergeHifz(baqarah, amma);
+    expect(m.plan?.startId).toBe(5673);
+    expect(m.frontierId).toBe(5672);
+    expect(m.sessions).toHaveLength(0);
+    expect(m.reviews).toHaveLength(0);
+    expect(m.mistakes).toHaveLength(0);
+    expect(m.planId).toBe("g-amma");
+  });
+
+  it("a recent manual backward frontier correction propagates (not undone by Math.max)", () => {
+    const sess = { id: "s1", date: "2026-01-05", fromId: 1, toId: 120, at: 1000 };
+    const withProgress = hz({ plan: plan(1), frontierId: 120, sessions: [sess], planId: "g1", planUpdatedAt: 500, frontierUpdatedAt: 500 });
+    const corrected = hz({ plan: plan(1), frontierId: 50, sessions: [sess], planId: "g1", planUpdatedAt: 500, frontierUpdatedAt: 2000 });
+    expect(mergeHifz(withProgress, corrected).frontierId).toBe(50);
+    expect(mergeHifz(corrected, withProgress).frontierId).toBe(50);
+  });
+
+  it("two simultaneous memorization sessions on the same plan both survive (no loss)", () => {
+    const a = hz({ plan: plan(1), frontierId: 100, sessions: [{ id: "sA", date: "2026-01-05", fromId: 51, toId: 100, at: 1000 }], planId: "g1", planUpdatedAt: 100, frontierUpdatedAt: 100 });
+    const b = hz({ plan: plan(1), frontierId: 120, sessions: [{ id: "sB", date: "2026-01-05", fromId: 51, toId: 120, at: 1100 }], planId: "g1", planUpdatedAt: 100, frontierUpdatedAt: 100 });
+    const m = mergeHifz(a, b);
+    expect(m.sessions.map((s) => s.id).sort()).toEqual(["sA", "sB"]);
+    expect(m.frontierId).toBe(120); // furthest real progress
+    expect(mergeHifz(b, a).frontierId).toBe(120); // commutative
+  });
+
+  it("a review and a mistake added on two devices (same plan) both merge in", () => {
+    const a = hz({ plan: plan(1), frontierId: 100, planId: "g1", planUpdatedAt: 100, frontierUpdatedAt: 100,
+      reviews: [{ id: "rA", date: "2026-01-06", fromId: 1, toId: 50 }],
+      mistakes: [{ id: "mA", ayahId: 3, wordIndex: 2, hits: ["2026-01-06"], resolved: false, updatedAt: "2026-01-06" }],
+    });
+    const b = hz({ plan: plan(1), frontierId: 100, planId: "g1", planUpdatedAt: 100, frontierUpdatedAt: 100,
+      reviews: [{ id: "rB", date: "2026-01-07", fromId: 51, toId: 100 }],
+      mistakes: [{ id: "mB", ayahId: 9, wordIndex: null, hits: ["2026-01-07"], resolved: false, updatedAt: "2026-01-07" }],
+    });
+    const m = mergeHifz(a, b);
+    expect(m.reviews.map((r) => r.id).sort()).toEqual(["rA", "rB"]);
+    expect((m.mistakes ?? []).map((x) => x.id).sort()).toEqual(["mA", "mB"]);
+  });
+
+  it("legacy states with no planId (same plan) merge without loss", () => {
+    const legA = hz({ plan: plan(1), frontierId: 50, sessions: [{ id: "a", date: "2026-01-02", fromId: 1, toId: 50 }] });
+    const legB = hz({ plan: plan(1), frontierId: 60, sessions: [{ id: "b", date: "2026-01-03", fromId: 51, toId: 60 }] });
+    const m = mergeHifz(legA, legB);
+    expect(m.sessions.map((s) => s.id).sort()).toEqual(["a", "b"]);
+    expect(m.frontierId).toBe(60);
+  });
+
+  it("updating the daily amount keeps progress (newer config wins, sessions intact)", () => {
+    const sess = { id: "s1", date: "2026-01-05", fromId: 1, toId: 100, at: 1000 };
+    const a = hz({ plan: plan(1, { amount: 1 }), frontierId: 100, sessions: [sess], planId: "g1", planUpdatedAt: 500, frontierUpdatedAt: 100 });
+    const b = hz({ plan: plan(1, { amount: 3 }), frontierId: 100, sessions: [sess], planId: "g1", planUpdatedAt: 2000, frontierUpdatedAt: 100 });
+    const m = mergeHifz(a, b);
+    expect(m.plan?.amount).toBe(3);
+    expect(m.frontierId).toBe(100);
+    expect(m.sessions).toHaveLength(1);
+  });
+
+  it("restoring a backup then syncing does NOT revive a cleared plan", () => {
+    // Backup keeps its ORIGINAL (old) plan stamp; the cleared device is newer.
+    const restoredBackup = hz({ plan: plan(1), frontierId: 200,
+      sessions: [{ id: "s1", date: "2026-01-05", fromId: 1, toId: 200, at: 1000 }],
+      planId: "g-old", planUpdatedAt: 1000, frontierUpdatedAt: 1000 });
+    const cleared = hz({ plan: null, planId: "gen-clear", planUpdatedAt: 5000, frontierUpdatedAt: 5000 });
+    const m = mergeHifz(restoredBackup, cleared);
+    expect(m.plan).toBeNull();
+    expect(m.sessions).toHaveLength(0);
+  });
+
+  it("wires through mergeAppData end-to-end (clear wins)", () => {
+    const local = base({ lastUpdated: "2026-05-10T12:00:00.000Z",
+      quranHifz: hz({ plan: null, planId: "gc", planUpdatedAt: 3000, frontierUpdatedAt: 3000 }) });
+    const cloud = base({ lastUpdated: "2026-05-11T12:00:00.000Z", // newer top-level stamp, but OLD plan gen
+      quranHifz: hz({ plan: plan(1), frontierId: 80,
+        sessions: [{ id: "s1", date: "2026-01-05", fromId: 1, toId: 80, at: 1000 }],
+        planId: "go", planUpdatedAt: 1000, frontierUpdatedAt: 1000 }) });
+    const merged = mergeAppData(local, cloud);
+    expect(merged.quranHifz.plan).toBeNull();
+    expect(merged.quranHifz.sessions).toHaveLength(0);
   });
 });
 

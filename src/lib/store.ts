@@ -4,14 +4,14 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter,
-  QuranReflection, HifzUnit, HifzRating, HifzMistake,
+  QuranReflection, HifzUnit, HifzRating, HifzMistake, HifzState,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { nextReviewCursor } from "./quran/hifz";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
-import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey } from "./merge";
+import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 
@@ -852,45 +852,72 @@ export const useAppStore = create<AppStore>()(
       // Fresh plan: sets the start point and daily target, and resets the
       // frontier to just before the start (so the first daily portion begins at
       // startId) along with all sessions/reviews.
+      // Fresh plan: جيلٌ جديد (planId) بطابعٍ حديث — فيفوز على أيّ خطةٍ قديمة على
+      // جهازٍ آخر ولا تُعيده نسخة سابقة عند الدمج (راجع mergeHifz).
       startHifzPlan: (startId, unit, amount) =>
-        set(() => ({
-          quranHifz: {
-            plan: { startId, unit, amount: Math.max(1, Math.round(amount) || 1), createdAt: today() },
-            frontierId: Math.max(0, startId - 1),
-            sessions: [],
-            reviews: [],
-            reviewCursorId: 0,
-          },
-        })),
+        set(() => {
+          const now = Date.now();
+          return {
+            quranHifz: {
+              plan: { startId, unit, amount: Math.max(1, Math.round(amount) || 1), createdAt: today() },
+              frontierId: Math.max(0, startId - 1),
+              sessions: [],
+              reviews: [],
+              reviewCursorId: 0,
+              mistakes: [],
+              lastTestDate: undefined,
+              planId: uid(),
+              planUpdatedAt: now,
+              frontierUpdatedAt: now,
+            },
+          };
+        }),
 
-      // Tune the daily target/unit without touching memorized progress.
+      // Tune the daily target/unit without touching memorized progress. يبقى
+      // الجيل نفسه؛ نُحدِّث planUpdatedAt فقط لينتشر تعديلُ المقدار عبر الأجهزة.
       updateHifzPlan: (patch) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           if (!h.plan) return {};
           const plan = { ...h.plan, ...patch };
           if (patch.amount != null) plan.amount = Math.max(1, Math.round(patch.amount) || 1);
-          return { quranHifz: { ...h, plan } };
+          return { quranHifz: { ...h, plan, planUpdatedAt: Date.now() } };
         }),
 
-      clearHifz: () => set(() => ({ quranHifz: EMPTY_HIFZ })),
+      // مسح الخطة: جيلٌ جديد (planId) بطابعٍ حديث حتى يفوز على الخطة القديمة عند
+      // الدمج — فلا تُعيدها نسخةٌ قديمة ولا استعادةُ نسخةٍ احتياطية سابقة.
+      clearHifz: () =>
+        set(() => {
+          const now = Date.now();
+          return {
+            quranHifz: {
+              plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0,
+              mistakes: [], lastTestDate: undefined,
+              planId: uid(), planUpdatedAt: now, frontierUpdatedAt: now,
+            },
+          };
+        }),
 
-      // Memorize forward: advance the frontier to toId and log the session.
+      // Memorize forward: advance the frontier to toId and log the session. نختم
+      // الجلسة بطابع `at` ليميّزها الدمجُ عن التصحيح اليدوي (تقدّم الجلسات لا
+      // يُلغى، والتصحيح اليدويّ الأحدث منها يفوز).
       recordHifzSession: (toId, rating) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           const from = h.frontierId + 1;
           const to = Math.min(Math.max(toId, from), TOTAL_AYAT);
           if (to < from) return {};
-          const session = { id: uid(), date: today(), fromId: from, toId: to, rating };
+          const session = { id: uid(), date: today(), fromId: from, toId: to, rating, at: Date.now() };
           return { quranHifz: { ...h, frontierId: to, sessions: [session, ...h.sessions] } };
         }),
 
       // Move the memorization position by hand (correction) without a session.
+      // نختمه بـfrontierUpdatedAt حتى ينتشر التصحيح (ولو للخلف) ولا يُلغيه اتّحادٌ
+      // أعمى مع جبهةٍ قديمة أعلى على جهازٍ آخر.
       setFrontier: (id) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
-          return { quranHifz: { ...h, frontierId: Math.min(Math.max(Math.round(id) || 0, 0), TOTAL_AYAT) } };
+          return { quranHifz: { ...h, frontierId: Math.min(Math.max(Math.round(id) || 0, 0), TOTAL_AYAT), frontierUpdatedAt: Date.now() } };
         }),
 
       // Log a periodic review of a memorized portion and advance the review
@@ -1110,7 +1137,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 12,
+      version: 13,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -1286,6 +1313,27 @@ export const useAppStore = create<AppStore>()(
         if (version < 12) {
           const je = (state.journalEntries as JournalEntry[]) ?? [];
           state = { ...state, journalEntries: dedupeJournalEntries(je) };
+        }
+
+        // v13 يُثبّت «جيل خطة الحفظ» (planId) لبيانات quranHifz القديمة التي لا
+        // تحمله: معرّفٌ مشتقٌّ ثابت (legacyHifzGen) يُنتج القيمةَ نفسها على كلّ
+        // جهاز — فتتلاقى الخطة القديمة في جيلٍ واحد وتتّحد سجلّاتها بلا فقد، بينما
+        // أيّ بدءٍ/مسحٍ لاحق (planId عشوائي بطابعٍ حديث) يفوز عليها. الطوابع صفر
+        // كي يفوز عليها أيّ إجراءٍ حقيقيّ لاحق. راجع mergeHifz في merge.ts.
+        if (version < 13) {
+          const h = state.quranHifz as HifzState | undefined;
+          if (h && h.planId == null) {
+            state = {
+              ...state,
+              quranHifz: {
+                ...h,
+                mistakes: h.mistakes ?? [],
+                planId: legacyHifzGen(h),
+                planUpdatedAt: 0,
+                frontierUpdatedAt: 0,
+              },
+            };
+          }
         }
 
         return state as unknown as AppData;

@@ -268,6 +268,7 @@ export interface HifzSession {
   fromId: number; // أوّل آية حُفظت في الجلسة
   toId: number; // آخر آية
   rating?: HifzRating;
+  at?: number; // طابع زمني بالمللي‌ثانية — يميّز تقدّم الجلسات عن التصحيح اليدوي عند الدمج
 }
 
 export interface HifzReviewLog {
@@ -299,6 +300,12 @@ export interface HifzState {
   reviewCursorId: number; // موضع دوران المراجعة الدورية داخل المحفوظ (0 = من البداية)
   mistakes?: HifzMistake[]; // مواضع الأخطاء المُحدَّدة أثناء المراجعة
   lastTestDate?: string; // آخر يومٍ ظهر فيه الاختبار العشوائي (لدوريّته)
+  // هوية «جيل الخطة»: تتبدّل عند بدء خطة جديدة أو مسحها، فلا تخلط سجلّات خطةٍ
+  // قديمة بخطةٍ جديدة، ولا تُعيد نسخةٌ قديمة خطةً مُسِحت. غيابها (بيانات قديمة)
+  // يُشتَقّ منه معرّفٌ ثابت عبر legacyHifzGen. راجع mergeHifz في merge.ts.
+  planId?: string;
+  planUpdatedAt?: number; // طابع بالمللي‌ثانية لآخر تغييرٍ على مستوى الخطة (بدء/مسح/تعديل مقدار)
+  frontierUpdatedAt?: number; // طابع بالمللي‌ثانية لآخر تصحيحٍ يدويٍّ للجبهة (setFrontier/بدء الخطة)
 }
 
 export const EMPTY_HIFZ: HifzState = {

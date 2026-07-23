@@ -2,7 +2,8 @@
 // has NO Firebase imports and can be unit-tested in plain Node. sync.ts re-
 // exports mergeAppData, so existing importers are unaffected. Pure functions of
 // (local, cloud) → merged AppData; touches no I/O.
-import type { AppData, JournalEntry, HifzMistake } from "./types";
+import type { AppData, JournalEntry, HifzMistake, HifzState } from "./types";
+import { EMPTY_HIFZ } from "./types";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 
 // Which journal shard a given entry belongs to: one document per YYYY-MM of the
@@ -46,6 +47,104 @@ export function unionOrdered<T>(primary: T[], secondary: T[], keyOf: (t: T) => s
 // the cure there is to clear the returning device and re-adopt the cloud, not a
 // heavier per-device watermark scheme.
 const TOMBSTONE_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
+
+// ===================== دمج حفظ القرآن (واعٍ بالجيل) =====================
+// المشكلة القديمة: `plan: ph.plan ?? sh.plan` و`frontierId: Math.max(...)`
+// واتّحادٌ أعمى للسجلّات — فكانت خطةٌ مُسِحت تعود من نسخةٍ قديمة، وتصحيحُ الجبهة
+// إلى الخلف يُلغيه Math.max، وقد تختلط سجلّات خطةٍ قديمة بجديدة.
+//
+// النموذج: لكلّ خطةٍ «جيلٌ» (planId) وطابعٌ موثوق (planUpdatedAt).
+//  • عند اختلاف الجيلين: يفوز صاحب الطابع الأحدث *كاملاً* (خطته، جبهته،
+//    وسجلّاته وحده) — فالمسح/البدء الأحدث ينتشر ولا تُعيده نسخةٌ قديمة. صاحب
+//    الجيل الأحدث هو مؤلِّف كلّ سجلّات ذلك الجيل (لم يرَه الطرف الآخر بعد)،
+//    فأخذُ سجلّاته كاملةً كافٍ ولا يخلط شيئاً من الجيل القديم.
+//  • عند اتّفاق الجيلين: تتّحد الجلسات والمراجعات والأخطاء بلا فقد، وتُحسب
+//    الجبهةُ بحيث لا يضيع تقدّمٌ متزامن (max على أقصى جلسة) ولا يُلغى تصحيحٌ
+//    يدويٌّ حديث (طابع frontierUpdatedAt الأحدث من آخر جلسة يفوز، ولو للخلف).
+//
+// دالة تبادلية (لا يهمّ ترتيب a/b): كلّ الاختيارات بطوابع مع كسر تعادلٍ ثابت.
+
+// معرّف جيلٍ مشتقّ ثابت للبيانات القديمة التي لا تحمل planId — يجب أن يُنتج
+// القيمةَ نفسها على كلّ جهاز حتى تتلاقى النسخُ القديمة في جيلٍ واحد بدل أن
+// يطيح أحدُهما بالآخر. مشتقٌّ من محتوى الخطة (ثابتٌ عبر الأجهزة).
+export function legacyHifzGen(h: Pick<HifzState, "plan">): string {
+  return h.plan ? `l:${h.plan.startId}:${h.plan.createdAt}` : "l:none";
+}
+
+const hifzGen = (h: HifzState): string => h.planId ?? legacyHifzGen(h);
+
+export function mergeHifz(a: HifzState, b: HifzState): HifzState {
+  const ga = hifzGen(a);
+  const gb = hifzGen(b);
+  const aAt = a.planUpdatedAt ?? 0;
+  const bAt = b.planUpdatedAt ?? 0;
+
+  if (ga !== gb) {
+    // جيلان مختلفان: يفوز الأحدث كاملاً. كسر التعادل بمقارنة المعرّف (ثابت).
+    const aWins = aAt !== bAt ? aAt > bAt : ga > gb;
+    const win = aWins ? a : b;
+    return {
+      plan: win.plan,
+      frontierId: win.frontierId ?? 0,
+      sessions: [...(win.sessions ?? [])],
+      reviews: [...(win.reviews ?? [])],
+      reviewCursorId: win.reviewCursorId ?? 0,
+      mistakes: [...(win.mistakes ?? [])],
+      lastTestDate: win.lastTestDate,
+      planId: hifzGen(win),
+      planUpdatedAt: win.planUpdatedAt ?? Math.max(aAt, bAt),
+      frontierUpdatedAt: win.frontierUpdatedAt ?? 0,
+    };
+  }
+
+  // الجيل نفسه: اتّحادٌ بلا فقد.
+  const sessions = unionOrdered(a.sessions ?? [], b.sessions ?? [], (x) => x.id);
+  const reviews = unionOrdered(a.reviews ?? [], b.reviews ?? [], (x) => x.id);
+
+  // الأخطاء: اتّحاد بالـid مع دمج تواريخ الوقوع (hits) وأحدث حالة إتقان.
+  const aMist = a.mistakes ?? [];
+  const bMist = b.mistakes ?? [];
+  const aMistById = new Map(aMist.map((m) => [m.id, m]));
+  const bMistById = new Map(bMist.map((m) => [m.id, m]));
+  const mistakes: HifzMistake[] = unionOrdered(aMist, bMist, (m) => m.id).map((m) => {
+    const x = aMistById.get(m.id);
+    const y = bMistById.get(m.id);
+    if (!x || !y) return m;
+    const newer = (x.updatedAt ?? "") >= (y.updatedAt ?? "") ? x : y;
+    return { ...newer, hits: [...new Set([...(x.hits ?? []), ...(y.hits ?? [])])].sort() };
+  });
+
+  // الجبهة: تقدّم الجلسات (max على أقصى toId) يحمي التقدّم المتزامن؛ لكنّ
+  // تصحيحاً يدوياً أحدثَ من آخر جلسة يفوز حتى لو كان للخلف.
+  const startFloor = (a.plan?.startId ?? b.plan?.startId ?? 1) - 1;
+  const sessMax = sessions.reduce((mx, x) => Math.max(mx, x.toId ?? 0), startFloor);
+  const newestSessionAt = sessions.reduce((mx, x) => Math.max(mx, x.at ?? 0), 0);
+  const faAt = a.frontierUpdatedAt ?? 0;
+  const fbAt = b.frontierUpdatedAt ?? 0;
+  const mfAt = Math.max(faAt, fbAt);
+  const mfVal = (faAt !== fbAt ? faAt > fbAt : (a.frontierId ?? 0) >= (b.frontierId ?? 0))
+    ? (a.frontierId ?? 0) : (b.frontierId ?? 0);
+  const frontierId = mfAt > newestSessionAt ? mfVal : Math.max(mfVal, sessMax);
+
+  // إعدادات الخطة (المقدار/الوحدة): يفوز آخر تعديل (planUpdatedAt الأحدث).
+  const planSide = aAt !== bAt ? (aAt > bAt ? a : b) : (a.plan ? a : b);
+  const lastTestDate = (a.lastTestDate ?? "") >= (b.lastTestDate ?? "")
+    ? a.lastTestDate : b.lastTestDate;
+  const cursorSide = faAt >= fbAt ? a : b;
+
+  return {
+    plan: planSide.plan,
+    frontierId,
+    sessions,
+    reviews,
+    reviewCursorId: cursorSide.reviewCursorId || (cursorSide === a ? b : a).reviewCursorId || 0,
+    mistakes,
+    lastTestDate,
+    planId: a.planId ?? b.planId ?? ga,
+    planUpdatedAt: Math.max(aAt, bAt) || undefined,
+    frontierUpdatedAt: mfAt || undefined,
+  };
+}
 
 export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const localNewer = (local.lastUpdated ?? "") >= (cloud.lastUpdated ?? "");
@@ -145,37 +244,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const sk = secondary.quranKhatma ?? { juz: 0, completed: 0 };
   const quranKhatma = { ...pk, completed: Math.max(pk.completed ?? 0, sk.completed ?? 0) };
 
-  // Quran حفظ: خطة من الأحدث، والجبهة أبعد موضعٍ بلغه أيُّ جهاز، وسجلّا الجلسات
-  // والمراجعات يُوحَّدان بالـid فلا يضيع أثرٌ سُجّل على جهاز. مواضع الأخطاء
-  // (mistakes) تُوحَّد بالـid مع دمج تواريخ الوقوع (hits) وأحدث حالة إتقان، و
-  // lastTestDate يأخذ الأحدث — كان الاثنان يُمحيان لأن الدمج بنى كائنًا ناقصهما.
-  const emptyHifz = { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [] as HifzMistake[], lastTestDate: undefined as string | undefined };
-  const ph = primary.quranHifz ?? emptyHifz;
-  const sh = secondary.quranHifz ?? emptyHifz;
-  const pMist = ph.mistakes ?? [];
-  const sMist = sh.mistakes ?? [];
-  const pMistById = new Map(pMist.map((m) => [m.id, m]));
-  const sMistById = new Map(sMist.map((m) => [m.id, m]));
-  const mistakes = unionOrdered(pMist, sMist, (m) => m.id).map((m) => {
-    const a = pMistById.get(m.id);
-    const b = sMistById.get(m.id);
-    if (!a || !b) return m; // only one device has it
-    // Both hold it: union the hit dates, and take the record edited more
-    // recently for resolved/word so an "أُتقن" on either device sticks.
-    const newer = (a.updatedAt ?? "") >= (b.updatedAt ?? "") ? a : b;
-    return { ...newer, hits: [...new Set([...(a.hits ?? []), ...(b.hits ?? [])])].sort() };
-  });
-  const lastTestDate = (ph.lastTestDate ?? "") >= (sh.lastTestDate ?? "")
-    ? ph.lastTestDate : sh.lastTestDate;
-  const quranHifz = {
-    plan: ph.plan ?? sh.plan,
-    frontierId: Math.max(ph.frontierId ?? 0, sh.frontierId ?? 0),
-    sessions: unionOrdered(ph.sessions ?? [], sh.sessions ?? [], (x) => x.id),
-    reviews: unionOrdered(ph.reviews ?? [], sh.reviews ?? [], (x) => x.id),
-    reviewCursorId: ph.reviewCursorId || sh.reviewCursorId || 0,
-    mistakes,
-    lastTestDate,
-  };
+  // Quran حفظ: دمجٌ واعٍ بجيل الخطة — الجيل الأحدث يفوز كاملاً عند اختلاف
+  // الجيلين، والتقدّم يتّحد بلا فقد عند اتّفاقهما. راجع mergeHifz أدناه.
+  const quranHifz = mergeHifz(primary.quranHifz ?? EMPTY_HIFZ, secondary.quranHifz ?? EMPTY_HIFZ);
 
   // Journal entries need more than a plain id-union. First canonicalize +
   // dedupe both sides so the same Day One entry imported on two devices (which
