@@ -183,7 +183,10 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
     return { target, head, tail };
   }, [memories]);
 
-  if (stars.length === 0) {
+  // فارغةٌ فقط حين لا مذكرات أصلاً. لا نعتمد على stars.length لأنّه صفرٌ في وضع
+  // الكوكبات قبل فتح شهر (starEntries حينها = []) فكانت «السماء الخالية» تُغطّي
+  // الكوكبات عند تجاوز الحدّ (>120 مذكرة).
+  if (entries.length === 0) {
     return (
       <div className="rounded-2xl overflow-hidden card-shadow" style={SKY_BG}>
         <div className="px-4 py-2">

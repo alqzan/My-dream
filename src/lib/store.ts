@@ -48,6 +48,18 @@ function clearTombstone(
   return { deleted: next };
 }
 
+// شواهد حذف سجلّات الحفظ (جلسات/مراجعات/أخطاء) تعيش داخل HifzState نفسها فتبقى
+// خاصّةً بالجيل ويحملها الدمج. الحذف يكتب الشاهد، والتراجع يرفعه.
+function addRecordTomb(h: HifzState, id: string): Record<string, number> {
+  return { ...(h.deletedRecords ?? {}), [id]: Date.now() };
+}
+function liftRecordTomb(h: HifzState, id: string): Record<string, number> | undefined {
+  if (!h.deletedRecords || !(id in h.deletedRecords)) return h.deletedRecords;
+  const next = { ...h.deletedRecords };
+  delete next[id];
+  return Object.keys(next).length ? next : undefined;
+}
+
 // Outcome of a Day One import: `added` = new entries, `completed` = existing
 // entries whose partially-missing media was filled, and how many of the touched
 // entries carry photos/audio (for an honest summary — not a slice() guess).
@@ -918,7 +930,8 @@ export const useAppStore = create<AppStore>()(
           const from = h.frontierId + 1;
           const to = Math.min(Math.max(toId, from), TOTAL_AYAT);
           if (to < from) return {};
-          const session = { id: uid(), date: today(), fromId: from, toId: to, rating, at: Date.now() };
+          const now = Date.now();
+          const session = { id: uid(), date: today(), fromId: from, toId: to, rating, at: now, updatedAt: now };
           return { quranHifz: { ...h, frontierId: to, sessions: [session, ...h.sessions] } };
         }),
 
@@ -938,7 +951,8 @@ export const useAppStore = create<AppStore>()(
       recordReview: (fromId, toId, rating, advance = true) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
-          const log = { id: uid(), date: today(), fromId, toId, rating };
+          const now = Date.now();
+          const log = { id: uid(), date: today(), fromId, toId, rating, at: now, updatedAt: now };
           return {
             quranHifz: {
               ...h,
@@ -968,7 +982,8 @@ export const useAppStore = create<AppStore>()(
       recordRandomTest: (fromId, toId, rating) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
-          const log = { id: uid(), date: today(), fromId, toId, rating };
+          const now = Date.now();
+          const log = { id: uid(), date: today(), fromId, toId, rating, at: now, updatedAt: now };
           return { quranHifz: { ...h, reviews: [log, ...h.reviews], lastTestDate: today() } };
         }),
 
@@ -979,7 +994,8 @@ export const useAppStore = create<AppStore>()(
       updateHifzSession: (id, patch) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
-          return { quranHifz: { ...h, sessions: h.sessions.map((x) => (x.id === id ? { ...x, ...patch } : x)) } };
+          // نختم updatedAt فيفوز آخر تعديلِ تقييمٍ عند الدمج بين جهازين.
+          return { quranHifz: { ...h, sessions: h.sessions.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) } };
         }),
 
       deleteHifzSession: (id) =>
@@ -988,7 +1004,8 @@ export const useAppStore = create<AppStore>()(
           const sessions = h.sessions.filter((x) => x.id !== id);
           const floor = Math.max(0, (h.plan?.startId ?? 1) - 1);
           const frontierId = sessions.reduce((mx, x) => Math.max(mx, x.toId), floor);
-          return { quranHifz: { ...h, sessions, frontierId, frontierUpdatedAt: Date.now() } };
+          // شاهدُ حذفٍ حتى لا يُعيد اتّحادُ المزامنة الجلسةَ من جهازٍ قديم.
+          return { quranHifz: { ...h, sessions, frontierId, frontierUpdatedAt: Date.now(), deletedRecords: addRecordTomb(h, id) } };
         }),
 
       restoreHifzSession: (session) =>
@@ -998,26 +1015,27 @@ export const useAppStore = create<AppStore>()(
           const sessions = [session, ...h.sessions];
           const floor = Math.max(0, (h.plan?.startId ?? 1) - 1);
           const frontierId = sessions.reduce((mx, x) => Math.max(mx, x.toId), floor);
-          return { quranHifz: { ...h, sessions, frontierId, frontierUpdatedAt: Date.now() } };
+          // التراجع يرفع الشاهد فتعود الجلسة وتصمد أمام الدمج.
+          return { quranHifz: { ...h, sessions, frontierId, frontierUpdatedAt: Date.now(), deletedRecords: liftRecordTomb(h, session.id) } };
         }),
 
       updateHifzReview: (id, patch) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
-          return { quranHifz: { ...h, reviews: h.reviews.map((x) => (x.id === id ? { ...x, ...patch } : x)) } };
+          return { quranHifz: { ...h, reviews: h.reviews.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) } };
         }),
 
       deleteHifzReview: (id) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
-          return { quranHifz: { ...h, reviews: h.reviews.filter((x) => x.id !== id) } };
+          return { quranHifz: { ...h, reviews: h.reviews.filter((x) => x.id !== id), deletedRecords: addRecordTomb(h, id) } };
         }),
 
       restoreHifzReview: (review) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           if (h.reviews.some((x) => x.id === review.id)) return {};
-          return { quranHifz: { ...h, reviews: [review, ...h.reviews] } };
+          return { quranHifz: { ...h, reviews: [review, ...h.reviews], deletedRecords: liftRecordTomb(h, review.id) } };
         }),
 
       // تحديد خطأٍ في موضعٍ (كلمة أو آية كاملة) بمنطق التبديل: أوّل مرّة يُنشئ
@@ -1071,7 +1089,8 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           const list = h.mistakes ?? [];
-          return { quranHifz: { ...h, mistakes: list.filter((m) => m.id !== id) } };
+          // شاهدُ حذفٍ نهائيّ فلا يُعيد اتّحادُ الدمج الخطأَ من جهازٍ قديم.
+          return { quranHifz: { ...h, mistakes: list.filter((m) => m.id !== id), deletedRecords: addRecordTomb(h, id) } };
         }),
 
       toggleWird: (date) =>

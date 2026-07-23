@@ -73,6 +73,41 @@ export function legacyHifzGen(h: Pick<HifzState, "plan">): string {
 
 const hifzGen = (h: HifzState): string => h.planId ?? legacyHifzGen(h);
 
+// اتّحاد شاهدَي حذفٍ (id → طابع) بأخذ الأحدث لكلّ id، مع تقليمٍ لما تجاوز TTL.
+function mergeRecordTombstones(
+  a?: Record<string, number>, b?: Record<string, number>
+): Record<string, number> {
+  const out: Record<string, number> = { ...(a ?? {}) };
+  for (const [k, v] of Object.entries(b ?? {})) out[k] = Math.max(out[k] ?? 0, v);
+  const cutoff = Date.now() - TOMBSTONE_TTL_MS;
+  for (const k of Object.keys(out)) if (out[k] < cutoff) delete out[k];
+  return out;
+}
+
+// اتّحاد سجلّاتٍ مفتاحُها id مع: إسقاط المشهودِ حذفُه، وفوزِ آخر تعديلٍ (updatedAt
+// ثمّ at) عند تعارض التقييم على id واحد، وترتيبٍ موثوقٍ عبر الأجهزة (التاريخ
+// تنازلياً ثمّ at ثمّ id) فتنتظم مراجعتان/جلستان في اليوم نفسه بلا اعتمادٍ على
+// أيّ الطرفين «الأساس».
+function mergeHifzRecords<T extends { id: string; date?: string; at?: number; updatedAt?: number }>(
+  a: T[], b: T[], tomb: Record<string, number>
+): T[] {
+  const byId = new Map<string, T>();
+  for (const r of [...a, ...b]) {
+    const prev = byId.get(r.id);
+    if (!prev) { byId.set(r.id, r); continue; }
+    const rU = r.updatedAt ?? r.at ?? 0;
+    const pU = prev.updatedAt ?? prev.at ?? 0;
+    if (rU > pU) byId.set(r.id, r);
+  }
+  return [...byId.values()]
+    .filter((r) => !(r.id in tomb))
+    .sort((x, y) =>
+      (y.date ?? "").localeCompare(x.date ?? "") ||
+      (y.at ?? 0) - (x.at ?? 0) ||
+      (x.id < y.id ? 1 : x.id > y.id ? -1 : 0)
+    );
+}
+
 export function mergeHifz(a: HifzState, b: HifzState): HifzState {
   const ga = hifzGen(a);
   const gb = hifzGen(b);
@@ -83,6 +118,9 @@ export function mergeHifz(a: HifzState, b: HifzState): HifzState {
     // جيلان مختلفان: يفوز الأحدث كاملاً. كسر التعادل بمقارنة المعرّف (ثابت).
     const aWins = aAt !== bAt ? aAt > bAt : ga > gb;
     const win = aWins ? a : b;
+    // شواهد الحذف خاصّة بالجيل: نأخذ شواهد الفائز وحده (سجلّات الجيل الخاسر
+    // تُسقَط أصلاً)، مقلَّمةً بـTTL.
+    const wtomb = mergeRecordTombstones(win.deletedRecords);
     return {
       plan: win.plan,
       frontierId: win.frontierId ?? 0,
@@ -94,25 +132,31 @@ export function mergeHifz(a: HifzState, b: HifzState): HifzState {
       planId: hifzGen(win),
       planUpdatedAt: win.planUpdatedAt ?? Math.max(aAt, bAt),
       frontierUpdatedAt: win.frontierUpdatedAt ?? 0,
+      deletedRecords: Object.keys(wtomb).length ? wtomb : undefined,
     };
   }
 
-  // الجيل نفسه: اتّحادٌ بلا فقد.
-  const sessions = unionOrdered(a.sessions ?? [], b.sessions ?? [], (x) => x.id);
-  const reviews = unionOrdered(a.reviews ?? [], b.reviews ?? [], (x) => x.id);
+  // الجيل نفسه: اتّحادٌ بلا فقد — مع إسقاط المشهودِ حذفُه فلا يُعيده جهازٌ قديم،
+  // وفوزِ آخر تعديلِ تقييمٍ، وترتيبٍ موثوق.
+  const tomb = mergeRecordTombstones(a.deletedRecords, b.deletedRecords);
+  const sessions = mergeHifzRecords(a.sessions ?? [], b.sessions ?? [], tomb);
+  const reviews = mergeHifzRecords(a.reviews ?? [], b.reviews ?? [], tomb);
 
-  // الأخطاء: اتّحاد بالـid مع دمج تواريخ الوقوع (hits) وأحدث حالة إتقان.
+  // الأخطاء: اتّحاد بالـid مع دمج تواريخ الوقوع (hits) وأحدث حالة إتقان، ثمّ
+  // إسقاط المشهودِ حذفُه (deleteMistake النهائي).
   const aMist = a.mistakes ?? [];
   const bMist = b.mistakes ?? [];
   const aMistById = new Map(aMist.map((m) => [m.id, m]));
   const bMistById = new Map(bMist.map((m) => [m.id, m]));
-  const mistakes: HifzMistake[] = unionOrdered(aMist, bMist, (m) => m.id).map((m) => {
-    const x = aMistById.get(m.id);
-    const y = bMistById.get(m.id);
-    if (!x || !y) return m;
-    const newer = (x.updatedAt ?? "") >= (y.updatedAt ?? "") ? x : y;
-    return { ...newer, hits: [...new Set([...(x.hits ?? []), ...(y.hits ?? [])])].sort() };
-  });
+  const mistakes: HifzMistake[] = unionOrdered(aMist, bMist, (m) => m.id)
+    .filter((m) => !(m.id in tomb))
+    .map((m) => {
+      const x = aMistById.get(m.id);
+      const y = bMistById.get(m.id);
+      if (!x || !y) return m;
+      const newer = (x.updatedAt ?? "") >= (y.updatedAt ?? "") ? x : y;
+      return { ...newer, hits: [...new Set([...(x.hits ?? []), ...(y.hits ?? [])])].sort() };
+    });
 
   // الجبهة: تقدّم الجلسات (max على أقصى toId) يحمي التقدّم المتزامن؛ لكنّ
   // تصحيحاً يدوياً أحدثَ من آخر جلسة يفوز حتى لو كان للخلف.
@@ -143,6 +187,7 @@ export function mergeHifz(a: HifzState, b: HifzState): HifzState {
     planId: a.planId ?? b.planId ?? ga,
     planUpdatedAt: Math.max(aAt, bAt) || undefined,
     frontierUpdatedAt: mfAt || undefined,
+    deletedRecords: Object.keys(tomb).length ? tomb : undefined,
   };
 }
 

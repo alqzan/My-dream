@@ -495,6 +495,68 @@ describe("mergeAppData — Quran hifz mistakes preserved", () => {
   });
 });
 
+describe("mergeHifz — record deletions survive sync (generation tombstones)", () => {
+  const NOW = Date.now(); // شواهد الحذف تُقلَّم بعد سنة، فلتكن حديثة في الاختبار
+  const g1 = { plan: plan(1), planId: "g1", planUpdatedAt: 100, frontierUpdatedAt: 100 };
+  const sess = (id: string, extra = {}) => ({ id, date: "2026-01-05", fromId: 1, toId: 50, at: 1000, ...extra });
+
+  it("a deleted session is NOT resurrected by an old device's union (both orders)", () => {
+    const deleted = hz({ ...g1, sessions: [], deletedRecords: { s1: NOW } });
+    const oldCopy = hz({ ...g1, sessions: [sess("s1")] }); // جهاز لم يرَ الحذف بعد
+    for (const m of [mergeHifz(deleted, oldCopy), mergeHifz(oldCopy, deleted)]) {
+      expect(m.sessions.map((x) => x.id)).toEqual([]);
+      expect(m.deletedRecords?.s1).toBe(NOW);
+    }
+  });
+
+  it("a deleted review and a deleted mistake also stay deleted", () => {
+    const deleted = hz({ ...g1, reviews: [], mistakes: [], deletedRecords: { rv1: NOW, mk1: NOW } });
+    const oldCopy = hz({
+      ...g1,
+      reviews: [{ id: "rv1", date: "2026-01-06", fromId: 1, toId: 50 }],
+      mistakes: [{ id: "mk1", ayahId: 3, wordIndex: null, hits: ["2026-01-06"], resolved: false, updatedAt: "2026-01-06" }],
+    });
+    const m = mergeHifz(deleted, oldCopy);
+    expect(m.reviews).toHaveLength(0);
+    expect(m.mistakes).toHaveLength(0);
+  });
+
+  it("undo (tombstone lifted before the delete propagated) keeps the record", () => {
+    // بعد حذفٍ ثمّ تراجعٍ فوريّ: الجهاز يحمل السجلّ بلا شاهد. الجهاز الآخر لم يرَ
+    // الحذف أصلاً → السجلّ يبقى (خلافاً لحالة الحذف المُنتشِر أعلاه).
+    const undone = hz({ ...g1, sessions: [sess("s1")], deletedRecords: undefined });
+    const other = hz({ ...g1, sessions: [sess("s1")] });
+    for (const m of [mergeHifz(undone, other), mergeHifz(other, undone)]) {
+      expect(m.sessions.map((x) => x.id)).toEqual(["s1"]);
+    }
+  });
+
+  it("the newer rating edit wins across two devices (by updatedAt), both orders", () => {
+    const a = hz({ ...g1, sessions: [sess("s1", { rating: 1, updatedAt: 2000 })] });
+    const b = hz({ ...g1, sessions: [sess("s1", { rating: 3, updatedAt: 1000 })] });
+    expect(mergeHifz(a, b).sessions[0].rating).toBe(1);
+    expect(mergeHifz(b, a).sessions[0].rating).toBe(1); // تبادليّة
+  });
+
+  it("two reviews on the same day get a device-independent order (by at)", () => {
+    const a = hz({ ...g1, reviews: [{ id: "rv1", date: "2026-01-06", fromId: 1, toId: 25, at: 1000 }] });
+    const b = hz({ ...g1, reviews: [{ id: "rv2", date: "2026-01-06", fromId: 26, toId: 50, at: 2000 }] });
+    const ab = mergeHifz(a, b).reviews.map((r) => r.id);
+    const ba = mergeHifz(b, a).reviews.map((r) => r.id);
+    expect(ab).toEqual(["rv2", "rv1"]); // الأحدث إنشاءً أوّلاً
+    expect(ba).toEqual(ab); // نفس الترتيب مهما كان الأساس
+  });
+
+  it("end-to-end through mergeAppData: a deleted session stays deleted", () => {
+    const local = base({ lastUpdated: "2026-05-10T12:00:00.000Z",
+      quranHifz: hz({ ...g1, sessions: [], deletedRecords: { s1: NOW } }) });
+    const cloud = base({ lastUpdated: "2026-05-11T12:00:00.000Z", // ختم مستندٍ أحدث لكنّه يحمل النسخة القديمة
+      quranHifz: hz({ ...g1, sessions: [sess("s1")] }) });
+    expect(mergeAppData(local, cloud).quranHifz.sessions).toHaveLength(0);
+    expect(mergeAppData(cloud, local).quranHifz.sessions).toHaveLength(0);
+  });
+});
+
 describe("mergeAppData — deterministic recurring ids dedupe", () => {
   it("two devices generating the same recurring occurrence collapse to one", () => {
     const id = "rec_R1_2026-05-01";

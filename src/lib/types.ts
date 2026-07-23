@@ -279,7 +279,8 @@ export interface HifzSession {
   fromId: number; // أوّل آية حُفظت في الجلسة
   toId: number; // آخر آية
   rating?: HifzRating;
-  at?: number; // طابع زمني بالمللي‌ثانية — يميّز تقدّم الجلسات عن التصحيح اليدوي عند الدمج
+  at?: number; // طابع الإنشاء بالمللي‌ثانية — يميّز تقدّم الجلسات عن التصحيح اليدوي، ويرتّب جلستَي اليوم نفسه
+  updatedAt?: number; // طابع آخر تعديل (تقييم) — يفوز به التعديل الأحدث في الدمج عبر جهازين
 }
 
 export interface HifzReviewLog {
@@ -288,6 +289,8 @@ export interface HifzReviewLog {
   fromId: number;
   toId: number;
   rating?: HifzRating;
+  at?: number; // طابع الإنشاء بالمللي‌ثانية — لترتيبٍ موثوقٍ لمراجعتين في اليوم نفسه عبر الأجهزة
+  updatedAt?: number; // طابع آخر تعديل (تقييم) — يفوز به التعديل الأحدث في الدمج
 }
 
 // خطأ محفوظ في موضعٍ من المصحف — إمّا كلمةٌ بعينها (wordIndex) أو الآية كاملةً
@@ -317,6 +320,11 @@ export interface HifzState {
   planId?: string;
   planUpdatedAt?: number; // طابع بالمللي‌ثانية لآخر تغييرٍ على مستوى الخطة (بدء/مسح/تعديل مقدار)
   frontierUpdatedAt?: number; // طابع بالمللي‌ثانية لآخر تصحيحٍ يدويٍّ للجبهة (setFrontier/بدء الخطة)
+  // شواهد حذفٍ داخلية للسجلّات (جلسات/مراجعات/أخطاء): معرّف السجلّ → طابع الحذف
+  // (ms). خاصّة بالجيل لأنّها تعيش داخل حالة الحفظ وتُرافقه؛ عند تبدّل الجيل يُؤخذ
+  // شواهد الفائز فقط. الحذف يكتبها والتراجع يرفعها، فلا يعيدها اتّحادُ الدمج من
+  // جهازٍ قديم لم يرَ الحذف. راجع mergeHifz في merge.ts.
+  deletedRecords?: Record<string, number>;
 }
 
 export const EMPTY_HIFZ: HifzState = {
