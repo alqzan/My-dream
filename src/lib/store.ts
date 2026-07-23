@@ -169,6 +169,7 @@ interface AppStore extends AppData {
   addKhatmaJuz: () => void; // read one juz (caps at 30 — the full ring)
   setKhatmaJuz: (juz: number) => void; // set progress directly (0..30)
   setKhatmaPage: (page: number) => void; // «قرأت حتى الصفحة…» (0..604) — أدقّ من الجزء
+  setKhatmaPageGoal: (goal: number) => void; // هدف الصفحات اليومي (يبقى عبر الختمات)
   completeKhatma: () => void; // seal a finished khatma (completed++, ring → 0)
   resetKhatma: () => void; // abandon current progress (juz → 0, completed kept)
 
@@ -1122,30 +1123,53 @@ export const useAppStore = create<AppStore>()(
         }),
 
       // تسجيل الصفحة التي بلغها (أدقّ من جزءٍ كامل): تُشتَقّ منها الأجزاء التي
-      // تُضيء الحلقة والنسبة، ويُقدَّر موعد الإتمام على الوتيرة.
+      // تُضيء الحلقة والنسبة، ويُقدَّر موعد الإتمام على الوتيرة الأخيرة. نُضيف
+      // نقطةً لسجلّ التقدّم (نقطة لكلّ تاريخ، الأحدث تفوز، محدود بآخر ~45 يوماً).
       setKhatmaPage: (page) =>
         set((s) => {
           const k = s.quranKhatma ?? EMPTY_KHATMA;
           const p = Math.min(Math.max(Math.round(page) || 0, 0), 604);
+          const todayStr = today();
+          let pageLog = k.pageLog;
+          if (p > 0) {
+            const cutoff = toDateStr(new Date(Date.now() - 45 * 86400000));
+            pageLog = [
+              ...(k.pageLog ?? []).filter((e) => e.date !== todayStr && e.date >= cutoff),
+              { date: todayStr, page: p },
+            ].sort((a, b) => a.date.localeCompare(b.date));
+          }
           return {
             quranKhatma: {
               ...k,
               page: p,
               juz: khatmaJuzForPage(p),
-              startDate: p > 0 ? (k.startDate ?? today()) : k.startDate,
-              lastReadDate: p > 0 ? today() : k.lastReadDate,
+              pageLog,
+              startDate: p > 0 ? (k.startDate ?? todayStr) : k.startDate,
+              lastReadDate: p > 0 ? todayStr : k.lastReadDate,
             },
           };
         }),
 
+      // هدف الصفحات اليومي — تفضيلٌ شخصي يبقى عبر الختمات (لا يُمسح عند الختم/الإعادة).
+      setKhatmaPageGoal: (goal) =>
+        set((s) => {
+          const k = s.quranKhatma ?? EMPTY_KHATMA;
+          return { quranKhatma: { ...k, dailyPageGoal: Math.min(Math.max(Math.round(goal) || 0, 1), 100) } };
+        }),
+
+      // الختم/الإعادة يبدآن ختمةً جديدة: يُمسح سجلّ التقدّم (وتيرةٌ جديدة) ويبقى
+      // هدف الصفحات اليومي كتفضيلٍ شخصي.
       completeKhatma: () =>
         set((s) => {
           const k = s.quranKhatma ?? EMPTY_KHATMA;
-          return { quranKhatma: { juz: 0, page: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today() } };
+          return { quranKhatma: { juz: 0, page: 0, completed: k.completed + 1, startDate: today(), lastReadDate: today(), dailyPageGoal: k.dailyPageGoal } };
         }),
 
       resetKhatma: () =>
-        set((s) => ({ quranKhatma: { juz: 0, page: 0, completed: (s.quranKhatma ?? EMPTY_KHATMA).completed } })),
+        set((s) => {
+          const k = s.quranKhatma ?? EMPTY_KHATMA;
+          return { quranKhatma: { juz: 0, page: 0, completed: k.completed, dailyPageGoal: k.dailyPageGoal } };
+        }),
 
       // Uses rawSet so the cloud's own lastUpdated is preserved (stamping a
       // fresh one here would defeat the newer-wins merge comparison).

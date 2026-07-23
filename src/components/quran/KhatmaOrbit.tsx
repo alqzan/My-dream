@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { formatAmount, formatDate, today } from "@/lib/utils";
-import { khatmaPct, khatmaEta } from "@/lib/quran/khatma";
+import { khatmaPct, khatmaEta, khatmaDaysForGoal, pagesReadOn, DEFAULT_KHATMA_GOAL } from "@/lib/quran/khatma";
 import { Confetti } from "@/components/ui/Confetti";
-import { Plus, Minus, RotateCcw, Check, BookOpen } from "lucide-react";
+import { Plus, Minus, RotateCcw, Check, BookOpen, Target } from "lucide-react";
 
 // «مدار الختمة» — أداةٌ إبداعية على عائلة أدوات التطبيق (PrayerOrbit، مدار
 // السنة، سباق المدارين): حلقةٌ ذهبية من ٣٠ جزءاً، كل جزءٍ مقروء يُضيء قوسه.
@@ -32,17 +32,26 @@ function juzArc(i: number): string {
   return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${R} ${R} 0 0 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
 }
 
+// أهدافٌ يومية جاهزة (صفحة/يوم) مع مدى الختمة الموافق.
+const GOAL_PRESETS = [10, 20, 30, 43];
+
 export function KhatmaOrbit() {
-  const { quranKhatma, addKhatmaJuz, setKhatmaJuz, setKhatmaPage, completeKhatma, resetKhatma } = useAppStore();
+  const { quranKhatma, addKhatmaJuz, setKhatmaJuz, setKhatmaPage, setKhatmaPageGoal, completeKhatma, resetKhatma } = useAppStore();
   const k = quranKhatma ?? { juz: 0, completed: 0 };
   const [celebrate, setCelebrate] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [pageInput, setPageInput] = useState("");
+  const [editGoal, setEditGoal] = useState(false);
 
   const full = k.juz >= JUZ;
   // النسبة من الصفحة إن سُجّلت (أدقّ)، وإلا من الأجزاء.
   const pct = k.page != null && k.page > 0 ? khatmaPct(k.page) : Math.round((k.juz / JUZ) * 100);
-  const eta = khatmaEta(k.page ?? 0, k.startDate, today());
+  const eta = khatmaEta(k.page ?? 0, k.startDate, today(), k.pageLog);
+
+  // الهدف اليومي وتقدّم اليوم مقابله (من سجلّ الصفحات).
+  const goal = k.dailyPageGoal ?? DEFAULT_KHATMA_GOAL;
+  const readToday = pagesReadOn(k.pageLog, today(), k.page ?? 0);
+  const goalPct = Math.min(100, Math.round((readToday / goal) * 100));
 
   function savePage() {
     const p = parseInt(pageInput);
@@ -115,11 +124,50 @@ export function KhatmaOrbit() {
             : ""}
         </p>
 
-        {/* تقدير الإتمام على وتيرة القراءة (عند تسجيل الصفحة وكفاية البيانات) */}
+        {/* تقدير الإتمام على الوتيرة الأخيرة (عند تسجيل الصفحة وكفاية البيانات) */}
         {eta.daysLeft != null && !full && (
-          <p className="text-[11px] text-quran font-semibold mt-1">
-            على وتيرتك (~{Math.round(eta.perDay)} صفحة/يوم) تُتمّ خلال ~{eta.daysLeft} يوماً
+          <p className="text-[11px] text-quran font-semibold mt-1 text-center">
+            على وتيرتك الأخيرة (~{Math.round(eta.perDay)} صفحة/يوم{eta.window ? ` — آخر ${eta.window} يوماً` : ""}) تُتمّ خلال ~{eta.daysLeft} يوماً
           </p>
+        )}
+
+        {/* الهدف اليومي للصفحات + تقدّم اليوم مقابله */}
+        {!full && (
+          <div className="w-full mt-2 rounded-xl border border-quran/15 bg-quran/[0.04] px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600">
+                <Target size={13} className="text-quran" /> هدف اليوم: {goal} صفحة
+                <span className="text-gray-400 font-normal">· ختمة خلال ~{khatmaDaysForGoal(goal)} يوماً</span>
+              </span>
+              <button onClick={() => setEditGoal((v) => !v)} className="text-[10px] text-quran font-bold press">
+                {editGoal ? "تم" : "عدّل"}
+              </button>
+            </div>
+            {editGoal ? (
+              <div className="flex items-center gap-1.5 mt-2">
+                {GOAL_PRESETS.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => { setKhatmaPageGoal(g); setEditGoal(false); }}
+                    className={`flex-1 text-[11px] font-bold rounded-lg py-1.5 press ${
+                      goal === g ? "bg-quran text-white" : "bg-white dark:bg-[#241c12] border border-gray-200 dark:border-transparent text-gray-600"
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 dark:bg-[#2c2318] overflow-hidden">
+                  <div className="h-full bg-quran rounded-full transition-all" style={{ width: `${goalPct}%` }} />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1 tabular-nums">
+                  {readToday >= goal ? "بلغت هدف اليوم 🎯" : `قرأت اليوم ${readToday} من ${goal} صفحة`}
+                </p>
+              </>
+            )}
+          </div>
         )}
 
         {/* أدوات التحكّم */}

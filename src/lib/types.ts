@@ -335,6 +335,12 @@ export interface KhatmaState {
   startDate?: string; // YYYY-MM-DD بداية الختمة الحالية
   completed: number; // عدد الختمات المكتملة
   lastReadDate?: string; // YYYY-MM-DD آخر يوم سُجّل فيه جزء
+  // سجلّ الصفحة التي بلغها في كلّ يومٍ سُجّل فيه تقدّم — يُحسب منه الوتيرة الأخيرة
+  // (آخر 14 ثمّ 30 يوماً) لتقدير الإتمام، بدل الوتيرة منذ البداية. نقطةٌ واحدة
+  // لكلّ تاريخ (الأحدث تفوز)، ومحدودٌ بآخر ~45 يوماً فلا ينمو بلا حدّ.
+  pageLog?: { date: string; page: number }[];
+  // هدف الصفحات اليومي (تفضيلٌ شخصي يبقى عبر الختمات؛ الافتراضي 20 ≈ ختمة في شهر).
+  dailyPageGoal?: number;
 }
 
 export const EMPTY_KHATMA: KhatmaState = { juz: 0, completed: 0 };
