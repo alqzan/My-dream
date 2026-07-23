@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
 import { MOODS } from "@/lib/types";
@@ -9,7 +10,7 @@ import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions
 import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Check, Tag } from "lucide-react";
+import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight } from "lucide-react";
 
 interface JournalFormProps {
   onClose: () => void;
@@ -71,6 +72,10 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [compressing, setCompressing] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Always points at the latest handleDone so the mount-time keydown/effect
+  // below can call it without capturing a stale closure over the form state.
+  const handleDoneRef = useRef<() => void>(() => {});
 
   // Auto-grow the writing area to fit its content so there's no cramped inner
   // scrollbar — you just keep writing and the sheet scrolls. Runs on every
@@ -81,6 +86,43 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     ta.style.height = "auto";
     ta.style.height = ta.scrollHeight + "px";
   }, [content]);
+
+  // Full-screen composer lifecycle: lock the page behind it, restore focus on
+  // close, land straight in the writing area for a fresh entry, and treat
+  // Escape as "save & close" (never a destructive discard — everything here
+  // auto-saves, so backing out should keep, not delete).
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const prevFocused = document.activeElement as HTMLElement | null;
+    if (!initial) requestAnimationFrame(() => contentRef.current?.focus());
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { e.preventDefault(); handleDoneRef.current(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+      prevFocused?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When a field gains focus, glide it to the centre of the writing area once
+  // the keyboard has settled, so you never type behind the on-screen keyboard.
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const typing = t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
+      if (!typing) return;
+      window.setTimeout(() => t.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+    };
+    scroller.addEventListener("focusin", onFocusIn);
+    return () => scroller.removeEventListener("focusin", onFocusIn);
+  }, []);
 
   // Auto-save plumbing. Once an entry exists (editing, or a new one we have
   // already auto-created), savedId points at the row we keep updating.
@@ -194,6 +236,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     persist();
     onClose();
   }
+  handleDoneRef.current = handleDone;
 
   // "إلغاء" — undo this session: revert an edited entry to its original, or
   // remove a new one we auto-created, so cancel still means cancel.
@@ -264,8 +307,37 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     }
   }
 
-  return (
-    <div className="space-y-4">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    // محرّر بملء الشاشة (لا نافذة) — أكثر انغماساً للكتابة. عمود ثابت أعلى
+    // (رجوع/حفظ + «تم») ثم مساحة تمرّر داخلياً. يتبع المنفذ المرئي (‎--vvh/--vvo‎)
+    // حتى لا تخفي لوحة المفاتيح الحقلَ النشط أو الأزرار.
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-white [animation:fadeIn_0.2s_ease_both]"
+      style={{ top: "var(--vvo, 0px)", height: "var(--vvh, 100dvh)" }}
+    >
+      {/* شريط علوي ثابت */}
+      <header className="shrink-0 flex items-center justify-between gap-2 px-2 border-b border-gray-100 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
+        <button
+          onClick={handleDone}
+          aria-label="حفظ وإغلاق"
+          className="p-2 rounded-full text-gray-500 hover:bg-gray-100 press"
+        >
+          <ChevronRight size={24} />
+        </button>
+        <div className="flex-1 min-w-0 text-center">
+          <p className="text-sm font-bold text-gray-900 truncate">{initial ? "تعديل المذكرة" : "مذكرة جديدة"}</p>
+          <span className="block h-3 leading-3 text-[11px] text-gray-400">
+            {saveState === "saving" ? "يُحفظ…" : saveState === "saved" ? "محفوظ تلقائياً ✓" : ""}
+          </span>
+        </div>
+        <Button onClick={handleDone} size="sm" className="bg-journal hover:bg-journal/90">تم</Button>
+      </header>
+
+      {/* المحتوى — يمرّر داخل الشاشة */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="max-w-2xl mx-auto w-full space-y-4 px-4 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       {/* العنوان — كبير وغامق في الأعلى */}
       <div>
         <input
@@ -520,17 +592,14 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-2 pt-1">
-        <span className="flex items-center gap-1 text-[11px] text-gray-400 ml-auto">
-          {saveState === "saving" && <><Loader2 size={12} className="animate-spin" /> يُحفظ…</>}
-          {saveState === "saved" && <><Check size={12} className="text-finance" /> محفوظ تلقائياً</>}
-        </span>
-        <Button variant="secondary" onClick={handleCancel}>
-          إلغاء
-        </Button>
-        <Button onClick={handleDone} className="bg-journal hover:bg-journal/90">
-          تم
-        </Button>
+      {/* تجاهل — الرجوع/«تم» يحفظان تلقائياً؛ هذا الخيار الوحيد المُتلِف */}
+      <div className="pt-1">
+        <button
+          onClick={handleCancel}
+          className="w-full py-2 text-center text-xs font-medium text-red-400 hover:text-red-500 press"
+        >
+          {initial ? "إلغاء التعديلات" : "تجاهل هذه المذكرة"}
+        </button>
       </div>
 
       {/* مكتبة الأسئلة */}
@@ -539,7 +608,10 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           onPick={(q) => { setQuestion(q); setAnswering(true); setShowLibrary(false); }}
         />
       </Modal>
-    </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

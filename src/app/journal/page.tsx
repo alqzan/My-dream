@@ -486,16 +486,13 @@ export default function JournalPage() {
         </div>
       )}
 
-      <Modal
-        open={showForm || !!editEntry}
-        onClose={() => { setShowForm(false); setEditEntry(undefined); }}
-        title={editEntry ? "تعديل المذكرة" : "مذكرة جديدة"}
-      >
+      {/* محرّر المذكرة بملء الشاشة (يدير رقعته الكاملة بنفسه، لا نافذة) */}
+      {(showForm || editEntry) && (
         <JournalForm
           onClose={() => { setShowForm(false); setEditEntry(undefined); }}
           initial={editEntry}
         />
-      </Modal>
+      )}
 
       <Modal
         open={showImport}
