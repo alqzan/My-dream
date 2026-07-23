@@ -10,7 +10,7 @@ import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions
 import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight } from "lucide-react";
+import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown } from "lucide-react";
 
 interface JournalFormProps {
   onClose: () => void;
@@ -71,6 +71,11 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [mood, setMood] = useState<JournalEntry["mood"]>(initial?.mood);
   const [compressing, setCompressing] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
+  // «إضافات» — صور/صوت/وسوم/شعور مطويّة لإبقاء سطح الكتابة صافياً، وتُفتح تلقائياً
+  // عند تعديل مذكرةٍ فيها إضافات أصلاً.
+  const [showExtras, setShowExtras] = useState(
+    Boolean(initial?.photos?.length || initial?.photo || initial?.audio || initial?.tags?.length || initial?.mood)
+  );
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Always points at the latest handleDone so the mount-time keydown/effect
@@ -459,6 +464,24 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         </div>
       </div>
 
+      {/* إضافات — تُطوى لتبقى الكتابة في الصدارة، وتُفتح عند الحاجة */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowExtras((v) => !v)}
+          className="w-full flex items-center gap-2 text-xs font-bold text-gray-500 py-2 press"
+        >
+          <Paperclip size={14} className="text-journal" />
+          إضافات
+          {(() => {
+            const n = photos.length + (audio ? 1 : 0) + tags.length + (mood ? 1 : 0);
+            return n > 0 ? <span className="text-[10px] bg-journal/10 text-journal rounded-full px-2 py-0.5">{n}</span> : null;
+          })()}
+          <span className="text-gray-300 font-normal">صور · صوت · وسوم · شعور</span>
+          <ChevronDown size={15} className={`ms-auto transition-transform ${showExtras ? "rotate-180" : ""}`} />
+        </button>
+        {showExtras && (
+          <div className="space-y-4 mt-2">
       {/* الصور: من الكاميرا أو الاستديو، حتى 6 صور — تُضغط تلقائياً */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">
@@ -591,6 +614,9 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           </div>
         </div>
       )}
+          </div>
+        )}
+      </div>
 
       {/* تجاهل — الرجوع/«تم» يحفظان تلقائياً؛ هذا الخيار الوحيد المُتلِف */}
       <div className="pt-1">

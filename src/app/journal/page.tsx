@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, entryPhotos, entryAudios, normalizeArabic } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, entryPhotos, entryAudios, normalizeArabic, uid } from "@/lib/utils";
+import { MOODS } from "@/lib/types";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
@@ -25,7 +26,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { JournalEntry } from "@/lib/types";
-import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine, ChevronRight, ChevronLeft, Star } from "lucide-react";
+import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3 } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
 
 export default function JournalPage() {
@@ -44,6 +45,8 @@ export default function JournalPage() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editEntry, setEditEntry] = useState<JournalEntry | undefined>();
+  // «سطر سريع» — التقاطُ خاطرةٍ في سطرٍ واحد دون فتح المحرّر الكامل.
+  const [quickLine, setQuickLine] = useState("");
   const [search, setSearch] = useState("");
   const [selectedYear, setSelectedYear] = useState("الكل");
   const [onlyStarred, setOnlyStarred] = useState(false);
@@ -75,6 +78,33 @@ export default function JournalPage() {
   }, []);
 
   const todayStr = today();
+
+  // «سطر سريع» — يُنشئ مذكرةً قصيرةً لليوم فوراً (مع إتاحة التراجع).
+  function addQuickLine() {
+    const t = quickLine.trim();
+    if (!t) return;
+    const d = new Date();
+    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const id = uid();
+    addJournalEntry({ id, date: todayStr, content: t, time, source: "manual" });
+    setQuickLine("");
+    showUndo("أُضيف سطرٌ سريع", () => deleteJournalEntry(id));
+  }
+
+  // «حصيلة الشهر» — ملخّصٌ لطيفٌ لمذكرات الشهر الحالي (عدد، أيام، مشاعر، وسوم).
+  const monthSummary = useMemo(() => {
+    const prefix = todayStr.slice(0, 7);
+    const month = journalEntries.filter((e) => e.date.startsWith(prefix));
+    const days = new Set(month.map((e) => e.date)).size;
+    const moods: Record<number, number> = {};
+    for (const e of month) if (e.mood) moods[e.mood] = (moods[e.mood] || 0) + 1;
+    const tagCounts = new Map<string, number>();
+    for (const e of month) for (const t of e.tags ?? []) tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+    const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
+    const moodCount = Object.values(moods).reduce((s, n) => s + n, 0);
+    return { count: month.length, days, moods, topTags, moodCount };
+  }, [journalEntries, todayStr]);
+
   const streak = getJournalStreak(journalEntries);
   const markedDates = journalEntries.map((e) => e.date);
   const question = dailyQuestion(todayStr);
@@ -258,6 +288,27 @@ export default function JournalPage() {
         </div>
       </div>
 
+      {/* سطر سريع — التقاطٌ فوريّ دون فتح المحرّر */}
+      <div className="flex items-center gap-2 bg-white dark:bg-[#241c12] border border-gray-200 dark:border-transparent rounded-2xl px-3 py-2 animate-fade-up stagger-1">
+        <Zap size={16} className="text-journal shrink-0" />
+        <input
+          value={quickLine}
+          onChange={(e) => setQuickLine(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addQuickLine(); } }}
+          placeholder="سطرٌ سريع… خاطرة، امتنان، أو ملاحظة"
+          aria-label="سطر سريع"
+          dir="auto"
+          className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none placeholder:text-gray-400"
+        />
+        <button
+          onClick={addQuickLine}
+          disabled={!quickLine.trim()}
+          className="shrink-0 text-xs font-bold text-white bg-journal rounded-lg px-3 py-1.5 press disabled:opacity-40"
+        >
+          أضف
+        </button>
+      </div>
+
       {/* سؤال اليوم */}
       <div className="rounded-2xl p-4 text-white bg-gradient-to-l from-[#5d4a8a] via-[#7c6fcd] to-[#9587d6] card-shadow shine animate-fade-up stagger-1">
         <div className="flex items-start gap-3">
@@ -314,6 +365,53 @@ export default function JournalPage() {
       <Card className="animate-fade-up stagger-3">
         <StreakCalendar markedDates={markedDates} color="#7c6fcd" onDayClick={setSelectedDay} />
       </Card>
+
+      {/* حصيلة الشهر — ملخّصٌ لطيفٌ لمذكرات الشهر الحالي */}
+      {monthSummary.count > 0 && (
+        <Card className="animate-fade-up stagger-3">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 size={16} className="text-journal" />
+            <span className="text-sm font-bold text-gray-800">حصيلة {arabicMonthName(parseDate(todayStr).getMonth())}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="rounded-xl bg-journal/[0.06] px-3 py-2 text-center">
+              <div className="text-xl font-black text-journal tabular-nums">{monthSummary.count}</div>
+              <div className="text-[11px] text-gray-500">مذكرة</div>
+            </div>
+            <div className="rounded-xl bg-journal/[0.06] px-3 py-2 text-center">
+              <div className="text-xl font-black text-journal tabular-nums">{monthSummary.days}</div>
+              <div className="text-[11px] text-gray-500">يوم كتبت فيه</div>
+            </div>
+          </div>
+          {monthSummary.moodCount > 0 && (
+            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+              <span className="text-[11px] text-gray-400">المشاعر:</span>
+              {MOODS.map((m) =>
+                monthSummary.moods[m.value] ? (
+                  <span key={m.value} className="inline-flex items-center gap-0.5 text-xs bg-gray-100 dark:bg-[#2c2318] rounded-full px-2 py-0.5">
+                    <span>{m.emoji}</span>
+                    <span className="tabular-nums text-gray-500">{monthSummary.moods[m.value]}</span>
+                  </span>
+                ) : null
+              )}
+            </div>
+          )}
+          {monthSummary.topTags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] text-gray-400">أبرز الوسوم:</span>
+              {monthSummary.topTags.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => selectTag(t)}
+                  className="text-[11px] font-medium bg-journal/10 text-journal px-2.5 py-0.5 rounded-full press"
+                >
+                  #{t}
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="relative animate-fade-up stagger-3">
         <Search size={15} className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400" />
