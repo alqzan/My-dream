@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   today, getPrayerLog, countDayPrayers, getPrayerStreak, getMosqueStreak,
@@ -52,15 +52,22 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
   const streak = getPrayerStreak(prayerLogs);
   const mosqueStreak = getMosqueStreak(prayerLogs);
 
-  const now = new Date();
+  // نبضة كل دقيقة: تُحدّث «الآن» فتنزلق نقطة الوقت وتُعاد الصلاة القادمة، ويُعاد
+  // حساب المواقيت عند تغيّر اليوم أو الموقع — دون أيّ تغييرٍ في التصميم أو القوس.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const coords = getCachedCoords();
 
   // Actual prayer times for the device's location (offline astronomical
   // calc, Umm al-Qura convention) + which prayer is up next.
-  const times = useMemo(() => computePrayerTimes(now, getCachedCoords().lat, getCachedCoords().lng), [todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
+  const times = useMemo(() => computePrayerTimes(now, coords.lat, coords.lng), [todayStr, coords.lat, coords.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   const nextPrayer: PrayerName | null = useMemo(() => {
     if (!times) return null;
     return PRAYERS.find((p) => times[p] > now) ?? null;
-  }, [times, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [times, now]);
   const hourFrac = now.getHours() + now.getMinutes() / 60;
   const inRange = hourFrac >= 4.5 && hourFrac <= 21;
   const nowPoint = inRange ? point(178 - ((hourFrac - 4.5) / (21 - 4.5)) * 176) : null;
