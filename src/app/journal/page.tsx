@@ -353,8 +353,12 @@ export default function JournalPage() {
                   <p className="text-[11px] font-bold text-brand-600 mb-0.5">
                     قبل {yearsAgo === 1 ? "سنة" : yearsAgo === 2 ? "سنتين" : `${yearsAgo} سنوات`} — {formatDate(m.date)}
                   </p>
-                  {m.title && <p className="text-sm font-bold text-gray-800 mb-0.5">{m.title}</p>}
-                  <p className="text-xs text-gray-500 line-clamp-1">{stripMarkdown(m.content)}</p>
+                  {m.title && <p className="text-sm font-bold text-gray-800 mb-0.5 truncate">{m.title}</p>}
+                  {/* «truncate» (نص بسطر واحد) بدل line-clamp-1: على WebKit في iOS
+                      كان -webkit-line-clamp يحجز ارتفاع النص كاملاً كفراغ فارغ أسفل
+                      السطر الظاهر، فتتباعد البطاقات بفجوات ضخمة تكبر مع طول المذكرة.
+                      white-space:nowrap يُثبّت الارتفاع بسطرٍ واحد على كل المتصفّحات. */}
+                  <p className="text-xs text-gray-500 truncate">{stripMarkdown(m.content)}</p>
                 </button>
               );
             })}
