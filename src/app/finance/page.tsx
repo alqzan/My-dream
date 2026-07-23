@@ -72,6 +72,27 @@ export default function FinancePage() {
     }
   }, []);
 
+  // روابط عميقة للقسم المقصود: توصيات «بوصلة مدار» توجّه إلى ‎/finance#daily‎
+  // أو ‎#reserves‎ أو ‎#budgets‎ بدل فتح الصفحة عامةً، و‎?open=recurring|categories|add‎
+  // تفتح النافذة المناسبة مباشرةً. المحتوى يُرطَّب من IndexedDB بعد التركيب،
+  // فننتظر نبضةً قبل التمرير كي يكون القسم موجوداً.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get("open");
+    if (open === "recurring") setShowRecurring(true);
+    else if (open === "categories") setShowCategories(true);
+    else if (open === "add") setShowForm(true);
+    if (open) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const t = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => clearTimeout(t);
+  }, []);
+
   const [monthFilter, setMonthFilter] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -166,17 +187,21 @@ export default function FinancePage() {
 
       <GroupLabel>يومياتك</GroupLabel>
 
-      <div className="animate-fade-up stagger-1">
+      <div id="daily" className="animate-fade-up stagger-1 scroll-mt-24">
         <DailyBudgetCard />
       </div>
 
-      <Card className="animate-fade-up stagger-1">
-        <ReserveFunds />
-      </Card>
+      <div id="reserves" className="scroll-mt-24">
+        <Card className="animate-fade-up stagger-1">
+          <ReserveFunds />
+        </Card>
+      </div>
 
-      <Card className="animate-fade-up stagger-3">
-        <BudgetTracker monthPrefix={monthFilter} />
-      </Card>
+      <div id="budgets" className="scroll-mt-24">
+        <Card className="animate-fade-up stagger-3">
+          <BudgetTracker monthPrefix={monthFilter} />
+        </Card>
+      </div>
 
       <UpcomingRecurring recurring={recurring} categories={categories} />
 

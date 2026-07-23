@@ -267,13 +267,13 @@ export function generateInsights(data: InsightData): Insight[] {
     if (status.balance < 0) {
       add({
         domain: "finance", dedupeKey: "finance:negative-balance", icon: "🚨", tone: "warning", priority: 90,
-        title: "رصيدك بالسالب", href: "/finance", actionLabel: "افتح الأموال",
+        title: "رصيدك بالسالب", href: "/finance#daily", actionLabel: "افتح الميزانية",
         body: `رصيدك اليومي بالسالب ${formatAmount(-status.balance)} ر.س — خفف الصرف أياماً حتى يتعافى.`,
       });
     } else if (status.balance >= dailyBudget.amount * 3) {
       add({
         domain: "finance", dedupeKey: "finance:surplus", icon: "🌟", tone: "positive", priority: 70,
-        title: "فائضٌ متراكم", href: "/finance", actionLabel: "حوّل للاحتياطي", validUntil: todayStr,
+        title: "فائضٌ متراكم", href: "/finance#reserves", actionLabel: "حوّل للاحتياطي", validUntil: todayStr,
         body: `فائضك المتراكم ${formatAmount(status.balance)} ر.س — انضباط ممتاز! حوّله للاحتياطي أو اتركه للفوائض عند الراتب.`,
       });
     }
@@ -291,7 +291,7 @@ export function generateInsights(data: InsightData): Insight[] {
   if (drained) {
     add({
       domain: "finance", dedupeKey: `finance:reserve-drained:${drained.id}`, icon: "🪫", tone: "warning", priority: 73,
-      title: "احتياطي مسحوب", href: "/finance", actionLabel: "راجِع الاحتياطي",
+      title: "احتياطي مسحوب", href: "/finance#reserves", actionLabel: "راجِع الاحتياطي",
       body: `احتياطي «${drained.name}» مسحوب أكثر من رصيده — عبّئه أو راجع مصاريفه.`,
     });
   }
@@ -308,13 +308,13 @@ export function generateInsights(data: InsightData): Insight[] {
     if (spent > cap) {
       add({
         domain: "finance", dedupeKey: `finance:budget-over:${b.category}`, icon: "📛", tone: "warning", priority: 85,
-        title: `تجاوز «${label}»`, href: "/finance", actionLabel: "افتح الأموال",
+        title: `تجاوز «${label}»`, href: "/finance#budgets", actionLabel: "راجِع السقوف",
         body: `تجاوزت سقف «${label}» بـ ${formatAmount(spent - cap)} ر.س هذا الشهر.`,
       });
     } else if (pct >= 80) {
       add({
         domain: "finance", dedupeKey: `finance:budget-near:${b.category}`, icon: "⚠️", tone: "warning", priority: 75,
-        title: `اقتربت من «${label}»`, href: "/finance", actionLabel: "افتح الأموال",
+        title: `اقتربت من «${label}»`, href: "/finance#budgets", actionLabel: "راجِع السقوف",
         body: `وصلت ${Math.round(pct)}% من سقف «${label}» — باقي ${formatAmount(cap - spent)} ر.س فقط.`,
       });
     }
@@ -343,7 +343,7 @@ export function generateInsights(data: InsightData): Insight[] {
       const info = categories.find((c) => c.id === cat);
       add({
         domain: "finance", dedupeKey: "finance:cat-rise", icon: "📈", tone: "warning", priority: 65,
-        title: `صرف «${info?.label ?? "قسم"}» يرتفع`, href: "/finance", actionLabel: "راجِع القسم",
+        title: `صرف «${info?.label ?? "قسم"}» يرتفع`, href: "/finance#budgets", actionLabel: "راجِع القسم",
         body: `صرفك على «${info?.label ?? "قسم"}» ارتفع ${Math.round(((amount - prev) / prev) * 100)}% عن نفس الفترة من الشهر الماضي (${formatAmount(amount)} مقابل ${formatAmount(prev)}).`,
       });
       break;
