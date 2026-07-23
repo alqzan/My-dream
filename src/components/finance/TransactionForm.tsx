@@ -33,6 +33,8 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const [newSubName, setNewSubName] = useState("");
   // Once the user picks a category by hand we stop auto-suggesting from the note.
   const [touchedCat, setTouchedCat] = useState(false);
+  const [showCats, setShowCats] = useState(!!initial); // شبكة التصنيفات (مطويّة حتى يُكتب التاجر)
+  const [showDetails, setShowDetails] = useState(false); // التاريخ ومصدر الصرف
 
   // Auto-classify from the note while adding a new expense: learned merchant
   // rules first, then keyword guess. Silently pre-selects the section/sub so
@@ -63,6 +65,43 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     () => new Map(reserves.map((f) => [f.id, reserveBalance(f, transactions)])),
     [reserves, transactions]
   );
+
+  // آخر 5 متاجر/ملاحظات مميّزة (اختصارات سريعة) وآخر مصروف (للتكرار).
+  const sortedTx = useMemo(() => [...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions]);
+  const recentMerchants = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const t of sortedTx) {
+      const n = t.note?.trim();
+      if (!n || seen.has(n)) continue;
+      seen.add(n); out.push(n);
+      if (out.length >= 5) break;
+    }
+    return out;
+  }, [sortedTx]);
+  const lastTx = sortedTx[0];
+
+  function pickCategoryFor(catId: string) {
+    const cat = categories.find((c) => c.id === catId);
+    if (cat?.parentId) { setMainCat(cat.parentId); setSubCat(cat.id); }
+    else { setMainCat(catId); setSubCat(""); }
+  }
+  // «كرّر آخر مصروف» — يملأ الحقول دون حفظٍ تلقائي.
+  function repeatLast() {
+    if (!lastTx) return;
+    setAmount(String(lastTx.amount));
+    setNote(lastTx.note ?? "");
+    pickCategoryFor(lastTx.category);
+    setTouchedCat(true);
+    setSplits(lastTx.reserveSplits ?? []);
+  }
+
+  // اقتراح التصنيف من التاجر (يظهر بعد كتابته وقبل اختيارٍ يدوي).
+  const suggestionLabel = (() => {
+    if (initial || touchedCat || !note.trim() || !selectedMain) return null;
+    const subLabel = subCat ? categories.find((c) => c.id === subCat)?.label : null;
+    return subLabel ? `${selectedMain.label} ← ${subLabel}` : selectedMain.label;
+  })();
 
   function setSplitPct(fundId: string, pct: number) {
     setSplits((prev) => {
@@ -131,8 +170,54 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
         />
       </div>
 
+      {/* المتجر/الملاحظة — ثانياً، ليخدم التصنيف التلقائي */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">القسم الرئيسي</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">المتجر أو الملاحظة</label>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="مثل: قهوة، بنزين، بقالة…"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
+        />
+        {/* اختصارات: آخر المتاجر + كرّر آخر مصروف */}
+        {!initial && (recentMerchants.length > 0 || lastTx) && (
+          <div className="flex gap-1.5 flex-wrap mt-2">
+            {lastTx && (
+              <button onClick={repeatLast} className="text-[11px] font-semibold text-finance bg-finance/10 hover:bg-finance/20 rounded-full px-2.5 py-1 press">
+                ↻ كرّر آخر مصروف
+              </button>
+            )}
+            {recentMerchants.map((m) => (
+              <button key={m} onClick={() => { setNote(m); setTouchedCat(false); }} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-[#382c1d] hover:bg-gray-200 rounded-full px-2.5 py-1 press truncate max-w-[8rem]">
+                {m}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* اقتراح التصنيف بعد كتابة التاجر — قبولٌ أو تغيير */}
+      {suggestionLabel && !showCats && (
+        <div className="flex items-center gap-2 bg-finance/5 border border-finance/20 rounded-xl px-3 py-2.5">
+          <span className="text-lg">{selectedMain?.icon}</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] text-gray-400">نقترح تصنيفه</div>
+            <div className="text-sm font-bold text-finance truncate">{suggestionLabel}</div>
+          </div>
+          <button onClick={() => setTouchedCat(true)} className="text-[11px] font-bold text-white bg-finance rounded-lg px-2.5 py-1.5 press">أقبل</button>
+          <button onClick={() => setShowCats(true)} className="text-[11px] font-semibold text-gray-500 press">غيّر</button>
+        </div>
+      )}
+
+      {/* شبكة التصنيفات — متاحة دائماً، لكن لا تُجبر قبل كتابة التاجر */}
+      {(showCats || !suggestionLabel) && (
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-xs font-medium text-gray-500">القسم الرئيسي</label>
+          {suggestionLabel && (
+            <button onClick={() => { setShowCats(false); setTouchedCat(false); }} className="text-[11px] text-gray-400 press">استخدم الاقتراح</button>
+          )}
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {mains.map((cat) => (
             <button
@@ -209,8 +294,15 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           </div>
         )}
       </div>
+      )}
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* تفاصيل: التاريخ ومصدر الصرف — مطويّة للمصروف العادي */}
+      <button type="button" onClick={() => setShowDetails((v) => !v)} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 press pt-1">
+        <span>تفاصيل (التاريخ ومصدر الصرف)</span>
+        <span className="text-gray-400">{showDetails ? "▲" : "▼"}</span>
+      </button>
+
+      {showDetails && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">التاريخ</label>
           <input
@@ -220,18 +312,9 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">ملاحظة</label>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="اختياري"
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
-          />
-        </div>
-      </div>
+      )}
 
-      {reserves.length > 0 && (
+      {showDetails && reserves.length > 0 && (
         <div className="bg-finance/5 rounded-xl p-3 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-finance">
