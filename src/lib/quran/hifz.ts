@@ -188,24 +188,52 @@ export function mistakesInRange(s: HifzState, from: number, to: number): number 
   ).length;
 }
 
-// أحدث تقييم لكل مقطع (بمفتاح المدى) عبر الحفظ والمراجعة معاً.
-function latestRatingByRange(s: HifzState): Map<string, { fromId: number; toId: number; date: string; rating?: 1 | 2 | 3 }> {
+// أحدث تقييمٍ مسّ كلَّ وجهٍ محفوظ (بتداخل الوجه لا بمطابقة المدى النصّي). هكذا
+// إذا كان وجهٌ ضعيفاً ثمّ راجعه المستخدم لاحقاً ضمن مدى مختلف وأتقنه، تتحدّث
+// حالتُه — كان المفتاح النصّي `fromId-toId` يُبقيه ضعيفاً لأنّ المدى اختلف.
+export function latestRatingByPage(s: HifzState): Map<number, { date: string; rating?: HifzRating }> {
+  const from = s.plan?.startId ?? 1;
+  const m = new Map<number, { date: string; rating?: HifzRating }>();
+  if (s.frontierId < from) return m;
+  const firstPage = idToPage(from);
+  const lastPage = idToPage(s.frontierId);
   const events = [
     ...s.sessions.map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date, rating: x.rating })),
     ...s.reviews.map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date, rating: x.rating })),
   ].sort((a, b) => (a.date < b.date ? -1 : 1)); // تصاعدي: الأحدث يكتب أخيراً
-  const m = new Map<string, { fromId: number; toId: number; date: string; rating?: 1 | 2 | 3 }>();
-  for (const e of events) m.set(`${e.fromId}-${e.toId}`, e);
+  for (const e of events) {
+    const ef = Math.max(firstPage, idToPage(e.fromId));
+    const et = Math.min(lastPage, idToPage(e.toId));
+    for (let p = ef; p <= et; p++) m.set(p, { date: e.date, rating: e.rating });
+  }
   return m;
 }
 
-// مواطن الضعف: مقاطع أحدثُ تقييمٍ لها «تحتاج إتقاناً» (1) — أي لم تُتقَن بعد.
+// مواطن الضعف: أوجهٌ أحدثُ تقييمٍ مسّها «يحتاج إتقاناً» (1). تُدمَج الأوجه
+// المتّصلة في مدى واحد (بتاريخ أقدم مراجعةٍ فيها) ويُرتَّب الأحوجُ (الأقدم) أوّلاً.
 export function weakSpots(s: HifzState): { fromId: number; toId: number; date: string }[] {
-  return [...latestRatingByRange(s).values()]
-    .filter((e) => e.rating === 1)
-    .sort((a, b) => (a.date < b.date ? -1 : 1)) // الأقدم أولاً (الأحوج للمراجعة)
-    .map((e) => ({ fromId: e.fromId, toId: e.toId, date: e.date }))
-    .slice(0, 8);
+  const from = s.plan?.startId ?? 1;
+  const byPage = latestRatingByPage(s);
+  const weakPages = [...byPage.entries()]
+    .filter(([, v]) => v.rating === 1)
+    .map(([page, v]) => ({ page, date: v.date }))
+    .sort((a, b) => a.page - b.page);
+
+  // ادمج الأوجه المتّصلة في مقاطع.
+  const spans: { fromId: number; toId: number; date: string }[] = [];
+  for (const wp of weakPages) {
+    const pr = pageRange(wp.page);
+    const fromId = Math.max(pr.start, from);
+    const toId = Math.min(pr.end, s.frontierId);
+    const last = spans[spans.length - 1];
+    if (last && idToPage(last.toId) === wp.page - 1) {
+      last.toId = toId;
+      if (wp.date < last.date) last.date = wp.date; // أقدم مراجعةٍ في المقطع
+    } else {
+      spans.push({ fromId, toId, date: wp.date });
+    }
+  }
+  return spans.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 8);
 }
 
 // مراجعة أذكى: تُقدّم مواطن الضعف المفتوحة (لم تُتقَن) على الدورة المتسلسلة.
