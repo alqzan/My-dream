@@ -18,6 +18,8 @@ export default function QuranPage() {
   const [tab, setTab] = useState<Tab>("hifz");
   // سورة يُطلب فتحها في المصحف (من «اقرأ في المصحف» في خريطة الحفظ).
   const [mushafSurah, setMushafSurah] = useState<number | null>(null);
+  // طلب تأمّلٍ على آيةٍ من المصحف: يفتح مؤلّف التدبّر مهيّأً بها (nonce للإعادة).
+  const [reflectReq, setReflectReq] = useState<{ surah: number; ayah: number; nonce: number } | null>(null);
 
   // فتح تبويبٍ محدّد عبر ?tab= (من تذكير الحفظ في الرئيسية مثلاً).
   useEffect(() => {
@@ -30,6 +32,12 @@ export default function QuranPage() {
   const openMushaf = (surah: number) => { setMushafSurah(surah); setTab("mushaf"); };
   // النقر اليدوي على التبويبات يمسح طلب السورة حتى لا يُعاد فتحها لاحقاً.
   const selectTab = (t: Tab) => { setMushafSurah(null); setTab(t); };
+  // «تأمّل» على آيةٍ من المصحف → التدبّر مهيّأً بها.
+  const requestReflect = (surah: number, ayah: number) => {
+    setReflectReq({ surah, ayah, nonce: Date.now() });
+    setMushafSurah(null);
+    setTab("tadabbur");
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
@@ -51,7 +59,7 @@ export default function QuranPage() {
 
       {tab === "tadabbur" && (
         <div className="animate-fade-up stagger-2 space-y-4">
-          <TadabburSection />
+          <TadabburSection openReflect={reflectReq} />
         </div>
       )}
       {tab === "hifz" && (
@@ -62,7 +70,7 @@ export default function QuranPage() {
       {tab === "mushaf" && (
         <div className="animate-fade-up stagger-2 space-y-4">
           <KhatmaOrbit />
-          <MushafBrowser initialSurah={mushafSurah} />
+          <MushafBrowser initialSurah={mushafSurah} onReflect={requestReflect} />
         </div>
       )}
     </div>

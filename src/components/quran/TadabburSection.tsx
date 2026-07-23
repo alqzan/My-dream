@@ -23,7 +23,7 @@ function refLabel(sel: AyahSelection): string {
   return sel.toAyah > sel.fromAyah ? `${name} ${sel.fromAyah}–${sel.toAyah}` : `${name} ${sel.fromAyah}`;
 }
 
-export function TadabburSection() {
+export function TadabburSection({ openReflect }: { openReflect?: { surah: number; ayah: number; nonce: number } | null }) {
   const { quranReflections, addReflection, updateReflection, deleteReflection } = useAppStore();
 
   const [text, setText] = useState<string[] | null>(null);
@@ -48,6 +48,13 @@ export function TadabburSection() {
       try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ body, tags, withRef, sel })); } catch { /* ignore */ }
     }
   }, [showForm, editId, body, tags, withRef, sel]);
+
+  // طلبٌ خارجيّ لتأمّلٍ على آية (من قائمة إجراءات المصحف): افتح المؤلّف مهيّأً بها.
+  useEffect(() => {
+    if (!openReflect) return;
+    openNew({ surah: openReflect.surah, fromAyah: openReflect.ayah, toAyah: openReflect.ayah });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openReflect?.nonce]);
 
   const allTags = [...new Set(quranReflections.flatMap((r) => r.tags ?? []))].sort();
 
