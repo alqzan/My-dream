@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
+import { MOODS } from "@/lib/types";
 import { uid, today, parseDate } from "@/lib/utils";
 import { compressImage } from "@/lib/imageUtils";
 import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
@@ -66,6 +67,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [audio, setAudio] = useState<string | undefined>(initial?.audio);
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
+  const [mood, setMood] = useState<JournalEntry["mood"]>(initial?.mood);
   const [compressing, setCompressing] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -146,6 +148,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photo: photos[0] ?? "",
         audio: audio ?? "",
         tags,
+        mood,
       });
     } else {
       const id = uid();
@@ -158,6 +161,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         ...(photos.length ? { photos, photo: photos[0] } : {}),
         ...(audio ? { audio } : {}),
         ...(tags.length ? { tags } : {}),
+        ...(mood ? { mood } : {}),
         time: nowHHMM(),
         source: "manual",
       });
@@ -176,7 +180,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     saveTimer.current = setTimeout(persist, 700);
     return () => clearTimeout(saveTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, title, content, question, answering, photos, audio, tags]);
+  }, [date, title, content, question, answering, photos, audio, tags, mood]);
 
   // "تم" — flush any pending save immediately and close. If the entry was
   // emptied out, treat it as a cancel: delete the auto-created row (or revert
@@ -493,6 +497,28 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           />
         )}
       </div>
+
+      {/* شعور اليوم — اختياريّ تماماً، يظهر بعد الكتابة فلا يزيد الاحتكاك */}
+      {(content.trim() || mood) && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-2">شعور اليوم (اختياري)</label>
+          <div className="flex items-center gap-1.5">
+            {MOODS.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => setMood(mood === m.value ? undefined : m.value)}
+                aria-label={m.label}
+                aria-pressed={mood === m.value}
+                className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border press transition-colors ${mood === m.value ? "border-journal bg-journal/10" : "border-gray-200 dark:border-transparent bg-white dark:bg-[#241c12]"}`}
+              >
+                <span className="text-xl leading-none">{m.emoji}</span>
+                <span className={`text-[9px] ${mood === m.value ? "text-journal font-bold" : "text-gray-400"}`}>{m.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 pt-1">
         <span className="flex items-center gap-1 text-[11px] text-gray-400 ml-auto">

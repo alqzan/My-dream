@@ -120,7 +120,17 @@ export interface JournalEntry {
   // ختم آخر تعديل (ms) — يفوز به التعديل الأحدث لهذه المذكرة بعينها في دمج
   // المزامنة، فلا يضيع تعديلٌ حديث على جهاز بسبب ختم مستندٍ أحدث على جهاز آخر.
   updatedAt?: number;
+  mood?: 1 | 2 | 3 | 4 | 5; // «شعور اليوم» اختياري (١ صعب … ٥ رائع) — لمراجعة الشهر
 }
+
+// رموز «شعور اليوم» الخمسة (اختياري تماماً — لا يظهر قبل الكتابة، ولا نحلّل النصّ).
+export const MOODS: { value: 1 | 2 | 3 | 4 | 5; emoji: string; label: string }[] = [
+  { value: 1, emoji: "😔", label: "صعب" },
+  { value: 2, emoji: "🙁", label: "ثقيل" },
+  { value: 3, emoji: "😐", label: "عادي" },
+  { value: 4, emoji: "🙂", label: "جميل" },
+  { value: 5, emoji: "😄", label: "رائع" },
+];
 
 export interface Habit {
   id: string;
