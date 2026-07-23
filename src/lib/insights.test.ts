@@ -1,8 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { generateInsights, type Insight } from "./insights";
+import { generateInsights, prevMonthPrefix, type Insight } from "./insights";
 import { filterInsights, snoozeUntilDate, type InsightPrefs } from "./insightPrefs";
 import { pageRange } from "./quran/meta";
+import { toDateStr } from "./utils";
 import type { HifzState, HifzRating } from "./types";
+
+// نفس منطق daysAgo داخل المحرّك (نسبةً لليوم الحقيقي) لبناء معاملاتٍ محدَّدة اليوم.
+function ago(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return toDateStr(d);
+}
+const tx = (date: string, i = 0) => ({ id: `t${date}-${i}`, date, amount: 5, category: "", note: "x" });
 
 function baseData(over: Partial<Parameters<typeof generateInsights>[0]> = {}) {
   return {
@@ -60,6 +69,45 @@ describe("generateInsights — structured model", () => {
       quranHifz: hz({ frontierId: p2.end, sessions: [ev(1, p2.end, "2026-01-01")] }),
     }));
     for (let i = 1; i < list.length; i++) expect(list[i - 1].priority).toBeGreaterThanOrEqual(list[i].priority);
+  });
+});
+
+describe("prevMonthPrefix — safe month subtraction (no Date.setMonth overflow)", () => {
+  it("subtracts a month and crosses the year boundary", () => {
+    expect(prevMonthPrefix("2026-03")).toBe("2026-02"); // 29–31 يوم: كان يفيض قديماً
+    expect(prevMonthPrefix("2026-07")).toBe("2026-06");
+    expect(prevMonthPrefix("2026-01")).toBe("2025-12");
+    expect(prevMonthPrefix("2026-12")).toBe("2026-11");
+  });
+  it("is day-independent (only the month key matters)", () => {
+    // البرهان: لا يوجد يومٌ في المدخل أصلاً، فلا فيضان مهما كان تاريخ اليوم.
+    for (let m = 1; m <= 12; m++) {
+      const key = `2026-${String(m).padStart(2, "0")}`;
+      const prev = prevMonthPrefix(key);
+      expect(prev).not.toBe(key); // never returns the same month
+    }
+  });
+});
+
+describe('generateInsights — "أيام بلا صرف" distinguishes no-spend from no-record', () => {
+  // متتبّع منتظم: سجّل في ≥12 يوماً من آخر 30، وله فجوتان داخليتان هذا الأسبوع.
+  function activeTracker() {
+    const days = [0, 1, 3, 5, 6, 8, 10, 12, 14, 16, 18, 20]; // 12 يوماً مميّزاً
+    return days.map((d, i) => tx(ago(d), i));
+  }
+
+  it("praises genuine interior no-spend days for an active tracker", () => {
+    const list = generateInsights(baseData({ transactions: activeTracker() }));
+    const ns = list.find((i) => i.dedupeKey === "finance:no-spend");
+    expect(ns).toBeTruthy();
+    expect(ns!.body).toContain("يومان"); // اليومان الداخليان (قبل ٤ و٢ أيام)
+  });
+
+  it("does NOT praise a week with no recording at all (was falsely praised before)", () => {
+    // كثير من المعاملات لكن كلها قديمة — لا تسجيل هذا الأسبوع.
+    const old = Array.from({ length: 20 }, (_, i) => tx(ago(40 + i), i));
+    const list = generateInsights(baseData({ transactions: old }));
+    expect(list.find((i) => i.dedupeKey === "finance:no-spend")).toBeFalsy();
   });
 });
 

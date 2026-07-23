@@ -71,6 +71,14 @@ function daysAgo(n: number): string {
   return toDateStr(d);
 }
 
+// الشهر السابق لمفتاح شهرٍ «YYYY-MM» باشتقاقٍ صريح من السنة/الشهر، لا بـ
+// Date.setMonth الذي يفيض في أيام 29–31 («31 مارس ناقص شهر» = «3 مارس» فيعيد
+// نفس الشهر). نقيّ ومختبَر، يعبر حدّ السنة (يناير → ديسمبر السابق) بأمان.
+export function prevMonthPrefix(monthPrefix: string): string {
+  const [y, m] = monthPrefix.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
 // إدخالٌ جزئيّ يُكمَّل بقيمٍ افتراضية (قابل للتأجيل والإخفاء، id = dedupeKey).
 type InsightInput = Omit<Insight, "id" | "dismissible" | "snoozeOptions"> &
   Partial<Pick<Insight, "dismissible" | "snoozeOptions">>;
@@ -314,9 +322,9 @@ export function generateInsights(data: InsightData): Insight[] {
 
   // مقارنة أعلى قسم صرفٍ بنفس عدد الأيام من الشهر الماضي (لا شهر جزئي بشهر كامل).
   const dayOfMonth = parseDate(todayStr).getDate();
-  const lastMonthDate = new Date();
-  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-  const lastPrefix = toDateStr(lastMonthDate).slice(0, 7);
+  // الشهر السابق يُشتَقّ من مفتاح الشهر (سنة/شهر صريحان) لا بـDate.setMonth الذي
+  // يفيض في أيام 29–31: «31 مارس ناقص شهر» يصير «3 مارس» فيعيد الشهر نفسه.
+  const lastPrefix = prevMonthPrefix(monthPrefix);
   const catTotals = (prefix: string, maxDay?: number) => {
     const totals: Record<string, number> = {};
     for (const t of transactions) {
@@ -342,14 +350,27 @@ export function generateInsights(data: InsightData): Insight[] {
     }
   }
 
-  // أيام بلا صرف — فقط حين تُميّز عدم الصرف عن عدم التسجيل (بيانات كافية).
+  // أيام بلا صرف — نميّز «لم يصرف» عن «لم يسجّل». نحتسب فقط الأيام الخالية
+  // الواقعة *بين* أيامٍ سجّل فيها هذا الأسبوع (محاطةً بتسجيلٍ قبلها وبعدها فهي
+  // فجوةٌ حقيقية، لا بداية تتبّعٍ أو يومٌ لم يُدخَل بعد)، ونشترط أن يكون صاحب
+  // تتبّعٍ منتظم أصلاً (سجّل في ≥12 يوماً من آخر 30). الأيام الطرفية — قبل أوّل
+  // تسجيلٍ في الأسبوع أو بعد آخره — غامضة فلا تُحتسب، فلا نمدح أسبوعاً بلا تسجيل.
   const weekDates = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
   const spendDays = new Set(transactions.filter((t) => weekDates.includes(t.date)).map((t) => t.date));
-  const noSpend = 7 - spendDays.size;
-  if (noSpend >= 3 && transactions.length > 10) {
+  const recordedWeek = weekDates.filter((d) => spendDays.has(d)); // تصاعدياً
+  let genuineNoSpend = 0;
+  if (recordedWeek.length >= 2) {
+    const first = recordedWeek[0];
+    const last = recordedWeek[recordedWeek.length - 1];
+    genuineNoSpend = weekDates.filter((d) => d > first && d < last && !spendDays.has(d)).length;
+  }
+  const last30 = Array.from({ length: 30 }, (_, i) => daysAgo(i));
+  const activeRecordDays = new Set(transactions.filter((t) => last30.includes(t.date)).map((t) => t.date)).size;
+  if (genuineNoSpend >= 2 && activeRecordDays >= 12) {
     add({
       domain: "finance", dedupeKey: "finance:no-spend", icon: "🛡️", tone: "positive", priority: 45,
-      title: "أيام بلا صرف", body: `${noSpend} أيام بلا أي مصروف هذا الأسبوع — قوة إرادة تُحسد عليها.`,
+      title: "أيام بلا صرف",
+      body: `${genuineNoSpend === 2 ? "يومان" : `${genuineNoSpend} أيام`} بلا أي مصروف بين أيام صرفك هذا الأسبوع — انضباط تُحسد عليه.`,
       validUntil: todayStr,
     });
   }
