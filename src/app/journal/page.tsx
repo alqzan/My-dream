@@ -342,7 +342,7 @@ export default function JournalPage() {
             <span className="text-sm font-bold text-gray-800">في مثل هذا اليوم 🕰️</span>
           </div>
           <div className="space-y-2">
-            {memories.slice(0, 3).map((m) => {
+            {memories.map((m) => {
               const yearsAgo = parseInt(todayStr) - parseInt(m.date);
               return (
                 <button
