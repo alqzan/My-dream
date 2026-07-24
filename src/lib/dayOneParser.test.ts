@@ -33,4 +33,30 @@ describe("parseDayOneJson — stable identity", () => {
     })).entries;
     expect(e[0].id).not.toBe(e[1].id);
   });
+
+  it("keeps same-day memories distinct — real UUIDs give distinct ids", () => {
+    // Multiple memories on ONE day: each has its own Day One UUID → distinct id,
+    // so nothing collapses them just for sharing a date.
+    const e = parseDayOneJson(JSON.stringify({
+      entries: [
+        { uuid: "m1", creationDate: "2026-02-14T07:00:00Z", text: "صباح" },
+        { uuid: "m2", creationDate: "2026-02-14T13:00:00Z", text: "ظهر" },
+        { uuid: "m3", creationDate: "2026-02-14T22:00:00Z", text: "مساء" },
+      ],
+    })).entries;
+    expect(new Set(e.map((x) => x.id)).size).toBe(3); // three distinct ids
+    expect(e.every((x) => x.date === "2026-02-14")).toBe(true); // same day
+  });
+
+  it("UUID-less same-day entries differ by time even with identical text", () => {
+    // The synthetic key uses the FULL timestamp, not just the day — two entries
+    // on the same day at different times stay distinct.
+    const e = parseDayOneJson(JSON.stringify({
+      entries: [
+        { creationDate: "2026-02-14T07:00:00Z", text: "نفس النص" },
+        { creationDate: "2026-02-14T22:00:00Z", text: "نفس النص" },
+      ],
+    })).entries;
+    expect(e[0].id).not.toBe(e[1].id);
+  });
 });

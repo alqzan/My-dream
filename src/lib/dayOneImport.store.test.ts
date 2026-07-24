@@ -111,6 +111,25 @@ describe("dedupeJournalNow — cleans duplicates left by an earlier faulty impor
     expect(useAppStore.getState().dedupeJournalNow()).toBe(0);
     expect(useAppStore.getState().journalEntries).toHaveLength(2);
   });
+
+  it("NEVER merges several memories that share the same day (different UUIDs)", () => {
+    // Three distinct memories all on 2026-02-14 — dedup keys by Day One identity,
+    // not by date, so all three must survive untouched.
+    useAppStore.setState({
+      journalEntries: [
+        doEntry("morning", { date: "2026-02-14", time: "07:00", content: "فجر" }),
+        doEntry("noon", { date: "2026-02-14", time: "13:00", content: "ظهر" }),
+        doEntry("night", { date: "2026-02-14", time: "22:00", content: "مساء" }),
+      ],
+    });
+
+    const removed = useAppStore.getState().dedupeJournalNow();
+    const sameDay = useAppStore.getState().journalEntries.filter((e) => e.date === "2026-02-14");
+
+    expect(removed).toBe(0);          // nothing merged
+    expect(sameDay).toHaveLength(3);  // all three memories kept
+    expect(sameDay.map((e) => e.content).sort()).toEqual(["ظهر", "فجر", "مساء"].sort());
+  });
 });
 
 describe("updateJournalEntry — records media tombstones on single-photo delete", () => {
