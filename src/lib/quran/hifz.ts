@@ -1,5 +1,6 @@
 import type { HifzState, HifzUnit, HifzRating, HifzMistake } from "../types";
 import { calcStreak, parseDate, toDateStr, today } from "../utils";
+import { presetOf } from "./intensity";
 import {
   TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, TOTAL_HIZB, idToPage, idToJuz, idToHizb, idToSurahAyah,
   juzRange, hizbRange, pageRange, describeRange, SURAHS,
@@ -127,35 +128,14 @@ export function hifzPace(s: HifzState, todayStr: string = today()): HifzPace {
   return { perDay, perDayReal, finishInDays, text, enough };
 }
 
-// مقطع المراجعة الدورية: يدور بالوجه داخل المحفوظ [البداية .. الجبهة].
-export function reviewPortion(s: HifzState): Portion | null {
-  const from = s.plan?.startId ?? 1;
-  if (s.frontierId < from) return null; // لا محفوظ بعد
-  let cursor = s.reviewCursorId || from;
-  if (cursor < from || cursor > s.frontierId) cursor = from;
-  const pr = pageRange(idToPage(cursor));
-  const start = Math.max(cursor, pr.start, from);
-  const end = Math.min(pr.end, s.frontierId);
-  return { fromId: start, toId: Math.max(start, end) };
-}
-
-// الموضع التالي لمؤشّر المراجعة بعد مراجعة مقطعٍ ينتهي عند toId (يدور).
-export function nextReviewCursor(s: HifzState, toId: number): number {
-  const from = s.plan?.startId ?? 1;
-  const next = toId + 1;
-  return next > s.frontierId ? from : next;
-}
-
-// ===================== ورد المراجعة (نافذة متحرّكة) =====================
-// المراجعة اليومية على مبدأ «آخر N وجه»: مقطعٌ يغطّي آخر reviewWindowPages وجهاً
-// محفوظاً حتى الجبهة. كلّما تقدّمت الجبهة بحفظٍ جديد تنزلق النافذة تلقائياً فيخرج
-// الأقدم — بلا ضبطٍ يدوي.
-export const DEFAULT_REVIEW_WINDOW = 5;
+// ===================== المراجعة القريبة (نافذة متحرّكة) =====================
+// أوّل خطوةٍ بعد السَّبْق: «آخر N وجه» محفوظاً حتى الجبهة — ما زال طريّاً ويحتاج
+// تثبيتاً قبل أن يدخل جدول المباعدة. كلّما تقدّمت الجبهة انزلقت النافذة فخرج
+// الأقدم إلى الجدول. N يأتي من شدّة التمرين (لا مقبض يدوي).
 export const RANDOM_TEST_INTERVAL_DAYS = 3;
 
 export function reviewWindowPages(s: HifzState): number {
-  const n = s.plan?.reviewWindowPages ?? DEFAULT_REVIEW_WINDOW;
-  return Math.min(Math.max(Math.round(n) || DEFAULT_REVIEW_WINDOW, 1), 15);
+  return presetOf(s.plan).recentPages;
 }
 
 // مقطع «آخر N وجه» المحفوظة (null إن لا محفوظ بعد).
@@ -169,15 +149,41 @@ export function recentReviewBand(s: HifzState): Portion | null {
   return { fromId: start, toId: s.frontierId };
 }
 
-// اختبار مفاجئ: وجهٌ عشوائيٌّ ضمن المحفوظ [startPage..frontierPage] (null إن لا
-// محفوظ). يُستدعى مرّة ويُثبَّت في حالة المكوّن حتى لا يتغيّر مع كل رسم.
-export function randomTestPage(s: HifzState): Portion | null {
+// نطاق الأوجه الذي تغطّيه المراجعة القريبة — لاستثنائه من طابور المستحقّ فلا
+// يظهر الوجه الواحد مرّتين في الجلسة نفسها.
+export function recentBandPages(s: HifzState): { first: number; last: number } | null {
+  const band = recentReviewBand(s);
+  return band ? { first: idToPage(band.fromId), last: idToPage(band.toId) } : null;
+}
+
+// ===================== الاختبار الذكي =====================
+// بدل وجهٍ عشوائيٍّ بحت (قد يعيد عليك ما راجعتَه قبل ساعة)، نرجّح الوجه الذي
+// طال عهدُك به وكثُر تعثّرك فيه: النقاط = أيام الغياب + 5 لكلّ تعثّر سابق، ثمّ
+// نختار عشوائياً من أعلى الثلث حتى لا يتكرّر الوجه نفسه كلّ مرّة. نستثني ما
+// تغطّيه المراجعة القريبة ما دام في المحفوظ ما هو أبعد منها.
+export function smartTestPortion(s: HifzState, todayStr: string): Portion | null {
   const from = s.plan?.startId ?? 1;
   if (s.frontierId < from) return null;
   const firstPage = idToPage(from);
   const lastPage = idToPage(s.frontierId);
-  const p = firstPage + Math.floor(Math.random() * (lastPage - firstPage + 1));
-  const pr = pageRange(p);
+  const band = recentBandPages(s);
+  const olderLast = band ? band.first - 1 : lastPage;
+  // نفضّل ما قبل النافذة القريبة، فإن لم يوجد فكلُّ المحفوظ.
+  const hi = olderLast >= firstPage ? olderLast : lastPage;
+
+  const seen = latestRatingByPage(s);
+  const scored: { page: number; score: number }[] = [];
+  for (let p = firstPage; p <= hi; p++) {
+    const last = seen.get(p);
+    const idle = last ? Math.max(0, daysBetween(last.date, todayStr)) : 60; // لم يُمَسّ قَطّ ⇒ أولى
+    const lapse = last?.rating === 1 ? 5 : 0;
+    scored.push({ page: p, score: idle + lapse });
+  }
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score);
+  const poolSize = Math.max(1, Math.ceil(scored.length / 3));
+  const pick = scored[Math.floor(Math.random() * poolSize)].page;
+  const pr = pageRange(pick);
   return { fromId: Math.max(pr.start, from), toId: Math.min(pr.end, s.frontierId) };
 }
 
@@ -219,17 +225,79 @@ export function mistakesInRange(s: HifzState, from: number, to: number): number 
   ).length;
 }
 
-// بعد كم مرّةٍ متتاليةٍ من التسميع الناجح نقترح إغلاق الخطأ تلقائياً.
-export const MISTAKE_MASTERY_SUGGEST = 2;
+// ===================== اختبار مواضع الخطأ =====================
+// كان الموضع يُعرَض مكشوفاً وتحته زرّ «أتقنته» — لا اختبار فيه أصلاً. صار
+// المُختبِر يطمس الكلمة ويسألك عنها، ونتيجتُك هي التي تقرّر:
+//   • أصبتَ ⇒ okStreak++ ، وعند بلوغه MISTAKE_MASTERY يُغلَق الموضع تلقائياً.
+//   • أخطأتَ ⇒ ضربةٌ جديدة (يرتفع العدّاد) وokStreak = 0 ، فيعود لاختبار الغد.
+// نجاحان متتاليان يكفيان — لا رأيَ للمستخدم في «هل أتقنتُه؟» بل نتيجةُ اختبار.
+export const MISTAKE_MASTERY = 2;
 
-// عدد مرّات تسميع موضع الخطأ بنجاح (تقييم ≥ 2) بعد آخر وقوعٍ له — مُشتقٌّ من
-// المراجعات/الجلسات المتداخلة مع آية الموضع، بلا حالةٍ جديدة. يقود اقتراح
-// الإغلاق التلقائي دون حذف تاريخ الخطأ (يُغلَق مع الاحتفاظ بالإحصائية).
-export function mistakeRecallSuccesses(s: HifzState, m: Pick<HifzMistake, "ayahId" | "hits">): number {
-  const lastHit = m.hits[m.hits.length - 1] ?? "";
-  return [...s.sessions, ...s.reviews].filter(
-    (e) => (e.rating ?? 0) >= 2 && e.fromId <= m.ayahId && e.toId >= m.ayahId && e.date > lastHit,
-  ).length;
+// عدد النجاحات المتتالية على الموضع منذ آخر خطأ (نتيجة اختبارٍ صريح لا استنتاج).
+export function mistakeStreak(m: Pick<HifzMistake, "okStreak">): number {
+  return Math.max(0, m.okStreak ?? 0);
+}
+
+// مواضع اليوم للاختبار: المفتوحة التي لم تُختبَر اليوم بعد، الأكثر تكراراً أوّلاً
+// (وهو ترتيب openMistakes)، مقصورةً على سقف شدّة التمرين.
+export function drillsToday(s: HifzState, todayStr: string): HifzMistake[] {
+  const cap = presetOf(s.plan).drillsPerDay;
+  return openMistakes(s).filter((m) => m.lastDrill !== todayStr).slice(0, cap);
+}
+
+// ===================== اشتقاق التقييم من الأخطاء =====================
+// أنت تسِم مواضع تعثّرك أثناء التسميع، فلا معنى لأن نسألك بعدها «كيف كانت
+// مراجعتك؟» — الجواب عندنا. القاعدة صريحة ومفهومة:
+//   • لا موضع        ⇒ متقن (3)
+//   • حتى حدّ التسامح ⇒ جيّد (2)   — الحدّ = آيتان لكلّ عشر آيات، وأدناه موضعان
+//   • فوق ذلك        ⇒ يحتاج إتقاناً (1)
+// يبقى للمستخدم أن يخالف الاشتقاق بضغطة (قد يكون تعثّره لحناً لا نسياناً).
+export function mistakeTolerance(ayatCount: number): number {
+  return Math.max(2, Math.round(Math.max(1, ayatCount) / 5));
+}
+
+export function gradeFromMistakes(marks: number, ayatCount: number): HifzRating {
+  if (marks <= 0) return 3;
+  return marks <= mistakeTolerance(ayatCount) ? 2 : 1;
+}
+
+export const RATING_LABEL: Record<HifzRating, string> = {
+  3: "متقن",
+  2: "جيّد",
+  1: "يحتاج إتقاناً",
+};
+
+// جملةٌ تشرح للمستخدم لماذا خرج هذا التقييم — لا رقمٌ يهبط بلا سبب.
+export function explainGrade(marks: number, ayatCount: number): string {
+  if (marks <= 0) return `سمّعتَ ${countAyat(ayatCount)} بلا تعثّر`;
+  return `${countSpots(marks)} في ${countAyat(ayatCount)}`;
+}
+
+export function countAyat(n: number): string {
+  if (n === 1) return "آية واحدة";
+  if (n === 2) return "آيتين";
+  return n <= 10 ? `${n} آيات` : `${n} آية`;
+}
+
+export function countSpots(n: number): string {
+  if (n === 1) return "موضعٌ واحد";
+  if (n === 2) return "موضعان";
+  return n <= 10 ? `${n} مواضع` : `${n} موضعاً`;
+}
+
+// صيغة الأوجه بعربيةٍ سليمة وأرقامٍ لاتينية (تُستعمل في ملخّص الجلسة).
+export function countPages(n: number): string {
+  if (n === 1) return "وجه واحد";
+  if (n === 2) return "وجهان";
+  return n <= 10 ? `${n} أوجه` : `${n} وجهاً`;
+}
+
+// صيغة الأيام (لعرض موعد المراجعة القادمة).
+export function countDays(n: number): string {
+  if (n <= 0) return "اليوم";
+  if (n === 1) return "غداً";
+  if (n === 2) return "بعد يومين";
+  return n <= 10 ? `بعد ${n} أيام` : `بعد ${n} يوماً`;
 }
 
 // أحدث تقييمٍ مسّ كلَّ وجهٍ محفوظ (بتداخل الوجه لا بمطابقة المدى النصّي). هكذا
@@ -278,15 +346,6 @@ export function weakSpots(s: HifzState): { fromId: number; toId: number; date: s
     }
   }
   return spans.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 8);
-}
-
-// مراجعة أذكى: تُقدّم مواطن الضعف المفتوحة (لم تُتقَن) على الدورة المتسلسلة.
-export interface SmartReview { portion: Portion; reason: "weak" | "cycle" }
-export function smartReview(s: HifzState): SmartReview | null {
-  const weak = weakSpots(s);
-  if (weak.length) return { portion: { fromId: weak[0].fromId, toId: weak[0].toId }, reason: "weak" };
-  const cyc = reviewPortion(s);
-  return cyc ? { portion: cyc, reason: "cycle" } : null;
 }
 
 // ===================== خريطة الحفظ =====================

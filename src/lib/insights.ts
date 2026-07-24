@@ -14,10 +14,9 @@ import {
   formatAmount, today, toDateStr, parseDate,
 } from "./utils";
 import { idToSurahAyah, SURAHS, describeRange } from "./quran/meta";
-import {
-  plannedPortion, openMistakes, testDue, mistakeRecallSuccesses, MISTAKE_MASTERY_SUGGEST,
-} from "./quran/hifz";
-import { todaySession } from "./quran/schedule";
+import { plannedPortion, openMistakes, testDue, mistakeStreak, MISTAKE_MASTERY } from "./quran/hifz";
+import { buildTodayPlan } from "./quran/session";
+import { duePages } from "./quran/schedule";
 
 export type InsightDomain = "quran" | "finance" | "prayer" | "journal" | "reading" | "habits" | "data";
 export type InsightTone = "positive" | "warning" | "tip" | "action";
@@ -100,13 +99,16 @@ export function generateInsights(data: InsightData): Insight[] {
 
   const h = quranHifz;
   if (h?.plan) {
-    const sess = todaySession(h, todayStr);
-    const dueTotal = sess.due.total;
-    const oldest = sess.due.pages[0];
+    const sess = buildTodayPlan(h, todayStr);
+    // العدد الحقيقي للأوجه المستحقّة (بلا استثناء ما تغطّيه المراجعة القريبة —
+    // ذاك استثناءٌ لترتيب خطوات الجلسة لا لقياس ما عليك اليوم).
+    const allDue = duePages(h, todayStr);
+    const dueTotal = allDue.length;
+    const oldestDue = allDue[0];
     const wirdToday = h.sessions.some((s) => s.date === todayStr);
 
     if (dueTotal > 0) {
-      const od = oldest?.overdueDays ?? 0;
+      const od = oldestDue?.overdueDays ?? 0;
       add({
         domain: "quran", dedupeKey: "quran:due-review", icon: "🔁", title: "مراجعتك القرآنية",
         body: od >= 2
@@ -136,12 +138,12 @@ export function generateInsights(data: InsightData): Insight[] {
       });
     }
 
-    const closable = openMk.find((m) => mistakeRecallSuccesses(h, m) >= MISTAKE_MASTERY_SUGGEST);
-    if (closable) {
+    const nearlyClosed = openMk.find((m) => mistakeStreak(m) === MISTAKE_MASTERY - 1);
+    if (nearlyClosed) {
       add({
-        domain: "quran", dedupeKey: "quran:mistake-close", icon: "✅", title: "خطأ جاهز للإغلاق",
-        body: "سمّعت موضع خطأ بنجاح عدة مرات بعد آخر خطأ — أغلِقه من لوحة أخطائي.",
-        tone: "tip", priority: 46, href: "/quran", actionLabel: "افتح أخطائي",
+        domain: "quran", dedupeKey: "quran:mistake-close", icon: "✅", title: "موضعٌ على وشك الإغلاق",
+        body: "نجحتَ في موضع خطأٍ مرّةً — اختبارٌ ناجحٌ آخر ويُغلَق نهائياً.",
+        tone: "tip", priority: 46, href: "/quran", actionLabel: "اختبرني عليه",
       });
     }
 

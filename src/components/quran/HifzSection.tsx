@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzUnit, type HifzRating } from "@/lib/types";
 import {
@@ -7,11 +7,10 @@ import {
 } from "@/lib/quran/meta";
 import { loadAyahText, textsInRange } from "@/lib/quran/text";
 import { today } from "@/lib/utils";
-import {
-  plannedPortion, hifzProgress, weakSpots, recentReviewBand, randomTestPage,
-  testDue, reviewWindowPages, openMistakes, type Portion,
-} from "@/lib/quran/hifz";
-import { dueQueue } from "@/lib/quran/schedule";
+import { plannedPortion, hifzProgress, smartTestPortion, type Portion } from "@/lib/quran/hifz";
+import { INTENSITY_LABEL, intensityOf } from "@/lib/quran/intensity";
+import type { HifzIntensity } from "@/lib/types";
+import { buildTodayPlan } from "@/lib/quran/session";
 import { HifzCoach } from "@/components/quran/HifzCoach";
 import { TodaySessionCard, TodaySessionFlow } from "@/components/quran/TodaySession";
 import { HifzMap } from "@/components/quran/HifzMap";
@@ -22,13 +21,14 @@ import { MistakesPanel } from "@/components/quran/MistakesPanel";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { NumberInput } from "@/components/ui/NumberInput";
 import {
-  Sprout, RefreshCw, Check, Target, GraduationCap, Headphones, Shuffle, Layers, Minus, Plus,
+  Sprout, Check, Target, GraduationCap, Shuffle, Minus, Plus, SlidersHorizontal,
 } from "lucide-react";
 
-// نوع جلسة المُدرّب: حفظٌ جديد، مراجعةٌ قريبة، مراجعةٌ مركّزة (ضعف)، أو اختبار مفاجئ.
-type CoachKind = "memorize" | "review" | "weak" | "test";
+// نوع جلسة المُدرّب خارج «جلسة اليوم»: حفظٌ جديد (زِد حفظك)، تسميعٌ من الخريطة،
+// أو اختبارٌ من زرّ «اختبرني الآن».
+type CoachKind = "memorize" | "review" | "test";
 const RECALL_TITLE: Record<Exclude<CoachKind, "memorize">, string> = {
-  review: "سمّع مراجعتك", weak: "مراجعة مركّزة", test: "اختبار مفاجئ",
+  review: "سمّع مراجعتك", test: "اختبار",
 };
 
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
@@ -128,88 +128,70 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
-  // المُدرّب الموجّه — للورد (memorize) أو للتسميع (recall) بأنواعه.
+  // المُدرّب الموجّه خارج جلسة اليوم — للزيادة، أو للتسميع من الخريطة، أو للاختبار.
   const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; kind: CoachKind } | null>(null);
-  const [sessionGoal, setSessionGoal] = useState<number | null>(null); // تدفّق «جلسة اليوم» مفتوح؟
+  const [flow, setFlow] = useState<{ resume: boolean } | null>(null); // تدفّق «جلسة اليوم» مفتوح؟
 
   const prog = hifzProgress(h);
   const portion = plannedPortion(h);
-  const weak = weakSpots(h);
-  const weakTop = weak[0] ?? null;
-  const band = recentReviewBand(h);
-  const winPages = reviewWindowPages(h);
   const todayStr = today();
-  const showTest = testDue(h, todayStr);
-  const wirdDoneToday = h.sessions.some((s) => s.date === todayStr);
-  // هل ثمّة «جلسة اليوم»؟ (سبقٌ جديد لم يُنجَز بعدُ اليوم، أو مراجعةٌ مستحقّة، أو
-  // أخطاءٌ مفتوحة) — يقود إظهار بطاقة الجلسة والفاصل، فلا يظهر فاصلٌ بلا بطاقة.
-  // نطابق شرط `nothing` داخل البطاقة (يعتمد `todaySession`) كي لا يظهر فاصلٌ بلا
-  // بطاقة: السَّبْق يُحسَب فقط ما لم يُسجَّل ورد حفظٍ اليوم (وإلا فهو ورد الغد).
-  const hasSession =
-    (!wirdDoneToday && !!plannedPortion(h)) || dueQueue(h, todayStr).total > 0 || openMistakes(h).length > 0;
+  // بناء خطّة اليوم يمرّ على كلّ وجهٍ محفوظ وسجلّه — نحسبها مرّةً لا في كلّ رسم.
+  const plan = useMemo(() => buildTodayPlan(h, todayStr), [h, todayStr]);
+  const hasSession = plan.steps.length > 0;
+  const hasMemorized = h.frontierId >= (h.plan?.startId ?? 1);
+  const wirdDoneToday = h.sessions.some((x) => x.date === todayStr);
 
-  // اختبار مفاجئ: يختار وجهاً عشوائياً من كامل المحفوظ ويفتح التسميع عليه.
+  // اختبرني الآن: وجهٌ يُرجَّح بطول العهد والتعثّر (لا عشوائيٌّ بحت).
   const startTest = () => {
-    const p = randomTestPage(h);
+    const p = smartTestPortion(h, todayStr);
     if (p) setCoach({ portion: p, mode: "recall", kind: "test" });
   };
 
   return (
     <div className="space-y-4">
-      {/* 0) جلسة اليوم — المدخل الأساسي الموحّد (سبق + مراجعة مستحقّة + أخطاء) */}
-      {hasSession && (
+      {/* 1) جلسة اليوم — المدخل الوحيد لعمل اليوم (سبق + مراجعة + اختبار أخطاء) */}
+      {hasSession ? (
         <>
-          <TodaySessionCard onStart={(goal) => setSessionGoal(goal)} />
-          <div className="flex items-center gap-2 pt-1">
-            <div className="h-px flex-1 bg-quran/10" />
-            <span className="text-[10px] font-semibold text-gray-400">أو نفّذ كل قسم على حدة</span>
-            <div className="h-px flex-1 bg-quran/10" />
-          </div>
+          <TodaySessionCard onStart={(resume) => setFlow({ resume })} />
+          {/* أتممتَ وردك لكن بقيت مراجعة؟ يبقى بابُ الزيادة مفتوحاً */}
+          {wirdDoneToday && portion && !showMore && text && (
+            <button
+              onClick={() => setShowMore(true)}
+              className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-quran hover:bg-quran/10 rounded-xl py-2 press"
+            >
+              <Sprout size={13} /> زِد حفظك اليوم
+            </button>
+          )}
         </>
-      )}
-
-      {sessionGoal != null && text && (
-        <TodaySessionFlow text={text} goal={sessionGoal} onClose={() => setSessionGoal(null)} />
-      )}
-
-      {/* 1) ورد اليوم — الفعل اليومي الأول */}
-      {prog.done ? (
+      ) : prog.done ? (
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center">
           <p className="text-sm font-bold text-quran">🎉 أتممت خطتك حتى آخر المصحف — تقبّل الله</p>
           <p className="text-xs text-gray-500 mt-1">يمكنك بدء خطة جديدة من «مؤشّر الحفظ ← خطة جديدة».</p>
         </div>
-      ) : portion && wirdDoneToday && !showMore ? (
+      ) : (
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center space-y-1.5">
-          <p className="text-sm font-bold text-quran">🌿 أتممت ورد اليوم — تقبّل الله</p>
+          <p className="text-sm font-bold text-quran">🌿 أتممت قرآن اليوم — تقبّل الله</p>
           {prog.at && <p className="text-xs text-gray-500">تقدّمت إلى {prog.at.surahName} {prog.at.ayah} · صفحة {prog.page}</p>}
-          <button onClick={() => setShowMore(true)} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-1.5 press">
-            <Sprout size={13} /> زِد حفظك اليوم
-          </button>
+          {portion && text && (
+            <button onClick={() => setShowMore(true)} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-1.5 press">
+              <Sprout size={13} /> زِد حفظك اليوم
+            </button>
+          )}
         </div>
-      ) : portion && (
+      )}
+
+      {flow && text && (
+        <TodaySessionFlow text={text} resume={flow.resume} onClose={() => setFlow(null)} />
+      )}
+
+      {/* 2) زيادة الحفظ خارج الجلسة — تُفتح بالطلب لا بالعرض الدائم */}
+      {showMore && portion && (
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Sprout size={15} className="text-quran" />
-            <span className="text-sm font-bold text-gray-800">ورد اليوم</span>
+            <span className="text-sm font-bold text-gray-800">زيادة الحفظ</span>
             <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
           </div>
-          {h.plan && (
-            <div className="flex items-center justify-center gap-2 text-[11px] text-gray-500">
-              <Target size={13} className="text-quran" /> مقدار وردك اليوم:
-              <button
-                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount - 1 })}
-                disabled={h.plan.amount <= 1}
-                className="w-6 h-6 rounded-lg bg-white dark:bg-[#382c1d] border border-gray-200 dark:border-transparent press flex items-center justify-center disabled:opacity-40"
-                aria-label="أنقص"
-              ><Minus size={13} /></button>
-              <span className="min-w-[64px] text-center font-bold text-gray-700 dark:text-gray-200 tabular-nums">{h.plan.amount} {UNIT_LABEL[h.plan.unit]}</span>
-              <button
-                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount + 1 })}
-                className="w-6 h-6 rounded-lg bg-white dark:bg-[#382c1d] border border-gray-200 dark:border-transparent press flex items-center justify-center"
-                aria-label="زِد"
-              ><Plus size={13} /></button>
-            </div>
-          )}
           <PortionText text={text} portion={portion} />
           <MutashabihatAlert portion={portion} />
           {text && (
@@ -230,92 +212,21 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
         </div>
       )}
 
-      {/* 2) ورد المراجعة — النافذة المتحرّكة «آخر N وجه» */}
-      {band && (
-        <div className="rounded-2xl border border-gray-100 bg-white dark:bg-[#241c12] p-4 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <RefreshCw size={15} className="text-quran" />
-            <span className="text-sm font-bold text-gray-800">المراجعة القريبة</span>
-            <span className="text-[10px] font-bold text-quran bg-quran/10 rounded-full px-2 py-0.5">آخر {winPages} وجه</span>
-            <span className="text-[11px] text-quran font-semibold">{describeRange(band.fromId, band.toId)}</span>
-          </div>
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            راجِع آخر ما حفظتَ باستمرار — كلّما تقدّمتَ في الحفظ انزلقت النافذة تلقائياً فخرج الأقدم.
-          </p>
-          <PortionText text={text} portion={band} muted />
-          <MutashabihatAlert portion={band} />
-          {text && (
-            <button
-              onClick={() => setCoach({ portion: band, mode: "recall", kind: "review" })}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
-            >
-              <Headphones size={16} /> سمّع موجّهاً
-            </button>
-          )}
-          <div>
-            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
-            <RatingRow onRate={(r) => store.recordReview(band.fromId, band.toId, r, false)} />
-          </div>
-          {/* ضبط حجم النافذة */}
-          <div className="flex items-center justify-center gap-2 pt-1 text-[11px] text-gray-400">
-            <Layers size={13} /> حجم نافذة المراجعة:
-            <button onClick={() => store.setReviewWindow(winPages - 1)} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أنقص"><Minus size={13} /></button>
-            <span className="w-8 text-center font-bold text-gray-600 dark:text-gray-300 tabular-nums">{winPages} وجه</span>
-            <button onClick={() => store.setReviewWindow(winPages + 1)} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="زِد"><Plus size={13} /></button>
-          </div>
-        </div>
+      {/* 3) اختبرني الآن — الزرّ الوحيد الباقي خارج الجلسة (بطلبك متى شئت) */}
+      {hasMemorized && text && (
+        <button
+          onClick={startTest}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-semibold press"
+        >
+          <Shuffle size={16} /> اختبرني الآن على وجهٍ من محفوظي
+        </button>
       )}
 
-      {/* 3) اختبار مفاجئ — وجهٌ عشوائيٌّ من كامل المحفوظ (دوريّاً أو يدويّاً) */}
-      {band && (
-        <div className={`rounded-2xl border p-4 space-y-2.5 ${showTest ? "border-indigo-200 dark:border-indigo-900/40 bg-indigo-50 dark:bg-indigo-900/10" : "border-gray-100 bg-white dark:bg-[#241c12]"}`}>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Shuffle size={15} className="text-indigo-500" />
-            <span className="text-sm font-bold text-gray-800">اختبار مفاجئ</span>
-            {showTest && <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 dark:bg-indigo-900/30 rounded-full px-2 py-0.5">حان وقته</span>}
-          </div>
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            {showTest
-              ? "اختبر ثباتَ حفظك على وجهٍ عشوائيّ من كل ما حفظت."
-              : "متى شئتَ، اختبر نفسك على وجهٍ عشوائيّ من محفوظك."}
-          </p>
-          <button
-            onClick={startTest}
-            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold press ${showTest ? "bg-indigo-500 text-white shadow-sm" : "bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600"}`}
-          >
-            <Shuffle size={16} /> اختبرني الآن
-          </button>
-        </div>
-      )}
+      {/* 4) أخطائي — عرضٌ لمواضع التعثّر مع اختبارٍ عليها */}
+      <MistakesPanel />
 
-      {/* 4) مراجعة مركّزة — أحوج مواطن الضعف (لم تُتقَن بعد) */}
-      {weakTop && (
-        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <RefreshCw size={15} className="text-amber-600" />
-            <span className="text-sm font-bold text-gray-800">مراجعة مركّزة</span>
-            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-full px-2 py-0.5">موطن ضعف</span>
-            <span className="text-[11px] text-quran font-semibold">{describeRange(weakTop.fromId, weakTop.toId)}</span>
-          </div>
-          <PortionText text={text} portion={weakTop} muted />
-          <MutashabihatAlert portion={{ fromId: weakTop.fromId, toId: weakTop.toId }} />
-          {text && (
-            <button
-              onClick={() => setCoach({ portion: { fromId: weakTop.fromId, toId: weakTop.toId }, mode: "recall", kind: "weak" })}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran/10 hover:bg-quran/20 text-quran font-semibold press"
-            >
-              <Headphones size={16} /> سمّع موجّهاً
-            </button>
-          )}
-          <div>
-            <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو قيّم مراجعتك مباشرةً:</div>
-            <RatingRow onRate={(r) => store.recordReview(weakTop.fromId, weakTop.toId, r, false)} />
-          </div>
-        </div>
-      )}
-
-      {/* 5) أخطائي — مواضع الأخطاء المُحدَّدة أثناء المراجعة */}
-      <MistakesPanel onReview={(p) => setCoach({ portion: p, mode: "recall", kind: "review" })} />
+      {/* 5) شدّة التمرين — الإعداد الوحيد في القسم */}
+      <IntensityCard />
 
       {/* 6) خريطة الحفظ — لوحة كاملة: المحفوظ، المتقن، المحتاج للمراجعة، والضعف */}
       <HifzMap
@@ -324,13 +235,13 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
         onRead={onRead}
       />
 
-      {/* 6.5) حصيلة الأسبوع القرآنية — تقريرٌ موجز وخطوة الأسبوع القادم */}
+      {/* 7) حصيلة الأسبوع القرآنية — تقريرٌ موجز وخطوة الأسبوع القادم */}
       <QuranWeekReport />
 
-      {/* 7) سجل الحفظ والمراجعة — تعديل/حذف/تراجع مع إعادة حساب الجبهة */}
+      {/* 8) سجل الحفظ والمراجعة — تعديل/حذف/تراجع مع إعادة حساب الجبهة */}
       <HifzLog />
 
-      {/* 8) رسم تقدّم الحفظ عبر الزمن */}
+      {/* 9) رسم تقدّم الحفظ عبر الزمن */}
       <HifzChart />
 
       {coach && text && (
@@ -341,13 +252,85 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
           recallTitle={coach.kind === "memorize" ? undefined : RECALL_TITLE[coach.kind]}
           onClose={() => setCoach(null)}
           onDone={(rating?: HifzRating) => {
-            const { portion, kind } = coach;
-            if (kind === "memorize") store.recordHifzSession(portion.toId, rating);
-            else if (kind === "test") store.recordRandomTest(portion.fromId, portion.toId, rating);
-            else store.recordReview(portion.fromId, portion.toId, rating, false);
+            const { portion: p, kind } = coach;
+            if (kind === "memorize") { store.recordHifzSession(p.toId, rating); setShowMore(false); }
+            else if (kind === "test") store.recordRandomTest(p.fromId, p.toId, rating);
+            else store.recordReview(p.fromId, p.toId, rating);
             setCoach(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// ---------------- شدّة التمرين + مقدار الورد ----------------
+// المكان الوحيد الذي يُضبَط فيه شيء في هذا القسم: ما مقدار ما تحفظه يومياً،
+// وبأيّ إيقاعٍ تُراجع. كلّ الأرقام الأخرى (التكرار، النافذة، السقف، سلّم
+// المباعدة) مشتقّةٌ من هذا الاختيار — راجع src/lib/quran/intensity.ts.
+const INTENSITIES: HifzIntensity[] = ["light", "balanced", "intense"];
+
+function IntensityCard() {
+  const store = useAppStore();
+  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const [open, setOpen] = useState(false);
+  const cur = intensityOf(h.plan);
+  if (!h.plan) return null;
+
+  return (
+    <div className="rounded-2xl border border-gray-100 dark:border-[#3a2e1e] bg-white dark:bg-[#241c12] p-4 space-y-3">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-2 press">
+        <SlidersHorizontal size={15} className="text-gray-400" />
+        <span className="text-sm font-bold text-gray-800">إعدادات الحفظ</span>
+        <span className="ms-auto text-[11px] font-semibold text-quran">
+          {h.plan.amount} {UNIT_LABEL[h.plan.unit]} · {INTENSITY_LABEL[cur].name}
+        </span>
+      </button>
+
+      {open && (
+        <div className="space-y-4 pt-1">
+          <div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">مقدار وردك اليومي</div>
+            <div className="flex items-center justify-center gap-2 text-[11px] text-gray-500">
+              <Target size={13} className="text-quran" />
+              <button
+                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount - 1 })}
+                disabled={h.plan.amount <= 1}
+                className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center disabled:opacity-40"
+                aria-label="أنقص"
+              ><Minus size={13} /></button>
+              <span className="min-w-[72px] text-center font-bold text-gray-700 dark:text-gray-200 tabular-nums">
+                {h.plan.amount} {UNIT_LABEL[h.plan.unit]}
+              </span>
+              <button
+                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount + 1 })}
+                className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center"
+                aria-label="زِد"
+              ><Plus size={13} /></button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">شدّة التمرين</div>
+            <div className="flex gap-1.5">
+              {INTENSITIES.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => store.setHifzIntensity(v)}
+                  className={`flex-1 text-xs font-bold rounded-xl py-2 press ${
+                    cur === v ? "bg-quran text-white shadow-sm" : "bg-gray-100 dark:bg-[#382c1d] text-gray-500"
+                  }`}
+                >
+                  {INTENSITY_LABEL[v].name}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 leading-relaxed mt-2">{INTENSITY_LABEL[cur].hint}</p>
+            <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
+              يضبط عدد التكرار في الحفظ الموجّه · حجم المراجعة القريبة · كم وجهاً تراجع يومياً · تباعد المراجعات.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

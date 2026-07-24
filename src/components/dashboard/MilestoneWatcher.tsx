@@ -55,7 +55,7 @@ export function MilestoneWatcher() {
         message: (t) => `📚 ${t} يوماً من القراءة المتواصلة!` },
       { key: "books", value: booksFinished, thresholds: BOOK_MILESTONES,
         message: (t) => `🏁 أنهيت ${t} ${t === 1 ? "كتاباً — بداية رحلة!" : "كتاباً!"}` },
-      { key: "hifz", value: hifzStreak(quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 }), thresholds: STREAK_MILESTONES,
+      { key: "hifz", value: hifzStreak(quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [] }), thresholds: STREAK_MILESTONES,
         message: (t) => `🧠 ${t} يوماً من الحفظ المتواصل — ثبّتك الله!` },
     ];
 

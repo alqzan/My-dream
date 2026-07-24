@@ -15,27 +15,33 @@
 
 import type { HifzState, HifzRating } from "../types";
 import type { Portion } from "./hifz";
-import { recentReviewBand, plannedPortion, openMistakes } from "./hifz";
+import { recentBandPages, plannedPortion, openMistakes } from "./hifz";
+import { presetOf, INTENSITY, DEFAULT_INTENSITY, type IntensityPreset } from "./intensity";
 import { idToPage, pageRange, idToSurahAyah, SURAHS } from "./meta";
 import { parseDate, toDateStr } from "../utils";
 
-// سلّم الإتقان بالأيام: أوّل إتقانٍ 7، ثمّ 14، 30، 60 عند استمرار الإتقان.
-export const MASTERY_LADDER: readonly number[] = [7, 14, 30, 60];
-export const RATE_NEEDS_DAYS = 1; // «يحتاج إتقان» → غداً
-export const RATE_GOOD_DAYS = 3; // «جيد» → بعد 3 أيام
+// سلّم «متوازن» (الافتراضي) — تبقى مصدّرةً للاختبارات وللعرض حين لا خطة.
+export const MASTERY_LADDER: readonly number[] = INTENSITY[DEFAULT_INTENSITY].ladder;
+export const RATE_NEEDS_DAYS = INTENSITY[DEFAULT_INTENSITY].needsDays; // «يحتاج إتقان» → غداً
+export const RATE_GOOD_DAYS = INTENSITY[DEFAULT_INTENSITY].goodDays; // «جيد» → بعد 3 أيام
 
-// المدة القادمة لمقطعٍ حسب تقييمه ومدّته السابقة — قاعدةٌ واحدة صريحة.
-export function nextInterval(prevDays: number, rating: HifzRating): number {
-  if (rating === 1) return RATE_NEEDS_DAYS;
-  if (rating === 2) return RATE_GOOD_DAYS;
-  const idx = MASTERY_LADDER.indexOf(prevDays);
-  return idx < 0 ? MASTERY_LADDER[0] : MASTERY_LADDER[Math.min(idx + 1, MASTERY_LADDER.length - 1)];
+// المدة القادمة لمقطعٍ حسب تقييمه ومدّته السابقة — قاعدةٌ واحدة صريحة، وأرقامها
+// من شدّة التمرين المختارة.
+export function nextInterval(
+  prevDays: number, rating: HifzRating, p: IntensityPreset = INTENSITY[DEFAULT_INTENSITY],
+): number {
+  if (rating === 1) return p.needsDays;
+  if (rating === 2) return p.goodDays;
+  const idx = p.ladder.indexOf(prevDays);
+  return idx < 0 ? p.ladder[0] : p.ladder[Math.min(idx + 1, p.ladder.length - 1)];
 }
 
 // طيّ سلسلة تقييمات وجهٍ زمنياً (الأقدم أوّلاً) → مدّته الحالية بالأيام.
-export function foldInterval(ratings: HifzRating[]): number {
+export function foldInterval(
+  ratings: HifzRating[], p: IntensityPreset = INTENSITY[DEFAULT_INTENSITY],
+): number {
   let d = 0;
-  for (const r of ratings) d = nextInterval(d, r);
+  for (const r of ratings) d = nextInterval(d, r, p);
   return d;
 }
 
@@ -78,6 +84,7 @@ export function pageSchedules(s: HifzState, todayStr: string): PageSchedule[] {
   const firstPage = idToPage(from);
   const lastPage = idToPage(s.frontierId);
   const events = ratedEvents(s);
+  const preset = presetOf(s.plan);
 
   const out: PageSchedule[] = [];
   for (let page = firstPage; page <= lastPage; page++) {
@@ -87,7 +94,7 @@ export function pageSchedules(s: HifzState, todayStr: string): PageSchedule[] {
       out.push({ page, intervalDays: 0, lastReviewed: null, dueDate: null, overdueDays: 0, lapses, due: true });
       continue;
     }
-    const intervalDays = foldInterval(hits.map((e) => e.rating));
+    const intervalDays = foldInterval(hits.map((e) => e.rating), preset);
     const lastReviewed = hits[hits.length - 1].date;
     const dueDate = addDays(lastReviewed, intervalDays);
     const overdueDays = Math.max(0, daysBetween(dueDate, todayStr));
@@ -96,12 +103,24 @@ export function pageSchedules(s: HifzState, todayStr: string): PageSchedule[] {
   return out;
 }
 
+// المدّة القادمة لمقطعٍ لو قُيّم بكذا — لعرض «موعدها القادم» قبل التسجيل، فيرى
+// المستخدم أثر تقييمه قبل أن يقع. نأخذ حال أوّل وجهٍ في المقطع (وهو الحاكم غالباً).
+export function nextDueDays(s: HifzState, portion: Portion, rating: HifzRating, todayStr: string): number {
+  const page = idToPage(portion.fromId);
+  const cur = pageSchedules(s, todayStr).find((p) => p.page === page);
+  return nextInterval(cur?.intervalDays ?? 0, rating, presetOf(s.plan));
+}
+
 export interface DuePage { page: number; portion: Portion; overdueDays: number; lapses: number; neverReviewed: boolean }
 
 // الأوجه المستحقّة اليوم، الأشدُّ تأخّراً أوّلاً ثمّ الأقدم — لكن لا تتجاوز الجبهة.
-export function duePages(s: HifzState, todayStr: string): DuePage[] {
+// `skipRecentBand` يستثني ما تغطّيه «المراجعة القريبة» فلا يظهر الوجه الواحد
+// مرّتين في جلسةٍ واحدة (كان هذا التداخل أظهر مصدر إرباك في القسم).
+export function duePages(s: HifzState, todayStr: string, skipRecentBand = false): DuePage[] {
+  const band = skipRecentBand ? recentBandPages(s) : null;
   return pageSchedules(s, todayStr)
     .filter((p) => p.due)
+    .filter((p) => !band || p.page < band.first || p.page > band.last)
     .sort((a, b) => b.overdueDays - a.overdueDays || a.page - b.page)
     .map((p) => {
       const pr = pageRange(p.page);
@@ -115,11 +134,12 @@ export function duePages(s: HifzState, todayStr: string): DuePage[] {
     });
 }
 
-// طابورٌ محدود بهدفٍ يومي: إن كثُرت المتأخّرات تُوزَّع على أيام (لا عشرات دفعةً).
+// طابورٌ محدود بسقف شدّة التمرين: إن كثُرت المتأخّرات تُوزَّع على أيام (لا عشرات
+// دفعةً واحدة فتُثبّط). `limit` يُمرَّر في الاختبارات فقط.
 export interface DueQueue { pages: DuePage[]; total: number; hidden: number }
-export function dueQueue(s: HifzState, todayStr: string, limit = 7): DueQueue {
-  const all = duePages(s, todayStr);
-  const cap = Math.max(1, Math.round(limit) || 1);
+export function dueQueue(s: HifzState, todayStr: string, limit?: number, skipRecentBand = false): DueQueue {
+  const all = duePages(s, todayStr, skipRecentBand);
+  const cap = Math.max(1, Math.round(limit ?? presetOf(s.plan).dailyReviewPages) || 1);
   return { pages: all.slice(0, cap), total: all.length, hidden: Math.max(0, all.length - cap) };
 }
 
@@ -135,39 +155,6 @@ export function hifzTodo(s: HifzState, todayStr: string): { needWird: boolean; n
     needWird: plannedPortion(s) != null && !sessionToday,
     needReview: duePages(s, todayStr).length > 0,
   };
-}
-
-// ===================== جلسة اليوم (تجميعة واحدة متدرّجة) =====================
-// بطاقة «جلسة اليوم» تعرض من هذه: مقدار الحفظ الجديد، عدد المستحقّ للمراجعة،
-// عدد الأخطاء المفتوحة، ووقتٌ تقريبي — بزرٍّ واحد «ابدأ جلسة اليوم».
-export interface TodaySession {
-  newPortion: Portion | null; // السَّبْق (الحفظ الجديد)
-  recentBand: Portion | null; // المراجعة القريبة (آخر ما حُفظ)
-  due: DueQueue; // المراجعة المستحقّة (محدودة بالهدف اليومي)
-  openMistakes: number; // مواطن الضعف والأخطاء المفتوحة
-  estMinutes: number; // وقتٌ تقريبيّ للجلسة
-}
-
-function pagesInPortion(p: Portion | null): number {
-  if (!p) return 0;
-  return Math.max(1, idToPage(p.toId) - idToPage(p.fromId) + 1);
-}
-
-export function todaySession(s: HifzState, todayStr: string, reviewGoalPages = 7): TodaySession {
-  // السَّبْق يُعتبر منجزاً بمجرّد تسجيل جلسة حفظٍ اليوم — وإلا لظلّت البطاقة تعرض
-  // ورد الغد (المقطع التالي للجبهة) وكأنّه مستحقٌّ الآن، فتبقى تقول «ابدأ جلسة
-  // اليوم» رغم إتمام الورد. (مثل `hifzTodo` تماماً؛ من أراد الزيادة يفعلها يدوياً.)
-  const sessionToday = (s.sessions ?? []).some((x) => x.date === todayStr);
-  const newPortion = sessionToday ? null : plannedPortion(s);
-  const recentBand = recentReviewBand(s);
-  const due = dueQueue(s, todayStr, reviewGoalPages);
-  const openMk = openMistakes(s).length;
-  // تقدير خشن: ~2 دقيقة لكلّ وجه حفظٍ جديد، ~1 لكلّ وجه مراجعة، ~0.5 لكلّ خطأ.
-  const est =
-    pagesInPortion(newPortion) * 2 +
-    Math.max(pagesInPortion(recentBand), due.pages.length) * 1 +
-    openMk * 0.5;
-  return { newPortion, recentBand, due, openMistakes: openMk, estMinutes: Math.max(1, Math.round(est)) };
 }
 
 // ===================== تقرير قرآني أسبوعي =====================

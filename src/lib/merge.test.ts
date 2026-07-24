@@ -346,7 +346,7 @@ describe("mergeAppData — single-value settings by per-field stamp", () => {
 
 // ===================== P0: سلامة دمج حفظ القرآن (الأجيال) =====================
 function hz(o: Partial<HifzState> = {}): HifzState {
-  return { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [], ...o };
+  return { plan: null, frontierId: 0, sessions: [], reviews: [], mistakes: [], ...o };
 }
 const plan = (startId: number, extra: Partial<HifzPlan> = {}): HifzPlan => ({
   startId, unit: "page", amount: 1, createdAt: "2026-01-01", ...extra,

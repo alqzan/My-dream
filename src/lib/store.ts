@@ -4,11 +4,11 @@ import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter,
-  QuranReflection, HifzUnit, HifzRating, HifzMistake, HifzState, HifzSession, HifzReviewLog,
+  QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
-import { nextReviewCursor } from "./quran/hifz";
+import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
@@ -161,9 +161,8 @@ interface AppStore extends AppData {
   clearHifz: () => void; // delete plan + all progress
   recordHifzSession: (toId: number, rating?: HifzRating) => void; // memorize up to toId
   setFrontier: (id: number) => void; // move position manually (0..6236)
-  recordReview: (fromId: number, toId: number, rating?: HifzRating, advance?: boolean) => void; // periodic review
-  skipReview: (toId: number) => void; // move the review cursor on without logging
-  setReviewWindow: (pages: number) => void; // حجم نافذة المراجعة المتحرّكة (أوجه)
+  recordReview: (fromId: number, toId: number, rating?: HifzRating) => void; // مراجعة مسجّلة
+  setHifzIntensity: (v: HifzIntensity) => void; // شدّة التمرين — الإعداد الوحيد
   recordRandomTest: (fromId: number, toId: number, rating?: HifzRating) => void; // اختبار مفاجئ
   // سجل الحفظ والمراجعة: تعديل التقييم أو حذف قيدٍ (مع إعادة حساب الجبهة من
   // الجلسات) والتراجع بإعادة الإضافة.
@@ -174,6 +173,7 @@ interface AppStore extends AppData {
   deleteHifzReview: (id: string) => void;
   restoreHifzReview: (review: HifzReviewLog) => void;
   toggleMistakeWord: (ayahId: number, wordIndex: number | null, word?: string) => void; // تحديد/إلغاء خطأ
+  recordMistakeDrill: (id: string, ok: boolean) => void; // نتيجة اختبار الموضع (طمس الكلمة)
   resolveMistake: (id: string) => void; // أُتقن الموضع (أُغلق)
   reopenMistake: (id: string) => void; // إعادة فتح خطأٍ مُتقن
   deleteMistake: (id: string) => void; // حذف الخطأ نهائياً
@@ -886,7 +886,6 @@ export const useAppStore = create<AppStore>()(
               frontierId: Math.max(0, startId - 1),
               sessions: [],
               reviews: [],
-              reviewCursorId: 0,
               mistakes: [],
               lastTestDate: undefined,
               planId: uid(),
@@ -914,7 +913,7 @@ export const useAppStore = create<AppStore>()(
           const now = Date.now();
           return {
             quranHifz: {
-              plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0,
+              plan: null, frontierId: 0, sessions: [], reviews: [],
               mistakes: [], lastTestDate: undefined,
               planId: uid(), planUpdatedAt: now, frontierUpdatedAt: now,
             },
@@ -944,37 +943,23 @@ export const useAppStore = create<AppStore>()(
           return { quranHifz: { ...h, frontierId: Math.min(Math.max(Math.round(id) || 0, 0), TOTAL_AYAT), frontierUpdatedAt: Date.now() } };
         }),
 
-      // Log a periodic review of a memorized portion and advance the review
-      // cursor (loops back to the start once it passes the frontier).
-      // advance=true moves the cyclic review cursor forward (سياق المراجعة
-      // الدورية). Weak-spot reviews pass advance=false so they don't disturb it.
-      recordReview: (fromId, toId, rating, advance = true) =>
+      // تسجيل مراجعة مقطعٍ محفوظ. جدول المباعدة كلُّه مُشتقٌّ من هذا السجلّ
+      // (راجع pageSchedules) — لا مؤشّر دورةٍ ولا حالةَ جدولةٍ منفصلة تُحفظ.
+      recordReview: (fromId, toId, rating) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           const now = Date.now();
           const log = { id: uid(), date: today(), fromId, toId, rating, at: now, updatedAt: now };
-          return {
-            quranHifz: {
-              ...h,
-              reviews: [log, ...h.reviews],
-              reviewCursorId: advance ? nextReviewCursor(h, toId) : h.reviewCursorId,
-            },
-          };
+          return { quranHifz: { ...h, reviews: [log, ...h.reviews] } };
         }),
 
-      skipReview: (toId) =>
-        set((s) => {
-          const h = s.quranHifz ?? EMPTY_HIFZ;
-          return { quranHifz: { ...h, reviewCursorId: nextReviewCursor(h, toId) } };
-        }),
-
-      // حجم نافذة المراجعة المتحرّكة «آخر N وجه» (مقيّد 1..15).
-      setReviewWindow: (pages) =>
+      // شدّة التمرين — الإعداد الوحيد في القسم. يعيش داخل الخطة فيُزامَن، ونختم
+      // planUpdatedAt فيفوز آخر تغييرٍ عند الدمج بين جهازين.
+      setHifzIntensity: (v) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           if (!h.plan) return {};
-          const p = Math.min(Math.max(Math.round(pages) || 1, 1), 15);
-          return { quranHifz: { ...h, plan: { ...h.plan, reviewWindowPages: p } } };
+          return { quranHifz: { ...h, plan: { ...h.plan, intensity: v }, planUpdatedAt: Date.now() } };
         }),
 
       // اختبار مفاجئ: يُسجَّل كمراجعةٍ (بلا تحريك مؤشّر الدورة) ويضبط تاريخ آخر
@@ -1069,6 +1054,26 @@ export const useAppStore = create<AppStore>()(
             next[idx] = { ...cur, hits: [...cur.hits, t], word: word ?? cur.word, resolved: false, updatedAt: t };
           }
           return { quranHifz: { ...h, mistakes: next } };
+        }),
+
+      // نتيجة اختبار موضع الخطأ (المُختبِر يطمس الكلمة ثمّ تكشف): النجاح يرفع
+      // السلسلة، وبلوغُها MISTAKE_MASTERY يُغلق الموضع تلقائياً بلا سؤال. الخطأ
+      // يُضيف ضربةً (فيرتفع العدّاد) ويصفّر السلسلة فيعود الموضع لاختبار الغد.
+      recordMistakeDrill: (id, ok) =>
+        set((s) => {
+          const h = s.quranHifz ?? EMPTY_HIFZ;
+          const t = today();
+          const mistakes = (h.mistakes ?? []).map((m) => {
+            if (m.id !== id) return m;
+            if (ok) {
+              const okStreak = (m.okStreak ?? 0) + 1;
+              return { ...m, okStreak, lastDrill: t, resolved: okStreak >= MISTAKE_MASTERY, updatedAt: t };
+            }
+            // ضربةٌ واحدة لليوم مهما تكرّر الاختبار فيه (العدّاد تاريخُ أيامٍ لا نقرات).
+            const hits = m.hits[m.hits.length - 1] === t ? m.hits : [...m.hits, t];
+            return { ...m, hits, okStreak: 0, lastDrill: t, resolved: false, updatedAt: t };
+          });
+          return { quranHifz: { ...h, mistakes } };
         }),
 
       resolveMistake: (id) =>
@@ -1421,7 +1426,7 @@ export const useAppStore = create<AppStore>()(
           delete st.quranMemorized;
           state = {
             ...st,
-            quranHifz: st.quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0 },
+            quranHifz: st.quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [] },
           };
         }
 

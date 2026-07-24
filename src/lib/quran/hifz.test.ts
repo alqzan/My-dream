@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { weakSpots, latestRatingByPage, mistakeRecallSuccesses, portionEnd, hifzProgress, hifzPace } from "./hifz";
+import {
+  weakSpots, latestRatingByPage, portionEnd, hifzProgress, hifzPace,
+  gradeFromMistakes, mistakeTolerance, recentReviewBand, drillsToday, smartTestPortion,
+} from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzRating } from "../types";
 
 function hz(o: Partial<HifzState> = {}): HifzState {
-  return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [], ...o };
+  return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], mistakes: [], ...o };
 }
 let n = 0;
 const ev = (fromId: number, toId: number, date: string, rating?: HifzRating) => ({ id: `e${n++}`, fromId, toId, date, rating });
@@ -69,28 +72,6 @@ describe("weakSpots — page-overlap based (not exact range-string)", () => {
     expect(weakSpots(s)).toHaveLength(0);
   });
 
-  it("mistakeRecallSuccesses counts successful recalls after the last error only", () => {
-    const p2 = pageRange(2);
-    const s = hz({
-      frontierId: p2.end,
-      // آية الخطأ = 10 (ضمن الوجه المحفوظ).
-      reviews: [
-        ev(1, p2.end, "2026-01-02", 2), // قبل آخر خطأ → لا يُحتسب
-        ev(1, p2.end, "2026-01-06", 3), // بعد آخر خطأ، ناجح → يُحتسب
-        ev(1, p2.end, "2026-01-07", 2), // بعد آخر خطأ، ناجح → يُحتسب
-        ev(1, p2.end, "2026-01-08", 1), // بعد آخر خطأ لكنّه فشل → لا يُحتسب
-      ],
-    });
-    const mistake = { ayahId: 10, hits: ["2026-01-01", "2026-01-05"] };
-    expect(mistakeRecallSuccesses(s, mistake)).toBe(2);
-  });
-
-  it("mistakeRecallSuccesses ignores events not overlapping the mistake's ayah", () => {
-    const p2 = pageRange(2);
-    const s = hz({ frontierId: p2.end, reviews: [ev(1, 5, "2026-01-06", 3)] });
-    expect(mistakeRecallSuccesses(s, { ayahId: 500, hits: ["2026-01-01"] })).toBe(0);
-  });
-
   it("latestRatingByPage keeps the newest event per page", () => {
     const p1 = pageRange(1);
     const s = hz({
@@ -145,5 +126,86 @@ describe("hifzPace — realistic pace incl. idle days (P2)", () => {
     expect(pace.perDay).toBeCloseTo(10, 5); // 60 آية / 6 أيام نشاط
     expect(pace.perDayReal).toBeLessThan(pace.perDay); // موزّعة على 30 يوماً
     expect(pace.finishInDays).not.toBeNull();
+  });
+});
+
+describe("gradeFromMistakes — التقييم مشتقٌّ من الأخطاء لا من رأي المستخدم", () => {
+  it("لا تعثّر ⇒ متقن", () => {
+    expect(gradeFromMistakes(0, 12)).toBe(3);
+    expect(gradeFromMistakes(0, 1)).toBe(3);
+  });
+  it("حتى حدّ التسامح ⇒ جيّد، وفوقه ⇒ يحتاج إتقاناً", () => {
+    expect(mistakeTolerance(12)).toBe(2);
+    expect(gradeFromMistakes(1, 12)).toBe(2);
+    expect(gradeFromMistakes(2, 12)).toBe(2);
+    expect(gradeFromMistakes(3, 12)).toBe(1);
+  });
+  it("المقطع الطويل يحتمل تعثّراً أكثر قبل أن يسقط للتقييم الأدنى", () => {
+    expect(mistakeTolerance(25)).toBe(5);
+    expect(gradeFromMistakes(4, 25)).toBe(2);
+    expect(gradeFromMistakes(6, 25)).toBe(1);
+  });
+  it("الحدّ الأدنى للتسامح موضعان مهما قصر المقطع", () => {
+    expect(mistakeTolerance(1)).toBe(2);
+    expect(gradeFromMistakes(2, 1)).toBe(2);
+    expect(gradeFromMistakes(3, 1)).toBe(1);
+  });
+});
+
+describe("recentReviewBand — حجمها من شدّة التمرين لا من مقبضٍ يدوي", () => {
+  it("«خفيف» نافذة أضيق من «مكثّف»", () => {
+    const p10 = pageRange(10);
+    const mk = (intensity: "light" | "balanced" | "intense") =>
+      hz({ frontierId: p10.end, plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01", intensity } });
+    const span = (s: HifzState) => {
+      const b = recentReviewBand(s)!;
+      return idToPage(b.toId) - idToPage(b.fromId) + 1;
+    };
+    expect(span(mk("light"))).toBe(3);
+    expect(span(mk("balanced"))).toBe(5);
+    expect(span(mk("intense"))).toBe(8);
+  });
+});
+
+describe("drillsToday — مواضع الخطأ المُختبَر عليها اليوم", () => {
+  const mk = (id: string, ayahId: number, hits: string[], extra = {}) =>
+    ({ id, ayahId, wordIndex: 0, hits, resolved: false, updatedAt: hits[hits.length - 1], ...extra });
+
+  it("يستثني ما اختُبر اليوم ويُقدّم الأكثر تكراراً", () => {
+    const s = hz({
+      frontierId: pageRange(2).end,
+      mistakes: [
+        mk("a", 3, ["2026-01-01"]),
+        mk("b", 4, ["2026-01-01", "2026-01-02", "2026-01-03"]),
+        mk("c", 5, ["2026-01-01"], { lastDrill: "2026-01-10" }),
+      ],
+    });
+    const out = drillsToday(s, "2026-01-10").map((m) => m.id);
+    expect(out).toEqual(["b", "a"]); // c اختُبر اليوم فسقط
+  });
+
+  it("يحترم سقف شدّة التمرين", () => {
+    const mistakes = Array.from({ length: 9 }, (_, i) => mk(`m${i}`, i + 2, ["2026-01-01"]));
+    const light = hz({
+      frontierId: pageRange(2).end, mistakes,
+      plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01", intensity: "light" },
+    });
+    expect(drillsToday(light, "2026-01-10")).toHaveLength(3);
+    expect(drillsToday(hz({ frontierId: pageRange(2).end, mistakes }), "2026-01-10")).toHaveLength(5);
+  });
+});
+
+describe("smartTestPortion — يرجّح الأطول عهداً لا العشوائي البحت", () => {
+  it("لا يختار من داخل نافذة المراجعة القريبة ما دام في المحفوظ ما هو أبعد", () => {
+    const p10 = pageRange(10);
+    const s = hz({ frontierId: p10.end, sessions: [ev(1, p10.end, "2026-01-01", 3)] });
+    for (let i = 0; i < 30; i++) {
+      const t = smartTestPortion(s, "2026-02-01")!;
+      expect(idToPage(t.fromId)).toBeLessThanOrEqual(5); // النافذة القريبة = 6..10
+    }
+  });
+
+  it("لا شيء قبل أن يوجد محفوظ", () => {
+    expect(smartTestPortion(hz({ frontierId: 0 }), "2026-02-01")).toBeNull();
   });
 });

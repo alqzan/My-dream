@@ -1,19 +1,28 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { idToSurahAyah, describeRange, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
-import { mistakesForAyah, type Portion } from "@/lib/quran/hifz";
+import {
+  mistakesForAyah, mistakeKey, gradeFromMistakes, explainGrade, countDays,
+  RATING_LABEL, type Portion,
+} from "@/lib/quran/hifz";
+import { presetOf } from "@/lib/quran/intensity";
+import { nextDueDays } from "@/lib/quran/schedule";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
-import { X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick } from "lucide-react";
+import { today } from "@/lib/utils";
+import {
+  X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick,
+  CalendarClock, SlidersHorizontal,
+} from "lucide-react";
 
-const REPS_KEY = "madar-hifz-reps";
-
-// المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعددٍ تختاره، ثم تسميعٌ بتلقين
-// الآية السابقة (تسمّع التالية من حفظك ثم تكشفها)، ثم «أتقنتها» للانتقال، وأخيراً
-// مرحلة ربطٍ للمقطع كله. له وضعان:
-// memorize (تكرار+تسميع) للورد، وrecall (تسميع فقط) للمراجعة.
+// المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعدد مرّاتٍ تحدّده شدّة التمرين،
+// ثم تسميعٌ بتلقين الآية السابقة، ثم «أتقنتها» للانتقال، وأخيراً مرحلة ربطٍ
+// للمقطع كله. له وضعان: memorize (تكرار+تسميع) للورد، وrecall (تسميع) للمراجعة.
+//
+// في وضع التسميع لا نسأل «كيف كانت مراجعتك؟» بعد أن وسمتَ مواضع تعثّرك — بل
+// يُشتقّ التقييم من عددها ويُعرض سببُه وموعدُ المراجعة القادمة، ولك أن تخالفه.
 export function HifzCoach({
   portion, text, mode, onDone, onClose, recallTitle = "سمّع مراجعتك",
 }: {
@@ -24,25 +33,21 @@ export function HifzCoach({
   onClose: () => void;
   recallTitle?: string; // عنوان شاشة التسميع (مراجعة/اختبار مفاجئ)
 }) {
+  const store = useAppStore();
+  const h = store.quranHifz ?? EMPTY_HIFZ;
   const ayat = textsInRange(text, portion.fromId, portion.toId).map((r) => ({
     id: r.id, no: idToSurahAyah(r.id).ayah, text: r.text,
   }));
 
-  const [repTarget, setRepTarget] = useState(5);
-  useEffect(() => {
-    try { const v = parseInt(localStorage.getItem(REPS_KEY) || ""); if (v >= 1) setRepTarget(v); } catch {}
-  }, []);
-  function changeReps(n: number) {
-    const v = Math.min(Math.max(n, 1), 20);
-    setRepTarget(v);
-    try { localStorage.setItem(REPS_KEY, String(v)); } catch {}
-  }
+  const repTarget = presetOf(h.plan).reps;
 
   // memorize: نمرّ آيةً آية. recall: شاشة واحدة للمقطع كله.
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<"repeat" | "recall" | "link">(mode === "recall" ? "recall" : "repeat");
   const [reps, setReps] = useState(0);
   const [revealed, setRevealed] = useState(mode === "recall" ? false : true);
+  // مواضع وُسمت في هذه الجلسة بالذات (لا كلّ تاريخ الآية) — هي أساس الاشتقاق.
+  const [marks, setMarks] = useState<Set<string>>(new Set());
 
   const cur = ayat[idx];
   const isLast = idx >= ayat.length - 1;
@@ -50,6 +55,16 @@ export function HifzCoach({
   function nextAyah() {
     if (isLast) { setPhase("link"); return; }
     setIdx((i) => i + 1); setReps(0); setPhase("repeat"); setRevealed(true);
+  }
+
+  function toggleMark(ayahId: number, wordIndex: number | null, word?: string) {
+    store.toggleMistakeWord(ayahId, wordIndex, word);
+    const k = mistakeKey(ayahId, wordIndex);
+    setMarks((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
   }
 
   // ---- recall mode (مراجعة): تلقينٌ بالآية السابقة ثم سمّع المقطع ثم اكشف ----
@@ -70,14 +85,11 @@ export function HifzCoach({
             <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
               <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها لتحديدها
             </div>
-            <MarkableAyatBlock ayat={ayat} />
+            <MarkableAyatBlock ayat={ayat} onToggle={toggleMark} />
             <div className="mt-3">
               <MutashabihatAlert portion={portion} compact />
             </div>
-            <div className="mt-4">
-              <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف كانت مراجعتك؟</div>
-              <RatingRow onRate={(r) => onDone(r)} />
-            </div>
+            <GradeVerdict portion={portion} marks={marks.size} ayatCount={ayat.length} onDone={onDone} />
           </>
         )}
       </Shell>
@@ -116,12 +128,9 @@ export function HifzCoach({
             <Repeat size={15} /> كرّرت ({reps}/{repTarget})
           </button>
           <div className="flex items-center justify-between mt-3">
-            <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-              عدد التكرار:
-              <button onClick={() => changeReps(repTarget - 1)} className="w-5 h-5 rounded bg-gray-100 dark:bg-[#382c1d] press">−</button>
-              <span className="w-4 text-center font-bold text-gray-600">{repTarget}</span>
-              <button onClick={() => changeReps(repTarget + 1)} className="w-5 h-5 rounded bg-gray-100 dark:bg-[#382c1d] press">+</button>
-            </div>
+            <span className="flex items-center gap-1 text-[10px] text-gray-400">
+              <SlidersHorizontal size={11} /> عدد التكرار من شدّة التمرين
+            </span>
             <button
               onClick={() => { setPhase("recall"); setRevealed(false); }}
               disabled={reps < repTarget}
@@ -188,12 +197,78 @@ function AyatBlock({ ayat, big }: { ayat: { id: number; no: number; text: string
   );
 }
 
+// ===================== حُكم المراجعة المشتقّ =====================
+// بدل سؤال «كيف كانت مراجعتك؟» نعرض ما استنتجناه من وسمك: التقييم، وسببه
+// بجملةٍ صريحة، وموعد المراجعة القادمة إن سجّلتَه — مع «غيّر التقييم» لمن رأى
+// أنّ تعثّره كان لحناً عابراً لا نسياناً.
+function GradeVerdict({
+  portion, marks, ayatCount, onDone,
+}: {
+  portion: Portion; marks: number; ayatCount: number; onDone: (r?: HifzRating) => void;
+}) {
+  const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
+  const [override, setOverride] = useState<HifzRating | null>(null);
+  const [editing, setEditing] = useState(false);
+  const derived = gradeFromMistakes(marks, ayatCount);
+  const rating = override ?? derived;
+  const todayStr = today();
+  const days = useMemo(
+    () => nextDueDays(h, portion, rating, todayStr),
+    [h, portion, rating, todayStr],
+  );
+
+  const tone: Record<HifzRating, string> = {
+    3: "border-quran/30 bg-quran/[0.07] text-quran",
+    2: "border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/15 text-amber-700 dark:text-amber-300",
+    1: "border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15 text-red-600 dark:text-red-400",
+  };
+
+  return (
+    <div className="mt-4 space-y-2.5">
+      <div className={`rounded-2xl border p-3.5 text-center space-y-1 ${tone[rating]}`}>
+        <div className="text-base font-bold">{RATING_LABEL[rating]}</div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+          {override ? "تقييمك أنت" : explainGrade(marks, ayatCount)}
+        </div>
+        <div className="text-[11px] font-semibold flex items-center justify-center gap-1 pt-0.5">
+          <CalendarClock size={12} /> موعدها القادم {countDays(days)}
+        </div>
+      </div>
+
+      <button
+        onClick={() => onDone(rating)}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press shadow-sm"
+      >
+        <Check size={16} /> سجّل المراجعة
+      </button>
+
+      {editing ? (
+        <div>
+          <div className="text-[11px] text-gray-500 text-center mb-1.5">اختر تقييمك:</div>
+          <RatingRow onRate={(r) => { setOverride(r); setEditing(false); }} />
+        </div>
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          className="w-full text-[11px] text-gray-400 hover:text-gray-600 press py-1"
+        >
+          لستَ موافقاً؟ غيّر التقييم
+        </button>
+      )}
+    </div>
+  );
+}
+
 // كتلة آياتٍ قابلة للتحديد: كلُّ كلمةٍ زرٌّ يبدّل وسمها كخطأ (تحمرّ وتُحفظ)، وكلُّ
 // آيةٍ لها زرٌّ لوسمها كاملةً. الكلمات ذات الخطأ المفتوح سابقاً تظهر محمرّةً مسبقاً
 // (تحذير) مع عدّاد التكرار — فتُعرَف مواطن الخطأ المتكرّر.
-function MarkableAyatBlock({ ayat }: { ayat: { id: number; no: number; text: string }[] }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+function MarkableAyatBlock({
+  ayat, onToggle,
+}: {
+  ayat: { id: number; no: number; text: string }[];
+  onToggle: (ayahId: number, wordIndex: number | null, word?: string) => void;
+}) {
+  const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
   return (
     <div className="rounded-2xl border border-quran/15 bg-white dark:bg-[#241c12] p-5 min-h-[100px]">
       <p className="font-quran text-center font-bold text-gray-800 dark:text-gray-100 text-[21px] leading-[2.5]" dir="rtl">
@@ -210,7 +285,7 @@ function MarkableAyatBlock({ ayat }: { ayat: { id: number; no: number; text: str
                   <span key={i}>
                     <button
                       type="button"
-                      onClick={() => store.toggleMistakeWord(a.id, i, w)}
+                      onClick={() => onToggle(a.id, i, w)}
                       className={`press align-middle transition-colors ${mk ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4" : "hover:text-quran"}`}
                     >
                       {w}
@@ -223,7 +298,7 @@ function MarkableAyatBlock({ ayat }: { ayat: { id: number; no: number; text: str
               })}
               <button
                 type="button"
-                onClick={() => store.toggleMistakeWord(a.id, null)}
+                onClick={() => onToggle(a.id, null)}
                 title="وسم الآية كاملةً كخطأ"
                 className={`inline-flex items-center justify-center text-[13px] mx-0.5 align-middle press ${ayahMark ? "text-red-500" : "text-quran"}`}
               >

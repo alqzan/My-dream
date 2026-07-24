@@ -23,7 +23,7 @@ function baseData(over: Partial<Parameters<typeof generateInsights>[0]> = {}) {
   };
 }
 function hz(o: Partial<HifzState> = {}): HifzState {
-  return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [], ...o };
+  return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], mistakes: [], ...o };
 }
 let n = 0;
 const ev = (fromId: number, toId: number, date: string, rating?: HifzRating) => ({ id: `e${n++}`, fromId, toId, date, rating });

@@ -1,13 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   nextInterval, foldInterval, MASTERY_LADDER,
-  pageSchedules, duePages, dueQueue, todaySession, quranWeeklyReport,
+  pageSchedules, duePages, dueQueue, nextDueDays, quranWeeklyReport,
 } from "./schedule";
+import { INTENSITY } from "./intensity";
 import { pageRange } from "./meta";
 import type { HifzState, HifzSession, HifzReviewLog, HifzRating } from "../types";
 
 function hz(o: Partial<HifzState> = {}): HifzState {
-  return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], reviewCursorId: 0, mistakes: [], ...o };
+  return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], mistakes: [], ...o };
 }
 let n = 0;
 const sess = (fromId: number, toId: number, date: string, rating?: HifzRating): HifzSession =>
@@ -122,26 +123,59 @@ describe("duePages / dueQueue — prioritization and daily cap", () => {
   });
 });
 
-describe("todaySession — the unified 'today' aggregate", () => {
-  it("summarizes new memorization, recent band, due count, and open mistakes", () => {
-    const p2 = pageRange(2);
-    const s = hz({
-      frontierId: p2.end,
-      sessions: [sess(1, p2.end, "2026-01-01")],
-      mistakes: [{ id: "m1", ayahId: 3, wordIndex: null, hits: ["2026-01-01"], resolved: false, updatedAt: "2026-01-01" }],
-    });
-    const t = todaySession(s, "2026-01-10", 7);
-    expect(t.newPortion).not.toBeNull(); // there is still Quran ahead to memorize
-    expect(t.due.total).toBeGreaterThan(0); // never-reviewed pages are due
-    expect(t.openMistakes).toBe(1);
-    expect(t.estMinutes).toBeGreaterThan(0);
+describe("intensity drives the schedule", () => {
+  it("the ladder and the short intervals follow the chosen intensity", () => {
+    expect(nextInterval(0, 3, INTENSITY.light)).toBe(10);
+    expect(nextInterval(10, 3, INTENSITY.light)).toBe(21);
+    expect(nextInterval(0, 2, INTENSITY.light)).toBe(5);
+    expect(nextInterval(60, 1, INTENSITY.light)).toBe(2);
+
+    expect(nextInterval(0, 3, INTENSITY.intense)).toBe(5);
+    expect(nextInterval(0, 2, INTENSITY.intense)).toBe(2);
   });
 
-  it("with no plan there is nothing due", () => {
-    const s = hz({ plan: null, frontierId: 0 });
-    const t = todaySession(s, "2026-01-10");
-    expect(t.due.total).toBe(0);
-    expect(t.newPortion).toBeNull();
+  it("a page mastered under 'light' stays undue longer than under 'balanced'", () => {
+    const p1 = pageRange(1);
+    const base = { frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] };
+    const balanced = hz(base);
+    const light = hz({ ...base, plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01", intensity: "light" } });
+    expect(pageSchedules(balanced, "2026-01-08")[0].due).toBe(true); // 7 يوماً
+    expect(pageSchedules(light, "2026-01-08")[0].due).toBe(false); // 10 أيام
+    expect(pageSchedules(light, "2026-01-11")[0].due).toBe(true);
+  });
+
+  it("dueQueue caps at the intensity's daily page budget when no limit is passed", () => {
+    const p20 = pageRange(20);
+    const s = hz({ frontierId: p20.end, sessions: [sess(1, p20.end, "2026-01-01")] });
+    expect(dueQueue(s, "2026-01-10").pages).toHaveLength(INTENSITY.balanced.dailyReviewPages);
+    const intense = hz({
+      frontierId: p20.end,
+      sessions: [sess(1, p20.end, "2026-01-01")],
+      plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01", intensity: "intense" },
+    });
+    expect(dueQueue(intense, "2026-01-10").pages).toHaveLength(INTENSITY.intense.dailyReviewPages);
+  });
+});
+
+describe("duePages — skipping the recent band", () => {
+  it("pages covered by the recent-review band drop out of the due queue", () => {
+    // 8 أوجه محفوظة بلا مراجعة ⇒ كلّها مستحقّة. نافذة «متوازن» = آخر 5 أوجه.
+    const p8 = pageRange(8);
+    const s = hz({ frontierId: p8.end, sessions: [sess(1, p8.end, "2026-01-01")] });
+    const all = duePages(s, "2026-01-10").map((d) => d.page);
+    const trimmed = duePages(s, "2026-01-10", true).map((d) => d.page);
+    expect(all).toEqual(expect.arrayContaining([4, 5, 6, 7, 8]));
+    expect(trimmed).toEqual([1, 2, 3]); // 4..8 تغطّيها المراجعة القريبة
+  });
+});
+
+describe("nextDueDays — previewing the effect of a rating", () => {
+  it("shows the interval a rating would produce for the portion's page", () => {
+    const p1 = pageRange(1);
+    const s = hz({ frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] }); // interval 7
+    const portion = { fromId: p1.start, toId: p1.end };
+    expect(nextDueDays(s, portion, 3, "2026-01-10")).toBe(14); // يصعد السلّم
+    expect(nextDueDays(s, portion, 1, "2026-01-10")).toBe(1); // الخطأ يُعيده لغد
   });
 });
 

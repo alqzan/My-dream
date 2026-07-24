@@ -262,12 +262,18 @@ export interface QuranReflection {
 // وحدة الورد اليومي — آية، ربع وجه، نصف وجه، أو وجه كامل. مرنة «على كيفك».
 export type HifzUnit = "ayah" | "quarter" | "half" | "page";
 
+// شدّة التمرين — الإعداد الوحيد في قسم الحفظ. يقود كلَّ الأرقام الداخلية دفعةً
+// واحدة (عدد التكرار · نافذة المراجعة القريبة · سقف الأوجه اليومي · سلّم
+// المباعدة · عدد مواضع الخطأ المُختبَرة)، فلا مقابض متفرّقة يضبطها المستخدم.
+// التفاصيل في src/lib/quran/intensity.ts.
+export type HifzIntensity = "light" | "balanced" | "intense";
+
 export interface HifzPlan {
   startId: number; // المعرّف العام لأوّل آية في الخطة (نقطة البداية)
   unit: HifzUnit; // وحدة الورد اليومي
   amount: number; // كم وحدة يومياً (≥ 1)
   createdAt: string; // YYYY-MM-DD
-  reviewWindowPages?: number; // حجم نافذة المراجعة المتحرّكة بالأوجه (افتراضي 5)
+  intensity?: HifzIntensity; // شدّة التمرين (افتراضي "balanced")
 }
 
 // تقييم ذاتي للحفظ/المراجعة: 1 يحتاج إتقاناً · 2 جيّد · 3 متقن.
@@ -304,14 +310,18 @@ export interface HifzMistake {
   hits: string[]; // تواريخ وقوع الخطأ YYYY-MM-DD — طولها = عدد التكرار
   resolved: boolean; // أُتقن (أُغلق)
   updatedAt: string; // YYYY-MM-DD
+  // نتيجة الاختبار الصريح على الموضع (المُختبِر يطمس الكلمة ويسألك عنها):
+  // عدد النجاحات المتتالية منذ آخر خطأ. يبلغ MISTAKE_MASTERY فيُغلَق الموضع
+  // تلقائياً. الخطأ في الاختبار يصفّره ويُضيف ضربةً جديدة.
+  okStreak?: number;
+  lastDrill?: string; // YYYY-MM-DD آخر يومٍ اختُبِر فيه الموضع (فلا يتكرّر مرّتين في اليوم)
 }
 
 export interface HifzState {
   plan: HifzPlan | null;
   frontierId: number; // آخر آية محفوظة (0 = لم يبدأ)
   sessions: HifzSession[]; // سجلّ الحفظ (تتابعي)
-  reviews: HifzReviewLog[]; // سجلّ المراجعات الدورية
-  reviewCursorId: number; // موضع دوران المراجعة الدورية داخل المحفوظ (0 = من البداية)
+  reviews: HifzReviewLog[]; // سجلّ المراجعات (المستحقّة والقريبة والاختبار)
   mistakes?: HifzMistake[]; // مواضع الأخطاء المُحدَّدة أثناء المراجعة
   lastTestDate?: string; // آخر يومٍ ظهر فيه الاختبار العشوائي (لدوريّته)
   // هوية «جيل الخطة»: تتبدّل عند بدء خطة جديدة أو مسحها، فلا تخلط سجلّات خطةٍ
@@ -332,7 +342,6 @@ export const EMPTY_HIFZ: HifzState = {
   frontierId: 0,
   sessions: [],
   reviews: [],
-  reviewCursorId: 0,
   mistakes: [],
 };
 

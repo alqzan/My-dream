@@ -126,7 +126,6 @@ export function mergeHifz(a: HifzState, b: HifzState): HifzState {
       frontierId: win.frontierId ?? 0,
       sessions: [...(win.sessions ?? [])],
       reviews: [...(win.reviews ?? [])],
-      reviewCursorId: win.reviewCursorId ?? 0,
       mistakes: [...(win.mistakes ?? [])],
       lastTestDate: win.lastTestDate,
       planId: hifzGen(win),
@@ -143,7 +142,9 @@ export function mergeHifz(a: HifzState, b: HifzState): HifzState {
   const reviews = mergeHifzRecords(a.reviews ?? [], b.reviews ?? [], tomb);
 
   // الأخطاء: اتّحاد بالـid مع دمج تواريخ الوقوع (hits) وأحدث حالة إتقان، ثمّ
-  // إسقاط المشهودِ حذفُه (deleteMistake النهائي).
+  // إسقاط المشهودِ حذفُه (deleteMistake النهائي). نتيجة الاختبار (okStreak /
+  // lastDrill) تأتي مع الجانب الأحدث — وتواريخُ الوقوع تبقى متّحدةً على أيّ حال،
+  // فلا يضيع تعثّرٌ سُجِّل على الجهاز الآخر حتى لو فاز الجانب الناجح.
   const aMist = a.mistakes ?? [];
   const bMist = b.mistakes ?? [];
   const aMistById = new Map(aMist.map((m) => [m.id, m]));
@@ -174,14 +175,12 @@ export function mergeHifz(a: HifzState, b: HifzState): HifzState {
   const planSide = aAt !== bAt ? (aAt > bAt ? a : b) : (a.plan ? a : b);
   const lastTestDate = (a.lastTestDate ?? "") >= (b.lastTestDate ?? "")
     ? a.lastTestDate : b.lastTestDate;
-  const cursorSide = faAt >= fbAt ? a : b;
 
   return {
     plan: planSide.plan,
     frontierId,
     sessions,
     reviews,
-    reviewCursorId: cursorSide.reviewCursorId || (cursorSide === a ? b : a).reviewCursorId || 0,
     mistakes,
     lastTestDate,
     planId: a.planId ?? b.planId ?? ga,
