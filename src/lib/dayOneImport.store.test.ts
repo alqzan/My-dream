@@ -86,6 +86,33 @@ describe("importDayOneEntries — completes partially-missing media", () => {
   });
 });
 
+describe("dedupeJournalNow — cleans duplicates left by an earlier faulty import", () => {
+  it("collapses entries sharing a Day One id into one without losing media", () => {
+    // Two rows for the same memory (u9): one legacy random id with no photo, one
+    // canonical carrying a photo — both share dayOneUUID, so they're one memory.
+    useAppStore.setState({
+      journalEntries: [
+        doEntry("u9", { id: "legacy-random" }),
+        doEntry("u9", { photos: [P2], photo: P2 }),
+      ],
+    });
+
+    const removed = useAppStore.getState().dedupeJournalNow();
+    const entries = useAppStore.getState().journalEntries.filter((e) => e.dayOneUUID === "u9");
+
+    expect(removed).toBe(1);
+    expect(entries).toHaveLength(1);        // one memory, not two
+    expect(entries[0].id).toBe("do-u9");    // id canonicalized
+    expect(entries[0].photos).toEqual([P2]); // the photo survived the merge
+  });
+
+  it("is a no-op (returns 0) when there are no duplicates", () => {
+    useAppStore.setState({ journalEntries: [doEntry("u10"), doEntry("u11")] });
+    expect(useAppStore.getState().dedupeJournalNow()).toBe(0);
+    expect(useAppStore.getState().journalEntries).toHaveLength(2);
+  });
+});
+
 describe("updateJournalEntry — records media tombstones on single-photo delete", () => {
   it("tombstones the removed photo for THIS entry (and not the kept one)", async () => {
     useAppStore.setState({

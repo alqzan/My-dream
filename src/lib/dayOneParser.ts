@@ -1,6 +1,6 @@
 import { Unzip, UnzipInflate } from "fflate";
 import type { JournalEntry } from "./types";
-import { uid, today } from "./utils";
+import { today } from "./utils";
 import { compressImageSmart } from "./imageUtils";
 
 interface DayOneRichText {
@@ -139,6 +139,30 @@ function normalizeTags(tags?: string[]): string[] {
   return [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
 }
 
+// A deterministic (non-cryptographic) 64-bit content signature. Used only to
+// give a UUID-less Day One entry a STABLE identity: some exports (or corrupted
+// ones) omit `uuid`, and without it every re-import minted a fresh random id and
+// duplicated the memory. Deriving the id from date+text instead maps the same
+// entry to the same id on every import, so it dedupes like any other. Two FNV-1a
+// passes with different seeds → 16 hex chars, collision-safe at realistic counts.
+function contentSignature(s: string): string {
+  let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x85ebca77);
+  }
+  return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+}
+
+// The stable identity of a Day One entry: its own UUID when present, otherwise a
+// synthetic key derived from its creation date + text. Both `id` and the store's
+// dedup key (`dayOneUUID`) use this, so a re-import always recognizes the entry.
+function stableUUID(entry: DayOneEntry): string {
+  if (entry.uuid) return entry.uuid;
+  return `syn-${contentSignature(`${entry.creationDate ?? ""}\n${extractText(entry)}`)}`;
+}
+
 // Build the common journal fields shared by the JSON and ZIP importers.
 function baseEntry(entry: DayOneEntry): JournalEntry {
   const { date, time } = extractDateTime(entry);
@@ -150,11 +174,13 @@ function baseEntry(entry: DayOneEntry): JournalEntry {
     ...(v.type ? { type: v.type } : {}),
     ...(typeof v.duration === "number" ? { duration: v.duration } : {}),
   }));
+  // معرّف ثابت مشتقّ من UUID الخاص بـ Day One — نفسه على كل جهاز وفي كل إعادة
+  // استيراد، فتُعرَف المذكرة كعنصرٍ واحد (لا تكرار عبر الأجهزة) وينتشر حذفها.
+  // المدخلة النادرة بلا UUID تأخذ مفتاحاً ثابتاً مشتقّاً من التاريخ+النص (بدل uid
+  // عشوائي جديد كل استيراد) حتى لا تتكرّر عند إعادة الاستيراد.
+  const stableId = stableUUID(entry);
   return {
-    // معرّف ثابت مشتقّ من UUID الخاص بـ Day One — نفسه على كل جهاز وفي كل إعادة
-    // استيراد، فتُعرَف المذكرة كعنصرٍ واحد (لا تكرار عبر الأجهزة) وينتشر حذفها.
-    // (uid احتياطيّ نادر لمدخلة بلا UUID حتى لا تتصادم مع غيرها.)
-    id: entry.uuid ? `do-${entry.uuid}` : uid(),
+    id: `do-${stableId}`,
     date,
     ...(time ? { time } : {}),
     ...(title ? { title } : {}),
@@ -163,7 +189,7 @@ function baseEntry(entry: DayOneEntry): JournalEntry {
     ...(videoRefs.length ? { videoRefs } : {}),
     ...(entry.starred === true ? { starred: true } : {}),
     source: "dayOne",
-    dayOneUUID: entry.uuid,
+    dayOneUUID: stableId,
   };
 }
 
@@ -388,22 +414,39 @@ export async function streamDayOneZipImport(
   // Base entries (no media yet) + per-entry media slots. A slot resolves when
   // ANY of its keys (md5 or identifier) streams in; an entry becomes ready when
   // all its slots resolve (or the stream ends without them — a missing file).
+  //
+  // Under onePhoto we still keep ALL photo slots (not just the first): the first
+  // photo can be a format the browser can't decode (a HEIC), and slicing to it
+  // used to leave the memory with no picture — sometimes losing the whole entry.
+  // Instead we STORE only the first photo that actually decodes (see finalize)
+  // and skip decoding the rest, so onePhoto stays cheap AND resilient.
   const onePhoto = cb.onePhotoPerEntry ?? false;
   const bases = allEntries.map(baseEntry);
   const slotsPerEntry: (MediaSlot[] | null)[] = allEntries.map((e) => {
     const slots: MediaSlot[] = [];
-    const photos = onePhoto ? (e.photos ?? []).slice(0, 1) : (e.photos ?? []);
-    for (const p of photos) slots.push({ keys: [p.md5, p.identifier].filter(Boolean) as string[], kind: "photo", resolved: false });
+    for (const p of e.photos ?? []) slots.push({ keys: [p.md5, p.identifier].filter(Boolean) as string[], kind: "photo", resolved: false });
     for (const a of e.audios ?? []) slots.push({ keys: [a.md5, a.identifier].filter(Boolean) as string[], kind: "audio", resolved: false });
     return slots;
   });
+  // Whether an entry referenced any media at all — a media-only memory whose file
+  // fails to decode must still be KEPT (as a dated placeholder), never dropped as
+  // "empty", or the memory silently disappears from the archive.
+  const hadMedia = slotsPerEntry.map((slots) => slots!.some((s) => s.keys.length > 0));
+  // Once an entry has one decoded photo stored, onePhoto needs no more of its
+  // photos — this flag lets the media loop skip the expensive extra decodes.
+  const photoStored = new Array(allEntries.length).fill(false);
   const pending = slotsPerEntry.map((slots) => slots!.filter((s) => s.keys.length).length);
   const keyIndex = new Map<string, { e: number; s: number }[]>();
   slotsPerEntry.forEach((slots, e) => slots!.forEach((slot, s) => slot.keys.forEach((k) => {
     (keyIndex.get(k) ?? keyIndex.set(k, []).get(k)!).push({ e, s });
   })));
 
-  const photosReferenced = slotsPerEntry.reduce((n, s) => n + s!.filter((x) => x.kind === "photo").length, 0);
+  // onePhoto stores at most one photo per entry, so "referenced" is one per entry
+  // that has any photo — not the full slot count — keeping the missing-media
+  // tally honest (the intentionally-skipped extras aren't "missing").
+  const photosReferenced = onePhoto
+    ? slotsPerEntry.reduce((n, s) => n + (s!.some((x) => x.kind === "photo") ? 1 : 0), 0)
+    : slotsPerEntry.reduce((n, s) => n + s!.filter((x) => x.kind === "photo").length, 0);
   const audiosReferenced = slotsPerEntry.reduce((n, s) => n + s!.filter((x) => x.kind === "audio").length, 0);
   const mediaTotal = pending.reduce((a, b) => a + b, 0);
   let photosImported = 0, audiosImported = 0, mediaDone = 0, entriesDone = 0, keptCount = 0;
@@ -415,13 +458,17 @@ export async function streamDayOneZipImport(
     flushed[idx] = true;
     entriesDone++;
     const slots = slotsPerEntry[idx]!;
-    const photos = slots.filter((s) => s.kind === "photo" && s.url).map((s) => s.url!);
+    let photos = slots.filter((s) => s.kind === "photo" && s.url).map((s) => s.url!);
+    if (onePhoto && photos.length > 1) photos = photos.slice(0, 1); // store just one
     const audios = slots.filter((s) => s.kind === "audio" && s.url).map((s) => s.url!);
     const je = bases[idx];
     if (photos.length) { je.photos = photos; je.photo = photos[0]; photosImported += photos.length; }
     if (audios.length) { je.audios = audios; je.audio = audios[0]; audiosImported += audios.length; }
     slotsPerEntry[idx] = null; // free this entry's media buffers now
-    if (je.content.length > 0 || je.title || je.photos?.length || je.audio || je.videoRefs?.length) {
+    // Keep the entry if it carries text/title/media OR merely REFERENCED media —
+    // a photo-only memory whose file couldn't be decoded survives as a dated
+    // placeholder (a later re-import fills it) instead of vanishing.
+    if (je.content.length > 0 || je.title || je.photos?.length || je.audios?.length || je.videoRefs?.length || hadMedia[idx]) {
       batch.push(je);
       keptCount++;
     }
@@ -455,9 +502,15 @@ export async function streamDayOneZipImport(
           if (isAudio) {
             url = bytesToDataUrl(bytes, AUDIO_MIME[ext] || "audio/mp4");
           } else {
-            try {
-              url = await compressImageSmart(new Blob([bytes as BlobPart], { type: IMG_MIME[ext] || "image/jpeg" }), 140);
-            } catch { url = null; }
+            // Under onePhoto, decode this photo only if some referencing entry
+            // still needs one — an entry that already stored a photo skips the
+            // rest, so onePhoto pays for ~one decode per entry, not all photos.
+            const needed = refs.some(({ e }) => slotsPerEntry[e] && !(onePhoto && photoStored[e]));
+            if (needed) {
+              try {
+                url = await compressImageSmart(new Blob([bytes as BlobPart], { type: IMG_MIME[ext] || "image/jpeg" }), 140);
+              } catch { url = null; }
+            }
           }
           for (const { e, s } of refs) {
             const slots = slotsPerEntry[e];
@@ -465,7 +518,12 @@ export async function streamDayOneZipImport(
             const slot = slots[s];
             if (!slot || slot.resolved) continue;
             slot.resolved = true;
-            if (url) slot.url = url;
+            // Store the photo only while the entry still needs one (onePhoto);
+            // audio and non-onePhoto photos always take their decoded bytes.
+            if (url && !(slot.kind === "photo" && onePhoto && photoStored[e])) {
+              slot.url = url;
+              if (slot.kind === "photo") photoStored[e] = true;
+            }
             mediaDone++;
             if (--pending[e] === 0) finalize(e);
           }

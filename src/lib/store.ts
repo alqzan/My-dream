@@ -80,6 +80,9 @@ interface AppStore extends AppData {
   // the import summary never has to guess which of the parsed entries changed.
   importDayOneEntries: (entries: JournalEntry[]) => ImportResult;
   deleteDayOneImports: () => number; // يحذف كل المذكرات المستوردة من Day One؛ يرجع العدد
+  // يدمج المذكرات المكرّرة (المشتركة في هوية Day One الثابتة) في عنصرٍ واحد مع توحيد
+  // وسائطها؛ يرجع عدد المكرّرات المُزالة. يُستدعى بعد الاستيراد لتنظيف أي تكرار قديم.
+  dedupeJournalNow: () => number;
 
   // Finance
   addTransaction: (tx: Transaction) => void;
@@ -430,6 +433,17 @@ export const useAppStore = create<AppStore>()(
           const kept = s.journalEntries.filter((e) => e.source !== "dayOne");
           removed = s.journalEntries.length - kept.length;
           return { journalEntries: kept };
+        });
+        return removed;
+      },
+
+      dedupeJournalNow: () => {
+        let removed = 0;
+        set((s) => {
+          const deduped = dedupeJournalEntries(s.journalEntries);
+          removed = s.journalEntries.length - deduped.length;
+          // لا نلمس المتجر إن لم نُزل شيئاً — لئلا نختم lastUpdated بلا تغيير فعلي.
+          return removed > 0 ? { journalEntries: deduped } : {};
         });
         return removed;
       },

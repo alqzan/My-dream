@@ -18,12 +18,15 @@ interface ImportStats {
   // How many photo/audio files the export referenced but couldn't be decoded —
   // surfaced so a partial import isn't shown as a clean success.
   mediaMissing: number;
+  // Pre-existing duplicate memories collapsed into one after the import — cleans
+  // leftovers from an earlier faulty import so the archive ends up tidy.
+  mergedDuplicates: number;
   // True when the owner cancelled mid-import — re-running resumes (dedupes).
   cancelled: boolean;
 }
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
-  const { importDayOneEntries, deleteDayOneImports, journalEntries, snapshot } = useAppStore();
+  const { importDayOneEntries, deleteDayOneImports, dedupeJournalNow, journalEntries, snapshot } = useAppStore();
   const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [stats, setStats] = useState<ImportStats | null>(null);
@@ -75,7 +78,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
     setStatus("working");
     cancelRef.current = false;
     setProgress(null);
-    const total: ImportStats = { files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0, cancelled: false };
+    const total: ImportStats = { files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0, mergedDuplicates: 0, cancelled: false };
     try {
       for (const file of chosen) {
         if (cancelRef.current) { total.cancelled = true; break; }
@@ -115,6 +118,8 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           total.audio += r.audio;
         }
       }
+      // نظّف أي تكرار قديم بقي من استيرادٍ سابق معطوب — فيخرج الأرشيف بلا مكرّرات.
+      total.mergedDuplicates = dedupeJournalNow();
       setStats(total);
       setStatus("success");
     } catch (err) {
@@ -239,6 +244,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
             {stats.photos > 0 && <p>• مع {stats.photos} مذكرة فيها صور</p>}
             {stats.audio > 0 && <p>• مع {stats.audio} مذكرة فيها صوت</p>}
             {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (بلا تكرار)</p>}
+            {stats.mergedDuplicates > 0 && <p>• دمجنا {stats.mergedDuplicates} مذكرة مكرّرة من استيراد سابق</p>}
             {stats.skippedEmpty > 0 && <p>• تجاهلنا {stats.skippedEmpty} مدخلة فارغة</p>}
           </div>
           {stats.mediaMissing > 0 && (

@@ -79,12 +79,31 @@ describe("streamDayOneZipImport — batched, bounded, resumable", () => {
     expect(ids).toContain("do-c");
   });
 
-  it("onePhotoPerEntry keeps only the first photo of an entry", async () => {
+  it("onePhotoPerEntry stores at most one photo per entry", async () => {
     const off = await streamDayOneZipImport(threePhotoZip(), { onBatch: () => {} });
     expect(off.photosReferenced).toBe(3); // default: all three slots kept
 
     const on = await streamDayOneZipImport(threePhotoZip(), { onBatch: () => {}, onePhotoPerEntry: true });
-    expect(on.photosReferenced).toBe(1); // only the first photo is referenced
+    expect(on.photosReferenced).toBe(1); // one photo intended per entry
+  });
+
+  it("keeps a media-only memory even when its media can't be decoded", async () => {
+    // An entry with NO text, only a photo that fails to decode in this env — it
+    // must survive as a dated placeholder, not vanish from the archive.
+    const json = {
+      entries: [{ uuid: "z", creationDate: "2026-06-01T10:00:00Z", photos: [{ md5: "ZP" }] }],
+    };
+    const zip = new Blob([zipSync({
+      "journal.json": strToU8(JSON.stringify(json)),
+      "photos/ZP.jpeg": new Uint8Array([9]),
+    })], { type: "application/zip" });
+
+    const batches: JournalEntry[][] = [];
+    const res = await streamDayOneZipImport(zip, { onBatch: (e) => { batches.push(e); } });
+
+    const z = batches.flat().find((e) => e.id === "do-z");
+    expect(z).toBeTruthy();            // memory kept despite the undecodable photo
+    expect(res.skippedEmpty).toBe(0);  // not counted as an empty entry
   });
 
   it("awaits each onBatch before the next (backpressure)", async () => {
