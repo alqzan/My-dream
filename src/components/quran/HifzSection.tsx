@@ -141,9 +141,12 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
   const todayStr = today();
   const showTest = testDue(h, todayStr);
   const wirdDoneToday = h.sessions.some((s) => s.date === todayStr);
-  // هل ثمّة «جلسة اليوم»؟ (سبقٌ جديد أو مراجعةٌ مستحقّة أو أخطاءٌ مفتوحة) — يقود
-  // إظهار بطاقة الجلسة والفاصل، فلا يظهر فاصلٌ بلا بطاقة.
-  const hasSession = !!plannedPortion(h) || dueQueue(h, todayStr).total > 0 || openMistakes(h).length > 0;
+  // هل ثمّة «جلسة اليوم»؟ (سبقٌ جديد لم يُنجَز بعدُ اليوم، أو مراجعةٌ مستحقّة، أو
+  // أخطاءٌ مفتوحة) — يقود إظهار بطاقة الجلسة والفاصل، فلا يظهر فاصلٌ بلا بطاقة.
+  // نطابق شرط `nothing` داخل البطاقة (يعتمد `todaySession`) كي لا يظهر فاصلٌ بلا
+  // بطاقة: السَّبْق يُحسَب فقط ما لم يُسجَّل ورد حفظٍ اليوم (وإلا فهو ورد الغد).
+  const hasSession =
+    (!wirdDoneToday && !!plannedPortion(h)) || dueQueue(h, todayStr).total > 0 || openMistakes(h).length > 0;
 
   // اختبار مفاجئ: يختار وجهاً عشوائياً من كامل المحفوظ ويفتح التسميع عليه.
   const startTest = () => {
