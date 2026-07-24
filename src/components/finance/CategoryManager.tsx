@@ -153,7 +153,7 @@ export function CategoryManager({ onClose }: { onClose: () => void }) {
                           <select
                             value={main.id}
                             onChange={(e) => updateCategory(sub.id, { parentId: e.target.value })}
-                            className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded-lg py-1 px-1 shrink-0 max-w-[74px] focus:outline-none focus:ring-1 focus:ring-finance/40"
+                            className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded-lg py-1 px-1 shrink-0 max-w-[104px] focus:outline-none focus:ring-1 focus:ring-finance/40"
                             aria-label={`نقل ${sub.label} إلى قسم آخر`}
                             title="نقل إلى قسم"
                           >

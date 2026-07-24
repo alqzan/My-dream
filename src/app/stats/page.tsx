@@ -145,13 +145,13 @@ export default function StatsPage() {
   const hasReadingData = readingMonthly.some((m) => m.صفحات > 0);
 
   return (
-    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-shell">
       <div className="animate-fade-up">
         <div className="flex items-center gap-2.5">
           <SectionSignet href="/stats" />
-          <h1 className="text-2xl font-bold text-gray-900">إحصائياتي</h1>
+          <h1 className="page-title">إحصائياتي</h1>
         </div>
-        <p className="text-sm text-gray-500 mt-0.5">رحلتك في {year} بالأرقام</p>
+        <p className="page-subtitle">رحلتك في {year} بالأرقام</p>
       </div>
 
       {/* Hero numbers — أربع أدواتٍ صغيرة بلغة اللوحة نفسها (سطح كريمي، حدٌّ

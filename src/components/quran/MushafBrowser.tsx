@@ -147,18 +147,21 @@ export function MushafBrowser({ initialSurah, onReflect }: { initialSurah?: numb
         ))}
       </div>
 
-      {/* اذهب إلى صفحة (١–٦٠٤) — متاحٌ دائماً */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-gray-500 shrink-0">اذهب إلى صفحة</span>
+      {/* اذهب إلى صفحة (١–٦٠٤) — متاحٌ دائماً. الحقل يمتدّ على ما تبقّى من
+          السطر: صفٌّ قصيرٌ يترك نصف العرض فارغاً كان يكسر توازن الشريطين
+          فوقه وتحته (وكلاهما بعرضٍ كامل). */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 shrink-0">اذهب إلى صفحة</span>
         <input
           value={pageInput}
           onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ""))}
           onKeyDown={(e) => e.key === "Enter" && goToPage()}
           inputMode="numeric"
           placeholder="١–٦٠٤"
-          className="w-20 text-sm text-center border border-gray-200 dark:border-transparent rounded-lg px-2 py-1.5 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
+          aria-label="اذهب إلى صفحة"
+          className="flex-1 min-w-0 text-sm text-center border border-gray-200 dark:border-transparent rounded-lg px-2 py-1.5 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
         />
-        <button onClick={goToPage} disabled={!pageInput} className="text-[11px] font-bold text-white bg-quran rounded-lg px-3 py-1.5 press disabled:opacity-40">اذهب</button>
+        <button onClick={goToPage} disabled={!pageInput} className="shrink-0 text-xs font-bold text-white bg-quran rounded-lg px-3.5 py-2 press disabled:opacity-40">اذهب</button>
       </div>
 
       {mode === "juz" ? (
@@ -186,7 +189,7 @@ export function MushafBrowser({ initialSurah, onReflect }: { initialSurah?: numb
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="ابحث في نصّ الآيات… (بلا تشكيل)"
-              className="w-full text-sm border border-gray-200 rounded-xl ps-3 pe-9 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
+              className="w-full text-sm border border-gray-200 rounded-xl ps-9 pe-3 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
             />
           </div>
           {query.trim().length < 2 ? (
@@ -219,7 +222,7 @@ export function MushafBrowser({ initialSurah, onReflect }: { initialSurah?: numb
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="ابحث عن سورة…"
-              className="w-full text-sm border border-gray-200 rounded-xl ps-3 pe-9 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
+              className="w-full text-sm border border-gray-200 rounded-xl ps-9 pe-3 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
             />
           </div>
           <div className="grid grid-cols-1 gap-1.5">

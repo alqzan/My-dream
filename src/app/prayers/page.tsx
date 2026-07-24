@@ -54,12 +54,12 @@ export default function PrayersPage() {
   const editCounts = countDayPrayers(editLog);
 
   return (
-    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="page-shell">
+      <div className="flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
             <SectionSignet href="/prayers" />
-            <h1 className="text-2xl font-bold text-gray-900">الصلاة</h1>
+            <h1 className="page-title">الصلاة</h1>
           </div>
           <div className="flex items-center gap-2 mt-1">
             <Flame size={14} className={streak > 0 ? "text-amber-500" : "text-gray-300"} />

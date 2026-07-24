@@ -189,14 +189,14 @@ export default function FinancePage() {
   }
 
   return (
-    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-shell">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
             <SectionSignet href="/finance" />
-            <h1 className="text-2xl font-bold text-gray-900">الأموال</h1>
+            <h1 className="page-title">الأموال</h1>
           </div>
-          <p className="text-sm text-gray-400 mt-0.5">{transactions.length} معاملة</p>
+          <p className="page-subtitle">{transactions.length} معاملة</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => setShowImport(true)} className="gap-1.5">
@@ -310,7 +310,7 @@ export default function FinancePage() {
       </CollapsibleSection>
 
       {/* ===== 3 — السجل ===== */}
-      <div id="history" className="scroll-mt-24 space-y-3">
+      <div id="history" className="space-y-3">
         <GroupLabel>السجل</GroupLabel>
 
         <div className="flex items-center gap-2">

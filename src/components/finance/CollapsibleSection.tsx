@@ -19,7 +19,7 @@ export function CollapsibleSection({
 }) {
   const panelId = useId();
   return (
-    <div id={id} className="scroll-mt-24">
+    <div id={id}>
       <button
         type="button"
         aria-expanded={open}

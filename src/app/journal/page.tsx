@@ -263,12 +263,12 @@ export default function JournalPage() {
   const hasMoreGallery = galleryPhotos.length > visibleGallery.length;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-shell">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
             <SectionSignet href="/journal" />
-            <h1 className="text-2xl font-bold text-gray-900">المذكرات</h1>
+            <h1 className="page-title">المذكرات</h1>
             {journalEntries.length > 0 && (
               <button
                 onClick={openRandomMemory}

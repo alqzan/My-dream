@@ -172,19 +172,22 @@ export function KhatmaOrbit() {
 
         {/* أدوات التحكّم */}
         <div className="w-full mt-3 space-y-2">
-          {/* «قرأت حتى الصفحة…» — أسرع وأدقّ من زيادة جزءٍ كامل */}
+          {/* «قرأت حتى الصفحة…» — أسرع وأدقّ من زيادة جزءٍ كامل. هيئة الصفّ هي
+              نفسها في «اذهب إلى صفحة» بالمصحف: الحقل يمتدّ والزرّ ثابت، فلا
+              يبقى نصف السطر فارغاً. */}
           {!full && (
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 shrink-0"><BookOpen size={13} className="text-quran" /> قرأت حتى الصفحة</span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-xs text-gray-500 shrink-0"><BookOpen size={13} className="text-quran" /> قرأت حتى الصفحة</span>
               <input
                 value={pageInput}
                 onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ""))}
                 onKeyDown={(e) => e.key === "Enter" && savePage()}
                 inputMode="numeric"
                 placeholder={k.page ? String(k.page) : "١–٦٠٤"}
-                className="w-16 text-sm text-center border border-gray-200 dark:border-transparent rounded-lg px-1 py-1.5 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
+                aria-label="قرأت حتى الصفحة"
+                className="flex-1 min-w-0 text-sm text-center border border-gray-200 dark:border-transparent rounded-lg px-2 py-1.5 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40"
               />
-              <button onClick={savePage} disabled={!pageInput} className="text-[11px] font-bold text-white bg-quran rounded-lg px-3 py-1.5 press disabled:opacity-40">سجّل</button>
+              <button onClick={savePage} disabled={!pageInput} className="shrink-0 text-xs font-bold text-white bg-quran rounded-lg px-3.5 py-2 press disabled:opacity-40">سجّل</button>
             </div>
           )}
           {full ? (

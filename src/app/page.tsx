@@ -120,7 +120,7 @@ export default function Dashboard() {
   const yearPct = yearProgress();
 
   return (
-    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-shell">
       {celebrate && <Confetti />}
 
       <div className="flex items-center justify-between gap-4 animate-fade-up">
@@ -128,7 +128,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-l from-[#5c3d21] to-[#a96c20] dark:from-[#f0d9a8] dark:to-[#e8b15a]">
             {getGreeting()} 👋
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">{formatDate(todayStr)}</p>
+          <p className="page-subtitle">{formatDate(todayStr)}</p>
           <p className="text-xs text-gray-400 mt-0.5">{hijriDate(todayStr)}</p>
         </div>
         <YearOrbit
@@ -169,7 +169,7 @@ export default function Dashboard() {
         <HikmaCard />
       </div>
 
-      <div id="daily-habits" className="animate-fade-up stagger-2 scroll-mt-4">
+      <div id="daily-habits" className="animate-fade-up stagger-2">
         <DailyHabits />
       </div>
 

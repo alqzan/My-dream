@@ -22,6 +22,18 @@ html {
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* لا انزلاق أفقي أبداً: أي عنصرٍ يتجاوز العرض (لمعةٌ منزلقة، شريطٌ طويل،
+     جدولٌ عريض) كان يمنح الصفحة تمريراً أفقياً وهمياً، فتنزاح المحتويات عن
+     حوافها ويبدو كل شيء غير متوازن. القصّ هنا يجعل العرض ثابتاً في كل الأقسام. */
+  overflow-x: hidden;
+  /* الانتقال إلى مرساةٍ داخل الصفحة (#history، #daily-habits…) ينزلق بدل أن
+     يقفز، فيتّضح «طلعت ولا نزلت»؛ ويقف تحت الترويسة اللاصقة لا خلفها. */
+  scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }
 
 body {
@@ -151,6 +163,40 @@ body {
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ===================== إيقاع الصفحة الموحّد ===================== */
+/* كل صفحاتِ الأقسام تشترك في العرض والحشو والمسافة الرأسية بين كتلها، فلا
+   تختلف صفحةٌ عن أخرى في «تنفّسها». عرضٌ أوسع على الشاشات الكبيرة، وحشوٌ سفلي
+   يُبعد آخر بطاقة عن الشريط السفلي وزرّ الإضافة العائم. */
+@layer components {
+  .page-shell {
+    @apply max-w-2xl xl:max-w-3xl mx-auto px-4 pt-5 pb-8 space-y-5;
+  }
+  /* ترويسة القسم: العنوان وسطره الوصفي بالمقاس واللون نفسيهما في كل مكان. */
+  .page-title {
+    @apply text-2xl font-bold text-gray-900;
+  }
+  .page-subtitle {
+    @apply text-sm text-gray-500 mt-0.5;
+  }
+}
+
+/* ===================== حقول الإدخال على اللمس ===================== */
+/* سببُ «القفزة» التي تُخرج الصفحة عن حوافها: iOS يكبّر الصفحة تلقائياً عند
+   لمس أي حقلٍ حجم خطّه أقلّ من 16px — وأغلب حقول التطبيق كانت text-sm (14px).
+   فتُفتح لوحة المفاتيح والصفحة مكبَّرة ومزاحة، فتبدو الأشرطة مقصوصة والشريط
+   السفلي ناقصاً ولا يتّضح موضعك عند التمرير. رفعُ الحدّ الأدنى إلى 16px على
+   أجهزة اللمس يمنع التكبير من أصله دون مصادرة تكبير المستخدم اليدوي (WCAG).
+   الحقول المقصود كِبَرها (عنوان المذكرة، رمز القفل) تبقى أكبر بالقاعدة تحتها. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+  .text-lg:where(input, textarea, select) { font-size: 1.125rem !important; }
+  .text-xl:where(input, textarea, select) { font-size: 1.25rem !important; }
 }
 
 /* Floating action button (+). Its bottom offset stacks the bottom-nav height

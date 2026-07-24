@@ -13,6 +13,18 @@ function isNightNow(): boolean {
   return now >= t.sunset || now < t.sunrise;
 }
 
+// شريط الحالة يتبع وضع التطبيق لا وضع النظام. الوسمان اللذان يولّدهما Next
+// مشروطان بـprefers-color-scheme، فمن يستعمل نظاماً نهارياً وتطبيقاً ليلياً
+// (يدوياً أو تلقائياً مع المغرب) كان يرى شريط حالةٍ كريمياً فوق ترويسةٍ داكنة —
+// أوضح خللٍ في توازن أعلى الشاشة. نكتب اللون الفعلي في كل وسوم theme-color
+// فيطابق الشريطُ الترويسةَ في الحالتين.
+function syncThemeColor(dark: boolean) {
+  const color = dark ? "#171009" : "#f4eee2";
+  document
+    .querySelectorAll('meta[name="theme-color"]')
+    .forEach((m) => m.setAttribute("content", color));
+}
+
 // Applies the `dark` class on <html>. In "auto" mode the theme follows the
 // sun: dark from المغرب until الصباح (sunrise) — re-checked every minute so
 // the flip happens live without a reload.
@@ -59,6 +71,7 @@ export function ThemeApplier() {
         cleanupTimer = setTimeout(() => root.classList.remove("theme-transition"), 700);
       }
       root.classList.toggle("dark", dark);
+      syncThemeColor(dark);
       wasDark.current = dark;
     }
     apply();

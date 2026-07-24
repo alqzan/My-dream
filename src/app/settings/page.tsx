@@ -13,10 +13,10 @@ const APP_VERSION = "0.1.0";
 // this page gives them their own place in the IA.
 export default function SettingsPage() {
   return (
-    <div className="max-w-2xl xl:max-w-3xl mx-auto px-4 py-6 space-y-5">
+    <div className="page-shell">
       <div className="animate-fade-up">
-        <h1 className="text-2xl font-bold text-gray-900">الإعدادات</h1>
-        <p className="text-sm text-gray-500 mt-0.5">النسخ الاحتياطي، القفل، ومفتاح المزامنة</p>
+        <h1 className="page-title">الإعدادات</h1>
+        <p className="page-subtitle">النسخ الاحتياطي، القفل، ومفتاح المزامنة</p>
       </div>
 
       <div className="animate-fade-up stagger-1">

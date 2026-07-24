@@ -40,10 +40,13 @@ export default function QuranPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-      <div className="flex items-center gap-3 animate-fade-up">
-        <SectionSignet href="/quran" />
-        <h1 className="text-2xl font-bold text-gray-900">قرآن</h1>
+    <div className="page-shell">
+      <div className="animate-fade-up">
+        <div className="flex items-center gap-2.5">
+          <SectionSignet href="/quran" />
+          <h1 className="page-title">قرآن</h1>
+        </div>
+        <p className="page-subtitle">التدبّر، الحفظ، والمصحف</p>
       </div>
 
       <div className="animate-fade-up stagger-1">
