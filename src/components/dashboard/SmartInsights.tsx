@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { generateInsights, type Insight, type InsightTone, type SnoozeOption } from "@/lib/insights";
 import {
-  filterInsights, loadPrefs, snoozeInsight, dismissInsight, type InsightPrefs,
+  filterInsights, loadPrefs, snoozeInsight, dismissInsight, actInsight, type InsightPrefs,
 } from "@/lib/insightPrefs";
 import { today } from "@/lib/utils";
 import { Compass, X, Clock, ChevronLeft } from "lucide-react";
@@ -56,6 +56,8 @@ export function SmartInsights() {
 
   const snooze = (key: string, opt: SnoozeOption) => setPrefs({ ...snoozeInsight(key, opt) });
   const dismiss = (key: string) => setPrefs({ ...dismissInsight(key) });
+  // نقرُ الإجراء = إقرار: تُخفى التوصية بقيّة اليوم فلا تبقى عالقة بعد تنفيذها.
+  const act = (key: string) => setPrefs({ ...actInsight(key) });
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
@@ -68,13 +70,13 @@ export function SmartInsights() {
       </div>
 
       {/* التوصية الرئيسية — «خطوتك الآن» */}
-      <PrimaryCard ins={primary} onSnooze={snooze} onDismiss={dismiss} />
+      <PrimaryCard ins={primary} onSnooze={snooze} onDismiss={dismiss} onAct={act} />
 
       {/* توصيتان ثانويتان عند الحاجة */}
       {secondary.length > 0 && (
         <div className="space-y-1.5 pt-0.5">
           {secondary.map((ins) => (
-            <SecondaryRow key={ins.dedupeKey} ins={ins} onDismiss={dismiss} />
+            <SecondaryRow key={ins.dedupeKey} ins={ins} onDismiss={dismiss} onAct={act} />
           ))}
         </div>
       )}
@@ -82,8 +84,8 @@ export function SmartInsights() {
   );
 }
 
-function PrimaryCard({ ins, onSnooze, onDismiss }: {
-  ins: Insight; onSnooze: (k: string, o: SnoozeOption) => void; onDismiss: (k: string) => void;
+function PrimaryCard({ ins, onSnooze, onDismiss, onAct }: {
+  ins: Insight; onSnooze: (k: string, o: SnoozeOption) => void; onDismiss: (k: string) => void; onAct: (k: string) => void;
 }) {
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   return (
@@ -106,7 +108,7 @@ function PrimaryCard({ ins, onSnooze, onDismiss }: {
 
       <div className="flex items-center gap-2 flex-wrap">
         {ins.href && ins.actionLabel && (
-          <Link href={ins.href} className={`inline-flex items-center gap-1 text-xs font-bold text-white rounded-lg px-3 py-1.5 press shadow-sm ${ins.tone === "warning" ? "bg-red-500" : "bg-quran"}`}>
+          <Link href={ins.href} onClick={() => onAct(ins.dedupeKey)} className={`inline-flex items-center gap-1 text-xs font-bold text-white rounded-lg px-3 py-1.5 press shadow-sm ${ins.tone === "warning" ? "bg-red-500" : "bg-quran"}`}>
             {ins.actionLabel} <ChevronLeft size={14} />
           </Link>
         )}
@@ -131,7 +133,7 @@ function PrimaryCard({ ins, onSnooze, onDismiss }: {
   );
 }
 
-function SecondaryRow({ ins, onDismiss }: { ins: Insight; onDismiss: (k: string) => void }) {
+function SecondaryRow({ ins, onDismiss, onAct }: { ins: Insight; onDismiss: (k: string) => void; onAct: (k: string) => void }) {
   const body = (
     <>
       <span className="text-base shrink-0">{ins.icon}</span>
@@ -144,7 +146,7 @@ function SecondaryRow({ ins, onDismiss }: { ins: Insight; onDismiss: (k: string)
   return (
     <div className="flex items-stretch gap-1">
       {ins.href ? (
-        <Link href={ins.href} className={`${cls} flex-1 press hover:brightness-95 transition`}>{body}</Link>
+        <Link href={ins.href} onClick={() => onAct(ins.dedupeKey)} className={`${cls} flex-1 press hover:brightness-95 transition`}>{body}</Link>
       ) : (
         <div className={`${cls} flex-1`}>{body}</div>
       )}

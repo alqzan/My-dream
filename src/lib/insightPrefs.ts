@@ -59,6 +59,13 @@ export function snoozeInsight(key: string, opt: SnoozeOption): InsightPrefs {
   return prefs;
 }
 
+// «تعاملتُ معها» — نقرُ زر الإجراء يُعدّ إقراراً بالتوصية: نخفيها بقيّة اليوم
+// (تظهر ثانيةً غداً إن بقيت وجيهة) بدل أن تبقى عالقةً بعد أن ذهب المستخدم
+// لتنفيذها. يُكتب فوراً في localStorage فلا يضيع الأثر عند الانتقال بالرابط.
+export function actInsight(key: string): InsightPrefs {
+  return snoozeInsight(key, "today"); // «today» ⇒ +يوم ⇒ تعاود الظهور غداً
+}
+
 export function dismissInsight(key: string): InsightPrefs {
   const prefs = loadPrefs();
   prefs[key] = { ...prefs[key], dismissed: true };

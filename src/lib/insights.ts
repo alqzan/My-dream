@@ -412,12 +412,20 @@ export function generateInsights(data: InsightData): Insight[] {
   }
 
   const mmdd = todayStr.slice(5);
-  const memory = journalEntries.find((e) => e.date.slice(5) === mmdd && e.date < todayStr);
+  // كل مذكرات «مثل هذا اليوم» من أعوامٍ سابقة، أحدثها أولاً — نربط زر الإجراء
+  // بأحدثها مباشرةً (فتحٌ فوريّ لها لا مجرّد ذهابٍ للصفحة)، ونذكر العدد إن تعدّدت.
+  const memories = journalEntries
+    .filter((e) => e.date.slice(5) === mmdd && e.date < todayStr)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const memory = memories[0];
   if (memory) {
+    const year = memory.date.slice(0, 4);
     add({
       domain: "journal", dedupeKey: "journal:on-this-day", icon: "🕰️", tone: "tip", priority: 58,
-      title: "في مثل هذا اليوم", href: "/journal", actionLabel: "ارجع لها",
-      body: `عندك مذكرة كتبتها في مثل هذا اليوم عام ${memory.date.slice(0, 4)} — ارجع لها في صفحة المذكرات.`,
+      title: "في مثل هذا اليوم", href: `/journal?memory=${memory.id}`, actionLabel: "ارجع لها",
+      body: memories.length > 1
+        ? `عندك ${memories.length} مذكرات في مثل هذا اليوم من أعوامٍ سابقة — أحدثها من عام ${year}. ارجع لها.`
+        : `عندك مذكرة كتبتها في مثل هذا اليوم عام ${year} — ارجع لها في صفحة المذكرات.`,
     });
   }
 

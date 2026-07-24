@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
 import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, entryPhotos, entryAudios, normalizeArabic, uid } from "@/lib/utils";
@@ -76,6 +76,22 @@ export default function JournalPage() {
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
+
+  // بوصلة مدار → «ارجع لها»: تفتح البوصلة الصفحة بـ ?memory=<id> لتُعرض تلك
+  // الذكرى مباشرةً بدل تركِ المستخدم يبحث عنها. ننتظر ترطيب المذكرات من
+  // IndexedDB ثم نفتحها مرّةً واحدة ونُسقط الوسيط حتى لا يعاود الفتح عند التحديث.
+  const memoryOpened = useRef(false);
+  useEffect(() => {
+    if (memoryOpened.current) return;
+    const id = new URLSearchParams(window.location.search).get("memory");
+    if (!id) return;
+    const entry = journalEntries.find((e) => e.id === id);
+    if (!entry) return; // لم تُرطَّب المذكرات بعد — ننتظر تحديث journalEntries
+    memoryOpened.current = true;
+    openViewer(entry);
+    window.history.replaceState(null, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journalEntries]);
 
   const todayStr = today();
 
