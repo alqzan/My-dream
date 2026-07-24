@@ -154,7 +154,11 @@ function pagesInPortion(p: Portion | null): number {
 }
 
 export function todaySession(s: HifzState, todayStr: string, reviewGoalPages = 7): TodaySession {
-  const newPortion = plannedPortion(s);
+  // السَّبْق يُعتبر منجزاً بمجرّد تسجيل جلسة حفظٍ اليوم — وإلا لظلّت البطاقة تعرض
+  // ورد الغد (المقطع التالي للجبهة) وكأنّه مستحقٌّ الآن، فتبقى تقول «ابدأ جلسة
+  // اليوم» رغم إتمام الورد. (مثل `hifzTodo` تماماً؛ من أراد الزيادة يفعلها يدوياً.)
+  const sessionToday = (s.sessions ?? []).some((x) => x.date === todayStr);
+  const newPortion = sessionToday ? null : plannedPortion(s);
   const recentBand = recentReviewBand(s);
   const due = dueQueue(s, todayStr, reviewGoalPages);
   const openMk = openMistakes(s).length;
