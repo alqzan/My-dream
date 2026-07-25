@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   weakSpots, latestRatingByPage, portionEnd, hifzProgress, hifzPace,
   gradeFromMistakes, mistakeTolerance, recentReviewBand, drillsToday, smartTestPortion,
+  openMistakesInRange, marksTodayInRange, markedToday,
 } from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzRating } from "../types";
@@ -192,6 +193,51 @@ describe("drillsToday — مواضع الخطأ المُختبَر عليها ا
     });
     expect(drillsToday(light, "2026-01-10")).toHaveLength(3);
     expect(drillsToday(hz({ frontierId: pageRange(2).end, mistakes }), "2026-01-10")).toHaveLength(5);
+  });
+});
+
+describe("مواضع المقطع — تمييز تعثّر اليوم من وسمٍ سابق مفتوح", () => {
+  const mk = (id: string, ayahId: number, hits: string[], extra = {}) =>
+    ({ id, ayahId, wordIndex: 0, hits, resolved: false, updatedAt: hits[hits.length - 1], ...extra });
+
+  it("يقصر على المقطع ويُسقط المُغلق والفارغ", () => {
+    const s = hz({
+      mistakes: [
+        mk("in1", 10, ["2026-01-05"]),
+        mk("in2", 14, ["2026-01-01", "2026-01-05"]),
+        mk("out", 40, ["2026-01-05"]),
+        mk("closed", 12, ["2026-01-05"], { resolved: true }),
+        mk("empty", 13, []),
+      ],
+    });
+    expect(openMistakesInRange(s, 10, 20).map((m) => m.id)).toEqual(["in1", "in2"]);
+  });
+
+  it("يرتّب بموضعه في المصحف (الآية ثمّ الكلمة) لا بتاريخ الوسم", () => {
+    const s = hz({
+      mistakes: [
+        { ...mk("b", 12, ["2026-01-05"]), wordIndex: 3 },
+        { ...mk("c", 12, ["2026-01-01"]), wordIndex: null },
+        { ...mk("a", 11, ["2026-01-02"]), wordIndex: 1 },
+      ],
+    });
+    expect(openMistakesInRange(s, 10, 20).map((m) => m.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("marksTodayInRange يعدّ تعثّر اليوم وحده — فالوسمُ السابق لا يهبط بالتقييم", () => {
+    const s = hz({
+      mistakes: [
+        mk("old", 10, ["2026-01-01"]),
+        mk("todayOnly", 11, ["2026-01-05"]),
+        mk("again", 12, ["2026-01-01", "2026-01-05"]),
+      ],
+    });
+    expect(marksTodayInRange(s, 10, 20, "2026-01-05")).toBe(2);
+    expect(markedToday({ hits: ["2026-01-01"] }, "2026-01-05")).toBe(false);
+    expect(markedToday({ hits: ["2026-01-01", "2026-01-05"] }, "2026-01-05")).toBe(true);
+    // إغلاق موضعٍ (أتقنته) يُخرجه من العدّ فوراً، فيتحسّن التقييم المشتقّ.
+    const closed = hz({ mistakes: [{ ...mk("todayOnly", 11, ["2026-01-05"]), resolved: true }] });
+    expect(marksTodayInRange(closed, 10, 20, "2026-01-05")).toBe(0);
   });
 });
 

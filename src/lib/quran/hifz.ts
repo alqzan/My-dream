@@ -196,9 +196,9 @@ export function testDue(s: HifzState, todayStr: string): boolean {
 }
 
 // ===================== الأخطاء (تحديد مواضع الخطأ) =====================
-export function mistakeKey(ayahId: number, wordIndex: number | null): string {
-  return `${ayahId}:${wordIndex ?? "all"}`;
-}
+// المفتاح المنطقي للموضع هو `ayahId` + `wordIndex` (null = الآية كاملة)، ويُطابَق
+// عليهما مباشرةً في المتجر — لا مفتاحَ نصّياً وسيطاً بعد أن زالت لقطة المواضع
+// المحلّية من شاشة التسميع (صارت تُقرأ من الحالة المحفوظة).
 
 // الأخطاء المفتوحة (غير المُتقنة) مرتّبةً: الأكثر تكراراً أوّلاً ثم الأحدث.
 export function openMistakes(s: HifzState): HifzMistake[] {
@@ -223,6 +223,28 @@ export function mistakesInRange(s: HifzState, from: number, to: number): number 
   return (s.mistakes ?? []).filter(
     (m) => !m.resolved && m.hits.length > 0 && m.ayahId >= from && m.ayahId <= to,
   ).length;
+}
+
+// الأخطاء المفتوحة داخل مقطعٍ مرتّبةً بموضعها في المصحف (الآية ثمّ الكلمة) —
+// تُعرض تحت النصّ أثناء التسميع فيرى المستخدم ما هو موسومٌ عليه الآن، ويُزيل ما
+// أتقنه بضغطة.
+export function openMistakesInRange(s: HifzState, from: number, to: number): HifzMistake[] {
+  return (s.mistakes ?? [])
+    .filter((m) => !m.resolved && m.hits.length > 0 && m.ayahId >= from && m.ayahId <= to)
+    .sort((a, b) => a.ayahId - b.ayahId || (a.wordIndex ?? -1) - (b.wordIndex ?? -1));
+}
+
+// هل هذا الموضع من تعثّر *اليوم*، أم وسمٌ سابق ما زال مفتوحاً؟ التمييز ضروريّ:
+// أحمرُ الشاشة كان يخلط الاثنين، فيظنّ المستخدم أنّ وسماً قديماً خطأٌ سجّله الآن.
+export function markedToday(m: Pick<HifzMistake, "hits">, todayStr: string): boolean {
+  return m.hits[m.hits.length - 1] === todayStr;
+}
+
+// مواضع تعثّر اليوم داخل المقطع — أساسُ اشتقاق تقييم المراجعة. نشتقّه من الحالة
+// المحفوظة لا من لقطةٍ في ذاكرة الشاشة: فإن أزلتَ وسماً أو أُغلق موضعٌ تحدّث
+// التقييمُ فوراً، وإن عدتَ للشاشة بعد انقطاعٍ بقي العدد صحيحاً.
+export function marksTodayInRange(s: HifzState, from: number, to: number, todayStr: string): number {
+  return openMistakesInRange(s, from, to).filter((m) => markedToday(m, todayStr)).length;
 }
 
 // ===================== اختبار مواضع الخطأ =====================

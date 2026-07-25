@@ -1047,8 +1047,13 @@ export const useAppStore = create<AppStore>()(
           if (cur.hits[cur.hits.length - 1] === t) {
             // تراجُع في نفس اليوم — أزِل ضربة اليوم، واحذف السجلّ إن فرغ.
             const hits = cur.hits.slice(0, -1);
-            if (hits.length === 0) next.splice(idx, 1);
-            else next[idx] = { ...cur, hits, resolved: false, updatedAt: t };
+            if (hits.length === 0) {
+              next.splice(idx, 1);
+              // شاهدُ حذفٍ: بلا شاهدٍ كان اتّحادُ الدمج يُعيد الوسمَ الملغى من
+              // السحابة إن كان قد زامَن قبل التراجع، فيبدو أنّه لا يُزال أبداً.
+              return { quranHifz: { ...h, mistakes: next, deletedRecords: addRecordTomb(h, cur.id) } };
+            }
+            next[idx] = { ...cur, hits, resolved: false, updatedAt: t };
           } else {
             // تكرارٌ في يومٍ جديد — أضِف ضربةً وأعِد الفتح.
             next[idx] = { ...cur, hits: [...cur.hits, t], word: word ?? cur.word, resolved: false, updatedAt: t };

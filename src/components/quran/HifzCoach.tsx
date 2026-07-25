@@ -3,18 +3,19 @@ import { useState, useMemo } from "react";
 import { idToSurahAyah, describeRange, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
 import {
-  mistakesForAyah, mistakeKey, gradeFromMistakes, explainGrade, countDays,
+  mistakesForAyah, gradeFromMistakes, explainGrade, countDays,
+  openMistakesInRange, marksTodayInRange, markedToday,
   RATING_LABEL, type Portion,
 } from "@/lib/quran/hifz";
 import { presetOf } from "@/lib/quran/intensity";
 import { nextDueDays } from "@/lib/quran/schedule";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { useAppStore } from "@/lib/store";
-import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
+import { EMPTY_HIFZ, type HifzMistake, type HifzRating } from "@/lib/types";
 import { today } from "@/lib/utils";
 import {
   X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick,
-  CalendarClock, SlidersHorizontal,
+  CalendarClock, SlidersHorizontal, Undo2,
 } from "lucide-react";
 
 // المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعدد مرّاتٍ تحدّده شدّة التمرين،
@@ -46,25 +47,19 @@ export function HifzCoach({
   const [phase, setPhase] = useState<"repeat" | "recall" | "link">(mode === "recall" ? "recall" : "repeat");
   const [reps, setReps] = useState(0);
   const [revealed, setRevealed] = useState(mode === "recall" ? false : true);
-  // مواضع وُسمت في هذه الجلسة بالذات (لا كلّ تاريخ الآية) — هي أساس الاشتقاق.
-  const [marks, setMarks] = useState<Set<string>>(new Set());
 
   const cur = ayat[idx];
   const isLast = idx >= ayat.length - 1;
 
+  // مواضع المقطع المفتوحة، ومنها ما وُسم اليوم — مقروءةً من الحالة المحفوظة لا
+  // من لقطةٍ في الذاكرة، فما تراه على النصّ هو نفسه ما يُشتقّ منه التقييم.
+  const todayStr = today();
+  const openHere = openMistakesInRange(h, portion.fromId, portion.toId);
+  const marksToday = marksTodayInRange(h, portion.fromId, portion.toId, todayStr);
+
   function nextAyah() {
     if (isLast) { setPhase("link"); return; }
     setIdx((i) => i + 1); setReps(0); setPhase("repeat"); setRevealed(true);
-  }
-
-  function toggleMark(ayahId: number, wordIndex: number | null, word?: string) {
-    store.toggleMistakeWord(ayahId, wordIndex, word);
-    const k = mistakeKey(ayahId, wordIndex);
-    setMarks((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) next.delete(k); else next.add(k);
-      return next;
-    });
   }
 
   // ---- recall mode (مراجعة): تلقينٌ بالآية السابقة ثم سمّع المقطع ثم اكشف ----
@@ -83,13 +78,14 @@ export function HifzCoach({
         ) : (
           <>
             <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
-              <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها لتحديدها
+              <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها — واضغطها ثانيةً للتراجع
             </div>
-            <MarkableAyatBlock ayat={ayat} onToggle={toggleMark} />
+            <MarkableAyatBlock ayat={ayat} today={todayStr} onToggle={store.toggleMistakeWord} />
+            <SpotStrip items={openHere} today={todayStr} onClear={store.resolveMistake} />
             <div className="mt-3">
               <MutashabihatAlert portion={portion} compact />
             </div>
-            <GradeVerdict portion={portion} marks={marks.size} ayatCount={ayat.length} onDone={onDone} />
+            <GradeVerdict portion={portion} marks={marksToday} ayatCount={ayat.length} onDone={onDone} />
           </>
         )}
       </Shell>
@@ -259,13 +255,18 @@ function GradeVerdict({
   );
 }
 
-// كتلة آياتٍ قابلة للتحديد: كلُّ كلمةٍ زرٌّ يبدّل وسمها كخطأ (تحمرّ وتُحفظ)، وكلُّ
-// آيةٍ لها زرٌّ لوسمها كاملةً. الكلمات ذات الخطأ المفتوح سابقاً تظهر محمرّةً مسبقاً
-// (تحذير) مع عدّاد التكرار — فتُعرَف مواطن الخطأ المتكرّر.
+// كتلة آياتٍ قابلة للتحديد: كلُّ كلمةٍ زرٌّ يبدّل وسمها كخطأ، وكلُّ آيةٍ لها زرٌّ
+// (رقمها) لوسمها كاملةً.
+//
+// اللونان مقصودان: الأحمرُ تعثُّرُ *اليوم*، والكهرمانيُّ الباهت وسمٌ سابق لم
+// يُغلَق بعد. كان اللون واحداً فيظنّ المستخدم أنّ الوسم القديم خطأٌ سجّله الآن،
+// ويضغطه ليُزيله — فتُضاف ضربةٌ جديدة (عكس المقصود) ويبقى ملوّناً، فيبدو أنّ
+// الضغط لا يفعل شيئاً. الإزالة الصريحة صارت في SpotStrip أسفل النصّ.
 function MarkableAyatBlock({
-  ayat, onToggle,
+  ayat, today: todayStr, onToggle,
 }: {
   ayat: { id: number; no: number; text: string }[];
+  today: string;
   onToggle: (ayahId: number, wordIndex: number | null, word?: string) => void;
 }) {
   const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
@@ -275,22 +276,41 @@ function MarkableAyatBlock({
         {ayat.map((a) => {
           const marks = mistakesForAyah(h, a.id);
           const ayahMark = marks.get("all");
+          const ayahNow = ayahMark != null && markedToday(ayahMark, todayStr);
           const words = a.text.split(/\s+/).filter(Boolean);
           return (
-            <span key={a.id} className={ayahMark ? "rounded-md bg-red-500/10 ring-1 ring-red-400/50 px-0.5" : undefined}>
+            <span
+              key={a.id}
+              className={
+                ayahMark
+                  ? ayahNow
+                    ? "rounded-md bg-red-500/10 ring-1 ring-red-400/60 px-0.5"
+                    : "rounded-md bg-amber-400/10 ring-1 ring-amber-400/40 px-0.5"
+                  : undefined
+              }
+            >
               {words.map((w, i) => {
                 const mk = marks.get(i);
+                const now = mk != null && markedToday(mk, todayStr);
                 const repeats = mk ? mk.hits.length : 0;
                 return (
                   <span key={i}>
                     <button
                       type="button"
                       onClick={() => onToggle(a.id, i, w)}
-                      className={`press align-middle transition-colors ${mk ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4" : "hover:text-quran"}`}
+                      aria-pressed={now}
+                      title={mk && !now ? "موضعٌ سابق لم يُغلق — اضغط إن تعثّرتَ فيه اليوم أيضاً" : undefined}
+                      className={`press align-middle transition-colors ${
+                        mk
+                          ? now
+                            ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4"
+                            : "text-amber-700 dark:text-amber-400 underline decoration-amber-400/70 decoration-dotted decoration-2 underline-offset-4"
+                          : "hover:text-quran"
+                      }`}
                     >
                       {w}
                       {repeats >= 2 && (
-                        <sup className="text-[10px] font-sans font-bold text-red-500 mx-0.5">{repeats}</sup>
+                        <sup className={`text-[10px] font-sans font-bold mx-0.5 ${now ? "text-red-500" : "text-amber-600"}`}>{repeats}</sup>
                       )}
                     </button>{" "}
                   </span>
@@ -300,7 +320,9 @@ function MarkableAyatBlock({
                 type="button"
                 onClick={() => onToggle(a.id, null)}
                 title="وسم الآية كاملةً كخطأ"
-                className={`inline-flex items-center justify-center text-[13px] mx-0.5 align-middle press ${ayahMark ? "text-red-500" : "text-quran"}`}
+                className={`inline-flex items-center justify-center text-[13px] mx-0.5 align-middle press ${
+                  ayahMark ? (ayahNow ? "text-red-500" : "text-amber-600") : "text-quran"
+                }`}
               >
                 ﴿{a.no}﴾
               </button>{" "}
@@ -308,6 +330,63 @@ function MarkableAyatBlock({
           );
         })}
       </p>
+    </div>
+  );
+}
+
+// ===================== مواضع هذا المقطع (وإزالتها) =====================
+// كان الوسمُ القديم لا يُزال إلا من لوحة «أخطائي» في أسفل صفحةٍ أخرى — أمّا في
+// شاشة التسميع فضغطُ الكلمة الملوّنة يُضيف ضربةً جديدة لا يُزيلها، فلا سبيل لمن
+// وسَم موضعاً بالخطأ (أو أتقنه اليوم) أن يمحوه من حيث هو. هذه اللائحة تعرض كلَّ
+// موضعٍ مفتوحٍ على المقطع الذي تسمّعه، ولكلٍّ زرُّ إزالة: «أتقنته» يُغلق الموضع
+// فيختفي من التسميع ومن اختبار مواضع الخطأ، ويهبط عدد المواضع فيتحدّث التقييم
+// المشتقّ فوراً. الإغلاق لا يمحو تاريخ التعثّر (يبقى في السجلّ) — لذا هو أسلمُ
+// من الحذف النهائي، وهو الأصلحُ للمزامنة أيضاً.
+function SpotStrip({
+  items, today: todayStr, onClear,
+}: {
+  items: HifzMistake[]; today: string; onClear: (id: string) => void;
+}) {
+  if (!items.length) return null;
+  const older = items.filter((m) => !markedToday(m, todayStr)).length;
+  return (
+    <div className="mt-3 rounded-2xl border border-gray-100 dark:border-[#3a2e1e] bg-white/70 dark:bg-[#241c12] p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300">مواضع هذا المقطع</span>
+        <span className="text-[10px] text-gray-400">
+          {older > 0 ? "الأحمر تعثّرُ اليوم · الكهرمانيّ موضعٌ سابق لم يُغلق" : "اضغط «أتقنته» لإزالة موضع"}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((m) => {
+          const now = markedToday(m, todayStr);
+          const { ayah } = idToSurahAyah(m.ayahId);
+          return (
+            <span
+              key={m.id}
+              className={`inline-flex items-center gap-1 rounded-full ps-2 pe-1 py-1 border text-[11px] ${
+                now
+                  ? "border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15 text-red-700 dark:text-red-300"
+                  : "border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/15 text-amber-800 dark:text-amber-300"
+              }`}
+            >
+              <span className="font-semibold">
+                {m.wordIndex == null ? `آية ${ayah} كاملة` : <span className="font-quran text-[13px]">{m.word || `آية ${ayah}`}</span>}
+              </span>
+              {m.hits.length >= 2 && <span className="font-sans font-bold opacity-70">×{m.hits.length}</span>}
+              <button
+                type="button"
+                onClick={() => onClear(m.id)}
+                title="أتقنته — أزِل هذا الموضع"
+                aria-label={`أتقنته — أزِل موضع ${m.wordIndex == null ? `آية ${ayah}` : m.word ?? ""}`}
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-bold press bg-white/70 dark:bg-white/5 hover:bg-white"
+              >
+                <Undo2 size={11} /> أتقنته
+              </button>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

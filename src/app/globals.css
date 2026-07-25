@@ -308,9 +308,14 @@ body {
    containing block for every `position: fixed` child — which pinned the
    floating + buttons to the bottom of the page instead of the viewport and
    threw modals off. Opacity establishes no containing block, so fixed stays
-   fixed to the screen. */
+   fixed to the screen.
+   ولا `both` أيضاً: العتامة لا تُنشئ كتلةً حاويةً، لكنّ متصفّحات Blink تُنشئ
+   *سياق تراكم* لكلّ عنصرٍ عليه حركةُ عتامةٍ فاعلة — وanimation-fill-mode: both
+   تُبقيها فاعلةً إلى الأبد وإن صارت القيمة 1. فكان كلُّ `position: fixed` داخل
+   الصفحة محبوساً في سياق هذا الغلاف: يظهر تحت الترويسة (z-30) والشريط السفلي
+   (z-40) مهما رفعنا z-index الشاشة. مع backwards تنتهي الحركة فيزول السياق. */
 .page-fade {
-  animation: pageFade 0.24s ease both;
+  animation: pageFade 0.24s ease backwards;
 }
 
 /* Sunset/sunrise: when the theme flips (auto at المغرب/الصباح, or a manual
@@ -325,8 +330,17 @@ body {
     color 0.6s ease !important;
 }
 
+/* دخولُ البطاقات المتدرّج. `backwards` لا `both` مقصودةٌ: fadeUp تُحرّك
+   transform، وbothتُثبّت آخر إطارٍ (translateY(0)) على العنصر إلى الأبد — وأيُّ
+   transform (ولو صفراً) يجعل العنصر «الكتلةَ الحاوية» لكلّ `position: fixed`
+   داخله وسياقَ تراكمٍ مستقلاً. كلّ صفحةٍ تُغلّف محتواها بـ.animate-fade-up،
+   فكانت الشاشات الكاملة داخلها (المُدرّب الموجّه، جلسة اليوم، اختبار موضع
+   الخطأ، النوافذ) تُرسم *داخل* الصفحة تحت الترويسة (z-30) والشريط السفلي
+   (z-40) بدل أن تغطّي الشاشة. مع backwards تُحفظ حالةُ ما قبل البداية أثناء
+   التأخير (فيبقى الظهور المتدرّج كما هو) ثمّ يعود العنصر لطبيعته بلا transform
+   باقٍ. راجع التعليق على .page-fade أعلاه — العلّة نفسها. */
 .animate-fade-up {
-  animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 /* Stagger helpers for lists of cards */
