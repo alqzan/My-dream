@@ -262,9 +262,40 @@ export function mistakeStreak(m: Pick<HifzMistake, "okStreak">): number {
 
 // مواضع اليوم للاختبار: المفتوحة التي لم تُختبَر اليوم بعد، الأكثر تكراراً أوّلاً
 // (وهو ترتيب openMistakes)، مقصورةً على سقف شدّة التمرين.
+//
+// السقف *يوميّ* لا «سقفٌ لكلّ دفعة»: نخصم ما اختُبِر اليوم فعلاً — بما فيه ما
+// أُغلق منه فخرج من المفتوحة. بغير هذا الخصم، ما إن تُتمّ مواضع الجلسة حتى يطرح
+// الباقي نفسه جلسةً جديدة، فلا تنتهي جلسة اليوم أبداً ما دامت المواضع أكثر من
+// السقف — وهو ما كان يُعيد بطاقة «جلسة اليوم» بعد إتمامها.
 export function drillsToday(s: HifzState, todayStr: string): HifzMistake[] {
   const cap = presetOf(s.plan).drillsPerDay;
-  return openMistakes(s).filter((m) => m.lastDrill !== todayStr).slice(0, cap);
+  const doneToday = (s.mistakes ?? []).filter((m) => m.lastDrill === todayStr).length;
+  const left = Math.max(0, cap - doneToday);
+  if (left === 0) return [];
+  return openMistakes(s).filter((m) => m.lastDrill !== todayStr).slice(0, left);
+}
+
+// هل غطّى عملُ اليوم — حفظاً ومراجعةً — هذا المقطع كاملاً؟
+//
+// كان فحص «المراجعة القريبة» يطلب مراجعةً واحدةً تحيط بالمقطع؛ فإذا سجّلتَ ورد
+// اليوم تقدّمت الجبهة فانزلقت نافذة القريبة، فلم تعُد مراجعةُ الجلسة تحيط
+// بالنافذة الجديدة، فتعود الخطوة وكأنّها لم تُنجَز. هنا نجمع مدايات اليوم كلَّها
+// وندمجها ثمّ نتحقّق من الغطاء — وورد اليوم يُحتسب لأنّك سمّعته مراراً في
+// المُدرّب لحظة حفظه.
+export function coveredToday(s: HifzState, p: Portion, todayStr: string): boolean {
+  const spans = [
+    ...(s.sessions ?? []).filter((x) => x.date === todayStr),
+    ...(s.reviews ?? []).filter((x) => x.date === todayStr),
+  ]
+    .map((x) => ({ from: Math.min(x.fromId, x.toId), to: Math.max(x.fromId, x.toId) }))
+    .sort((a, b) => a.from - b.from);
+  let cursor = p.fromId;
+  for (const sp of spans) {
+    if (sp.from > cursor) break; // ثغرة: ما بعدها لا يسدّ ما قبلها
+    if (sp.to >= cursor) cursor = sp.to + 1;
+    if (cursor > p.toId) return true;
+  }
+  return cursor > p.toId;
 }
 
 // ===================== اشتقاق التقييم من الأخطاء =====================

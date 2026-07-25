@@ -5,6 +5,7 @@ import { EMPTY_HIFZ } from "@/lib/types";
 import { idToSurahAyah, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
 import { MISTAKE_MASTERY } from "@/lib/quran/hifz";
+import { LeadPrompt } from "@/components/quran/LeadPrompt";
 import { Eye, Check, X, RotateCcw, ShieldCheck, Target } from "lucide-react";
 
 // ===================== اختبار موضع الخطأ =====================
@@ -61,9 +62,13 @@ export function MistakeDrill({
 
       <p className="text-xs text-gray-500 leading-relaxed">
         {wholeAyah
-          ? "اقرأ الآية من حفظك كاملةً ثمّ اكشف للتحقّق."
+          ? "هذه الآية التي قبلها — أكمِل بعدها من حفظك ثمّ اكشف للتحقّق."
           : "أكمل الموضع المطموس من حفظك ثمّ اكشف للتحقّق."}
       </p>
+
+      {/* الآية كاملةً مطموسة بلا تلقين ليست اختباراً: رقمُ الآية وحده لا يدلّ
+          عليها. نعرض الآية السابقة كما في شاشة التسميع فيكون للسؤال مدخل. */}
+      {wholeAyah && !revealed && <LeadPrompt text={text} targetId={ayahId} />}
 
       <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-[#241c12] p-5 min-h-[110px] flex items-center justify-center">
         <p className="font-quran text-center text-[21px] leading-[2.5] font-bold text-gray-800 dark:text-gray-100" dir="rtl">

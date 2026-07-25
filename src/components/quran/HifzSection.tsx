@@ -21,7 +21,7 @@ import { MistakesPanel } from "@/components/quran/MistakesPanel";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import { NumberInput } from "@/components/ui/NumberInput";
 import {
-  Sprout, Check, Target, GraduationCap, Shuffle, Minus, Plus, SlidersHorizontal,
+  Sprout, Check, Target, GraduationCap, Shuffle, Minus, Plus, SlidersHorizontal, RefreshCw,
 } from "lucide-react";
 
 // نوع جلسة المُدرّب خارج «جلسة اليوم»: حفظٌ جديد (زِد حفظك)، تسميعٌ من الخريطة،
@@ -146,6 +146,12 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
     const p = smartTestPortion(h, todayStr);
     if (p) setCoach({ portion: p, mode: "recall", kind: "test" });
   };
+  // «جلسة مراجعة» بعد إتمام اليوم: الوجه نفسه المُرجَّح، لكنّه يُسجَّل مراجعةً
+  // (فيدخل جدول المباعدة) لا اختباراً دورياً.
+  const startExtraReview = () => {
+    const p = smartTestPortion(h, todayStr);
+    if (p) setCoach({ portion: p, mode: "recall", kind: "review" });
+  };
 
   return (
     <div className="space-y-4">
@@ -169,14 +175,25 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
           <p className="text-xs text-gray-500 mt-1">يمكنك بدء خطة جديدة من «مؤشّر الحفظ ← خطة جديدة».</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center space-y-1.5">
+        /* لا شيء مستحقٌّ اليوم: خِتامٌ صريح، وما بعده *بطلبك* لا اقتراحاً دائماً.
+           كانت البطاقة تعود بعد إتمام الجلسة فلا يتبيّن للمستخدم أنّه أنهى
+           يومه — راجع drillsToday وcoveredToday. */
+        <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center space-y-2.5">
           <p className="text-sm font-bold text-quran">🌿 أتممت قرآن اليوم — تقبّل الله</p>
           {prog.at && <p className="text-xs text-gray-500">تقدّمت إلى {prog.at.surahName} {prog.at.ayah} · صفحة {prog.page}</p>}
-          {portion && text && (
-            <button onClick={() => setShowMore(true)} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-1.5 press">
-              <Sprout size={13} /> زِد حفظك اليوم
-            </button>
-          )}
+          <p className="text-[11px] text-gray-400">لا مستحقَّ عليك اليوم. وإن أردت الزيادة فبطلبك:</p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {portion && text && (
+              <button onClick={() => setShowMore(true)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-2 press">
+                <Sprout size={13} /> جلسة حفظ
+              </button>
+            )}
+            {hasMemorized && text && (
+              <button onClick={startExtraReview} className="inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-2 press">
+                <RefreshCw size={13} /> جلسة مراجعة
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -212,8 +229,9 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
         </div>
       )}
 
-      {/* 3) اختبرني الآن — الزرّ الوحيد الباقي خارج الجلسة (بطلبك متى شئت) */}
-      {hasMemorized && text && (
+      {/* 3) اختبرني الآن — بطلبك متى شئت. يُخفى في حال «أتممت اليوم» لأنّ بطاقة
+             الخِتام تعرض «جلسة مراجعة» أصلاً، فلا نزحم الشاشة بزرّين لعملٍ واحد. */}
+      {hasSession && hasMemorized && text && (
         <button
           onClick={startTest}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-semibold press"

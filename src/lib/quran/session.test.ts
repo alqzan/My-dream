@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildTodayPlan } from "./session";
+import { coveredToday, recentReviewBand } from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzSession, HifzReviewLog, HifzRating, HifzMistake } from "../types";
 
@@ -59,6 +60,56 @@ describe("buildTodayPlan — مسارٌ واحد مرتّب لعمل اليوم"
       reviews: [rev(1, p3.end, "2026-01-10", 3)],
     });
     expect(buildTodayPlan(s, "2026-01-10").steps.some((x) => x.kind === "recent")).toBe(false);
+  });
+
+  // كانت الجلسة تعود بعد إتمامها: تسجيلُ ورد اليوم يُقدّم الجبهة فتنزلق نافذة
+  // «القريبة»، فلا تعُد مراجعةُ الجلسة تحيط بالنافذة الجديدة فتُطلَب من جديد.
+  it("القريبة لا تعود بعد أن يُقدّم ورد اليوم الجبهة", () => {
+    const p3 = pageRange(3);
+    const p4 = pageRange(4);
+    const s = hz({
+      frontierId: p4.end, // الجبهة تقدّمت بورد اليوم
+      sessions: [
+        sess(1, p3.end, "2026-01-01", 3),
+        sess(p3.end + 1, p4.end, "2026-01-10", 3), // ورد اليوم
+      ],
+      reviews: [rev(1, p3.end, "2026-01-10", 3)], // القريبة كما كانت قبل الورد
+    });
+    const band = recentReviewBand(s)!;
+    expect(band.toId).toBe(p4.end); // النافذة انزلقت فعلاً
+    expect(coveredToday(s, band, "2026-01-10")).toBe(true);
+    expect(buildTodayPlan(s, "2026-01-10").steps.some((x) => x.kind === "recent")).toBe(false);
+  });
+
+  it("ثغرةٌ في مدايات اليوم تُبقي القريبة مطلوبة", () => {
+    const p3 = pageRange(3);
+    const s = hz({
+      frontierId: p3.end,
+      sessions: [sess(1, p3.end, "2026-01-01", 3)],
+      reviews: [rev(p3.start + 2, p3.end, "2026-01-10", 3)], // أوّل النافذة لم يُراجَع
+    });
+    expect(buildTodayPlan(s, "2026-01-10").steps.some((x) => x.kind === "recent")).toBe(true);
+  });
+
+  // السقف يوميّ: خمسة مواضع في اليوم لا خمسةٌ لكلّ دفعة — وإلا طرح الباقي نفسه
+  // جلسةً جديدة فلا تنتهي جلسة اليوم أبداً.
+  it("سقف مواضع الخطأ يوميّ: ما اختُبِر اليوم يُخصَم منه", () => {
+    const p2 = pageRange(2);
+    const seven = Array.from({ length: 7 }, (_, i) => mist(`m${i}`, p2.start + i));
+    const fresh = hz({ frontierId: p2.end, sessions: [sess(1, p2.end, "2026-01-10", 3)], mistakes: seven });
+    expect(buildTodayPlan(fresh, "2026-01-10").drills).toBe(5); // سقف «متوازن»
+
+    // اختُبرت خمسةٌ اليوم (أُغلق منها اثنان) ⇒ لا مواضع أخرى اليوم
+    const after = hz({
+      frontierId: p2.end,
+      sessions: [sess(1, p2.end, "2026-01-10", 3)],
+      mistakes: seven.map((m, i) =>
+        i < 5 ? { ...m, lastDrill: "2026-01-10", resolved: i < 2 } : m,
+      ),
+    });
+    const plan = buildTodayPlan(after, "2026-01-10");
+    expect(plan.drills).toBe(0);
+    expect(plan.steps.some((x) => x.kind === "drill")).toBe(false);
   });
 
   it("لا خطوات ولا اقتراح حين لا خطة", () => {

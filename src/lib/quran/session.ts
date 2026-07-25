@@ -11,7 +11,7 @@ import type { HifzState } from "../types";
 import type { Portion } from "./hifz";
 import {
   plannedPortion, recentReviewBand, drillsToday, smartTestPortion, testDue,
-  countPages, countSpots, countAyat, openMistakes,
+  countPages, countSpots, countAyat, openMistakes, coveredToday,
 } from "./hifz";
 import { dueQueue, type DuePage } from "./schedule";
 import { idToPage } from "./meta";
@@ -45,12 +45,11 @@ export function buildTodayPlan(s: HifzState, todayStr: string): TodayPlan {
   const sessionToday = (s.sessions ?? []).some((x) => x.date === todayStr);
   const newPortion = sessionToday ? null : plannedPortion(s);
 
-  // المراجعة القريبة تُعرَض فقط ما لم تُراجَع اليوم أصلاً (لا نكرّرها في اليوم).
+  // المراجعة القريبة تُعرَض فقط ما لم يغطّها عملُ اليوم (لا نكرّرها في اليوم).
+  // الغطاء يُحسب بدمج مدايات اليوم — حفظاً ومراجعةً — لأنّ تسجيل ورد اليوم
+  // يُقدّم الجبهة فتنزلق النافذة؛ راجع coveredToday.
   const band = recentReviewBand(s);
-  const bandDoneToday = band != null && (s.reviews ?? []).some(
-    (r) => r.date === todayStr && r.fromId <= band.fromId && r.toId >= band.toId,
-  );
-  const recentBand = bandDoneToday ? null : band;
+  const recentBand = band != null && coveredToday(s, band, todayStr) ? null : band;
 
   // المستحقّ بالجدول — مستثنىً منه ما تغطّيه المراجعة القريبة (لا ازدواج).
   const due = dueQueue(s, todayStr, undefined, recentBand != null);
