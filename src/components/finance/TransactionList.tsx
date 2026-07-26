@@ -1,6 +1,7 @@
 "use client";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, getMainCategory } from "@/lib/utils";
+import { INSTALLMENT_ROLE_LABEL } from "@/lib/installments";
 import { Trash2, PiggyBank } from "lucide-react";
 
 interface TransactionListProps {
@@ -56,6 +57,14 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                 {reservedPct > 0 && (
                   <span className="flex items-center gap-0.5 text-[10px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full shrink-0">
                     <PiggyBank size={9} /> {reservedPct}% احتياطي
+                  </span>
+                )}
+                {/* دفعةٌ مربوطة بخطة أقساط — تبقى مصروفاً عادياً في كل الحسابات،
+                    والوسم يوضّح لماذا سُجّلت حتى لا تبدو مصروفاً غامضاً. */}
+                {tx.planId && (
+                  <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 dark:bg-white/10 dark:text-gray-300 px-1.5 py-0.5 rounded-full shrink-0">
+                    🧾 {tx.planRole ? INSTALLMENT_ROLE_LABEL[tx.planRole] : "قسط"}
+                    {tx.planRole === "installment" && tx.planInstallmentNo ? ` ${tx.planInstallmentNo}` : ""}
                   </span>
                 )}
               </div>

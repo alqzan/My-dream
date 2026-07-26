@@ -27,7 +27,7 @@ export function SmartInsights() {
   const {
     transactions, journalEntries, readingLogs, books, habits,
     budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
-    quranHifz, quranKhatma,
+    installmentPlans, quranHifz, quranKhatma,
   } = useAppStore();
   const [prefs, setPrefs] = useState<InsightPrefs>({});
   useEffect(() => { setPrefs(loadPrefs()); }, []);
@@ -40,13 +40,14 @@ export function SmartInsights() {
         readingLogs: readingLogs ?? [], books: books ?? [], habits: habits ?? [],
         budgets: budgets ?? [], categories: categories ?? [], reserves: reserves ?? [],
         prayerLogs: prayerLogs ?? [], dailyBudget: dailyBudget ?? null, monthlyIncome: monthlyIncome ?? null,
-        futureLetters: futureLetters ?? [], quranHifz: quranHifz ?? null, quranKhatma: quranKhatma ?? null,
+        futureLetters: futureLetters ?? [], installmentPlans: installmentPlans ?? [],
+        quranHifz: quranHifz ?? null, quranKhatma: quranKhatma ?? null,
         lastBackup: typeof window !== "undefined" ? localStorage.getItem("madar-last-backup") : null,
       });
     } catch {
       return [];
     }
-  }, [transactions, journalEntries, readingLogs, books, habits, budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters, quranHifz, quranKhatma]);
+  }, [transactions, journalEntries, readingLogs, books, habits, budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters, installmentPlans, quranHifz, quranKhatma]);
 
   const visible = useMemo(() => filterInsights(all, prefs, today()), [all, prefs]);
 

@@ -50,6 +50,14 @@ export interface Transaction {
   // ختم آخر تعديل (ms). يستخدمه دمج المزامنة ليفوز التعديل الأحدث لهذا العنصر
   // بعينه، لا التعديل من الجهاز صاحب أحدث ختم على مستوى المستند كله.
   updatedAt?: number;
+  // ===== ربط المعاملة بخطة أقساط (اختياري) =====
+  // المعاملة تمثّل **دوراً واحداً فقط** في الخطة — الحقل مفردٌ لا مصفوفة، فلا
+  // يمكن بنيوياً أن تكون «دفعة أولى» و«قسطاً» في الوقت نفسه. المبالغ تبقى مصاريف
+  // عادية في كل الحسابات (الميزانية اليومية والسقوف)؛ الخطة تقرأها ولا تملكها.
+  planId?: string; // InstallmentPlan id
+  planRole?: InstallmentRole;
+  planInstallmentNo?: number; // رقم القسط (1..count) — للأقساط والدفعة الأخيرة فقط
+  planLinkedAt?: number; // ms وقت الربط بالخطة
 }
 
 // ===================== Reserve funds (الاحتياطي) =====================
@@ -174,6 +182,14 @@ export const PRAYER_STATUS_META: Record<PrayerStatus, { label: string; short: st
 // half, and so on — arbitrary spacing instead of a fixed monthly/yearly pair.
 export type RecurringUnit = "أسبوعي" | "شهري";
 
+// كيف يتصرّف الالتزام المتكرّر في موعده:
+//  • auto     — تُنشأ معاملةٌ تلقائياً (السلوك التاريخي، وهو الافتراضي عند الغياب).
+//  • reminder — تذكيرٌ فقط: يظهر في «القادم قريباً» و«أقرب التزام» ولا يولّد معاملة.
+//    خطط الأقساط تستعمل هذا الوضع حصراً — الدفع يُسجّل يدوياً بمبلغه الفعلي، فلا
+//    تُخلَق مصاريف وهمية لقسطٍ لم يُدفع.
+// غياب الحقل (بياناتٌ قديمة) = "auto" دائماً — راجع generationModeOf في utils.ts.
+export type RecurringGenerationMode = "auto" | "reminder";
+
 export interface RecurringTransaction {
   id: string;
   amount: number;
@@ -185,6 +201,12 @@ export interface RecurringTransaction {
   anchorDate: string; // YYYY-MM-DD — first occurrence; interval phase is counted from here
   active: boolean;
   lastGenerated?: string; // YYYY-MM-DD of last auto-created instance
+  generationMode?: RecurringGenerationMode; // غيابه = "auto"
+  // ختم آخر تعديل (ms) — يفوز به التعديل الأحدث لهذه القاعدة بعينها في الدمج.
+  // لا يُختم عند التوليد التلقائي (تحديث lastGenerated) كي لا يطغى توليدٌ آليّ
+  // على تعديلٍ حقيقيّ من الجهاز الآخر؛ lastGenerated يُدمج بأخذ الأحدث تاريخياً.
+  updatedAt?: number;
+  planId?: string; // خطة الأقساط التي أنشأت هذا التذكير (إن وُجدت)
 }
 
 // Quick presets shown in the UI on top of the free "every N" input.
@@ -198,6 +220,44 @@ export const RECURRING_PRESETS: { label: string; unit: RecurringUnit; every: num
   { label: "نصف سنوي", unit: "شهري", every: 6 },
   { label: "سنوي", unit: "شهري", every: 12 },
 ];
+
+// ===================== الأقساط (خطط التقسيط) =====================
+// خطةُ تقسيطٍ لالتزامٍ واحد (جوّال بالتقسيط، أثاث، تأمين مجزّأ...). الخطة **وصفٌ
+// للاتفاق فقط**؛ لا تنشئ مصروفاً بنفسها ولا تحرّك أيّ رصيد. كل ريالٍ يُحتسب حين
+// تُسجَّل معاملةٌ حقيقية مربوطة بها (Transaction.planId) — فلا يظهر قسطٌ كمصروفٍ
+// لمجرّد مرور موعده، ولا يتضخّم صرف الشهر بأرقامٍ لم تُدفع.
+//
+// `totalPrice` هو **المرجع الوحيد** للمبلغ الواجب: الرسوم توضيحيةٌ لا تُضاف عليه،
+// و`cashPrice` للمقارنة فقط. `finalPayment` (دفعةٌ أخيرة كبيرة) **تستبدل** آخر قسط
+// ولا تُضاف إليه. إن لم تتّسق الأرقام مع الإجمالي فالعرض يحمل تحذيراً **غير
+// معطِّل** (لا نصحّح أرقام المالك من تلقائنا) — راجع planMismatch في installments.ts.
+export type InstallmentStatus = "active" | "settled" | "cancelled";
+
+// دور المعاملة داخل الخطة — واحدٌ فقط لكل معاملة:
+//  down = الدفعة الأولى · installment = قسط · final = الدفعة الأخيرة الكبيرة ·
+//  settlement = سدادٌ مبكر (يُسجَّل بمبلغه الفعليّ وحده؛ الفرق يُعرَض «موفَّراً»
+//  ولا يُخلَق له مصروفٌ وهميّ).
+export type InstallmentRole = "down" | "installment" | "final" | "settlement";
+
+export interface InstallmentPlan {
+  id: string;
+  provider: string; // الجهة (تمارا · تابي · بنك · معرض...)
+  name: string; // اسم الالتزام
+  cashPrice?: number; // السعر النقدي (اختياري — للمقارنة فقط، لا يدخل أيّ حساب)
+  totalPrice: number; // السعر الإجمالي — المرجع الوحيد للمبلغ الواجب
+  downPayment: number; // الدفعة الأولى (0 = لا دفعة أولى)
+  installmentAmount: number; // قيمة القسط الشهري
+  count: number; // عدد الأقساط
+  firstDueDate: string; // YYYY-MM-DD أول موعد استحقاق
+  fees?: number; // الرسوم — توضيحية فقط (لا تُضاف على الإجمالي)
+  finalPayment?: number; // دفعة أخيرة كبيرة تستبدل آخر قسط (اختياري)
+  status: InstallmentStatus;
+  category?: string; // FinanceCategoryDef id يُقترح لمدفوعات الخطة
+  recurringId?: string; // ربط اختياري بالتزامٍ متكرّر (تذكير reminder فقط)
+  note?: string;
+  createdAt: string; // YYYY-MM-DD
+  updatedAt?: number; // ms — يفوز به التعديل الأحدث لهذه الخطة في الدمج
+}
 
 // A monthly cap on a main category — either a fixed SAR amount or a
 // percentage of the monthly income (pct wins when both are set, and the
@@ -372,6 +432,8 @@ export interface AppData {
   journalEntries: JournalEntry[];
   habits: Habit[];
   recurring: RecurringTransaction[];
+  // خطط الأقساط — وصفُ اتفاقٍ فقط؛ المدفوع يُشتَقّ من المعاملات المربوطة بها.
+  installmentPlans: InstallmentPlan[];
   budgets: Budget[];
   categories: FinanceCategoryDef[];
   reserves: ReserveFund[];

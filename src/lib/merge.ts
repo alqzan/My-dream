@@ -2,7 +2,7 @@
 // has NO Firebase imports and can be unit-tested in plain Node. sync.ts re-
 // exports mergeAppData, so existing importers are unaffected. Pure functions of
 // (local, cloud) → merged AppData; touches no I/O.
-import type { AppData, JournalEntry, HifzMistake, HifzState } from "./types";
+import type { AppData, JournalEntry, HifzMistake, HifzState, RecurringTransaction } from "./types";
 import { EMPTY_HIFZ } from "./types";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 
@@ -47,6 +47,37 @@ export function unionOrdered<T>(primary: T[], secondary: T[], keyOf: (t: T) => s
 // the cure there is to clear the returning device and re-adopt the cloud, not a
 // heavier per-device watermark scheme.
 const TOMBSTONE_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
+
+// ===================== دمج الالتزامات المتكرّرة =====================
+// قاعدةٌ متكرّرة فيها حقلان مختلفا الطبيعة:
+//  • تعديلُ المالك (المبلغ/الوتيرة/التفعيل/وضع التوليد) → يفوز الأحدث بـ`updatedAt`.
+//  • `lastGenerated` سجلٌّ آليّ **لا يرجع للخلف أبداً**: نأخذ الأحدث تاريخياً من
+//    الجهازين. كان اتّحادٌ بالـid يأخذ نسخةَ الأساس كاملةً، فإن كان جهازٌ قد ولّد
+//    قسط الشهر وفاز الآخر بالختم، عاد `lastGenerated` للخلف فأُعيد توليد نفس
+//    المعاملة. (المعرّف الحتميّ يلتقطها في الدمج، لكن التراجع نفسه خطأ يجب سدّه.)
+// دالة تبادلية: النتيجة نفسها أيّاً كان الأساس.
+export function mergeRecurringRules(
+  a: RecurringTransaction[],
+  b: RecurringTransaction[]
+): RecurringTransaction[] {
+  const laterDate = (x?: string, y?: string) => {
+    if (!x) return y;
+    if (!y) return x;
+    return x > y ? x : y;
+  };
+  const fold = (p: RecurringTransaction, s: RecurringTransaction): RecurringTransaction => {
+    const winner = (s.updatedAt ?? 0) > (p.updatedAt ?? 0) ? s : p;
+    const lg = laterDate(p.lastGenerated, s.lastGenerated);
+    return lg === winner.lastGenerated ? winner : { ...winner, lastGenerated: lg };
+  };
+  const sById = new Map(b.map((r) => [r.id, r]));
+  const merged = a.map((r) => {
+    const other = sById.get(r.id);
+    return other ? fold(r, other) : r;
+  });
+  const seen = new Set(a.map((r) => r.id));
+  return [...merged, ...b.filter((r) => !seen.has(r.id))];
+}
 
 // ===================== دمج حفظ القرآن (واعٍ بالجيل) =====================
 // المشكلة القديمة: `plan: ph.plan ?? sh.plan` و`frontierId: Math.max(...)`
@@ -328,7 +359,11 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     readingLogs: byId(primary.readingLogs, secondary.readingLogs),
     journalEntries,
     habits,
-    recurring: byId(primary.recurring, secondary.recurring),
+    // الالتزامات المتكرّرة: آخر تعديلٍ يفوز، و`lastGenerated` لا يرجع للخلف.
+    recurring: alive(mergeRecurringRules(primary.recurring, secondary.recurring)),
+    // خطط الأقساط: عنصرٌ بمعرّف وطابع تعديلٍ خاصٍّ به — فتعديل الخطة على جهاز لا
+    // يضيع لأن ختم المستند على الجهاز الآخر أحدث، والحذف يبقى شاهداً فلا يعود.
+    installmentPlans: byIdNewer(primary.installmentPlans ?? [], secondary.installmentPlans ?? []),
     // Budgets are keyed by category (no item id), so a removed cap is tombstoned
     // as budget:<category> and filtered here — else the union re-adds it.
     budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category).filter(

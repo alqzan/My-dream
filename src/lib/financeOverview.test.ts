@@ -4,7 +4,7 @@ import {
   planSectionFromHash, historySlice, PLAN_SECTIONS,
 } from "./financeOverview";
 import { today } from "./utils";
-import type { RecurringTransaction, Transaction, FinanceCategoryDef, Budget, ReserveFund, DailyBudget } from "./types";
+import type { RecurringTransaction, Transaction, FinanceCategoryDef, Budget, ReserveFund, DailyBudget, InstallmentPlan } from "./types";
 
 const tx = (over: Partial<Transaction>): Transaction => ({ id: "t", date: "2026-06-01", amount: 10, category: "", note: "", ...over });
 const rec = (over: Partial<RecurringTransaction>): RecurringTransaction => ({
@@ -114,8 +114,11 @@ describe("planSectionFromHash — deep links open the right collapsible", () => 
     expect(planSectionFromHash("")).toBeNull();
     expect(planSectionFromHash("nope")).toBeNull();
   });
-  it("the plan-sections registry keeps the four expected sections (no section lost)", () => {
-    expect([...PLAN_SECTIONS]).toEqual(["daily", "budgets", "recurring", "reserves"]);
+  it("resolves the installments section too (‎/finance#installments‎)", () => {
+    expect(planSectionFromHash("installments")).toBe("installments");
+  });
+  it("the plan-sections registry keeps every section, الأقساط بين المتكررة والاحتياطيات", () => {
+    expect([...PLAN_SECTIONS]).toEqual(["daily", "budgets", "recurring", "installments", "reserves"]);
   });
 });
 
@@ -133,5 +136,95 @@ describe("historySlice — «إظهار المزيد» pagination", () => {
     expect(visible).toHaveLength(45);
     expect(hasMore).toBe(false);
     expect(remaining).toBe(0);
+  });
+});
+
+describe("nearestCommitment مع الأقساط — بطاقةٌ واحدة بلا تكرار", () => {
+  const plan = (over: Partial<InstallmentPlan> = {}): InstallmentPlan => ({
+    id: "p1", provider: "تمارا", name: "جوّال", totalPrice: 1200, downPayment: 0,
+    installmentAmount: 300, count: 4, firstDueDate: "2026-06-12",
+    status: "active", createdAt: "2026-06-01", ...over,
+  });
+
+  it("picks an installment when it is nearer than the recurring rule", () => {
+    const now = new Date(2026, 5, 10); // 10 يونيو
+    const n = nearestCommitment([rec({ id: "r1", dayOfMonth: 15 })], now, { plans: [plan()], transactions: [] });
+    expect(n?.kind).toBe("installment");
+    expect(n?.planId).toBe("p1");
+    expect(n?.amount).toBe(300);
+    expect(n?.due).toBe("2026-06-12");
+    expect(n?.daysUntil).toBe(2);
+  });
+
+  it("keeps the recurring rule when it is nearer", () => {
+    const now = new Date(2026, 5, 10);
+    const n = nearestCommitment([rec({ id: "r1", dayOfMonth: 11, anchorDate: "2026-01-11" })], now, {
+      plans: [plan()], transactions: [],
+    });
+    expect(n?.kind).toBe("recurring");
+    expect(n?.id).toBe("r1");
+  });
+
+  it("shows a plan and its reminder rule only ONCE (no double commitment)", () => {
+    const now = new Date(2026, 5, 10);
+    const reminder = rec({ id: "rem", dayOfMonth: 12, anchorDate: "2026-06-12", amount: 300, generationMode: "reminder" });
+    const linked = plan({ recurringId: "rem" });
+    const n = nearestCommitment([reminder], now, { plans: [linked], transactions: [] });
+    expect(n?.kind).toBe("installment"); // القسط نفسه، لا قاعدة التذكير
+    expect(n?.id).toBe("plan:p1:1");
+  });
+
+  it("ignores a plan whose installments are all paid", () => {
+    const now = new Date(2026, 5, 10);
+    const paidTxs: Transaction[] = [1, 2, 3, 4].map((no) => tx({
+      id: `t${no}`, amount: 300, date: "2026-06-01", planId: "p1",
+      planRole: "installment", planInstallmentNo: no,
+    }));
+    expect(nearestCommitment([], now, { plans: [plan()], transactions: paidTxs })).toBeNull();
+  });
+
+  it("ignores a cancelled plan but keeps its reminder rule visible", () => {
+    const now = new Date(2026, 5, 10);
+    const reminder = rec({ id: "rem", dayOfMonth: 12, anchorDate: "2026-06-12", amount: 300 });
+    const cancelled = plan({ status: "cancelled", recurringId: "rem" });
+    const n = nearestCommitment([reminder], now, { plans: [cancelled], transactions: [] });
+    expect(n?.kind).toBe("recurring");
+  });
+});
+
+describe("buildFinanceOverview — ملخّص الأقساط", () => {
+  it("reports the active count, remaining total and overdue count", () => {
+    const t = today();
+    const o = buildFinanceOverview({
+      dailyBudget: null, transactions: [], reserves: [], recurring: [],
+      installmentPlans: [{
+        id: "p1", provider: "تابي", name: "أثاث", totalPrice: 900, downPayment: 0,
+        installmentAmount: 300, count: 3, firstDueDate: "2026-01-05",
+        status: "active", createdAt: "2026-01-01",
+      }],
+      salaryDay: 27, monthPrefix: t.slice(0, 7), todayStr: t,
+    });
+    expect(o.installments.activeCount).toBe(1);
+    expect(o.installments.remainingTotal).toBe(900);
+    expect(o.installments.overdueCount).toBe(3); // مواعيد 2026 كلّها فاتت
+    expect(o.nearest?.kind).toBe("installment");
+  });
+
+  it("stays empty (and never throws) when no plans are passed at all", () => {
+    const t = today();
+    const o = buildFinanceOverview({
+      dailyBudget: null, transactions: [], reserves: [], recurring: [],
+      salaryDay: 27, monthPrefix: t.slice(0, 7), todayStr: t,
+    });
+    expect(o.installments.activeCount).toBe(0);
+    expect(o.nearest).toBeNull();
+  });
+});
+
+describe("defaultPlanOpen — قسطٌ فائت يفتح «الأقساط»", () => {
+  it("prioritises an overdue installment over a breached cap", () => {
+    const d = defaultPlanOpen({ budgetAttention: true, negativeBalance: false, installmentOverdue: true });
+    expect(d.installments).toBe(true);
+    expect(d.budgets).toBe(false);
   });
 });

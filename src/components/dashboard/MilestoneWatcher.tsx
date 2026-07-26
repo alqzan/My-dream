@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import {
-  getDailyCompletionDates,
   calcStreak,
   getPrayerStreak,
   getJournalStreak,
   getReadingStreak,
+  quranActivityDates,
   buzz,
 } from "@/lib/utils";
+import { completedDayDates } from "@/lib/dayAggregator";
 import { hifzStreak } from "@/lib/quran/hifz";
 import { juzRange } from "@/lib/quran/meta";
 import { STREAK_MILESTONES, BOOK_MILESTONES, highestReached } from "@/lib/milestones";
@@ -29,7 +30,10 @@ interface Metric {
 // sync settles, so opening the app on a device that already has a long streak
 // doesn't retro-fire a celebration.
 export function MilestoneWatcher() {
-  const { journalEntries, readingLogs, prayerLogs, books, quranHifz } = useAppStore();
+  const {
+    journalEntries, readingLogs, prayerLogs, books,
+    quranHifz, quranWird, quranReflections, quranKhatma, frozenHabits,
+  } = useAppStore();
   const [ready, setReady] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
 
@@ -41,12 +45,18 @@ export function MilestoneWatcher() {
   useEffect(() => {
     if (!ready) return;
 
-    const completion = getDailyCompletionDates(journalEntries, readingLogs);
+    // نفس تعريف «اليوم المكتمل» الذي يقود التقويم وشارة اليوم (الدالة المركزية).
+    const completion = completedDayDates({
+      journalEntries,
+      readingLogs,
+      quranActivity: quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }),
+      frozenHabits,
+    });
     const booksFinished = books.filter((b) => b.status === "أنهيت").length;
 
     const metrics: Metric[] = [
       { key: "full", value: calcStreak(completion), thresholds: STREAK_MILESTONES,
-        message: (t) => `🔥 سلسلة ${t} يوم متواصل — مذكرة وقراءة كل يوم!` },
+        message: (t) => `🔥 سلسلة ${t} يوم متواصل — كل طقوسك اليومية!` },
       { key: "prayer", value: getPrayerStreak(prayerLogs), thresholds: STREAK_MILESTONES,
         message: (t) => `🕌 ${t} يوماً وصلواتك الخمس كاملة — ما شاء الله!` },
       { key: "journal", value: getJournalStreak(journalEntries), thresholds: STREAK_MILESTONES,
@@ -106,7 +116,7 @@ export function MilestoneWatcher() {
       const t = setTimeout(() => setCelebrate(false), 5200);
       return () => clearTimeout(t);
     }
-  }, [ready, journalEntries, readingLogs, prayerLogs, books, quranHifz]);
+  }, [ready, journalEntries, readingLogs, prayerLogs, books, quranHifz, quranWird, quranReflections, quranKhatma, frozenHabits]);
 
   return celebrate ? <Confetti pieces={80} /> : null;
 }

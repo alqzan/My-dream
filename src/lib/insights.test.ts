@@ -3,7 +3,7 @@ import { generateInsights, prevMonthPrefix, type Insight } from "./insights";
 import { filterInsights, snoozeUntilDate, type InsightPrefs } from "./insightPrefs";
 import { pageRange } from "./quran/meta";
 import { toDateStr } from "./utils";
-import type { HifzState, HifzRating } from "./types";
+import type { HifzState, HifzRating, InstallmentPlan } from "./types";
 
 // نفس منطق daysAgo داخل المحرّك (نسبةً لليوم الحقيقي) لبناء معاملاتٍ محدَّدة اليوم.
 function ago(n: number): string {
@@ -17,7 +17,7 @@ function baseData(over: Partial<Parameters<typeof generateInsights>[0]> = {}) {
   return {
     transactions: [], journalEntries: [], readingLogs: [], books: [], habits: [],
     budgets: [], categories: [], reserves: [], prayerLogs: [],
-    dailyBudget: null, monthlyIncome: null, futureLetters: [],
+    dailyBudget: null, monthlyIncome: null, futureLetters: [], installmentPlans: [],
     quranHifz: null, quranKhatma: null, lastBackup: null,
     ...over,
   };
@@ -140,3 +140,39 @@ describe("filterInsights — validUntil / snooze / dismiss (device-local)", () =
     expect(snoozeUntilDate("week", "2026-01-01")).toBe("2026-01-09");
   });
 });
+
+describe("الأقساط في بوصلة مدار — تنبيهٌ واحد فقط", () => {
+  const plan = (over: Partial<InstallmentPlan> = {}): InstallmentPlan => ({
+    id: "p1", provider: "تمارا", name: "جوّال", totalPrice: 1200, downPayment: 0,
+    installmentAmount: 300, count: 4, firstDueDate: ago(1), // قسطٌ فات بالأمس
+    status: "active", createdAt: ago(40), ...over,
+  });
+
+  it("raises exactly one installment insight even with several overdue plans", () => {
+    const list = generateInsights(baseData({
+      installmentPlans: [plan(), plan({ id: "p2", name: "أثاث", firstDueDate: ago(3) })],
+    }));
+    const inst = list.filter((i) => i.dedupeKey === "finance:installment-due");
+    expect(inst).toHaveLength(1);
+    expect(inst[0].tone).toBe("warning");
+    expect(inst[0].href).toBe("/finance#installments");
+  });
+
+  it("stays quiet for an installment that is still far away", () => {
+    const far = new Date();
+    far.setDate(far.getDate() + 20);
+    const list = generateInsights(baseData({ installmentPlans: [plan({ firstDueDate: toDateStr(far) })] }));
+    expect(list.some((i) => i.dedupeKey === "finance:installment-due")).toBe(false);
+  });
+
+  it("stays quiet once the plan is settled or cancelled", () => {
+    for (const status of ["settled", "cancelled"] as const) {
+      const list = generateInsights(baseData({ installmentPlans: [plan({ status })] }));
+      expect(list.some((i) => i.dedupeKey === "finance:installment-due")).toBe(false);
+    }
+  });
+
+  it("says nothing at all when there are no plans (the default)", () => {
+    expect(generateInsights(baseData()).some((i) => i.dedupeKey === "finance:installment-due")).toBe(false);
+  });
+})

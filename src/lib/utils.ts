@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { mediaTombKey } from "./mediaHash";
-import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, RecurringGenerationMode, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -633,6 +633,13 @@ export function mostRecentDueDate(r: RecurringTransaction, now: Date): Date {
   return due < anchor ? new Date(anchor.getFullYear(), anchor.getMonth(), day) : due;
 }
 
+// وضع التوليد لقاعدةٍ متكرّرة. البيانات القديمة لا تحمل الحقل، وكلّها كانت
+// تُولّد معاملاتٍ تلقائياً — فغيابه = "auto" دائماً، بلا استثناء. المصدر الوحيد
+// لهذا القرار (يستعمله runRecurring والعرض) فلا يتكرّر الافتراض في مكانين.
+export function generationModeOf(r: { generationMode?: RecurringGenerationMode }): RecurringGenerationMode {
+  return r.generationMode === "reminder" ? "reminder" : "auto";
+}
+
 // The next occurrence strictly after `now` — one interval past the most
 // recent due date.
 export function nextDueDate(r: RecurringTransaction, now: Date): Date {
@@ -647,16 +654,10 @@ export function nextDueDate(r: RecurringTransaction, now: Date): Date {
   return new Date(Math.floor(monthIndex / 12), ((monthIndex % 12) + 12) % 12, recent.getDate());
 }
 
-// اليوم «المكتمل» = مذكرة + قراءة. المالية خارج السلسلة عمداً:
-// الصرف مهب شرط كل يوم، فلا يُحاسب عليه العدّاد.
-export function getDailyCompletionDates(
-  journalEntries: JournalEntry[],
-  readingLogs: ReadingLog[]
-): string[] {
-  const jDates = new Set(journalEntries.map((e) => e.date));
-  const rDates = new Set(readingLogs.map((l) => l.date));
-  return [...jDates].filter((d) => rDates.has(d));
-}
+// تعريف «اليوم المكتمل» يعيش في مكانٍ واحد: dayAggregator.ts
+// (`dayRitualStates` / `completedDayDates`) — كان هنا نسخةٌ ثانية تعرف المذكرة
+// والقراءة فقط، فاختلفت السلسلة والتقويم عن شارة اليوم في DayView. أُزيلت
+// عمداً؛ كل من يحتاج الاكتمال يستدعي الدالة المركزية.
 
 export function getMonthDates(year: number, month: number): string[] {
   const dates: string[] = [];

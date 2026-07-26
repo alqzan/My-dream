@@ -154,6 +154,13 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
 
   return (
     <div className="space-y-4">
+      {/* دفعةُ خطة أقساط: نوضّح الربط قبل التعديل — تغيير المبلغ يغيّر «المدفوع»
+          في الخطة (مشتقٌّ من المعاملات)، ولا يُفكّ الربط بالحفظ. */}
+      {initial?.planId && (
+        <p className="text-[11px] text-gray-500 bg-gray-50 dark:bg-white/5 rounded-xl px-3 py-2 leading-relaxed">
+          🧾 هذه دفعةٌ مرتبطة بخطة أقساط — تعديل مبلغها يُعيد حساب المدفوع والمتبقّي في الخطة.
+        </p>
+      )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">المبلغ (ريال)</label>
         <NumberInput

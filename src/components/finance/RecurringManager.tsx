@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { RecurringTransaction, RecurringUnit } from "@/lib/types";
 import { RECURRING_PRESETS } from "@/lib/types";
-import { uid, today, getCategoryInfo, formatAmount } from "@/lib/utils";
+import { uid, today, getCategoryInfo, formatAmount, generationModeOf } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, Trash2, Power } from "lucide-react";
@@ -62,13 +62,24 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
         )}
         {recurring.map((r) => {
           const info = getCategoryInfo(categories, r.category);
+          // «تذكير» = لا يولّد مصروفاً تلقائياً (قواعد خطط الأقساط). نُظهرها صراحةً
+          // فلا يتساءل المالك لماذا لم يُسجَّل هذا الالتزام من نفسه.
+          const reminderOnly = generationModeOf(r) === "reminder";
           return (
             <div key={r.id} className={`flex items-center gap-2 rounded-xl p-3 border ${r.active ? "bg-white border-gray-100" : "bg-gray-50 border-gray-100 opacity-60"}`}>
               <span className="text-lg">{info.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-sm font-semibold text-gray-700 truncate">{r.note || info.label}</span>
+                  {reminderOnly && (
+                    <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-300">
+                      تذكير
+                    </span>
+                  )}
+                </div>
                 <div className="text-[11px] text-gray-400">
                   {describeFrequency(r.unit, r.every)} · {info.label}
+                  {reminderOnly ? " · لا يُسجَّل تلقائياً" : ""}
                 </div>
               </div>
               <span className="text-sm font-bold text-red-500">

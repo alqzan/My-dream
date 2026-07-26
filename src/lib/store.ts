@@ -3,14 +3,14 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
-  ReserveFund, ReserveDeposit, FutureLetter,
+  ReserveFund, ReserveDeposit, FutureLetter, InstallmentPlan, InstallmentRole,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios } from "./utils";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
 import { normalizeMerchant } from "./bankParser";
@@ -21,7 +21,7 @@ import { idbStorage } from "./idbStorage";
 const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
-  "quranReflections",
+  "quranReflections", "installmentPlans",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -91,6 +91,23 @@ interface AppStore extends AppData {
   updateRecurring: (id: string, updates: Partial<RecurringTransaction>) => void;
   deleteRecurring: (id: string) => void;
   runRecurring: () => number; // returns count of generated transactions
+
+  // الأقساط — الخطة وصفٌ للاتفاق، والدفع معاملةٌ حقيقية مربوطة بها
+  addInstallmentPlan: (plan: InstallmentPlan) => void;
+  updateInstallmentPlan: (id: string, updates: Partial<InstallmentPlan>) => void;
+  // الإلغاء **لا يحذف** أيّ معاملةٍ سُجّلت — يوقف المطالبة فقط.
+  cancelInstallmentPlan: (id: string) => void;
+  reopenInstallmentPlan: (id: string) => void;
+  deleteInstallmentPlan: (id: string) => void; // شاهدُ حذفٍ فقط (المعاملات تبقى)
+  // يسجّل دفعةً بدورٍ واحد ويربطها بالخطة؛ يرجع معرّف المعاملة (أو "" إن رُفضت).
+  recordInstallmentPayment: (
+    planId: string,
+    p: { role: InstallmentRole; amount: number; date?: string; installmentNo?: number; note?: string; category?: string }
+  ) => string;
+  // سدادٌ مبكر: يسجّل **المبلغ الفعليّ وحده** ويقفل الخطة. لا مصروف وهمي للفرق.
+  settleInstallmentPlan: (planId: string, amount: number, date?: string) => string;
+  // تذكيرٌ متكرّر للخطة (generationMode: "reminder" — لا يولّد معاملات أبداً).
+  linkInstallmentReminder: (planId: string) => void;
 
   // Budgets — a fixed limit OR a % of monthly income
   setBudget: (category: string, cap: { limit?: number; pct?: number }) => void;
@@ -304,6 +321,7 @@ export const useAppStore = create<AppStore>()(
         { id: "h2", name: "قرآن", icon: "📖", color: "#7c6fcd", logs: [] },
       ],
       recurring: [],
+      installmentPlans: [],
       budgets: [],
       categories: DEFAULT_CATEGORIES,
       reserves: [],
@@ -453,13 +471,17 @@ export const useAppStore = create<AppStore>()(
           transactions: s.transactions.filter((t) => t.id !== id),
         })),
 
+      // نختم updatedAt على الإضافة/التعديل فيفوز آخر تعديلٍ حقيقيٍّ عند الدمج.
       addRecurring: (r) =>
-        set((s) => ({ recurring: [...s.recurring, r] })),
+        set((s) => ({
+          recurring: [...s.recurring, { ...r, updatedAt: Date.now() }],
+          ...clearTombstone(s.deleted, r.id),
+        })),
 
       updateRecurring: (id, updates) =>
         set((s) => ({
           recurring: s.recurring.map((r) =>
-            r.id === id ? { ...r, ...updates } : r
+            r.id === id ? { ...r, ...updates, updatedAt: Date.now() } : r
           ),
         })),
 
@@ -471,8 +493,17 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const now = parseDate(today());
           const newTx: Transaction[] = [];
+          // كل المعرّفات الموجودة أصلاً — الحارس الذي يجعل التشغيل idempotent:
+          // المعرّف الحتميّ (`rec_<rule>_<date>`) إن كان موجوداً (تشغيلٌ سابق، أو
+          // وصل من جهازٍ آخر بالمزامنة) فلا تُضاف نسختُه ثانيةً. بدونه كان تراجعُ
+          // `lastGenerated` (دمجٌ قديم) أو تشغيلان متتاليان يُنتِجان صفّاً مكرّراً
+          // يُصلحه الدمج لاحقاً فقط — أمّا محلياً فيظهر مصروفان.
+          const existingIds = new Set(s.transactions.map((t) => t.id));
+          let rulesChanged = false;
           const updatedRecurring = s.recurring.map((r) => {
             if (!r.active) return r;
+            // «تذكير» لا يولّد معاملةً أبداً (خطط الأقساط) — والغياب = auto.
+            if (generationModeOf(r) !== "auto") return r;
             // Backfill every missed occurrence, not just the latest — if the
             // app wasn't opened for two months, both rent payments land.
             // Walk back from the most recent due date until we hit what was
@@ -499,13 +530,16 @@ export const useAppStore = create<AppStore>()(
             }
             if (!dueDates.length) return r;
             for (const dueStr of dueDates) {
+              // Deterministic id from the rule + occurrence date so two devices
+              // that each generate the same due occurrence produce the SAME id —
+              // the sync merge (byId) then collapses them into one instead of
+              // leaving a duplicate rent/subscription. Manual transactions keep
+              // their random uid(); only auto-generated recurring ones are keyed.
+              const id = `rec_${r.id}_${dueStr}`;
+              if (existingIds.has(id)) continue; // موجودة سلفاً — لا تكرار
+              existingIds.add(id);
               newTx.push({
-                // Deterministic id from the rule + occurrence date so two devices
-                // that each generate the same due occurrence produce the SAME id —
-                // the sync merge (byId) then collapses them into one instead of
-                // leaving a duplicate rent/subscription. Manual transactions keep
-                // their random uid(); only auto-generated recurring ones are keyed.
-                id: `rec_${r.id}_${dueStr}`,
+                id,
                 date: dueStr,
                 amount: r.amount,
                 category: r.category,
@@ -514,15 +548,160 @@ export const useAppStore = create<AppStore>()(
               });
               generated++;
             }
-            return { ...r, lastGenerated: dueDates[dueDates.length - 1] };
+            // `lastGenerated` لا يرجع للخلف أبداً (حتى لو أعطت مرساةٌ معدّلة موعداً
+            // أقدم)، ويتقدّم حتى لو تُخطّيت كل المواعيد كمكرّرة — فلا يُعاد فحصها.
+            const last = dueDates[dueDates.length - 1];
+            const nextLast = r.lastGenerated && r.lastGenerated > last ? r.lastGenerated : last;
+            if (nextLast === r.lastGenerated) return r;
+            rulesChanged = true;
+            // بلا ختم updatedAt: التوليد إجراءٌ آليّ، وختمُه يجعله يطغى على تعديلٍ
+            // حقيقيٍّ من الجهاز الآخر عند الدمج. lastGenerated يُدمج بأخذ الأحدث.
+            return { ...r, lastGenerated: nextLast };
           });
-          if (!newTx.length) return {};
+          if (!newTx.length && !rulesChanged) return {};
           return {
-            transactions: [...newTx, ...s.transactions],
-            recurring: updatedRecurring,
+            ...(newTx.length ? { transactions: [...newTx, ...s.transactions] } : {}),
+            ...(rulesChanged ? { recurring: updatedRecurring } : {}),
           };
         });
         return generated;
+      },
+
+      // ---------- الأقساط ----------
+      addInstallmentPlan: (plan) =>
+        set((s) => ({
+          installmentPlans: [
+            { ...plan, updatedAt: Date.now() },
+            ...(s.installmentPlans ?? []),
+          ],
+          // إعادة إضافة معرّفٍ مُحذوف (تراجع) ترفع شاهد الحذف وإلا أسقطه الدمج.
+          ...clearTombstone(s.deleted, plan.id),
+        })),
+
+      updateInstallmentPlan: (id, updates) =>
+        set((s) => ({
+          installmentPlans: (s.installmentPlans ?? []).map((p) =>
+            p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
+          ),
+        })),
+
+      // الإلغاء يوقف المطالبة ويُبقي كل معاملةٍ سُجّلت (تاريخُ الصرف لا يُمسّ).
+      cancelInstallmentPlan: (id) =>
+        set((s) => ({
+          installmentPlans: (s.installmentPlans ?? []).map((p) =>
+            p.id === id ? { ...p, status: "cancelled" as const, updatedAt: Date.now() } : p
+          ),
+        })),
+
+      reopenInstallmentPlan: (id) =>
+        set((s) => ({
+          installmentPlans: (s.installmentPlans ?? []).map((p) =>
+            p.id === id ? { ...p, status: "active" as const, updatedAt: Date.now() } : p
+          ),
+        })),
+
+      // حذف الخطة = شاهدُ حذفٍ (يكتبه غلاف set تلقائياً) والمعاملات تبقى كما هي:
+      // ما دُفع فعلاً مصروفٌ حقيقيّ، وحذف الخطة قرارُ تنظيمٍ لا محوُ تاريخ.
+      deleteInstallmentPlan: (id) =>
+        set((s) => ({
+          installmentPlans: (s.installmentPlans ?? []).filter((p) => p.id !== id),
+        })),
+
+      recordInstallmentPayment: (planId, p) => {
+        const st = get();
+        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
+        if (!plan) return "";
+        const amount = round2(p.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return "";
+        const date = p.date || today();
+        // معرّفٌ عشوائيّ (لا حتميّ): الدفعة حدثٌ يدويّ يجوز تكراره بمبالغ مختلفة،
+        // والحتميّة هنا كانت تدمج دفعتين حقيقيتين في واحدة.
+        const id = uid();
+        const roleLabel = p.role === "installment" && p.installmentNo
+          ? `قسط ${p.installmentNo}`
+          : p.role === "down" ? "دفعة أولى"
+          : p.role === "final" ? "دفعة أخيرة"
+          : p.role === "settlement" ? "سداد مبكر" : "قسط";
+        const tx: Transaction = {
+          id,
+          date,
+          amount,
+          category: p.category ?? plan.category ?? st.categories[0]?.id ?? "",
+          note: p.note ?? `${plan.name || plan.provider} — ${roleLabel}`,
+          // دورٌ واحد فقط: الحقل مفردٌ، فلا تمثّل معاملةٌ دورين معاً.
+          planId,
+          planRole: p.role,
+          ...(p.role === "installment" || p.role === "final"
+            ? { planInstallmentNo: p.installmentNo }
+            : {}),
+          planLinkedAt: Date.now(),
+        };
+        set((s) => ({
+          transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions],
+          ...clearTombstone(s.deleted, id),
+        }));
+        return id;
+      },
+
+      // سدادٌ مبكر: معاملةٌ واحدة بالمبلغ **الفعليّ** + إغلاق الخطة. الفرق بين ما
+      // كان واجباً وما دُفع يُعرَض «موفَّراً» (planSummary.saved) ولا يُخلَق له
+      // مصروفٌ ولا إيرادٌ وهميّ — لا نلوّث سجلّ الصرف بأرقامٍ لم تُنقَل.
+      settleInstallmentPlan: (planId, amount, date) => {
+        const st = get();
+        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
+        if (!plan) return "";
+        const paid = round2(amount);
+        if (!Number.isFinite(paid) || paid <= 0) return "";
+        const id = uid();
+        const tx: Transaction = {
+          id,
+          date: date || today(),
+          amount: paid,
+          category: plan.category ?? st.categories[0]?.id ?? "",
+          note: `${plan.name || plan.provider} — سداد مبكر`,
+          planId,
+          planRole: "settlement",
+          planLinkedAt: Date.now(),
+        };
+        set((s) => ({
+          transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions],
+          installmentPlans: (s.installmentPlans ?? []).map((x) =>
+            x.id === planId ? { ...x, status: "settled" as const, updatedAt: Date.now() } : x
+          ),
+          ...clearTombstone(s.deleted, id),
+        }));
+        return id;
+      },
+
+      // تذكيرٌ متكرّر مربوطٌ بالخطة: يظهر في «القادم قريباً» و«أقرب التزام» ولا
+      // يولّد معاملةً أبداً (generationMode: "reminder")، فلا يتضاعف القسط.
+      linkInstallmentReminder: (planId) => {
+        const st = get();
+        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
+        if (!plan) return;
+        if (plan.recurringId && st.recurring.some((r) => r.id === plan.recurringId)) return;
+        const rid = uid();
+        const day = Math.min(28, Math.max(1, parseDate(plan.firstDueDate).getDate() || 1));
+        const rule: RecurringTransaction = {
+          id: rid,
+          amount: plan.installmentAmount,
+          category: plan.category ?? st.categories[0]?.id ?? "",
+          note: `${plan.name || plan.provider} (قسط)`,
+          unit: "شهري",
+          every: 1,
+          dayOfMonth: day,
+          anchorDate: plan.firstDueDate,
+          active: true,
+          generationMode: "reminder",
+          planId,
+          updatedAt: Date.now(),
+        };
+        set((s) => ({
+          recurring: [...s.recurring, rule],
+          installmentPlans: (s.installmentPlans ?? []).map((p) =>
+            p.id === planId ? { ...p, recurringId: rid, updatedAt: Date.now() } : p
+          ),
+        }));
       },
 
       setBudget: (category, cap) =>
@@ -1210,6 +1389,7 @@ export const useAppStore = create<AppStore>()(
           journalEntries: data.journalEntries ?? [],
           habits: data.habits ?? [],
           recurring: data.recurring ?? [],
+          installmentPlans: data.installmentPlans ?? [],
           budgets: data.budgets ?? [],
           categories: data.categories ?? DEFAULT_CATEGORIES,
           reserves: data.reserves ?? [],
@@ -1241,6 +1421,7 @@ export const useAppStore = create<AppStore>()(
           journalEntries: s.journalEntries,
           habits: s.habits,
           recurring: s.recurring,
+          installmentPlans: s.installmentPlans ?? [],
           budgets: s.budgets,
           categories: s.categories,
           reserves: s.reserves,
@@ -1267,7 +1448,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 13,
+      version: 14,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -1464,6 +1645,25 @@ export const useAppStore = create<AppStore>()(
               },
             };
           }
+        }
+
+        // v14 يُضيف الأقساط (`installmentPlans`) ويُصرّح بدلالة الالتزامات المتكرّرة
+        // القديمة: كلّها كانت تولّد معاملاتٍ تلقائياً، فتُختم `generationMode:
+        // "auto"` صراحةً (والغياب يبقى مقروءاً auto عبر generationModeOf، فالبيانات
+        // القادمة من جهازٍ لم يُرقَّ بعد تعمل كما كانت). `updatedAt: 0` كي يفوز
+        // عليها أيّ تعديلٍ حقيقيٍّ لاحق في الدمج، ولا تطغى ترقيةٌ على تعديلٍ حديث
+        // من الجهاز الآخر. لا معاملةً تُنشأ ولا تُحذف في هذه المهاجرة.
+        if (version < 14) {
+          const rec = ((state.recurring as RecurringTransaction[]) ?? []).map((r) => ({
+            ...r,
+            generationMode: r.generationMode ?? ("auto" as const),
+            updatedAt: r.updatedAt ?? 0,
+          }));
+          state = {
+            ...state,
+            recurring: rec,
+            installmentPlans: state.installmentPlans ?? [],
+          };
         }
 
         return state as unknown as AppData;

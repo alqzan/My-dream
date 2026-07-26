@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
@@ -10,6 +10,7 @@ import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { CategoryManager } from "@/components/finance/CategoryManager";
 import { ReserveFunds } from "@/components/finance/ReserveFunds";
+import { InstallmentPlans } from "@/components/finance/InstallmentPlans";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceGlance } from "@/components/finance/FinanceGlance";
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark } from "lucide-react";
+import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock } from "lucide-react";
 import { getCategoryInfo, normalizeArabic, formatAmount, today } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
@@ -63,7 +64,7 @@ function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
 
 export default function FinancePage() {
   const {
-    transactions, recurring, categories, dailyBudget, reserves, budgets, salaryDay, monthlyIncome,
+    transactions, recurring, installmentPlans, categories, dailyBudget, reserves, budgets, salaryDay, monthlyIncome,
     deleteTransaction, addTransaction,
   } = useAppStore();
 
@@ -83,7 +84,7 @@ export default function FinancePage() {
   // حالة فتح أقسام «الخطة»: افتراضٌ ثابت (الميزانية اليومية) يطابق الخادم، ثمّ
   // نطبّق التفضيل المحفوظ محلياً + أي قسمٍ يطلبه رابطٌ عميق بعد التركيب.
   const [openSections, setOpenSections] = useState<Record<PlanSectionId, boolean>>(
-    () => defaultPlanOpen({ budgetAttention: false, negativeBalance: false })
+    () => defaultPlanOpen({ budgetAttention: false, negativeBalance: false, installmentOverdue: false })
   );
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
 
@@ -103,7 +104,7 @@ export default function FinancePage() {
   }, []);
 
   // الروابط العميقة + التفضيل المحفوظ: ‎?open=add|recurring|categories‎ تفتح
-  // النافذة، و‎#daily/#budgets/#recurring/#reserves/#history‎ تفتح القسم المطويّ
+  // النافذة، و‎#daily/#budgets/#recurring/#installments/#reserves/#history‎ تفتح القسم المطويّ
   // المقصود *قبل* التمرير إليه. التفضيل المحفوظ يُطبَّق أوّلاً ثمّ يعلوه فتح الرابط.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -117,9 +118,13 @@ export default function FinancePage() {
     const saved = readSavedSections();
     const hash = window.location.hash.slice(1);
     const hashSection = planSectionFromHash(hash);
-    if (saved || hashSection) {
-      setOpenSections((prev) => ({ ...prev, ...(saved ?? {}), ...(hashSection ? { [hashSection]: true } : {}) }));
-    }
+    // بلا تفضيلٍ محفوظ نفتح ما يحتاج انتباهاً فعلاً (قسطٌ فائت ← سقفٌ متجاوَز ←
+    // الميزانية اليومية). القيم تُقرأ من مرجعٍ (ref) فيبقى الأثر لمرّة الوصول
+    // وحدها ولا يُقحم قيماً متغيّرة في اعتماديّاته.
+    const base = saved ?? defaultPlanOpen(attentionRef.current);
+    setOpenSections((prev) => ({
+      ...prev, ...base, ...(hashSection ? { [hashSection]: true } : {}),
+    }));
     if (hash) {
       const t = setTimeout(() => {
         document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -152,15 +157,23 @@ export default function FinancePage() {
   // «نظرة اليوم» + تنبيهات السقوف — تجميعٌ عرضيّ يعيد استعمال دوالّ الحساب القائمة.
   const overview = useMemo(
     () => buildFinanceOverview({
-      dailyBudget, transactions, reserves, recurring,
+      dailyBudget, transactions, reserves, recurring, installmentPlans,
       salaryDay: salaryDay ?? 27, monthPrefix: currentMonth, todayStr: today(),
     }),
-    [dailyBudget, transactions, reserves, recurring, salaryDay, currentMonth]
+    [dailyBudget, transactions, reserves, recurring, installmentPlans, salaryDay, currentMonth]
   );
   const alerts = useMemo(
     () => budgetAlerts(budgets, transactions, categories, monthlyIncome, currentMonth),
     [budgets, transactions, categories, monthlyIncome, currentMonth]
   );
+  // ما يستحقّ الفتح عند أوّل زيارةٍ بلا تفضيلٍ محفوظ — في مرجعٍ يُقرأ داخل تأثير
+  // الوصول (لا يُعاد تشغيله مع كل تغيّر رقم).
+  const attentionRef = useRef({ budgetAttention: false, negativeBalance: false, installmentOverdue: false });
+  attentionRef.current = {
+    budgetAttention: alerts.over > 0 || alerts.near > 0,
+    negativeBalance: overview.hasBudget && overview.availableToday < 0,
+    installmentOverdue: overview.installments.overdueCount > 0,
+  };
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
 
@@ -293,6 +306,28 @@ export default function FinancePage() {
             <Repeat size={15} className="text-finance" />
             إدارة المصاريف المتكررة
           </button>
+        </Card>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="installments"
+        title="الأقساط"
+        icon={<CalendarClock size={16} />}
+        open={openSections.installments}
+        onToggle={() => toggleSection("installments")}
+        summary={
+          overview.installments.activeCount > 0
+            ? `${formatAmount(overview.installments.activeCount)} خطة · متبقٍّ ${formatAmount(overview.installments.remainingTotal)} ر.س`
+            : "لا أقساط"
+        }
+        badge={
+          overview.installments.overdueCount > 0
+            ? <AlertBadge>{formatAmount(overview.installments.overdueCount)} متأخّر</AlertBadge>
+            : undefined
+        }
+      >
+        <Card>
+          <InstallmentPlans />
         </Card>
       </CollapsibleSection>
 

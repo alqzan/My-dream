@@ -153,6 +153,9 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     journalEntries: g("journalEntries", []),
     habits: g("habits", []),
     recurring: g("recurring", []),
+    // خطط الأقساط تدخل النسخة الاحتياطية كأيّ مجموعة: تصديرها يحملها (snapshot)،
+    // والاستعادة تُبقيها؛ ملفٌّ قديم بلا الحقل يُستعاد كقائمةٍ فارغة بلا خطأ.
+    installmentPlans: g("installmentPlans", []),
     budgets: g("budgets", []),
     categories: g("categories", DEFAULT_CATEGORIES),
     reserves: g("reserves", []),

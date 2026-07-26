@@ -10,8 +10,10 @@ import {
   longestStreak,
   formatAmount,
   arabicMonthName,
+  quranActivityDates,
   today,
 } from "@/lib/utils";
+import { completedDayDates } from "@/lib/dayAggregator";
 import { Card } from "@/components/ui/Card";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { StatInstrument } from "@/components/stats/StatInstrument";
@@ -27,7 +29,10 @@ const MonthlyBars = dynamic(
 import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck } from "lucide-react";
 
 export default function StatsPage() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, readingGoal, frozenHabits } = useAppStore();
+  const {
+    journalEntries, readingLogs, transactions, books, prayerLogs, readingGoal, frozenHabits,
+    quranWird, quranHifz, quranReflections, quranKhatma,
+  } = useAppStore();
 
   const year = today().slice(0, 4);
 
@@ -66,16 +71,15 @@ export default function StatsPage() {
   const journalActive = !frozen.has("core:journal");
   const readingActive = !frozen.has("core:reading");
 
-  // «السلسلة الكاملة» = الأيام التي أُتمّت فيها كلّ الطقوس النشطة (مذكرة/قراءة).
-  const jDates = new Set(journalEntries.map((e) => e.date));
-  const rDates = new Set(readingLogs.map((l) => l.date));
-  const activeSets = [
-    ...(journalActive ? [jDates] : []),
-    ...(readingActive ? [rDates] : []),
-  ];
-  const completionDates = activeSets.length
-    ? [...activeSets[0]].filter((d) => activeSets.every((s) => s.has(d)))
-    : [];
+  // «السلسلة الكاملة» = «اليوم المكتمل» بتعريفه المركزي الوحيد (مذكرة · قراءة ·
+  // وِرد قرآني، ويُستثنى المجمّد) — نفس ما يقود تقويم الرئيسية وشارة DayView. كان
+  // هنا تعريفٌ ثالثٌ يعرف المذكرة والقراءة فقط، فاختلف الرقم بين الشاشتين.
+  const completionDates = completedDayDates({
+    journalEntries,
+    readingLogs,
+    quranActivity: quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }),
+    frozenHabits,
+  });
 
   const streaks = [
     {

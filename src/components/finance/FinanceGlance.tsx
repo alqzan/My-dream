@@ -12,7 +12,7 @@ export function FinanceGlance({
 }: {
   overview: FinanceOverview;
   categories: FinanceCategoryDef[];
-  onGo: (section: "daily" | "budgets" | "recurring" | "reserves" | "history") => void;
+  onGo: (section: "daily" | "budgets" | "recurring" | "installments" | "reserves" | "history") => void;
 }) {
   const { hasBudget, availableToday, monthSpend, daysToSalary, reservesTotal, hasReserves, nearest } = overview;
   const negative = hasBudget && availableToday < 0;
@@ -64,16 +64,18 @@ export function FinanceGlance({
           value={daysToSalary === 0 ? "اليوم" : daysToSalary === 1 ? "غداً" : `${formatAmount(daysToSalary)} يوم`}
           onClick={() => onGo("daily")}
         />
+        {/* «أقرب التزام» يجمع المتكرّر والقسط في بطاقةٍ واحدة (بلا بطاقة أقساط
+            دائمة)، وينقل إلى قسم مصدره. المصدر مذكورٌ في السطر الصغير فلا يلتبس. */}
         <GlanceTile
           icon={<span className="text-[13px]">📌</span>}
           label="أقرب التزام"
           value={nearest ? `${formatAmount(nearest.amount)} ر.س` : "لا التزامات"}
           sub={
             nearest
-              ? `${getCategoryInfo(categories, nearest.category).icon} ${nearest.note || getCategoryInfo(categories, nearest.category).label} · ${nearest.daysUntil === 0 ? "اليوم" : nearest.daysUntil === 1 ? "غداً" : `خلال ${nearest.daysUntil} يوم`}`
+              ? `${nearest.kind === "installment" ? "🧾" : getCategoryInfo(categories, nearest.category).icon} ${nearest.note || getCategoryInfo(categories, nearest.category).label} · ${nearest.daysUntil === 0 ? "اليوم" : nearest.daysUntil === 1 ? "غداً" : `خلال ${nearest.daysUntil} يوم`}`
               : "أضِف التزاماً متكرّراً"
           }
-          onClick={() => onGo("recurring")}
+          onClick={() => onGo(nearest?.kind === "installment" ? "installments" : "recurring")}
         />
         <GlanceTile
           icon={<Landmark size={14} />}

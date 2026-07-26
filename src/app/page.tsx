@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
+import { completedDayDates, activeRitualLabels } from "@/lib/dayAggregator";
 import {
-  getDailyCompletionDates,
   today,
   toDateStr,
   formatDate,
@@ -48,16 +48,23 @@ export default function Dashboard() {
   const [quickExpense, setQuickExpense] = useState(false);
 
   const todayStr = today();
-  const completionDates = getDailyCompletionDates(journalEntries, readingLogs);
 
   // العادات المجمّدة تختفي من التطبيق كلّه: لا تظهر أقمارها على مدار السنة ولا
   // تُحتسب. القراءة/المذكرة/الوِرد المجمّدة تُخفى قمرُها، والعادات المخصّصة
   // المجمّدة تُستثنى من قمر «العادات» الجامع.
   const frozen = new Set(frozenHabits ?? []);
 
+  // السلسلة والتقويم والاحتفال — كلّها من تعريف «اليوم المكتمل» المركزي
+  // (مذكرة · قراءة · وِرد، ويُستثنى المجمّد)، فلا يختلف يومٌ مكتملٌ بين شاشتين.
+  const quranDates = quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma });
+  const completionDates = completedDayDates({
+    journalEntries, readingLogs, quranActivity: quranDates, frozenHabits,
+  });
+  const ritualLabels = activeRitualLabels(frozenHabits);
+
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
-  const allDoneToday = hasTodayJournal && hasTodayReading;
+  const allDoneToday = completionDates.includes(todayStr);
 
   // «أقمار اليوم» — today's done-state for each daily domain, reusing the
   // exact predicates the domain widgets use (PrayerOrbit / DailyHabits), so
@@ -67,7 +74,7 @@ export default function Dashboard() {
   // قمر «الوِرد» يُضاء بأيّ نشاطٍ قرآني اليوم (حفظ/مراجعة/تدبّر/ختمة/ورد) تماماً
   // كبطاقة «وِرد اليوم» و«خلاصة اليوم» — لا بنقرة الوِرد اليدوية وحدها، وإلا بقي
   // القمر مطفأً رغم إتمام الوِرد عبر الحفظ أو التدبّر.
-  const hasTodayWird = quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }).has(todayStr);
+  const hasTodayWird = quranDates.has(todayStr);
   const hasHifzPlan = !!quranHifz?.plan;
   const hasTodayHifz = (quranHifz?.sessions ?? []).some((s) => s.date === todayStr);
 
@@ -189,7 +196,9 @@ export default function Dashboard() {
 
       <Card className="animate-fade-up stagger-5">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-gray-700">سلسلة يومية — مذكرة + قراءة</span>
+          <span className="text-sm font-semibold text-gray-700">
+            {ritualLabels.length ? `سلسلة يومية — ${ritualLabels.join(" + ")}` : "سلسلة يومية"}
+          </span>
           <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
         </div>
         <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />

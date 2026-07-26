@@ -4,8 +4,10 @@
 // للاختبار حتى تبقى الصفحة رقيقةً.
 import type {
   DailyBudget, Transaction, ReserveFund, RecurringTransaction, Budget, FinanceCategoryDef,
+  InstallmentPlan,
 } from "./types";
-import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate } from "./utils";
+import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr } from "./utils";
+import { installmentsOverview, type InstallmentsOverview } from "./installments";
 
 export interface NearestCommitment {
   id: string;
@@ -14,6 +16,9 @@ export interface NearestCommitment {
   amount: number;
   due: string; // YYYY-MM-DD
   daysUntil: number;
+  // من أين جاء الالتزام: قاعدةٌ متكرّرة أم قسطٌ في خطة — فتنقل البطاقة إلى قسمه.
+  kind: "recurring" | "installment";
+  planId?: string;
 }
 
 export interface FinanceOverview {
@@ -24,10 +29,13 @@ export interface FinanceOverview {
   reservesTotal: number;
   hasReserves: boolean;
   nearest: NearestCommitment | null;
+  installments: InstallmentsOverview;
 }
 
 // أقسام «الخطة المالية» القابلة للطيّ (مصادر الروابط العميقة أيضاً).
-export const PLAN_SECTIONS = ["daily", "budgets", "recurring", "reserves"] as const;
+// «الأقساط» بعد «المتكررة» وقبل «الاحتياطيات» — ترتيبٌ يقرأ من الالتزام الثابت
+// إلى الالتزام المؤقّت ثمّ إلى ما جُنِّب.
+export const PLAN_SECTIONS = ["daily", "budgets", "recurring", "installments", "reserves"] as const;
 export type PlanSectionId = (typeof PLAN_SECTIONS)[number];
 
 // عدد الأيام حتى الراتب القادم (0 = يوم الراتب نفسه). عرضٌ محض، لا يمسّ أيّ حساب.
@@ -42,18 +50,56 @@ export function daysUntilSalary(salaryDay: number, todayStr: string): number {
   return Math.max(0, Math.round((salaryDate.getTime() - parseDate(todayStr).getTime()) / 86400000));
 }
 
-// أقرب التزامٍ متكرّرٍ قادم (أصغر nextDueDate بين المفعّلة).
-export function nearestCommitment(recurring: RecurringTransaction[], now: Date): NearestCommitment | null {
-  const active = recurring.filter((r) => r.active);
-  if (!active.length) return null;
-  const best = active
-    .map((r) => ({ r, due: nextDueDate(r, now) }))
-    .sort((a, b) => a.due.getTime() - b.due.getTime())[0];
-  const { r, due } = best;
+// أقرب التزامٍ قادم — متكرّرٌ **أو** قسطٌ من خطة، في بطاقةٍ واحدة (لا بطاقة أقساط
+// دائمة في واجهة اليوم). منعُ التكرار مقصود: خطةٌ لها تذكيرٌ متكرّر (recurringId)
+// تظهر مرّةً واحدة — نُسقِط قاعدة التذكير ونُبقي القسط نفسه، وإلا رأى المالك
+// الالتزام مرّتين بنفس المبلغ والموعد.
+export function nearestCommitment(
+  recurring: RecurringTransaction[],
+  now: Date,
+  extra?: { plans?: InstallmentPlan[]; transactions?: Transaction[] }
+): NearestCommitment | null {
+  const todayStr = toDateStr(now);
+  const plans = extra?.plans ?? [];
+  const transactions = extra?.transactions ?? [];
   const startOfToday = new Date(now.toDateString()).getTime();
-  const daysUntil = Math.max(0, Math.round((due.getTime() - startOfToday) / 86400000));
-  const key = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
-  return { id: r.id, note: r.note, category: r.category, amount: r.amount, due: key, daysUntil };
+  const daysFrom = (t: number) => Math.max(0, Math.round((t - startOfToday) / 86400000));
+
+  const candidates: NearestCommitment[] = [];
+
+  // معرّفات قواعد التذكير التي تخصّ خططاً — تُستبعد فلا يُحتسب الالتزام مرّتين.
+  const planReminderIds = new Set(
+    plans.filter((p) => p.status === "active" && p.recurringId).map((p) => p.recurringId as string)
+  );
+  for (const r of recurring) {
+    if (!r.active || planReminderIds.has(r.id) || r.planId) continue;
+    const due = nextDueDate(r, now);
+    candidates.push({
+      id: r.id, note: r.note, category: r.category, amount: r.amount,
+      due: toDateStr(due), daysUntil: daysFrom(due.getTime()), kind: "recurring",
+    });
+  }
+
+  const inst = installmentsOverview(plans, transactions, todayStr);
+  if (inst.next) {
+    const { plan, row } = inst.next;
+    candidates.push({
+      id: `plan:${plan.id}:${row.no}`,
+      note: plan.name || plan.provider,
+      category: plan.category ?? "",
+      amount: row.amount,
+      due: row.due,
+      daysUntil: daysFrom(parseDate(row.due).getTime()),
+      kind: "installment",
+      planId: plan.id,
+    });
+  }
+
+  if (!candidates.length) return null;
+  // الأقرب موعداً؛ وعند التساوي يتقدّم القسط (موعده مُلزَم بجهةٍ خارجية).
+  return candidates.sort(
+    (a, b) => a.due.localeCompare(b.due) || (a.kind === b.kind ? 0 : a.kind === "installment" ? -1 : 1)
+  )[0];
 }
 
 // عدد السقوف المتجاوزة/القريبة هذا الشهر — نفس منطق insights/BudgetTracker
@@ -84,6 +130,7 @@ export function buildFinanceOverview(data: {
   transactions: Transaction[];
   reserves: ReserveFund[];
   recurring: RecurringTransaction[];
+  installmentPlans?: InstallmentPlan[];
   salaryDay: number;
   monthPrefix: string; // YYYY-MM للشهر الحالي
   todayStr: string;
@@ -98,6 +145,7 @@ export function buildFinanceOverview(data: {
     .filter((t) => t.date.startsWith(data.monthPrefix))
     .reduce((s, t) => s + t.amount, 0);
   const reservesTotal = data.reserves.reduce((s, f) => s + reserveBalance(f, data.transactions), 0);
+  const plans = data.installmentPlans ?? [];
   return {
     hasBudget,
     availableToday,
@@ -105,14 +153,23 @@ export function buildFinanceOverview(data: {
     daysToSalary: daysUntilSalary(data.salaryDay, data.todayStr),
     reservesTotal,
     hasReserves: data.reserves.length > 0,
-    nearest: nearestCommitment(data.recurring, now),
+    nearest: nearestCommitment(data.recurring, now, { plans, transactions: data.transactions }),
+    installments: installmentsOverview(plans, data.transactions, data.todayStr),
   };
 }
 
 // حالة الفتح الافتراضية لأقسام الخطة: نفتح ما يحتاج انتباهاً، وإلا الميزانية
 // اليومية. تُستعمل فقط عند غياب تفضيلٍ محفوظٍ بالجهاز.
-export function defaultPlanOpen(attention: { budgetAttention: boolean; negativeBalance: boolean }): Record<PlanSectionId, boolean> {
-  const base: Record<PlanSectionId, boolean> = { daily: false, budgets: false, recurring: false, reserves: false };
+export function defaultPlanOpen(attention: {
+  budgetAttention: boolean;
+  negativeBalance: boolean;
+  installmentOverdue?: boolean;
+}): Record<PlanSectionId, boolean> {
+  const base: Record<PlanSectionId, boolean> = {
+    daily: false, budgets: false, recurring: false, installments: false, reserves: false,
+  };
+  // قسطٌ فائت أعجل من سقفٍ مُتجاوَز: له جهةٌ خارجية تطالب به.
+  if (attention.installmentOverdue) return { ...base, installments: true };
   if (attention.budgetAttention) return { ...base, budgets: true };
   return { ...base, daily: true }; // يشمل حالة الرصيد السالب (القسم نفسه)
 }

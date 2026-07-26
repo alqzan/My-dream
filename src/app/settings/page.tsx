@@ -4,9 +4,9 @@ import { DataHealthCard } from "@/components/settings/DataHealthCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
 import { BrandMark } from "@/components/layout/BrandMark";
-
-// Keep in step with package.json's version when it bumps.
-const APP_VERSION = "0.1.0";
+// الإصدار من مصدره الوحيد (src/lib/version.ts) — لا رقمَ مكتوباً بيدٍ هنا يتخلّف
+// عن package.json. الرقم = عدد التعديلات الجوهرية منذ أوّل نسخة مستقرة.
+import { APP_VERSION, APP_BUILD } from "@/lib/version";
 
 // Home for device-level controls that aren't statistics — backups, the
 // privacy lock, and the sync key. They used to live at the bottom of /stats;
@@ -39,6 +39,7 @@ export default function SettingsPage() {
         <BrandMark size={30} />
         <p className="text-base font-bold text-gray-500 dark:text-gray-400">مدار</p>
         <p className="text-xs text-gray-400">مساحتك الشخصية · الإصدار {APP_VERSION}</p>
+        <p className="text-[10px] text-gray-300 dark:text-gray-500">التعديل رقم {APP_BUILD} منذ أوّل نسخة مستقرة</p>
       </footer>
     </div>
   );

@@ -5,7 +5,7 @@
 import type {
   Transaction, JournalEntry, ReadingLog, Book, Habit, Budget,
   FinanceCategoryDef, ReserveFund, PrayerLog, DailyBudget, FutureLetter,
-  HifzState, KhatmaState,
+  HifzState, KhatmaState, InstallmentPlan,
 } from "./types";
 import { PRAYERS } from "./types";
 import {
@@ -13,6 +13,7 @@ import {
   computeDailyBudgetStatus, budgetLimit, getMainCategory, reserveBalance,
   formatAmount, today, toDateStr, parseDate,
 } from "./utils";
+import { installmentsOverview, describeDueIn, daysBetween } from "./installments";
 import { idToSurahAyah, SURAHS, describeRange } from "./quran/meta";
 import { plannedPortion, openMistakes, testDue, mistakeStreak, MISTAKE_MASTERY } from "./quran/hifz";
 import { buildTodayPlan } from "./quran/session";
@@ -56,6 +57,7 @@ interface InsightData {
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null;
   futureLetters: FutureLetter[];
+  installmentPlans?: InstallmentPlan[];
   quranHifz?: HifzState | null;
   quranKhatma?: KhatmaState | null;
   lastBackup?: string | null; // YYYY-MM-DD لآخر تصدير نسخة احتياطية
@@ -92,7 +94,7 @@ export function generateInsights(data: InsightData): Insight[] {
   const {
     transactions, journalEntries, readingLogs, books, habits,
     budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
-    quranHifz, quranKhatma, lastBackup,
+    installmentPlans, quranHifz, quranKhatma, lastBackup,
   } = data;
 
   /* ---------- القرآن (يقود «خطوتك الآن» حين يكون هناك محفوظ) ---------- */
@@ -277,6 +279,25 @@ export function generateInsights(data: InsightData): Insight[] {
         domain: "finance", dedupeKey: "finance:surplus", icon: "🌟", tone: "positive", priority: 70,
         title: "فائضٌ متراكم", href: "/finance#reserves", actionLabel: "حوّل للاحتياطي", validUntil: todayStr,
         body: `فائضك المتراكم ${formatAmount(status.balance)} ر.س — انضباط ممتاز! حوّله للاحتياطي أو اتركه للفوائض عند الراتب.`,
+      });
+    }
+  }
+
+  // الأقساط: **تنبيهٌ واحد فقط** — أقرب قسطٍ مستحقٍّ أو متأخّر عبر كل الخطط. لا
+  // بطاقة دائمة في واجهة اليوم ولا تنبيهٌ لكل خطة، فلا يتحوّل التذكير إلى ضجيج.
+  const instOverview = installmentsOverview(installmentPlans ?? [], transactions, todayStr);
+  if (instOverview.next) {
+    const { plan, row } = instOverview.next;
+    const days = daysBetween(todayStr, row.due);
+    if (days <= 3) {
+      const late = days < 0;
+      add({
+        domain: "finance", dedupeKey: "finance:installment-due", icon: "🧾",
+        title: late ? "قسطٌ متأخّر" : "قسطٌ قريب",
+        href: "/finance#installments", actionLabel: "افتح الأقساط",
+        tone: late ? "warning" : "tip", priority: late ? 92 : 74,
+        body: `قسط «${plan.name || plan.provider}» ${formatAmount(row.amount)} ر.س ${describeDueIn(days)}`
+          + (instOverview.overdueCount > 1 ? ` — وعندك ${instOverview.overdueCount} أقساط متأخّرة.` : "."),
       });
     }
   }

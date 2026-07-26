@@ -1,6 +1,83 @@
 import type { Transaction, JournalEntry, ReadingLog, Book, Habit, PrayerLog } from "./types";
 import { countDayPrayers } from "./utils";
 
+// ===================== «اليوم المكتمل» — تعريفٌ واحد =====================
+// الطقوس الأساسية الثلاثة: مذكرة · قراءة · وِرد قرآني. ما جُمّد منها لا يُطالَب
+// به فلا يكسر الاكتمال ولا يُحتسب ضمنه. المالية والصلاة خارج التعريف عمداً
+// (الصرف ليس شرط كل يوم، والصلاة لها سلسلتها الخاصة).
+//
+// هذه هي **الدالة المركزية**: شارة اليوم في DayView، وتقويم السلسلة في الرئيسية،
+// ومعالم MilestoneWatcher — كلّها تقرأ منها، فلا يختلف يومٌ «مكتمل» في شاشةٍ عن
+// أخرى (كان في utils.ts تعريفٌ ثانٍ يعرف المذكرة والقراءة فقط).
+export const CORE_RITUALS = [
+  { key: "core:journal", label: "مذكرة" },
+  { key: "core:reading", label: "قراءة" },
+  { key: "core:wird", label: "وِرد" },
+] as const;
+
+export interface DayRitualState {
+  key: string;
+  label: string;
+  done: boolean;
+}
+
+export function dayRitualStates(d: {
+  hasJournal: boolean;
+  hasReading: boolean;
+  quranActive: boolean;
+  frozenHabits?: string[];
+}): DayRitualState[] {
+  const frozen = new Set(d.frozenHabits ?? []);
+  const done: Record<string, boolean> = {
+    "core:journal": d.hasJournal,
+    "core:reading": d.hasReading,
+    "core:wird": d.quranActive,
+  };
+  return CORE_RITUALS.filter((r) => !frozen.has(r.key)).map((r) => ({
+    key: r.key,
+    label: r.label,
+    done: done[r.key],
+  }));
+}
+
+// يومٌ مكتمل = أُتمّت كلّ الطقوس النشطة (وهناك طقسٌ نشطٌ أصلاً).
+export function isDayComplete(states: DayRitualState[]): boolean {
+  return states.length > 0 && states.every((r) => r.done);
+}
+
+// أسماء الطقوس المطلوبة اليوم — لعناوين صادقة («سلسلة يومية — مذكرة + قراءة»
+// تتبدّل مع التجميد بدل أن تكذب).
+export function activeRitualLabels(frozenHabits?: string[]): string[] {
+  const frozen = new Set(frozenHabits ?? []);
+  return CORE_RITUALS.filter((r) => !frozen.has(r.key)).map((r) => r.label);
+}
+
+// كل الأيام المكتملة (للسلسلة والتقويم والمعالم) — بنفس تعريف dayRitualStates
+// بالحرف. نمرّ على الأيام التي فيها أيّ نشاطٍ فقط، فلا حاجة لمسح تقويمٍ كامل.
+export function completedDayDates(src: {
+  journalEntries: { date: string }[];
+  readingLogs: { date: string }[];
+  quranActivity: Iterable<string>;
+  frozenHabits?: string[];
+}): string[] {
+  const jDates = new Set(src.journalEntries.map((e) => e.date));
+  const rDates = new Set(src.readingLogs.map((l) => l.date));
+  const qDates = new Set(src.quranActivity);
+  const candidates = new Set<string>([...jDates, ...rDates, ...qDates]);
+  return [...candidates]
+    .filter((date) =>
+      isDayComplete(
+        dayRitualStates({
+          hasJournal: jDates.has(date),
+          hasReading: rDates.has(date),
+          quranActive: qDates.has(date),
+          frozenHabits: src.frozenHabits,
+        })
+      )
+    )
+    .sort();
+}
+
 export interface DaySummary {
   date: string;
   // كل مذكرات هذا اليوم — قد يكون فيها أكثر من مذكرة واحدة.
@@ -54,21 +131,18 @@ export function aggregateDay(
 
   const quranActive = !!data.quranActive;
 
-  // «اليوم المكتمل» يحترم الطقوس المجمّدة والقرآن: الطقوس الأساسية الثلاثة
-  // (مذكرة · قراءة · وِرد قرآني)، ويُستثنى منها ما جُمّد فلا يُطالَب به. يومٌ
-  // مكتمل = أُتمّت كلّ الطقوس النشطة (غير المجمّدة)، فلا القرآن مُهمَل ولا الطقس
-  // المجمّد يكسر الاكتمال. (المالية والصلاة خارج هذا التعريف عمداً كما السلسلة.)
-  const frozen = new Set(data.frozenHabits ?? []);
-  const rituals = [
-    { key: "core:journal", label: "مذكرة", done: journalEntries.length > 0 },
-    { key: "core:reading", label: "قراءة", done: dayLogs.length > 0 },
-    { key: "core:wird", label: "وِرد", done: quranActive },
-  ].filter((r) => !frozen.has(r.key));
+  // «اليوم المكتمل» — من الدالة المركزية أعلاه، فلا يوجد تعريفٌ ثانٍ في التطبيق.
+  const rituals = dayRitualStates({
+    hasJournal: journalEntries.length > 0,
+    hasReading: dayLogs.length > 0,
+    quranActive,
+    frozenHabits: data.frozenHabits,
+  });
 
   const activeRitualLabels = rituals.map((r) => r.label);
   const activeRitualCount = rituals.length;
   const completionScore = rituals.filter((r) => r.done).length;
-  const complete = activeRitualCount > 0 && completionScore === activeRitualCount;
+  const complete = isDayComplete(rituals);
 
   const prayerLog = data.prayerLogs.find((l) => l.date === date);
   const { prayed: prayersCount, mosque: mosqueCount } = countDayPrayers(prayerLog);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateDay } from "./dayAggregator";
+import { aggregateDay, completedDayDates, activeRitualLabels } from "./dayAggregator";
 import type { JournalEntry, ReadingLog } from "./types";
 
 const D = "2026-07-20";
@@ -38,5 +38,65 @@ describe("aggregateDay — «اليوم المكتمل» يحترم القرآن
 
   it("an empty day is not complete", () => {
     expect(aggregateDay(D, base()).complete).toBe(false);
+  });
+});
+
+describe("completedDayDates — تعريفٌ واحد للسلسلة وشارة اليوم", () => {
+  const A = "2026-07-18";
+  const B = "2026-07-19";
+
+  it("only counts a day where every active ritual is done (journal + reading + wird)", () => {
+    const dates = completedDayDates({
+      journalEntries: [j(A), j(B)],
+      readingLogs: [r(A), r(B)],
+      quranActivity: [A], // القرآن في A فقط
+    });
+    expect(dates).toEqual([A]);
+  });
+
+  it("agrees with aggregateDay day by day (no second definition anywhere)", () => {
+    const src = { journalEntries: [j(A), j(B)], readingLogs: [r(A)], quranActivity: [A, B] };
+    const dates = completedDayDates(src);
+    for (const date of [A, B]) {
+      const day = aggregateDay(date, base({
+        journalEntries: src.journalEntries,
+        readingLogs: src.readingLogs,
+        quranActive: src.quranActivity.includes(date),
+      }));
+      expect(dates.includes(date)).toBe(day.complete);
+    }
+  });
+
+  it("a frozen ritual is not required — the day still completes without it", () => {
+    const dates = completedDayDates({
+      journalEntries: [j(A)],
+      readingLogs: [],
+      quranActivity: [A],
+      frozenHabits: ["core:reading"],
+    });
+    expect(dates).toEqual([A]);
+  });
+
+  it("returns nothing when every ritual is frozen (nothing to complete)", () => {
+    expect(completedDayDates({
+      journalEntries: [j(A)], readingLogs: [r(A)], quranActivity: [A],
+      frozenHabits: ["core:journal", "core:reading", "core:wird"],
+    })).toEqual([]);
+  });
+
+  it("sorts ascending and never repeats a date", () => {
+    const dates = completedDayDates({
+      journalEntries: [j(B), j(A), j(A)],
+      readingLogs: [r(A), r(B)],
+      quranActivity: [A, B, B],
+    });
+    expect(dates).toEqual([A, B]);
+  });
+});
+
+describe("activeRitualLabels — عنوانٌ صادق يتبدّل مع التجميد", () => {
+  it("lists all three by default and drops a frozen one", () => {
+    expect(activeRitualLabels()).toEqual(["مذكرة", "قراءة", "وِرد"]);
+    expect(activeRitualLabels(["core:reading"])).toEqual(["مذكرة", "وِرد"]);
   });
 });
