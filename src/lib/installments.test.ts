@@ -3,6 +3,7 @@ import {
   installmentDueDates, planScheduleAmounts, planExpectedTotal, planMismatch,
   planPaid, planSchedule, planSummary, installmentsOverview, validatePlanDraft,
   describeDueIn, isPlanOpen, planPrincipal, planLinkedTransactions,
+  rowRemaining, isValidDateKey,
 } from "./installments";
 import type { InstallmentPlan, Transaction } from "./types";
 
@@ -293,5 +294,56 @@ describe("«الأصل المؤجّل» — الشراء مهب كاش، وال�
   it("ignores any deferred transaction even if it carries a payment role", () => {
     const ghost = pay({ id: "g", planRole: "installment", planInstallmentNo: 1, amount: 100, deferred: true });
     expect(planSummary(plan(), [ghost], "2026-03-01").paid).toBe(0);
+  });
+});
+
+describe("rowRemaining / paidRows — القسط المدفوع جزئياً", () => {
+  it("reports what is still owed on a partially paid row", () => {
+    const txs = [pay({ id: "half", planRole: "installment", planInstallmentNo: 1, amount: 40 })];
+    const rows = planSchedule(plan({ count: 3 }), txs, "2026-03-01");
+    expect(rows[0].paid).toBe(false);
+    expect(rows[0].paidAmount).toBe(40);
+    expect(rowRemaining(rows[0])).toBe(60); // لا 100
+    expect(rowRemaining(rows[1])).toBe(100);
+  });
+
+  it("never goes negative on an over-paid row", () => {
+    const txs = [pay({ id: "over", planRole: "installment", planInstallmentNo: 1, amount: 150 })];
+    const rows = planSchedule(plan({ count: 3 }), txs, "2026-03-01");
+    expect(rowRemaining(rows[0])).toBe(0);
+  });
+
+  it("counts completed installments for the «٣ من ١٢» display", () => {
+    const txs = [
+      pay({ id: "t1", planRole: "installment", planInstallmentNo: 1, amount: 100 }),
+      pay({ id: "t2", planRole: "installment", planInstallmentNo: 2, amount: 100 }),
+      pay({ id: "half", planRole: "installment", planInstallmentNo: 3, amount: 40 }), // جزئيّ
+    ];
+    const s = planSummary(plan(), txs, "2026-06-01");
+    expect(s.paidRows).toBe(2); // الجزئيّ غير مكتمل
+    expect(s.totalRows).toBe(10);
+    expect(s.next?.no).toBe(3);
+  });
+});
+
+describe("isValidDateKey — تاريخٌ صالح لا شكلٌ صالح", () => {
+  it("accepts real dates including leap 29 February", () => {
+    expect(isValidDateKey("2026-02-15")).toBe(true);
+    expect(isValidDateKey("2028-02-29")).toBe(true);
+    expect(isValidDateKey("2026-12-31")).toBe(true);
+  });
+  it("rejects impossible dates and bad shapes", () => {
+    expect(isValidDateKey("2026-13-45")).toBe(false);
+    expect(isValidDateKey("2026-02-30")).toBe(false);
+    expect(isValidDateKey("2026-00-10")).toBe(false);
+    expect(isValidDateKey("2026-2-5")).toBe(false);
+    expect(isValidDateKey("")).toBe(false);
+  });
+  it("generates no schedule at all for an impossible first due date", () => {
+    expect(installmentDueDates("2026-02-30", 3)).toEqual([]);
+    expect(validatePlanDraft({
+      provider: "تمارا", name: "x", totalPrice: 100, downPayment: 0,
+      installmentAmount: 50, count: 2, firstDueDate: "2026-13-01",
+    })).toEqual(["أول موعد استحقاق مطلوب"]);
   });
 });

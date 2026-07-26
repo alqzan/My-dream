@@ -181,6 +181,20 @@ export function planSectionFromHash(hash: string): PlanSectionId | null {
   return (PLAN_SECTIONS as readonly string[]).includes(hash) ? (hash as PlanSectionId) : null;
 }
 
+// أكبر مصروفٍ **نقديّ** واحد في مجموعة — يقارن بـ`cashOut` فيستبعد المؤجّل تماماً
+// (أصلُ خطةٍ بـ1200 لم يخرج من الحساب، فلا يصحّ أن يُسمّى «أكبر مصروف» ولا أن
+// يُقاس بربع الصرف). يرجع null إن لم يكن في المجموعة صرفٌ نقديّ أصلاً. نقيٌّ
+// ومختبَر، تستعمله صفحة «متابعة الصرف» بدل ترتيبٍ خامٍ على `amount`.
+export function biggestCashExpense(transactions: Transaction[]): Transaction | null {
+  let best: Transaction | null = null;
+  for (const t of transactions) {
+    const v = cashOut(t);
+    if (v <= 0) continue;
+    if (!best || v > cashOut(best)) best = t;
+  }
+  return best;
+}
+
 // شريحة «السجل» مع «إظهار المزيد»: أحدث أوّلاً (مُرتَّبة سلفاً)، وكم بقي.
 export function historySlice<T>(sorted: T[], limit: number): { visible: T[]; hasMore: boolean; remaining: number } {
   const visible = sorted.slice(0, Math.max(0, limit));

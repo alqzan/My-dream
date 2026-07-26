@@ -15,6 +15,7 @@ import {
   cashOut,
   cn,
 } from "@/lib/utils";
+import { biggestCashExpense } from "@/lib/financeOverview";
 import type { Transaction } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
@@ -210,9 +211,13 @@ export default function SpendInsightsPage() {
       list.push(`🪺 ${formatAmount(reserveTotal)} ر.س من صرف الفترة تحمّلها الاحتياطي بدل اليومية.`);
     }
 
-    const biggest = [...periodTx].sort((a, b) => b.amount - a.amount)[0];
-    if (biggest && total > 0 && biggest.amount / total > 0.25) {
-      list.push(`💸 أكبر مصروف واحد (${biggest.note || getMainCategory(categories, biggest.category).label}) = ${formatAmount(biggest.amount)} ر.س — ربع صرفك أو أكثر.`);
+    // «أكبر مصروف» بالنقد الخارج فعلاً (biggestCashExpense) — لا بـ`amount` الخام:
+    // أصلُ خطةِ أقساط مؤجّل بـ1200 كان يتصدّر القائمة وهو لم يُدفع، والنسبة تُقاس
+    // على إجماليٍّ لا يضمّه فتخرج مضلِّلة.
+    const biggest = biggestCashExpense(periodTx);
+    const biggestCash = biggest ? cashOut(biggest) : 0;
+    if (biggest && total > 0 && biggestCash / total > 0.25) {
+      list.push(`💸 أكبر مصروف واحد (${biggest.note || getMainCategory(categories, biggest.category).label}) = ${formatAmount(biggestCash)} ر.س — ربع صرفك أو أكثر.`);
     }
 
     // Month-end projection: current daily pace extended over the full month.

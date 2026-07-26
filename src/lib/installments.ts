@@ -41,12 +41,22 @@ const MAX_SCHEDULE_ROWS = 600;
 // أقصى عددٍ يقبله النموذج (عشر سنوات) — ما فوقه خطأُ إدخالٍ شبه مؤكّد.
 export const MAX_INSTALLMENT_COUNT = 120;
 
+// تاريخٌ صالحٌ فعلاً بصيغة YYYY-MM-DD — لا الشكل وحده: «2026-13-45» يطابق النمط
+// لكنه ليس يوماً، و`parseDate` كانت تُدوّره لتاريخٍ آخر بلا إشعار (شهر 13 → يناير
+// التالي). حارسٌ واحد يشترك فيه النموذج و«قسّط هذا المصروف» وتوليد الجدول.
+export function isValidDateKey(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(y, m, 0).getDate(); // آخر يوم في الشهر m
+}
+
 // مواعيد الاستحقاق: `count` موعداً شهرياً من `firstDueDate`. يوم المرساة هو يوم
 // أوّل استحقاق؛ في شهرٍ أقصر يُقلَّم لآخر يومٍ فيه (31 يناير → 28/29 فبراير) ثمّ
 // **يعود ليوم المرساة** في الشهر التالي — فلا يزحف الموعد للأبد بعد شهرٍ قصير.
 export function installmentDueDates(firstDueDate: string, count: number): string[] {
   const n = Math.min(Math.max(0, Math.floor(count) || 0), MAX_SCHEDULE_ROWS);
-  if (!n || !/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate)) return [];
+  if (!n || !isValidDateKey(firstDueDate)) return [];
   const first = parseDate(firstDueDate);
   const anchorDay = first.getDate();
   const baseIndex = first.getFullYear() * 12 + first.getMonth();
@@ -172,8 +182,16 @@ export function planSchedule(plan: InstallmentPlan, transactions: Transaction[],
   return rows;
 }
 
+// ما بقي على صفٍّ بعينه: قيمتُه ناقص ما رُبط به فعلاً. القسط قد يُدفع على دفعتين
+// (تحويلٌ ناقص ثمّ إكماله)، فتسجيلُ قيمته كاملةً ثانيةً يُضخّم المدفوع بلا حقّ.
+export function rowRemaining(row: Pick<ScheduleRow, "amount" | "paidAmount">): number {
+  return round2(Math.max(0, row.amount - row.paidAmount));
+}
+
 export interface PlanSummary {
   rows: ScheduleRow[];
+  paidRows: number; // كم قسطاً اكتمل دفعه (للعرض: «٣ من ١٢ قسطاً»)
+  totalRows: number; // عدد أقساط الجدول
   paid: number; // مجموع المعاملات المربوطة
   remaining: number; // max(0, totalPrice − المدفوع)
   pct: number; // 0..100 نسبة الإنجاز
@@ -209,6 +227,8 @@ export function planSummary(plan: InstallmentPlan, transactions: Transaction[], 
   }
   return {
     rows,
+    paidRows: rows.filter((r) => r.paid).length,
+    totalRows: rows.length,
     paid,
     remaining,
     pct,
@@ -276,7 +296,7 @@ export function validatePlanDraft(d: {
   else if (d.count > MAX_INSTALLMENT_COUNT) errors.push(`عدد الأقساط أكبر من المعقول (الحدّ ${MAX_INSTALLMENT_COUNT})`);
   if (!(d.installmentAmount > 0)) errors.push("قيمة القسط مطلوبة");
   if (d.downPayment < 0) errors.push("الدفعة الأولى لا تكون سالبة");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.firstDueDate)) errors.push("أول موعد استحقاق مطلوب");
+  if (!isValidDateKey(d.firstDueDate)) errors.push("أول موعد استحقاق مطلوب");
   return errors;
 }
 

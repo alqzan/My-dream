@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import type { InstallmentPlan } from "@/lib/types";
 import {
   planSummary, planExpectedTotal, validatePlanDraft, installmentsOverview,
-  describeDueIn, daysBetween, INSTALLMENT_STATUS_LABEL, MAX_INSTALLMENT_COUNT,
+  describeDueIn, daysBetween, INSTALLMENT_STATUS_LABEL, MAX_INSTALLMENT_COUNT, rowRemaining,
   type ScheduleRow,
 } from "@/lib/installments";
 import { uid, today, formatAmount, formatDateShort, round2, cn } from "@/lib/utils";
@@ -99,7 +99,9 @@ export function InstallmentPlans() {
               {overview.next.plan.name || overview.next.plan.provider} · القسط {overview.next.row.no}
             </div>
             <div className="text-[10px] text-gray-500">
-              {formatAmount(overview.next.row.amount)} ر.س · {describeDueIn(daysBetween(todayStr, overview.next.row.due))}
+              {formatAmount(rowRemaining(overview.next.row))} ر.س
+              {overview.next.row.paidAmount > 0 ? ` (باقي من ${formatAmount(overview.next.row.amount)})` : ""}
+              {" · "}{describeDueIn(daysBetween(todayStr, overview.next.row.due))}
             </div>
           </div>
           <button
@@ -193,6 +195,10 @@ function PlanCard({
               {categoryLabel ? ` · ${categoryLabel}` : ""}
               {` · ${formatAmount(plan.installmentAmount)} × ${formatAmount(plan.count)}`}
             </div>
+            {/* عدد الأقساط المكتملة صريحاً — «٣ من ١٢ قسطاً» أوضح من النسبة وحدها. */}
+            <div className="text-[11px] font-semibold text-gray-500 mt-0.5">
+              {formatAmount(s.paidRows)} من {formatAmount(s.totalRows)} قسطاً مكتملاً
+            </div>
           </div>
           <div className="text-right shrink-0">
             <div className="text-sm font-bold tabular-nums text-gray-800 dark:text-gray-100">
@@ -237,7 +243,8 @@ function PlanCard({
           onClick={() => payNextInstallment(plan.id)}
           className="w-full text-[11px] font-bold text-finance bg-finance/10 rounded-lg py-2 press"
         >
-          سجّلت دفع القسط {s.next.no} ({formatAmount(s.next.amount)} ر.س)
+          سجّلت دفع القسط {s.next.no} ({formatAmount(rowRemaining(s.next))} ر.س
+          {s.next.paidAmount > 0 ? " — الباقي عليه" : ""})
         </button>
       )}
 
@@ -301,9 +308,13 @@ function PlanCard({
                 onPay={() =>
                   recordInstallmentPayment(plan.id, {
                     role: row.isFinal ? "final" : "installment",
-                    amount: row.amount,
+                    // الباقي على الصفّ فقط (قد يكون دُفع جزئياً سابقاً).
+                    amount: rowRemaining(row),
                     installmentNo: row.no,
-                    date: row.due <= todayStr ? row.due : todayStr,
+                    // **تاريخ الدفع الفعليّ = اليوم** حتى للقسط المتأخّر: المعاملة
+                    // سجلٌّ لخروج النقد، وموعد الاستحقاق يبقى في جدول الخطة. كتابةُ
+                    // الموعد القديم تُغيّر صرف شهرٍ مضى وميزانيته المرحّلة.
+                    date: todayStr,
                   })
                 }
               />
@@ -432,6 +443,9 @@ function ScheduleRowView({
       </span>
       <span className="shrink-0 font-bold tabular-nums text-gray-700 dark:text-gray-200">
         {formatAmount(row.amount)}
+        {!row.paid && row.paidAmount > 0 && (
+          <span className="font-normal text-[10px] text-gray-400"> (دُفع {formatAmount(row.paidAmount)})</span>
+        )}
       </span>
       {row.paid ? (
         <span className="shrink-0 text-finance flex items-center gap-1">

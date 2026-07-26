@@ -15,7 +15,7 @@ import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
-import { planSummary } from "./installments";
+import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT } from "./installments";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
 // wrapper) so cloud sync can't resurrect a removed item from another device.
@@ -667,10 +667,16 @@ export const useAppStore = create<AppStore>()(
         if (!plan) return "";
         const next = planSummary(plan, st.transactions, today()).next;
         if (!next) return "";
+        // قسطٌ مدفوعٌ جزئياً (تحويلٌ ناقص سابقاً): نسجّل **الباقي عليه وحده**، وإلا
+        // ضاعفنا المدفوع وأظهرنا الخطة أقرب للإتمام من حقيقتها.
+        const due = rowRemaining(next);
         return get().recordInstallmentPayment(planId, {
           role: next.isFinal ? "final" : "installment",
-          amount: opts?.amount ?? next.amount,
+          amount: opts?.amount ?? due,
           installmentNo: next.no,
+          // تاريخ الدفع هو **يوم الدفع الفعليّ** (اليوم)، لا موعد الاستحقاق الفائت:
+          // المعاملة سجلٌّ لخروج النقد، وموعدُ الاستحقاق يبقى في جدول الخطة. لو
+          // كُتب التاريخ القديم لتغيّر صرفُ شهرٍ مضى وميزانيتُه المرحّلة بلا سبب.
           date: opts?.date,
         });
       },
@@ -685,7 +691,14 @@ export const useAppStore = create<AppStore>()(
         if (!tx) return "";
         const total = round2(tx.amount);
         if (!(total > 0)) return "";
-        const count = Math.max(1, Math.floor(draft.count) || 1);
+        // نفس حرّاس النموذج الرئيسي تماماً — هذا طريقٌ ثانٍ لإنشاء خطة، فلا يجوز
+        // أن يقبل ما يرفضه الأول: تاريخٌ صالح، وعددٌ داخل الحدّ (وإلا جدولٌ لا معنى
+        // له وقائمةٌ لا تنتهي). القيمة السالبة/الصفرية للقسط مرفوضة كذلك.
+        if (!isValidDateKey(draft.firstDueDate)) return "";
+        if (!(draft.installmentAmount > 0)) return "";
+        const rawCount = Math.floor(draft.count) || 0;
+        if (rawCount < 1 || rawCount > MAX_INSTALLMENT_COUNT) return "";
+        const count = rawCount;
         const planId = uid();
         const plan: InstallmentPlan = {
           id: planId,

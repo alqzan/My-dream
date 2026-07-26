@@ -285,14 +285,19 @@ export function generateInsights(data: InsightData): Insight[] {
 
   // الأقساط: **تنبيهٌ واحد فقط** — أقرب قسطٍ مستحقٍّ أو متأخّر عبر كل الخطط. لا
   // بطاقة دائمة في واجهة اليوم ولا تنبيهٌ لكل خطة، فلا يتحوّل التذكير إلى ضجيج.
+  // نافذة أسبوع: القسط يحتاج تحويلاً أو رصيداً، فتذكيرٌ قبل ثلاثة أيام قد يفوت
+  // آخر فرصةٍ للتحويل. المتأخّر يظهر دائماً.
   const instOverview = installmentsOverview(installmentPlans ?? [], transactions, todayStr);
   if (instOverview.next) {
     const { plan, row } = instOverview.next;
     const days = daysBetween(todayStr, row.due);
-    if (days <= 3) {
+    if (days <= 7) {
       const late = days < 0;
       add({
-        domain: "finance", dedupeKey: "finance:installment-due", icon: "🧾",
+        // المفتاح يخصّ **هذا القسط بعينه** (الخطة + موعد الاستحقاق): إخفاء تنبيه
+        // قسطِ هذا الشهر لا يُخفي قسط الشهر القادم، والتأجيل يخصّ ما أُجّل وحده.
+        // كان مفتاحاً واحداً لكل الأقساط، فإخفاءٌ واحد يُسكِت الخطة إلى الأبد.
+        domain: "finance", dedupeKey: `finance:installment-due:${plan.id}:${row.due}`, icon: "🧾",
         title: late ? "قسطٌ متأخّر" : "قسطٌ قريب",
         href: "/finance#installments", actionLabel: "افتح الأقساط",
         tone: late ? "warning" : "tip", priority: late ? 92 : 74,

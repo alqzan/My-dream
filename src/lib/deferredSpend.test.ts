@@ -3,7 +3,7 @@
 // أُضيف تجميعٌ جديد يقرأ `t.amount` مباشرةً ظهر الخلل هنا لا في جيب المالك.
 import { describe, it, expect } from "vitest";
 import { cashOut, isCashOut, dailyShare, reserveShare, computeDailyBudgetStatus, budgetWarningFor } from "./utils";
-import { buildFinanceOverview, budgetAlerts } from "./financeOverview";
+import { buildFinanceOverview, budgetAlerts, biggestCashExpense } from "./financeOverview";
 import { aggregateDay } from "./dayAggregator";
 import { generateInsights } from "./insights";
 import { today } from "./utils";
@@ -69,6 +69,29 @@ describe("صرف الشهر و«نظرة اليوم»", () => {
       salaryDay: 27, monthPrefix: T.slice(0, 7), todayStr: T,
     });
     expect(o.monthSpend).toBe(100);
+  });
+});
+
+describe("«أكبر مصروف» في متابعة الصرف", () => {
+  it("never names the deferred 1200 principal — the 100 installment is the biggest cash expense", () => {
+    // الحالة بالحرف: أصلٌ مؤجّل 1200 + قسطٌ مدفوع 100.
+    const biggest = biggestCashExpense(txs);
+    expect(biggest?.id).toBe("inst1");
+    expect(cashOut(biggest!)).toBe(100);
+
+    // وشرط التوصية نفسه (نسبة أكبر مصروفٍ من الإجمالي) يُحسب على النقد:
+    const total = txs.reduce((s, t) => s + cashOut(t), 0);
+    expect(total).toBe(100);
+    expect(cashOut(biggest!) / total).toBe(1); // القسط هو كلّ الصرف، لا 1200/100
+  });
+
+  it("ignores a period that holds nothing but deferred purchases", () => {
+    expect(biggestCashExpense([principal])).toBeNull();
+  });
+
+  it("still picks the largest real expense when several exist", () => {
+    const big: Transaction = { id: "b", date: T, amount: 400, category: "cat-x", note: "إطارات" };
+    expect(biggestCashExpense([...txs, big])?.id).toBe("b");
   });
 });
 

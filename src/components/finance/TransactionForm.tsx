@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
-import { planSummary, isPlanOpen, INSTALLMENT_ROLE_LABEL } from "@/lib/installments";
+import { planSummary, isPlanOpen, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -552,6 +552,13 @@ function SplitToPlanForm({
   const [installment, setInstallment] = useState("");
   const value = parseFloat(installment) || derived;
   const field = "w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40";
+  // نفس حرّاس النموذج الرئيسي: عددٌ داخل الحدّ وتاريخٌ صالح — فطريقان لإنشاء خطةٍ
+  // لا يقبل أحدهما ما يرفضه الآخر.
+  const error =
+    n > MAX_INSTALLMENT_COUNT ? `عدد الأقساط أكبر من المعقول (الحدّ ${MAX_INSTALLMENT_COUNT})`
+    : !isValidDateKey(firstDue) ? "أول موعد استحقاق غير صالح"
+    : !(value > 0) ? "قيمة القسط مطلوبة"
+    : null;
 
   return (
     <div className="rounded-xl bg-gray-50 dark:bg-white/5 p-3 space-y-2.5">
@@ -562,7 +569,7 @@ function SplitToPlanForm({
       <div className="grid grid-cols-3 gap-2">
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">عدد الأقساط</label>
-          <NumberInput value={count} onChange={setCount} inputMode="numeric" min={1} className={field} />
+          <NumberInput value={count} onChange={setCount} inputMode="numeric" min={1} max={MAX_INSTALLMENT_COUNT} className={field} />
         </div>
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">قيمة القسط</label>
@@ -577,11 +584,16 @@ function SplitToPlanForm({
         {n} × {formatAmount(value)} = {formatAmount(Math.round(n * value * 100) / 100)} ر.س
         {Math.abs(n * value - amount) > 0.5 ? " (يخالف الإجمالي — تحذيرٌ فقط)" : ""}
       </p>
+      {error && <p className="text-[11px] text-red-500">• {error}</p>}
       <div className="flex gap-2">
         <Button
           size="sm"
+          disabled={!!error}
           className="flex-1 bg-finance hover:bg-finance/90"
-          onClick={() => onSubmit({ provider: provider.trim() || "تقسيط", installmentAmount: value, count: n, firstDueDate: firstDue })}
+          onClick={() => {
+            if (error) return;
+            onSubmit({ provider: provider.trim() || "تقسيط", installmentAmount: value, count: n, firstDueDate: firstDue });
+          }}
         >
           أنشئ الخطة
         </Button>

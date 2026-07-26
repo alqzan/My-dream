@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { generateInsights, prevMonthPrefix, type Insight } from "./insights";
 import { filterInsights, snoozeUntilDate, type InsightPrefs } from "./insightPrefs";
+import { today } from "./utils";
 import { pageRange } from "./quran/meta";
+import { installmentDueDates } from "./installments";
 import { toDateStr } from "./utils";
 import type { HifzState, HifzRating, InstallmentPlan } from "./types";
 
@@ -147,32 +149,89 @@ describe("الأقساط في بوصلة مدار — تنبيهٌ واحد فق
     installmentAmount: 300, count: 4, firstDueDate: ago(1), // قسطٌ فات بالأمس
     status: "active", createdAt: ago(40), ...over,
   });
+  const instKeys = (list: Insight[]) => list.filter((i) => i.dedupeKey.startsWith("finance:installment-due"));
 
   it("raises exactly one installment insight even with several overdue plans", () => {
     const list = generateInsights(baseData({
       installmentPlans: [plan(), plan({ id: "p2", name: "أثاث", firstDueDate: ago(3) })],
     }));
-    const inst = list.filter((i) => i.dedupeKey === "finance:installment-due");
+    const inst = instKeys(list);
     expect(inst).toHaveLength(1);
     expect(inst[0].tone).toBe("warning");
     expect(inst[0].href).toBe("/finance#installments");
+  });
+
+  it("keys the insight to the plan AND the due date, so hiding one doesn't silence the rest", () => {
+    const due = ago(1);
+    const list = generateInsights(baseData({ installmentPlans: [plan({ firstDueDate: due })] }));
+    expect(instKeys(list)[0].dedupeKey).toBe(`finance:installment-due:p1:${due}`);
+  });
+
+  it("warns a week ahead (not only three days)", () => {
+    const inSixDays = new Date();
+    inSixDays.setDate(inSixDays.getDate() + 6);
+    const list = generateInsights(baseData({ installmentPlans: [plan({ firstDueDate: toDateStr(inSixDays) })] }));
+    expect(instKeys(list)).toHaveLength(1);
+    expect(instKeys(list)[0].tone).toBe("tip"); // قريبٌ لا متأخّر
   });
 
   it("stays quiet for an installment that is still far away", () => {
     const far = new Date();
     far.setDate(far.getDate() + 20);
     const list = generateInsights(baseData({ installmentPlans: [plan({ firstDueDate: toDateStr(far) })] }));
-    expect(list.some((i) => i.dedupeKey === "finance:installment-due")).toBe(false);
+    expect(instKeys(list)).toHaveLength(0);
   });
 
   it("stays quiet once the plan is settled or cancelled", () => {
     for (const status of ["settled", "cancelled"] as const) {
       const list = generateInsights(baseData({ installmentPlans: [plan({ status })] }));
-      expect(list.some((i) => i.dedupeKey === "finance:installment-due")).toBe(false);
+      expect(instKeys(list)).toHaveLength(0);
     }
   });
 
   it("says nothing at all when there are no plans (the default)", () => {
-    expect(generateInsights(baseData()).some((i) => i.dedupeKey === "finance:installment-due")).toBe(false);
+    expect(instKeys(generateInsights(baseData()))).toHaveLength(0);
+  });
+
+  it("dismissing this month's installment does NOT hide next month's", () => {
+    const t = today();
+    // قسطان فائتان: الأول قبل شهرٍ وشهرٍ (لأنّ الجدول شهريّ) والثاني قريب — فيصحّ
+    // أن ينتقل التنبيه للثاني ضمن نافذة الأسبوع بعد دفع الأول.
+    const p = plan({ firstDueDate: ago(31), count: 4 });
+    const dues = installmentDueDates(p.firstDueDate, p.count);
+    const first = dues[0];
+    const key1 = `finance:installment-due:p1:${first}`;
+    const prefs: InsightPrefs = { [key1]: { dismissed: true } };
+
+    // القسط الأول مُخفى → لا تنبيه.
+    const shown = filterInsights(generateInsights(baseData({ installmentPlans: [p] })), prefs, t);
+    expect(shown.filter((i) => i.dedupeKey.startsWith("finance:installment-due"))).toHaveLength(0);
+
+    // دُفع القسط الأول → التنبيه ينتقل للقسط الثاني بمفتاحٍ آخر، فيظهر رغم الإخفاء.
+    const paidFirst = [{
+      id: "pay1", date: t, amount: 300, category: "", note: "", planId: "p1",
+      planRole: "installment" as const, planInstallmentNo: 1,
+    }];
+    const next = filterInsights(
+      generateInsights(baseData({ installmentPlans: [p], transactions: paidFirst })),
+      prefs,
+      t
+    ).filter((i) => i.dedupeKey.startsWith("finance:installment-due"));
+    expect(next).toHaveLength(1);
+    expect(next[0].dedupeKey).not.toBe(key1);
+  });
+
+  it("snoozing an installment hides only that one, and it returns after the snooze", () => {
+    const t = today();
+    const due = ago(1);
+    const p = plan({ firstDueDate: due });
+    const key = `finance:installment-due:p1:${due}`;
+    const list = generateInsights(baseData({ installmentPlans: [p] }));
+
+    const snoozed: InsightPrefs = { [key]: { snoozedUntil: snoozeUntilDate("tomorrow", t) } };
+    expect(filterInsights(list, snoozed, t).some((i) => i.dedupeKey === key)).toBe(false);
+    // بعد انقضاء التأجيل يعود (التاريخ صار ماضياً).
+    const past: InsightPrefs = { [key]: { snoozedUntil: ago(1) } };
+    expect(filterInsights(list, past, t).some((i) => i.dedupeKey === key)).toBe(true);
   });
 })

@@ -394,3 +394,90 @@ describe("الطريق اليوميّ — ضغطةٌ واحدة وربطُ مص�
     expect(useAppStore.getState().transactions[0].planId).toBeUndefined();
   });
 });
+
+describe("payNextInstallment — تاريخُ الدفع الفعليّ والباقي وحده", () => {
+  beforeEach(() => {
+    useAppStore.setState({ transactions: [], installmentPlans: [] });
+    // خطةٌ مواعيدها فائتة (2026-01) لنختبر القسط المتأخّر.
+    useAppStore.getState().addInstallmentPlan(plan({
+      firstDueDate: "2026-01-05", count: 3, installmentAmount: 100, totalPrice: 300, downPayment: 0,
+    }));
+  });
+
+  it("records an OVERDUE installment at today's date, not at its old due date", () => {
+    const id = useAppStore.getState().payNextInstallment("p1");
+    const t = useAppStore.getState().transactions.find((x) => x.id === id)!;
+    expect(t.date).toBe(today());
+    expect(t.date).not.toBe("2026-01-05");
+    // وموعد الاستحقاق يبقى في جدول الخطة كما هو.
+    const st = useAppStore.getState();
+    const rows = planSchedule(st.installmentPlans[0], st.transactions, today());
+    expect(rows[0].due).toBe("2026-01-05");
+    expect(rows[0].paid).toBe(true);
+  });
+
+  it("pays only the REMAINDER of a partially paid installment", () => {
+    // دفعةٌ ناقصة سابقاً (40 من 100) ثمّ ضغطة «سجّلت الدفع».
+    useAppStore.getState().recordInstallmentPayment("p1", {
+      role: "installment", amount: 40, installmentNo: 1, date: "2026-01-06",
+    });
+    const id = useAppStore.getState().payNextInstallment("p1");
+    const t = useAppStore.getState().transactions.find((x) => x.id === id)!;
+    expect(t.amount).toBe(60); // الباقي، لا 100
+    expect(t.planInstallmentNo).toBe(1);
+    const st = useAppStore.getState();
+    const s = planSummary(st.installmentPlans[0], st.transactions, today());
+    expect(s.paid).toBe(100); // لا 140 — ما تضخّم المدفوع
+    expect(s.rows[0].paid).toBe(true);
+    expect(s.next?.no).toBe(2);
+  });
+
+  it("an explicit amount still overrides (a partial payment on purpose)", () => {
+    const id = useAppStore.getState().payNextInstallment("p1", { amount: 25 });
+    expect(useAppStore.getState().transactions.find((x) => x.id === id)!.amount).toBe(25);
+    const st = useAppStore.getState();
+    expect(planSummary(st.installmentPlans[0], st.transactions, today()).rows[0].paid).toBe(false);
+  });
+});
+
+describe("convertTransactionToPlan — حرّاس العدد والتاريخ", () => {
+  const buy = (): Transaction => ({
+    id: "buy1", date: today(), amount: 1200, category: "cat-luxuries", note: "جوّال",
+  });
+  beforeEach(() => {
+    useAppStore.setState({ transactions: [buy()], installmentPlans: [] });
+  });
+
+  it("refuses an absurd installment count (same limit as the main form)", () => {
+    expect(useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "تمارا", installmentAmount: 10, count: 500, firstDueDate: "2026-09-01",
+    })).toBe("");
+    expect(useAppStore.getState().installmentPlans).toHaveLength(0);
+    // والمعاملة لم تُلمَس (لم تصر مؤجّلة بالخطأ).
+    expect(useAppStore.getState().transactions[0].deferred).toBeUndefined();
+  });
+
+  it("accepts exactly the limit", () => {
+    expect(useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "تمارا", installmentAmount: 10, count: 120, firstDueDate: "2026-09-01",
+    })).not.toBe("");
+  });
+
+  it("refuses an impossible or malformed due date", () => {
+    for (const firstDueDate of ["2026-02-30", "2026-13-01", "غداً", ""]) {
+      expect(useAppStore.getState().convertTransactionToPlan("buy1", {
+        provider: "تمارا", installmentAmount: 100, count: 4, firstDueDate,
+      })).toBe("");
+    }
+    expect(useAppStore.getState().installmentPlans).toHaveLength(0);
+  });
+
+  it("refuses a zero/negative installment amount and a zero count", () => {
+    expect(useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "x", installmentAmount: 0, count: 4, firstDueDate: "2026-09-01",
+    })).toBe("");
+    expect(useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "x", installmentAmount: 100, count: 0, firstDueDate: "2026-09-01",
+    })).toBe("");
+  });
+});
