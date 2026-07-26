@@ -481,15 +481,27 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
     if (!touchedDue && isValidDateKey(v)) setFirstDueDate(nextMonth(v));
   }
 
+  // نواقص المسوّدة **حيّةً** أثناء الكتابة، لا بعد الضغط: زرٌّ يرفض الحفظ صامتاً
+  // يبدو معطّلاً لا مانعاً. فالزرّ يُعطَّل ظاهراً ويُكتب سببه تحته.
+  const problems: string[] = [];
+  if (!name.trim()) problems.push("اكتب ما اشتريتَه");
+  if (!(inst > 0)) problems.push("قيمة القسط الشهري مطلوبة");
+  if (!(n >= 1)) problems.push("عدد الشهور لا يقلّ عن ١");
+  else if (n > MAX_INSTALLMENT_COUNT) problems.push(`عدد الأقساط أكبر من المعقول (الحدّ ${MAX_INSTALLMENT_COUNT})`);
+  if (down < 0) problems.push("الدفعة الأولى لا تكون سالبة");
+  if (!isValidDateKey(firstDueDate)) problems.push("أول موعد قسط مطلوب");
+
   function handleSave() {
-    const errs: string[] = [];
-    if (!name.trim()) errs.push("اكتب ما اشتريتَه");
-    if (!(inst > 0)) errs.push("قيمة القسط الشهري مطلوبة");
-    if (!(n >= 1)) errs.push("عدد الشهور لا يقلّ عن ١");
-    else if (n > MAX_INSTALLMENT_COUNT) errs.push(`عدد الأقساط أكبر من المعقول (الحدّ ${MAX_INSTALLMENT_COUNT})`);
-    if (down < 0) errs.push("الدفعة الأولى لا تكون سالبة");
-    if (!isValidDateKey(firstDueDate)) errs.push("أول موعد قسط مطلوب");
-    if (errs.length) { setErrors(errs); return; }
+    if (problems.length) { setErrors(problems); return; }
+    try {
+      save();
+    } catch (e) {
+      // أيّ خللٍ في الحفظ يُعرَض نصّاً بدل أن يبتلعه المتصفّح فيبدو الزرّ ميتاً.
+      setErrors([`تعذّر الحفظ: ${e instanceof Error ? e.message : String(e)}`]);
+    }
+  }
+
+  function save() {
 
     if (initial) {
       // التعديل يعيد حساب الإجمالي من البنود — الجدول مشتقٌّ فلا نسخةَ قديمة تتخلّف.
@@ -546,7 +558,7 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
         <div className={step}>٢ · كم دفعتَ أوّلاً؟</div>
         <div className="grid grid-cols-2 gap-2">
           <NumberInput value={downPayment} onChange={setDownPayment} placeholder="٠ إن ما دفعت" inputMode="decimal" className={field} />
-          <input type="date" value={downDate} onChange={(e) => handleDownDate(e.target.value)} className={field} />
+          <input type="date" value={downDate} onChange={(e) => handleDownDate(e.target.value || downDate)} className={field} />
         </div>
         {down > 0 && !initial && (
           <label className="flex items-start gap-2 text-[10px] text-gray-500 leading-relaxed">
@@ -568,7 +580,9 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
           <input
             type="date"
             value={firstDueDate}
-            onChange={(e) => { setFirstDueDate(e.target.value); setTouchedDue(true); }}
+            // قيمةٌ فارغة من منتقي التاريخ (Safari بتقويمٍ هجريّ) كانت تُفقد الموعد
+            // فيرفض الزرّ الحفظ صامتاً — نتمسّك بآخر تاريخٍ صالح.
+            onChange={(e) => { setFirstDueDate(e.target.value || firstDueDate); setTouchedDue(true); }}
             className={field}
           />
         </div>
@@ -652,8 +666,18 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
         </ul>
       )}
 
+      {/* سبب تعطّل الزرّ ظاهرٌ دائماً — فلا يُظنّ ميتاً وهو ممتنع. */}
+      {problems.length > 0 && errors.length === 0 && (
+        <p className="text-[11px] text-gray-400">لإتمام الحفظ: {problems[0]}</p>
+      )}
+
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleSave} className="flex-1 bg-finance hover:bg-finance/90">
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={problems.length > 0}
+          className="flex-1 bg-finance hover:bg-finance/90"
+        >
           {initial ? "حفظ التعديل" : "أضِف الخطة"}
         </Button>
         <Button size="sm" variant="secondary" onClick={onDone} className="gap-1">

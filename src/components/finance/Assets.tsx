@@ -314,11 +314,14 @@ function AssetForm({ initial, onDone }: { initial?: Asset; onDone: () => void })
     setLifeMonths("");
   }
 
+  // نواقص المسوّدة **حيّةً** أثناء الكتابة، لا بعد الضغط: زرٌّ يرفض الحفظ صامتاً
+  // يبدو معطّلاً لا مانعاً. فالزرّ يُعطَّل ظاهراً ويُكتب سببه تحته.
+  const problems = validateAssetDraft({
+    name, purchasePrice: draft.purchasePrice, purchaseDate, lifeDays, salvageValue: draft.salvageValue,
+  });
+
   function handleSave() {
-    const errs = validateAssetDraft({
-      name, purchasePrice: draft.purchasePrice, purchaseDate, lifeDays, salvageValue: draft.salvageValue,
-    });
-    if (errs.length) { setErrors(errs); return; }
+    if (problems.length) { setErrors(problems); return; }
     const payload = {
       name: name.trim(),
       icon: icon.trim() || undefined,
@@ -328,8 +331,14 @@ function AssetForm({ initial, onDone }: { initial?: Asset; onDone: () => void })
       salvageValue: draft.salvageValue,
       note: note.trim() || undefined,
     };
-    if (initial) updateAsset(initial.id, payload);
-    else addAsset({ ...payload, id: uid(), createdAt: today() });
+    // أيّ خللٍ في الحفظ يُعرَض نصّاً بدل أن يبتلعه المتصفّح فيبدو الزرّ ميتاً.
+    try {
+      if (initial) updateAsset(initial.id, payload);
+      else addAsset({ ...payload, id: uid(), createdAt: today() });
+    } catch (e) {
+      setErrors([`تعذّر الحفظ: ${e instanceof Error ? e.message : String(e)}`]);
+      return;
+    }
     onDone();
   }
 
@@ -355,7 +364,15 @@ function AssetForm({ initial, onDone }: { initial?: Asset; onDone: () => void })
         </div>
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">متى اشتريتَه؟</label>
-          <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className={field} />
+          {/* قيمةٌ فارغة من منتقي التاريخ (يحدث في Safari حين يكون تقويم الجهاز
+              هجرياً) كانت تُبقي الحقل بلا تاريخٍ صالح فيرفض الزرّ الحفظ صامتاً —
+              نتمسّك بآخر تاريخٍ صالح بدل أن نمسحه. */}
+          <input
+            type="date"
+            value={purchaseDate}
+            onChange={(e) => setPurchaseDate(e.target.value || purchaseDate)}
+            className={field}
+          />
         </div>
       </div>
 
@@ -400,8 +417,18 @@ function AssetForm({ initial, onDone }: { initial?: Asset; onDone: () => void })
         </ul>
       )}
 
+      {/* سبب تعطّل الزرّ ظاهرٌ دائماً — فلا يُظنّ ميتاً وهو ممتنع. */}
+      {problems.length > 0 && errors.length === 0 && (
+        <p className="text-[11px] text-gray-400">لإتمام الحفظ: {problems[0]}</p>
+      )}
+
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleSave} className="flex-1 bg-finance hover:bg-finance/90">
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={problems.length > 0}
+          className="flex-1 bg-finance hover:bg-finance/90"
+        >
           {initial ? "حفظ التعديل" : "أضِف الأصل"}
         </Button>
         <Button size="sm" variant="secondary" onClick={onDone} className="gap-1">
