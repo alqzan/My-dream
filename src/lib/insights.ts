@@ -11,7 +11,7 @@ import { PRAYERS } from "./types";
 import {
   getJournalStreak, getPrayerStreak, getMosqueStreak, prayerConsistency,
   computeDailyBudgetStatus, budgetLimit, getMainCategory, reserveBalance,
-  formatAmount, today, toDateStr, parseDate,
+  formatAmount, today, toDateStr, parseDate, cashOut, isCashOut,
 } from "./utils";
 import { installmentsOverview, describeDueIn, daysBetween } from "./installments";
 import { idToSurahAyah, SURAHS, describeRange } from "./quran/meta";
@@ -324,7 +324,7 @@ export function generateInsights(data: InsightData): Insight[] {
     if (!cap) continue;
     const spent = transactions
       .filter((t) => getMainCategory(categories, t.category).id === b.category && t.date.startsWith(monthPrefix))
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, t) => s + cashOut(t), 0);
     const pct = (spent / cap) * 100;
     const info = categories.find((c) => c.id === b.category);
     const label = info?.label ?? "قسم";
@@ -354,7 +354,7 @@ export function generateInsights(data: InsightData): Insight[] {
       if (!t.date.startsWith(prefix)) continue;
       if (maxDay != null && parseDate(t.date).getDate() > maxDay) continue;
       const main = getMainCategory(categories, t.category).id || "غير مصنف";
-      totals[main] = (totals[main] || 0) + t.amount;
+      totals[main] = (totals[main] || 0) + cashOut(t);
     }
     return totals;
   };
@@ -379,7 +379,7 @@ export function generateInsights(data: InsightData): Insight[] {
   // تتبّعٍ منتظم أصلاً (سجّل في ≥12 يوماً من آخر 30). الأيام الطرفية — قبل أوّل
   // تسجيلٍ في الأسبوع أو بعد آخره — غامضة فلا تُحتسب، فلا نمدح أسبوعاً بلا تسجيل.
   const weekDates = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
-  const spendDays = new Set(transactions.filter((t) => weekDates.includes(t.date)).map((t) => t.date));
+  const spendDays = new Set(transactions.filter((t) => isCashOut(t) && weekDates.includes(t.date)).map((t) => t.date));
   const recordedWeek = weekDates.filter((d) => spendDays.has(d)); // تصاعدياً
   let genuineNoSpend = 0;
   if (recordedWeek.length >= 2) {
@@ -388,7 +388,7 @@ export function generateInsights(data: InsightData): Insight[] {
     genuineNoSpend = weekDates.filter((d) => d > first && d < last && !spendDays.has(d)).length;
   }
   const last30 = Array.from({ length: 30 }, (_, i) => daysAgo(i));
-  const activeRecordDays = new Set(transactions.filter((t) => last30.includes(t.date)).map((t) => t.date)).size;
+  const activeRecordDays = new Set(transactions.filter((t) => isCashOut(t) && last30.includes(t.date)).map((t) => t.date)).size;
   if (genuineNoSpend >= 2 && activeRecordDays >= 12) {
     add({
       domain: "finance", dedupeKey: "finance:no-spend", icon: "🛡️", tone: "positive", priority: 45,

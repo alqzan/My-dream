@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
+import { planSummary, isPlanOpen, INSTALLMENT_ROLE_LABEL } from "@/lib/installments";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { PiggyBank } from "lucide-react";
+import { PiggyBank, CalendarClock, Link2Off } from "lucide-react";
 
 interface TransactionFormProps {
   onClose: () => void;
@@ -15,7 +16,11 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onClose, initial }: TransactionFormProps) {
-  const { categories, reserves, transactions, budgets, monthlyIncome, merchantRules, addTransaction, updateTransaction, addCategory, rememberMerchant } = useAppStore();
+  const {
+    categories, reserves, transactions, budgets, monthlyIncome, merchantRules, installmentPlans,
+    addTransaction, updateTransaction, addCategory, rememberMerchant,
+    linkTransactionToPlan, unlinkTransactionFromPlan, convertTransactionToPlan,
+  } = useAppStore();
   const mains = categories.filter((c) => !c.parentId);
 
   // If editing a transaction whose category is a sub, pre-select its parent
@@ -35,6 +40,9 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const [touchedCat, setTouchedCat] = useState(false);
   const [showCats, setShowCats] = useState(!!initial); // شبكة التصنيفات (مطويّة حتى يُكتب التاجر)
   const [showDetails, setShowDetails] = useState(false); // التاريخ ومصدر الصرف
+  // ربطُ هذا المصروف بخطة أقساط (الطريق اليوميّ: سجّل كالعادة ثمّ اربط بضغطة).
+  const [linkPlan, setLinkPlan] = useState<string | null>(initial?.planId ?? null);
+  const [showSplit, setShowSplit] = useState(false); // نموذج «قسّط هذا المصروف»
 
   // Auto-classify from the note while adding a new expense: learned merchant
   // rules first, then keyword guess. Silently pre-selects the section/sub so
@@ -80,6 +88,22 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     return out;
   }, [sortedTx]);
   const lastTx = sortedTx[0];
+
+  // الخطط المفتوحة (نشطة ولم تكتمل) مع قسطها القادم — للربط بضغطة. نرتّبها
+  // فيتقدّم ما يطابق المبلغ المكتوب (وصولُ رسالة البنك ثمّ تسجيلُها هو الحالة
+  // اليومية، فالمطابقة تجعل الربط ضغطةً واحدة بلا بحث).
+  const openPlans = useMemo(() => {
+    const t = today();
+    return (installmentPlans ?? [])
+      .filter((p) => isPlanOpen(p, transactions, t))
+      .map((p) => ({ plan: p, next: planSummary(p, transactions, t).next }))
+      .sort((a, b) => {
+        const am = a.next && Math.abs(a.next.amount - parsedAmount) < 0.01 ? 0 : 1;
+        const bm = b.next && Math.abs(b.next.amount - parsedAmount) < 0.01 ? 0 : 1;
+        return am - bm || (a.next?.due ?? "").localeCompare(b.next?.due ?? "");
+      });
+  }, [installmentPlans, transactions, parsedAmount]);
+  const linkedPlan = (installmentPlans ?? []).find((p) => p.id === linkPlan);
 
   function pickCategoryFor(catId: string) {
     const cat = categories.find((c) => c.id === catId);
@@ -138,6 +162,24 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       updateTransaction(initial.id, tx);
     } else {
       addTransaction(tx);
+    }
+    // ربطُ الدفعة بخطتها (أو فكُّه) بعد الحفظ — المبلغ يُحتسب مرّةً واحدة: مصروفاً
+    // عادياً كما هو، والخطة تقرأه فتتقدّم. «الأصل المؤجّل» لا يُربط من هنا (له
+    // زرّه الخاص «قسّط هذا المصروف») فلا يُحوَّل مصروفٌ مدفوعٌ إلى مؤجّلٍ بالغلط.
+    if (linkPlan && linkPlan !== initial?.planId) {
+      const s = planSummary(
+        (installmentPlans ?? []).find((p) => p.id === linkPlan)!,
+        useAppStore.getState().transactions,
+        today()
+      );
+      const row = s.next;
+      linkTransactionToPlan(tx.id, {
+        planId: linkPlan,
+        role: row?.isFinal ? "final" : "installment",
+        installmentNo: row?.no,
+      });
+    } else if (!linkPlan && initial?.planId) {
+      unlinkTransactionFromPlan(tx.id);
     }
     // Learn this merchant → category so the next one is auto-classified.
     if (note.trim()) rememberMerchant(note, tx.category);
@@ -303,6 +345,84 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       </div>
       )}
 
+      {/* ===== الأقساط: ربطٌ بضغطة أو «قسّط هذا المصروف» ===== */}
+      {initial?.planRole === "principal" ? (
+        // الأصل المؤجّل: نوضّح أنّه لا يُحتسب صرفاً، وأنّ الأقساط هي الصرف.
+        <div className="rounded-xl bg-gray-50 dark:bg-white/5 p-3 text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-1.5">
+          <div className="font-bold">🧾 هذا «الأصل المؤجّل» لخطة أقساط</div>
+          <p>الشراء لم يخرج من حسابك (مؤجّل)، فلا يُحتسب في الميزانية ولا السقوف — الأقساط هي الصرف الفعليّ.</p>
+          <button
+            type="button"
+            onClick={() => { unlinkTransactionFromPlan(initial.id); onClose(); }}
+            className="flex items-center gap-1 font-bold text-gray-500 hover:text-red-500 press"
+          >
+            <Link2Off size={12} /> فُكّ الربط واحسبه مصروفاً عادياً
+          </button>
+        </div>
+      ) : openPlans.length > 0 ? (
+        <div className="rounded-xl bg-finance/5 p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-finance">
+            <CalendarClock size={14} /> دفعة قسط؟
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setLinkPlan(null)}
+              className={cn(
+                "text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors",
+                !linkPlan ? "bg-finance text-white border-finance" : "bg-white text-gray-500 border-gray-200"
+              )}
+            >
+              لا — مصروف عادي
+            </button>
+            {openPlans.map(({ plan, next }) => (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => {
+                  setLinkPlan(plan.id);
+                  // تعبئةٌ لطيفة: مبلغ القسط وتصنيف الخطة إن كان الحقل فارغاً.
+                  if (next && !parsedAmount) setAmount(String(next.amount));
+                  if (plan.category) { pickCategoryFor(plan.category); setTouchedCat(true); }
+                }}
+                className={cn(
+                  "text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors",
+                  linkPlan === plan.id ? "bg-finance text-white border-finance" : "bg-white text-gray-500 border-gray-200"
+                )}
+              >
+                {plan.name || plan.provider}
+                {next ? ` · ${formatAmount(next.amount)}` : ""}
+              </button>
+            ))}
+          </div>
+          {linkedPlan && (
+            <p className="text-[10px] text-gray-500">
+              ستُسجَّل كـ«{INSTALLMENT_ROLE_LABEL.installment}» في خطة «{linkedPlan.name || linkedPlan.provider}» — مصروفٌ واحدٌ لا يُحتسب مرّتين.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {/* «قسّط هذا المصروف»: الشراء كان مؤجّلاً لا كاش */}
+      {initial && !initial.planId && (
+        showSplit ? (
+          <SplitToPlanForm
+            amount={initial.amount}
+            defaultProvider={initial.note}
+            onCancel={() => setShowSplit(false)}
+            onSubmit={(draft) => { convertTransactionToPlan(initial.id, draft); setShowSplit(false); onClose(); }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowSplit(true)}
+            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-100 dark:bg-white/10 rounded-xl py-2 press"
+          >
+            <CalendarClock size={13} /> شريته بالتقسيط (مؤجّل)؟ قسّطه
+          </button>
+        )
+      )}
+
       {/* تفاصيل: التاريخ ومصدر الصرف — مطويّة للمصروف العادي */}
       <button type="button" onClick={() => setShowDetails((v) => !v)} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 press pt-1">
         <span>تفاصيل (التاريخ ومصدر الصرف)</span>
@@ -403,6 +523,69 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           {initial ? "حفظ" : "إضافة"}
         </Button>
         <Button variant="secondary" onClick={onClose}>إلغاء</Button>
+      </div>
+    </div>
+  );
+}
+
+// «قسّط هذا المصروف» — أصغرُ نموذجٍ ممكن: قيمة القسط وعددها وأول موعد. الإجمالي
+// **هو مبلغ المعاملة نفسه** (لا يُكتب مرّتين)، والقسط يُشتقّ تلقائياً من القسمة
+// فيكفي تعديلُه إن خالف اتفاق الجهة. لا حقل رسومٍ ولا دفعةٍ أخيرة هنا — تُضاف
+// لاحقاً من قسم «الأقساط» عند الحاجة، فيبقى هذا الطريق ثلاث خانات لا أكثر.
+function SplitToPlanForm({
+  amount, defaultProvider, onCancel, onSubmit,
+}: {
+  amount: number;
+  defaultProvider: string;
+  onCancel: () => void;
+  onSubmit: (d: { provider: string; name?: string; installmentAmount: number; count: number; firstDueDate: string }) => void;
+}) {
+  const [provider, setProvider] = useState(defaultProvider.trim());
+  const [count, setCount] = useState("4");
+  const [firstDue, setFirstDue] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1); // الافتراض الطبيعيّ: أول قسطٍ بعد شهر
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const n = Math.max(1, parseInt(count) || 1);
+  const derived = Math.round((amount / n) * 100) / 100; // قسطٌ مشتقّ من الإجمالي
+  const [installment, setInstallment] = useState("");
+  const value = parseFloat(installment) || derived;
+  const field = "w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40";
+
+  return (
+    <div className="rounded-xl bg-gray-50 dark:bg-white/5 p-3 space-y-2.5">
+      <div className="text-xs font-semibold text-gray-600">
+        تقسيط {formatAmount(amount)} ر.س — سيُعتبر الشراء مؤجّلاً، والأقساط هي الصرف.
+      </div>
+      <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="الجهة (تمارا، تابي...)" className={field} />
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="block text-[10px] text-gray-400 mb-1">عدد الأقساط</label>
+          <NumberInput value={count} onChange={setCount} inputMode="numeric" min={1} className={field} />
+        </div>
+        <div>
+          <label className="block text-[10px] text-gray-400 mb-1">قيمة القسط</label>
+          <NumberInput value={installment} onChange={setInstallment} placeholder={formatAmount(derived)} inputMode="decimal" className={field} />
+        </div>
+        <div>
+          <label className="block text-[10px] text-gray-400 mb-1">أول موعد</label>
+          <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={field} />
+        </div>
+      </div>
+      <p className="text-[10px] text-gray-400">
+        {n} × {formatAmount(value)} = {formatAmount(Math.round(n * value * 100) / 100)} ر.س
+        {Math.abs(n * value - amount) > 0.5 ? " (يخالف الإجمالي — تحذيرٌ فقط)" : ""}
+      </p>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="flex-1 bg-finance hover:bg-finance/90"
+          onClick={() => onSubmit({ provider: provider.trim() || "تقسيط", installmentAmount: value, count: n, firstDueDate: firstDue })}
+        >
+          أنشئ الخطة
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onCancel}>إلغاء</Button>
       </div>
     </div>
   );

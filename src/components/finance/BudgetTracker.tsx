@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn } from "@/lib/utils";
+import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, cashOut } from "@/lib/utils";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, X } from "lucide-react";
 
@@ -30,7 +30,7 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
   const spentByCategory = (category: string) =>
     transactions
       .filter((t) => getMainCategory(categories, t.category).id === category && t.date.startsWith(monthPrefix))
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, t) => s + cashOut(t), 0);
 
   // The live store income wins over the local input — the input only
   // exists for the very first time, and the store may have been set from

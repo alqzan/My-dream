@@ -524,11 +524,26 @@ export function budgetWarningFor(
   const monthPrefix = today().slice(0, 7);
   const spent = transactions
     .filter((t) => t.date.startsWith(monthPrefix) && getMainCategory(categories, t.category).id === mainId)
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + cashOut(t), 0);
   const pct = (spent / cap) * 100;
   if (pct < 80) return null;
   const info = categories.find((c) => c.id === mainId);
   return { label: info?.label ?? "قسم", over: spent > cap, pct: Math.round(pct), remaining: cap - spent };
+}
+
+// ===================== الصرف النقديّ فعلاً =====================
+// **البوابة الوحيدة** لسؤال «كم خرج من الجيب في هذه المعاملة؟». معاملةٌ مؤجّلة
+// (`deferred`) = شراءٌ بالتقسيط سُجّل كالتزام ولم يُدفع: تظهر في السجل وتُحتسب
+// صفراً في كل حساب (الميزانية اليومية · السقوف · الرسوم · الإحصائيات)، لأنّ
+// الدفعات هي التي تخرج فعلاً. بلا هذه البوابة يُحتسب الشراء مرّتين: 1200 مرّةً
+// كأصل، ثمّ 12×100 كأقساط. كلّ تجميعٍ للصرف في التطبيق يمرّ من هنا.
+export function cashOut(t: Pick<Transaction, "amount" | "deferred">): number {
+  return t.deferred ? 0 : t.amount;
+}
+
+// هل تمثّل هذه المعاملة خروجَ نقدٍ فعلاً؟ (للتصفية قبل التجميع أو عدّ أيام الصرف)
+export function isCashOut(t: Pick<Transaction, "deferred">): boolean {
+  return !t.deferred;
 }
 
 // ===================== Reserve funds & split spending =====================
@@ -536,15 +551,16 @@ export function budgetWarningFor(
 // Share of a transaction charged to the daily budget (the remainder after
 // any reserve splits). A transaction with no splits is 100% daily.
 export function dailyShare(t: Transaction): number {
-  if (!t.reserveSplits?.length) return t.amount;
+  const paid = cashOut(t); // المؤجّل لا يستهلك ميزانيةً — لم يُدفع بعد
+  if (!t.reserveSplits?.length) return paid;
   const reservedPct = Math.min(100, t.reserveSplits.reduce((s, sp) => s + sp.pct, 0));
-  return round2((t.amount * (100 - reservedPct)) / 100);
+  return round2((paid * (100 - reservedPct)) / 100);
 }
 
 // Share of a transaction charged to one specific reserve fund.
 export function reserveShare(t: Transaction, fundId: string): number {
   const split = t.reserveSplits?.find((s) => s.fundId === fundId);
-  return split ? round2((t.amount * split.pct) / 100) : 0;
+  return split ? round2((cashOut(t) * split.pct) / 100) : 0;
 }
 
 // Live balance of a fund: deposits in, charged transaction shares out.

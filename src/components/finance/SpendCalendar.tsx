@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate, dailyShare } from "@/lib/utils";
+import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate, dailyShare, cashOut } from "@/lib/utils";
 import type { Transaction, DailyBudget } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
@@ -31,7 +31,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
   const spendByDate = new Map<string, number>();
   const dailyShareByDate = new Map<string, number>();
   for (const t of transactions) {
-    spendByDate.set(t.date, (spendByDate.get(t.date) ?? 0) + t.amount);
+    spendByDate.set(t.date, (spendByDate.get(t.date) ?? 0) + cashOut(t));
     dailyShareByDate.set(t.date, (dailyShareByDate.get(t.date) ?? 0) + dailyShare(t));
   }
   const maxSpend = Math.max(1, ...dates.map((d) => spendByDate.get(d) ?? 0));

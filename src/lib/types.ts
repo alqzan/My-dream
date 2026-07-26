@@ -52,12 +52,18 @@ export interface Transaction {
   updatedAt?: number;
   // ===== ربط المعاملة بخطة أقساط (اختياري) =====
   // المعاملة تمثّل **دوراً واحداً فقط** في الخطة — الحقل مفردٌ لا مصفوفة، فلا
-  // يمكن بنيوياً أن تكون «دفعة أولى» و«قسطاً» في الوقت نفسه. المبالغ تبقى مصاريف
+  // يمكن بنيوياً أن تكون «دفعة أولى» و«قسطاً» في الوقت نفسه. دفعاتُ الخطة مصاريف
   // عادية في كل الحسابات (الميزانية اليومية والسقوف)؛ الخطة تقرأها ولا تملكها.
   planId?: string; // InstallmentPlan id
   planRole?: InstallmentRole;
   planInstallmentNo?: number; // رقم القسط (1..count) — للأقساط والدفعة الأخيرة فقط
   planLinkedAt?: number; // ms وقت الربط بالخطة
+  // **الشراء المؤجّل (مهب كاش)**: سُجّل كالتزامٍ ولم يخرج من الحساب — «الأصل» الذي
+  // تُسدّده الأقساط. يظهر في السجل بوسم «مؤجّل» ولا يُحتسب في أيّ صرف (ولا ريال):
+  // لا الميزانية اليومية، ولا السقوف، ولا الرسوم البيانية، ولا الإحصائيات. ما
+  // يُحتسب هو الدفعات الفعلية — وإلا حُسب الشراء مرّتين (1200 ثمّ 12×100).
+  // البوابة الوحيدة لهذا القرار: `cashOut` / `isCashOut` في utils.ts.
+  deferred?: boolean;
 }
 
 // ===================== Reserve funds (الاحتياطي) =====================
@@ -234,10 +240,13 @@ export const RECURRING_PRESETS: { label: string; unit: RecurringUnit; every: num
 export type InstallmentStatus = "active" | "settled" | "cancelled";
 
 // دور المعاملة داخل الخطة — واحدٌ فقط لكل معاملة:
-//  down = الدفعة الأولى · installment = قسط · final = الدفعة الأخيرة الكبيرة ·
+//  principal  = **الأصل المؤجّل**: الشراء نفسه حين لم يكن كاش (اشتريتَ بالتقسيط).
+//               التزامٌ لا صرف: يحمل `deferred` فلا يُحتسب ريالاً واحداً في أيّ
+//               حساب، والأقساط هي التي تُسدّده. ليس دفعةً ولا يدخل «المدفوع».
+//  down       = الدفعة الأولى · installment = قسط · final = الدفعة الأخيرة الكبيرة
 //  settlement = سدادٌ مبكر (يُسجَّل بمبلغه الفعليّ وحده؛ الفرق يُعرَض «موفَّراً»
-//  ولا يُخلَق له مصروفٌ وهميّ).
-export type InstallmentRole = "down" | "installment" | "final" | "settlement";
+//               ولا يُخلَق له مصروفٌ وهميّ).
+export type InstallmentRole = "principal" | "down" | "installment" | "final" | "settlement";
 
 export interface InstallmentPlan {
   id: string;
@@ -254,6 +263,9 @@ export interface InstallmentPlan {
   status: InstallmentStatus;
   category?: string; // FinanceCategoryDef id يُقترح لمدفوعات الخطة
   recurringId?: string; // ربط اختياري بالتزامٍ متكرّر (تذكير reminder فقط)
+  // معاملة «الأصل المؤجّل» التي تُسدّدها هذه الخطة (إن كان الشراء مسجَّلاً أصلاً
+  // كمصروفٍ ثمّ قُسِّط). المعاملة نفسها تحمل `deferred` + `planRole: "principal"`.
+  principalTxId?: string;
   note?: string;
   createdAt: string; // YYYY-MM-DD
   updatedAt?: number; // ms — يفوز به التعديل الأحدث لهذه الخطة في الدمج

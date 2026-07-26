@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
-import { formatAmount, getMainCategory, getCategoryInfo, buzz } from "@/lib/utils";
+import { formatAmount, getMainCategory, getCategoryInfo, buzz, cashOut } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const ESS = "cat-essentials";
@@ -19,8 +19,8 @@ function sumEssLux(txs: Transaction[], categories: FinanceCategoryDef[]) {
   let lux = 0;
   for (const t of txs) {
     const main = getMainCategory(categories, t.category).id;
-    if (main === ESS) ess += t.amount;
-    else if (main === LUX) lux += t.amount;
+    if (main === ESS) ess += cashOut(t);
+    else if (main === LUX) lux += cashOut(t);
   }
   return { ess, lux };
 }
@@ -93,7 +93,7 @@ export function SpendingPatternCard({
         if (getMainCategory(categories, t.category).id !== mainId) continue;
         const info = getCategoryInfo(categories, t.category);
         const cur = byCat.get(info.id) ?? { label: info.label, icon: info.icon, amount: 0 };
-        cur.amount += t.amount;
+        cur.amount += cashOut(t);
         byCat.set(info.id, cur);
       }
       return [...byCat.values()].sort((a, b) => b.amount - a.amount).slice(0, 3);

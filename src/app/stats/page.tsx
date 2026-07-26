@@ -11,6 +11,7 @@ import {
   formatAmount,
   arabicMonthName,
   quranActivityDates,
+  cashOut,
   today,
 } from "@/lib/utils";
 import { completedDayDates } from "@/lib/dayAggregator";
@@ -46,7 +47,7 @@ export default function StatsPage() {
   ).length;
   const spentThisYear = transactions
     .filter((t) => t.date.startsWith(year))
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + cashOut(t), 0);
   const fullPrayerDays = prayerLogs
     .filter((l) => countDayPrayers(l).prayed === 5)
     .map((l) => l.date);
@@ -124,7 +125,7 @@ export default function StatsPage() {
     const byKey = Object.fromEntries(months.map((m) => [m.key, m]));
     transactions.forEach((t) => {
       const m = byKey[t.date.slice(0, 7)];
-      if (m) m.مصاريف += t.amount;
+      if (m) m.مصاريف += cashOut(t);
     });
     return months;
   }, [transactions]);

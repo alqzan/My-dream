@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   installmentDueDates, planScheduleAmounts, planExpectedTotal, planMismatch,
   planPaid, planSchedule, planSummary, installmentsOverview, validatePlanDraft,
-  describeDueIn, isPlanOpen,
+  describeDueIn, isPlanOpen, planPrincipal, planLinkedTransactions,
 } from "./installments";
 import type { InstallmentPlan, Transaction } from "./types";
 
@@ -250,5 +250,48 @@ describe("describeDueIn", () => {
     expect(describeDueIn(0)).toBe("اليوم");
     expect(describeDueIn(1)).toBe("غداً");
     expect(describeDueIn(5)).toBe("خلال 5 يوم");
+  });
+});
+
+describe("«الأصل المؤجّل» — الشراء مهب كاش، والأقساط هي الصرف", () => {
+  const principal = pay({
+    id: "orig", amount: 1200, date: "2026-02-01",
+    planRole: "principal", deferred: true,
+  });
+
+  it("is never counted as a payment (the plan isn't settled the moment you buy)", () => {
+    const s = planSummary(plan(), [principal], "2026-02-02");
+    expect(s.paid).toBe(0);
+    expect(s.remaining).toBe(1200);
+    expect(s.pct).toBe(0);
+    expect(s.complete).toBe(false);
+    expect(s.rows.every((r) => !r.paid)).toBe(true);
+  });
+
+  it("keeps the principal in the linked list but out of the payments list", () => {
+    expect(planLinkedTransactions(plan(), [principal]).map((t) => t.id)).toEqual(["orig"]);
+    expect(planPrincipal(plan(), [principal])?.id).toBe("orig");
+  });
+
+  it("is exposed for display and linked back through the plan", () => {
+    const s = planSummary(plan({ principalTxId: "orig" }), [principal], "2026-02-02");
+    expect(s.principal?.id).toBe("orig");
+    expect(s.principal?.deferred).toBe(true);
+  });
+
+  it("counts only the installments as paid, alongside the principal", () => {
+    const txs = [
+      principal,
+      pay({ id: "t1", planRole: "installment", planInstallmentNo: 1, amount: 100 }),
+      pay({ id: "t2", planRole: "installment", planInstallmentNo: 2, amount: 100 }),
+    ];
+    const s = planSummary(plan(), txs, "2026-04-01");
+    expect(s.paid).toBe(200); // لا 1400 — الأصل ليس دفعة
+    expect(s.remaining).toBe(1000);
+  });
+
+  it("ignores any deferred transaction even if it carries a payment role", () => {
+    const ghost = pay({ id: "g", planRole: "installment", planInstallmentNo: 1, amount: 100, deferred: true });
+    expect(planSummary(plan(), [ghost], "2026-03-01").paid).toBe(0);
   });
 });

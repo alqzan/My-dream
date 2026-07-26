@@ -67,13 +67,21 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                     {tx.planRole === "installment" && tx.planInstallmentNo ? ` ${tx.planInstallmentNo}` : ""}
                   </span>
                 )}
+                {/* شراءٌ مؤجّل (مهب كاش): لم يخرج من الحساب فلا يُحتسب صرفاً —
+                    نقولها صريحةً حتى لا يبدو الرقم ناقصاً في حسابات الشهر. */}
+                {tx.deferred && (
+                  <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 dark:bg-amber-500/20 dark:text-amber-300 px-1.5 py-0.5 rounded-full shrink-0">
+                    مؤجّل — لا يُحتسب
+                  </span>
+                )}
               </div>
               {tx.note && <div className="text-xs text-gray-400 truncate">{tx.note}</div>}
               <div className="text-xs text-gray-400 mt-0.5">{formatDate(tx.date)}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-base font-bold text-red-500">
-                -{formatAmount(tx.amount)}
+              {/* المؤجّل بلا إشارة سالبة ولا لونٍ أحمر — لم يخرج من الجيب. */}
+              <span className={`text-base font-bold ${tx.deferred ? "text-gray-400 line-through" : "text-red-500"}`}>
+                {tx.deferred ? "" : "-"}{formatAmount(tx.amount)}
                 <span className="text-xs font-normal mr-0.5">ر.س</span>
               </span>
               {onDelete && (

@@ -1,6 +1,6 @@
 "use client";
 import type { Budget, Transaction, FinanceCategoryDef } from "@/lib/types";
-import { formatAmount, budgetLimit, getMainCategory } from "@/lib/utils";
+import { formatAmount, budgetLimit, getMainCategory, cashOut } from "@/lib/utils";
 
 interface FinancePaceProps {
   budgets: Budget[];
@@ -20,7 +20,7 @@ export function FinancePace({ budgets, monthTransactions, categories, monthlyInc
   // Sub-category spending rolls up onto the main category's budget.
   const spent = monthTransactions
     .filter((t) => budgetedCats.has(getMainCategory(categories, t.category).id))
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + cashOut(t), 0);
   const remaining = totalBudget - spent;
 
   const now = new Date();

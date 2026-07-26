@@ -6,7 +6,7 @@ import type {
   DailyBudget, Transaction, ReserveFund, RecurringTransaction, Budget, FinanceCategoryDef,
   InstallmentPlan,
 } from "./types";
-import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr } from "./utils";
+import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr, cashOut } from "./utils";
 import { installmentsOverview, type InstallmentsOverview } from "./installments";
 
 export interface NearestCommitment {
@@ -118,7 +118,7 @@ export function budgetAlerts(
     if (!cap) continue;
     const spent = transactions
       .filter((t) => getMainCategory(categories, t.category).id === b.category && t.date.startsWith(monthPrefix))
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, t) => s + cashOut(t), 0);
     if (spent > cap) over++;
     else if ((spent / cap) * 100 >= 80) near++;
   }
@@ -141,9 +141,10 @@ export function buildFinanceOverview(data: {
   const availableToday = hasBudget
     ? computeDailyBudgetStatus(data.dailyBudget as DailyBudget, data.transactions).balance
     : 0;
+  // صرف الشهر = ما خرج فعلاً (المؤجّل التزامٌ لا صرف — راجع cashOut).
   const monthSpend = data.transactions
     .filter((t) => t.date.startsWith(data.monthPrefix))
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + cashOut(t), 0);
   const reservesTotal = data.reserves.reduce((s, f) => s + reserveBalance(f, data.transactions), 0);
   const plans = data.installmentPlans ?? [];
   return {

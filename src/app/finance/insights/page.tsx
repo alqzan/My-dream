@@ -12,6 +12,7 @@ import {
   dailyShare,
   reserveShare,
   arabicMonthName,
+  cashOut,
   cn,
 } from "@/lib/utils";
 import type { Transaction } from "@/lib/types";
@@ -109,8 +110,8 @@ export default function SpendInsightsPage() {
   const periodTx = transactions.filter((t) => inRange(t, ranges.start, ranges.end));
   const prevTx = transactions.filter((t) => inRange(t, ranges.prevStart, ranges.prevEnd));
 
-  const total = periodTx.reduce((s, t) => s + t.amount, 0);
-  const prevTotal = prevTx.reduce((s, t) => s + t.amount, 0);
+  const total = periodTx.reduce((s, t) => s + cashOut(t), 0);
+  const prevTotal = prevTx.reduce((s, t) => s + cashOut(t), 0);
   const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null;
   const daysInPeriod =
     Math.round((parseDate(ranges.end).getTime() - parseDate(ranges.start).getTime()) / 86400000) + 1;
@@ -125,7 +126,7 @@ export default function SpendInsightsPage() {
     const dailyByKey = new Map<string, number>();
     for (const t of periodTx) {
       const key = period === "سنة" ? t.date.slice(0, 7) : t.date;
-      byKey.set(key, (byKey.get(key) ?? 0) + t.amount);
+      byKey.set(key, (byKey.get(key) ?? 0) + cashOut(t));
       dailyByKey.set(key, (dailyByKey.get(key) ?? 0) + dailyShare(t));
     }
     if (period === "سنة") {
@@ -160,8 +161,8 @@ export default function SpendInsightsPage() {
     for (const t of periodTx) {
       const main = getMainCategory(categories, t.category);
       const entry = map.get(main.id) ?? { total: 0, bySub: new Map() };
-      entry.total += t.amount;
-      entry.bySub.set(t.category, (entry.bySub.get(t.category) ?? 0) + t.amount);
+      entry.total += cashOut(t);
+      entry.bySub.set(t.category, (entry.bySub.get(t.category) ?? 0) + cashOut(t));
       map.set(main.id, entry);
     }
     return [...map.entries()]

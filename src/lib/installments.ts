@@ -20,6 +20,7 @@ export const INSTALLMENT_STATUS_LABEL: Record<InstallmentStatus, string> = {
 };
 
 export const INSTALLMENT_ROLE_LABEL: Record<InstallmentRole, string> = {
+  principal: "الأصل (مؤجّل)",
   down: "الدفعة الأولى",
   installment: "قسط",
   final: "الدفعة الأخيرة",
@@ -100,12 +101,31 @@ export function planMismatch(plan: InstallmentPlan): { expected: number; diff: n
   return Math.abs(diff) > MONEY_EPSILON ? { expected, diff } : null;
 }
 
-// معاملات هذه الخطة (أقدم أولاً) — مصدر كل رقمٍ «مدفوع».
-export function planPayments(plan: InstallmentPlan | string, transactions: Transaction[]): Transaction[] {
+// كل معاملات هذه الخطة (أقدم أولاً) — بما فيها «الأصل المؤجّل» إن وُجد.
+export function planLinkedTransactions(plan: InstallmentPlan | string, transactions: Transaction[]): Transaction[] {
   const id = typeof plan === "string" ? plan : plan.id;
   return transactions
     .filter((t) => t.planId === id)
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+}
+
+// **الدفعات** فقط — مصدر كل رقمٍ «مدفوع». يُستثنى منها:
+//  • «الأصل المؤجّل» (`planRole: "principal"`): هو الشراء نفسه، التزامٌ لا دفعة —
+//    لو حُسِب لظهرت الخطة مسدّدةً كاملةً في لحظة الشراء.
+//  • أيّ معاملةٍ مؤجّلة (`deferred`): لم يخرج منها ريال.
+export function planPayments(plan: InstallmentPlan | string, transactions: Transaction[]): Transaction[] {
+  return planLinkedTransactions(plan, transactions).filter(
+    (t) => t.planRole !== "principal" && !t.deferred
+  );
+}
+
+// «الأصل المؤجّل» المرتبط بالخطة (الشراء الذي لم يكن كاش)، إن وُجد.
+export function planPrincipal(plan: InstallmentPlan, transactions: Transaction[]): Transaction | null {
+  return (
+    planLinkedTransactions(plan, transactions).find(
+      (t) => t.planRole === "principal" || t.id === plan.principalTxId
+    ) ?? null
+  );
 }
 
 export function planPaid(plan: InstallmentPlan, transactions: Transaction[]): number {
@@ -163,6 +183,8 @@ export interface PlanSummary {
   mismatch: { expected: number; diff: number } | null; // تحذير غير معطِّل
   saved: number; // «موفَّر» بالسداد المبكر (فرقٌ معروضٌ فقط — لا مصروف وهمي)
   downPaid: boolean; // سُجّلت الدفعة الأولى
+  // «الأصل المؤجّل» المربوط (الشراء الذي لم يكن كاش) — للعرض فقط، بصفر أثرٍ حسابيّ.
+  principal: Transaction | null;
 }
 
 export function planSummary(plan: InstallmentPlan, transactions: Transaction[], todayStr: string): PlanSummary {
@@ -196,6 +218,7 @@ export function planSummary(plan: InstallmentPlan, transactions: Transaction[], 
     mismatch: planMismatch(plan),
     saved,
     downPaid: payments.some((t) => t.planRole === "down"),
+    principal: planPrincipal(plan, transactions),
   };
 }
 

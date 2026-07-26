@@ -15,6 +15,7 @@ import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
+import { planSummary } from "./installments";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
 // wrapper) so cloud sync can't resurrect a removed item from another device.
@@ -104,6 +105,21 @@ interface AppStore extends AppData {
     planId: string,
     p: { role: InstallmentRole; amount: number; date?: string; installmentNo?: number; note?: string; category?: string }
   ) => string;
+  // **سجّل القسط القادم بضغطةٍ واحدة** (الطريق اليوميّ): يدفع أقدم قسطٍ غير مكتمل
+  // بمبلغه اليوم. يرجع معرّف المعاملة، أو "" إن لم يبقَ قسط.
+  payNextInstallment: (planId: string, opts?: { amount?: number; date?: string }) => string;
+  // **قسّط مصروفاً مسجَّلاً**: الشراء لم يكن كاش (مؤجّل) — تُنشأ خطةٌ إجماليّها مبلغ
+  // المعاملة، وتصير المعاملة «الأصل المؤجّل» فلا تُحتسب صرفاً (الأقساط هي الصرف).
+  convertTransactionToPlan: (
+    txId: string,
+    plan: { provider: string; name?: string; installmentAmount: number; count: number; firstDueDate: string; downPayment?: number; fees?: number; finalPayment?: number; note?: string }
+  ) => string;
+  // ربط/فكّ معاملةٍ قائمة بخطة — للطريق اليوميّ: سجّل المصروف كالعادة ثمّ اربطه.
+  linkTransactionToPlan: (
+    txId: string,
+    link: { planId: string; role: InstallmentRole; installmentNo?: number }
+  ) => void;
+  unlinkTransactionFromPlan: (txId: string) => void;
   // سدادٌ مبكر: يسجّل **المبلغ الفعليّ وحده** ويقفل الخطة. لا مصروف وهمي للفرق.
   settleInstallmentPlan: (planId: string, amount: number, date?: string) => string;
   // تذكيرٌ متكرّر للخطة (generationMode: "reminder" — لا يولّد معاملات أبداً).
@@ -642,6 +658,113 @@ export const useAppStore = create<AppStore>()(
         }));
         return id;
       },
+
+      // الطريق اليوميّ #1: ضغطةٌ واحدة تسجّل القسط القادم بمبلغه في تاريخ اليوم.
+      // لا اختيارَ رقمٍ ولا تاريخٍ ولا تصنيف — كلّها مشتقّة من الخطة والجدول.
+      payNextInstallment: (planId, opts) => {
+        const st = get();
+        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
+        if (!plan) return "";
+        const next = planSummary(plan, st.transactions, today()).next;
+        if (!next) return "";
+        return get().recordInstallmentPayment(planId, {
+          role: next.isFinal ? "final" : "installment",
+          amount: opts?.amount ?? next.amount,
+          installmentNo: next.no,
+          date: opts?.date,
+        });
+      },
+
+      // «قسّط هذا المصروف»: الشراء كان **مؤجّلاً لا كاش**. المعاملة القائمة تصير
+      // «الأصل المؤجّل» (deferred + planRole: "principal") فتخرج من كل حسابات
+      // الصرف وتبقى في السجل كسجلٍّ للشراء، والخطة إجماليّها مبلغُها بالضبط.
+      // هكذا لا يُحتسب الشراء مرّتين: الأقساط وحدها هي الصرف الفعليّ.
+      convertTransactionToPlan: (txId, draft) => {
+        const st = get();
+        const tx = st.transactions.find((t) => t.id === txId);
+        if (!tx) return "";
+        const total = round2(tx.amount);
+        if (!(total > 0)) return "";
+        const count = Math.max(1, Math.floor(draft.count) || 1);
+        const planId = uid();
+        const plan: InstallmentPlan = {
+          id: planId,
+          provider: draft.provider.trim(),
+          name: (draft.name?.trim() || tx.note.trim() || draft.provider.trim()),
+          totalPrice: total,
+          downPayment: round2(draft.downPayment ?? 0),
+          installmentAmount: round2(draft.installmentAmount),
+          count,
+          firstDueDate: draft.firstDueDate,
+          fees: draft.fees,
+          finalPayment: draft.finalPayment,
+          status: "active",
+          category: tx.category || undefined,
+          note: draft.note,
+          principalTxId: txId,
+          createdAt: today(),
+          updatedAt: Date.now(),
+        };
+        set((s) => ({
+          installmentPlans: [plan, ...(s.installmentPlans ?? [])],
+          transactions: s.transactions.map((t) =>
+            t.id === txId
+              ? {
+                  ...t,
+                  deferred: true,
+                  planId,
+                  planRole: "principal" as const,
+                  planInstallmentNo: undefined,
+                  planLinkedAt: Date.now(),
+                  updatedAt: Date.now(),
+                }
+              : t
+          ),
+          ...clearTombstone(s.deleted, planId),
+        }));
+        return planId;
+      },
+
+      // الطريق اليوميّ #2: سجّل المصروف كما تفعل دائماً، ثمّ اربطه بالخطة بضغطة —
+      // فلا إدخالٌ مزدوج ولا مبلغٌ يُحتسب مرّتين. الدور مفردٌ دائماً.
+      linkTransactionToPlan: (txId, link) =>
+        set((s) => {
+          if (!(s.installmentPlans ?? []).some((p) => p.id === link.planId)) return {};
+          return {
+            transactions: s.transactions.map((t) =>
+              t.id === txId
+                ? {
+                    ...t,
+                    planId: link.planId,
+                    planRole: link.role,
+                    planInstallmentNo:
+                      link.role === "installment" || link.role === "final" ? link.installmentNo : undefined,
+                    // الأصل وحده مؤجّل؛ أيّ دورٍ آخر دفعةٌ نقدية فعلية.
+                    deferred: link.role === "principal" ? true : undefined,
+                    planLinkedAt: Date.now(),
+                    updatedAt: Date.now(),
+                  }
+                : t
+            ),
+          };
+        }),
+
+      // فكّ الربط يُرجع المعاملة مصروفاً عادياً — ويرفع «التأجيل» فتُحتسب من جديد.
+      unlinkTransactionFromPlan: (txId) =>
+        set((s) => ({
+          transactions: s.transactions.map((t) =>
+            t.id === txId
+              ? {
+                  ...t,
+                  planId: undefined, planRole: undefined, planInstallmentNo: undefined,
+                  planLinkedAt: undefined, deferred: undefined, updatedAt: Date.now(),
+                }
+              : t
+          ),
+          installmentPlans: (s.installmentPlans ?? []).map((p) =>
+            p.principalTxId === txId ? { ...p, principalTxId: undefined, updatedAt: Date.now() } : p
+          ),
+        })),
 
       // سدادٌ مبكر: معاملةٌ واحدة بالمبلغ **الفعليّ** + إغلاق الخطة. الفرق بين ما
       // كان واجباً وما دُفع يُعرَض «موفَّراً» (planSummary.saved) ولا يُخلَق له

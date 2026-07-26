@@ -1,5 +1,5 @@
 import type { Transaction, JournalEntry, ReadingLog, Book, Habit, PrayerLog } from "./types";
-import { countDayPrayers } from "./utils";
+import { countDayPrayers, cashOut } from "./utils";
 
 // ===================== «اليوم المكتمل» — تعريفٌ واحد =====================
 // الطقوس الأساسية الثلاثة: مذكرة · قراءة · وِرد قرآني. ما جُمّد منها لا يُطالَب
@@ -116,7 +116,8 @@ export function aggregateDay(
 ): DaySummary {
   const journalEntries = data.journalEntries.filter((e) => e.date === date);
   const transactions = data.transactions.filter((t) => t.date === date);
-  const expense = transactions.reduce((s, t) => s + t.amount, 0);
+  // صرف اليوم = النقد الخارج فعلاً؛ الشراء المؤجّل يظهر في القائمة بصفر أثرٍ.
+  const expense = transactions.reduce((s, t) => s + cashOut(t), 0);
 
   const dayLogs = data.readingLogs.filter((l) => l.date === date);
   const readingLogs = dayLogs.map((log) => ({

@@ -11,7 +11,7 @@ vi.mock("idb-keyval", () => ({
 
 import { useAppStore } from "./store";
 import { planSummary, planSchedule } from "./installments";
-import { today } from "./utils";
+import { today, cashOut, dailyShare, computeDailyBudgetStatus } from "./utils";
 import type { InstallmentPlan, RecurringTransaction, Transaction } from "./types";
 
 const rule = (over: Partial<RecurringTransaction> & { id: string }): RecurringTransaction => ({
@@ -265,5 +265,132 @@ describe("مهاجرة v14", () => {
     }, 13)) as { recurring: RecurringTransaction[] };
     expect(out.recurring[0].generationMode).toBe("reminder");
     expect(out.recurring[0].updatedAt).toBe(777);
+  });
+});
+
+describe("الشراء المؤجّل — «قسّط هذا المصروف» لا يحتسبه مرّتين", () => {
+  beforeEach(() => {
+    useAppStore.setState({ transactions: [], installmentPlans: [], dailyBudget: null });
+  });
+
+  const buy = (): Transaction => ({
+    id: "buy1", date: today(), amount: 1200, category: "cat-luxuries", note: "جوّال",
+  });
+
+  it("turns the expense into the plan's deferred principal", () => {
+    useAppStore.setState({ transactions: [buy()] });
+    const planId = useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "تمارا", installmentAmount: 300, count: 4, firstDueDate: "2026-09-01",
+    });
+    const st = useAppStore.getState();
+    const plan = st.installmentPlans.find((p) => p.id === planId)!;
+    const tx = st.transactions.find((t) => t.id === "buy1")!;
+
+    expect(plan.totalPrice).toBe(1200); // الإجمالي = مبلغ المعاملة بلا كتابةٍ ثانية
+    expect(plan.principalTxId).toBe("buy1");
+    expect(plan.name).toBe("جوّال");
+    expect(plan.category).toBe("cat-luxuries");
+    expect(tx.deferred).toBe(true);
+    expect(tx.planRole).toBe("principal");
+    expect(tx.planId).toBe(planId);
+  });
+
+  it("the deferred principal spends nothing: zero daily share and zero month spend", () => {
+    useAppStore.setState({ transactions: [buy()] });
+    const planId = useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "تمارا", installmentAmount: 300, count: 4, firstDueDate: today(),
+    });
+    const st = useAppStore.getState();
+    const tx = st.transactions.find((t) => t.id === "buy1")!;
+    expect(cashOut(tx)).toBe(0);
+    expect(dailyShare(tx)).toBe(0);
+
+    // الميزانية اليومية لا تتأثّر بالشراء، وتتأثّر بالقسط وحده.
+    const budget = { amount: 100, startDate: today() };
+    expect(computeDailyBudgetStatus(budget, st.transactions).spent).toBe(0);
+    useAppStore.getState().payNextInstallment(planId);
+    const after = useAppStore.getState().transactions;
+    expect(computeDailyBudgetStatus(budget, after).spent).toBe(300);
+  });
+
+  it("the plan progresses only through the installments (1200 counted once)", () => {
+    useAppStore.setState({ transactions: [buy()] });
+    const planId = useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "تمارا", installmentAmount: 300, count: 4, firstDueDate: "2026-01-05",
+    });
+    const paid = () => {
+      const st = useAppStore.getState();
+      return planSummary(st.installmentPlans.find((p) => p.id === planId)!, st.transactions, today());
+    };
+    expect(paid().paid).toBe(0);
+    useAppStore.getState().payNextInstallment(planId);
+    useAppStore.getState().payNextInstallment(planId);
+    expect(paid().paid).toBe(600);
+    expect(paid().remaining).toBe(600);
+    // مجموع النقد الخارج فعلاً = 600 لا 1800.
+    const cash = useAppStore.getState().transactions.reduce((s, t) => s + cashOut(t), 0);
+    expect(cash).toBe(600);
+  });
+
+  it("unlinking the principal makes it a normal expense again", () => {
+    useAppStore.setState({ transactions: [buy()] });
+    useAppStore.getState().convertTransactionToPlan("buy1", {
+      provider: "تمارا", installmentAmount: 300, count: 4, firstDueDate: "2026-09-01",
+    });
+    useAppStore.getState().unlinkTransactionFromPlan("buy1");
+    const st = useAppStore.getState();
+    const tx = st.transactions.find((t) => t.id === "buy1")!;
+    expect(tx.deferred).toBeUndefined();
+    expect(tx.planId).toBeUndefined();
+    expect(cashOut(tx)).toBe(1200);
+    expect(st.installmentPlans[0].principalTxId).toBeUndefined();
+  });
+
+  it("refuses to convert a missing transaction", () => {
+    expect(useAppStore.getState().convertTransactionToPlan("nope", {
+      provider: "x", installmentAmount: 10, count: 2, firstDueDate: "2026-09-01",
+    })).toBe("");
+  });
+});
+
+describe("الطريق اليوميّ — ضغطةٌ واحدة وربطُ مصروفٍ قائم", () => {
+  beforeEach(() => {
+    useAppStore.setState({ transactions: [], installmentPlans: [] });
+    useAppStore.getState().addInstallmentPlan(plan({ firstDueDate: "2026-01-15", count: 3, installmentAmount: 100, totalPrice: 500, downPayment: 200 }));
+  });
+
+  it("payNextInstallment pays the earliest unpaid row, then the next one", () => {
+    const first = useAppStore.getState().payNextInstallment("p1");
+    const t1 = useAppStore.getState().transactions.find((t) => t.id === first)!;
+    expect(t1.amount).toBe(100);
+    expect(t1.planInstallmentNo).toBe(1);
+    expect(t1.date).toBe(today()); // تاريخ اليوم بلا سؤال
+    useAppStore.getState().payNextInstallment("p1");
+    const nos = useAppStore.getState().transactions.map((t) => t.planInstallmentNo).sort();
+    expect(nos).toEqual([1, 2]);
+  });
+
+  it("returns an empty id once every installment is covered (nothing left to pay)", () => {
+    for (let i = 0; i < 3; i++) useAppStore.getState().payNextInstallment("p1");
+    expect(useAppStore.getState().payNextInstallment("p1")).toBe("");
+    expect(useAppStore.getState().transactions).toHaveLength(3);
+  });
+
+  it("links an already-logged expense to a plan without creating a second one", () => {
+    useAppStore.setState({ transactions: [{ id: "x1", date: today(), amount: 100, category: "c", note: "قسط تمارا" }] });
+    useAppStore.getState().linkTransactionToPlan("x1", { planId: "p1", role: "installment", installmentNo: 1 });
+    const st = useAppStore.getState();
+    expect(st.transactions).toHaveLength(1); // لا إدخالٌ مزدوج
+    const t = st.transactions[0];
+    expect(t.planId).toBe("p1");
+    expect(t.deferred).toBeUndefined(); // دفعةٌ نقدية فعلية — تُحتسب كالعادة
+    expect(cashOut(t)).toBe(100);
+    expect(planSummary(st.installmentPlans[0], st.transactions, today()).paid).toBe(100);
+  });
+
+  it("ignores a link to a plan that doesn't exist", () => {
+    useAppStore.setState({ transactions: [{ id: "x1", date: today(), amount: 100, category: "c", note: "" }] });
+    useAppStore.getState().linkTransactionToPlan("x1", { planId: "ghost", role: "installment" });
+    expect(useAppStore.getState().transactions[0].planId).toBeUndefined();
   });
 });

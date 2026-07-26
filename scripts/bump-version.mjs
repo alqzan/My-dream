@@ -20,4 +20,14 @@ writeFileSync(versionUrl, src.replace(/(APP_BUILD\s*=\s*)\d+/, `$1${next}`));
 const raw = readFileSync(pkgUrl, "utf8");
 writeFileSync(pkgUrl, raw.replace(/("version"\s*:\s*")[^"]+(")/, `$10.1.${next}$2`));
 
+// package-lock.json يحمل نسخةَ الجذر مرّتين (الترويسة + مدخل ""). تركُها متخلّفةً
+// يجعل npm يعتبر الشجرة غير صالحة (فيفشل `npm audit` مثلاً)، فنُحدّثهما معاً.
+const lockUrl = new URL("../package-lock.json", import.meta.url);
+try {
+  const lock = readFileSync(lockUrl, "utf8");
+  writeFileSync(lockUrl, lock.replace(/("version"\s*:\s*")[^"]+(")/g, (m, a, b, off) =>
+    off < 400 ? `${a}0.1.${next}${b}` : m // الترويسة ومدخل الجذر فقط، لا الاعتماديات
+  ));
+} catch { /* لا قفل (تثبيتٌ نظيف) — غير حرج */ }
+
 console.log(`✓ الإصدار الآن 0.1.${next} (تعديل رقم ${next}) — سجّله في ROADMAP.md`);

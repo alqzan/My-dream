@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { Transaction, JournalEntry, ReadingLog, Book, HifzState } from "@/lib/types";
-import { formatAmount, toDateStr, parseDate, formatDateShort } from "@/lib/utils";
+import { formatAmount, toDateStr, parseDate, formatDateShort, cashOut } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Share2, Loader2, BookOpen } from "lucide-react";
 
@@ -210,7 +210,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, quranHif
   const weekJournal = journalEntries.filter((e) => weekSet.has(e.date));
   const weekLogs = readingLogs.filter((l) => weekSet.has(l.date));
 
-  const spent = weekTx.reduce((s, t) => s + t.amount, 0);
+  const spent = weekTx.reduce((s, t) => s + cashOut(t), 0);
   const pagesRead = weekLogs.reduce((s, l) => s + l.pagesRead, 0);
   const journalDays = weekJournal.length;
   const readingDays = new Set(weekLogs.map((l) => l.date)).size;
@@ -226,7 +226,7 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, quranHif
     const journaled = weekJournal.some((e) => e.date === d);
     const read = weekLogs.some((l) => l.date === d);
     const dayTx = weekTx.filter((t) => t.date === d);
-    const daySpent = dayTx.reduce((s, t) => s + t.amount, 0);
+    const daySpent = dayTx.reduce((s, t) => s + cashOut(t), 0);
     const dayPages = weekLogs.filter((l) => l.date === d).reduce((s, l) => s + l.pagesRead, 0);
     const quran = weekHifz.some((x) => x.date === d) || weekReviews.some((x) => x.date === d);
     const level = (journaled ? 1 : 0) + (read ? 1 : 0) + (dayTx.length ? 1 : 0) + (quran ? 1 : 0);
