@@ -3,7 +3,7 @@ import {
   installmentDueDates, planScheduleAmounts, planExpectedTotal, planMismatch,
   planPaid, planSchedule, planSummary, installmentsOverview, validatePlanDraft,
   describeDueIn, isPlanOpen, planPrincipal, planLinkedTransactions,
-  rowRemaining, isValidDateKey,
+  rowRemaining, isValidDateKey, partsTotal, suggestPlanLink,
 } from "./installments";
 import type { InstallmentPlan, Transaction } from "./types";
 
@@ -345,5 +345,53 @@ describe("isValidDateKey — تاريخٌ صالح لا شكلٌ صالح", () =
       provider: "تمارا", name: "x", totalPrice: 100, downPayment: 0,
       installmentAmount: 50, count: 2, firstDueDate: "2026-13-01",
     })).toEqual(["أول موعد استحقاق مطلوب"]);
+  });
+});
+
+describe("partsTotal — الإجمالي يُحسب من البنود", () => {
+  it("دفعة أولى + أقساط متساوية (حالة المالك: ١٥٠٠ ثمّ ٧٨٠ × ٦)", () => {
+    expect(partsTotal({ downPayment: 1500, installmentAmount: 780, count: 6 })).toBe(6180);
+  });
+  it("بلا دفعة أولى", () => {
+    expect(partsTotal({ downPayment: 0, installmentAmount: 250, count: 4 })).toBe(1000);
+  });
+  it("الدفعة الأخيرة تستبدل آخر قسط ولا تُضاف إليه", () => {
+    expect(partsTotal({ downPayment: 0, installmentAmount: 100, count: 5, finalPayment: 500 })).toBe(900);
+  });
+  it("عددٌ صفريّ = الدفعة الأولى وحدها", () => {
+    expect(partsTotal({ downPayment: 300, installmentAmount: 100, count: 0 })).toBe(300);
+  });
+});
+
+describe("suggestPlanLink — الربط التلقائي لا يخمّن عند الشكّ", () => {
+  const p = plan({ downPayment: 1500, installmentAmount: 780, count: 6, totalPrice: 6180, firstDueDate: "2026-03-01" });
+  it("يربط دفعةً بمبلغ القسط في موعده", () => {
+    const s = suggestPlanLink({ amount: 780, date: "2026-03-01" }, [p], [], "2026-03-01");
+    expect(s?.plan.id).toBe("p1");
+    expect(s?.row.no).toBe(1);
+    expect(s?.role).toBe("installment");
+  });
+  it("يتسامح مع فرق ريالٍ وأيامٍ قليلة", () => {
+    expect(suggestPlanLink({ amount: 779.5, date: "2026-03-05" }, [p], [], "2026-03-05")).not.toBeNull();
+  });
+  it("يرفض مبلغاً بعيداً أو موعداً بعيداً", () => {
+    expect(suggestPlanLink({ amount: 90, date: "2026-03-01" }, [p], [], "2026-03-01")).toBeNull();
+    expect(suggestPlanLink({ amount: 780, date: "2026-05-15" }, [p], [], "2026-05-15")).toBeNull();
+  });
+  it("لا يربط معاملةً مربوطةً أصلاً ولا مؤجّلة", () => {
+    expect(suggestPlanLink({ amount: 780, date: "2026-03-01", planId: "x" }, [p], [], "2026-03-01")).toBeNull();
+    expect(suggestPlanLink({ amount: 780, date: "2026-03-01", deferred: true }, [p], [], "2026-03-01")).toBeNull();
+  });
+  it("يمتنع عند تعدّد المرشّحين (خطّتان متطابقتان)", () => {
+    const twin = { ...p, id: "p2" };
+    expect(suggestPlanLink({ amount: 780, date: "2026-03-01" }, [p, twin], [], "2026-03-01")).toBeNull();
+  });
+  it("لا يقترح قسطاً دُفع، بل الذي يليه", () => {
+    const paid = [pay({ id: "t1", planRole: "installment", planInstallmentNo: 1, amount: 780 })];
+    const s = suggestPlanLink({ amount: 780, date: "2026-04-01" }, [p], paid, "2026-04-01");
+    expect(s?.row.no).toBe(2);
+  });
+  it("لا يقترح شيئاً لخطةٍ ملغاة", () => {
+    expect(suggestPlanLink({ amount: 780, date: "2026-03-01" }, [{ ...p, status: "cancelled" }], [], "2026-03-01")).toBeNull();
   });
 });

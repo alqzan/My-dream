@@ -364,6 +364,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // خطط الأقساط: عنصرٌ بمعرّف وطابع تعديلٍ خاصٍّ به — فتعديل الخطة على جهاز لا
     // يضيع لأن ختم المستند على الجهاز الآخر أحدث، والحذف يبقى شاهداً فلا يعود.
     installmentPlans: byIdNewer(primary.installmentPlans ?? [], secondary.installmentPlans ?? []),
+    // الأصول: كخطط الأقساط تماماً — عنصرٌ بمعرّفٍ وطابع تعديلٍ خاصٍّ به، فتعديل
+    // عمرٍ افتراضيّ على جهاز لا يضيع، والحذف يبقى شاهداً فلا يعود الأصل.
+    assets: byIdNewer(primary.assets ?? [], secondary.assets ?? []),
     // Budgets are keyed by category (no item id), so a removed cap is tombstoned
     // as budget:<category> and filtered here — else the union re-adds it.
     budgets: unionOrdered(primary.budgets, secondary.budgets, (b) => b.category).filter(

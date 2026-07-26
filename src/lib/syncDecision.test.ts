@@ -12,6 +12,7 @@ function base(over: Partial<AppData> = {}): AppData {
     habits: [],
     recurring: [],
     installmentPlans: [],
+    assets: [],
     budgets: [],
     categories: [],
     reserves: [],

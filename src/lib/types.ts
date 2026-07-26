@@ -255,6 +255,9 @@ export interface InstallmentPlan {
   cashPrice?: number; // السعر النقدي (اختياري — للمقارنة فقط، لا يدخل أيّ حساب)
   totalPrice: number; // السعر الإجمالي — المرجع الوحيد للمبلغ الواجب
   downPayment: number; // الدفعة الأولى (0 = لا دفعة أولى)
+  // يوم دفع الدفعة الأولى — تُسجَّل مصروفاً حقيقياً بهذا التاريخ لحظة إنشاء الخطة
+  // (دفعةٌ خرجت فعلاً، لا موعدٌ مستقبليّ). غيابه (خططٌ قديمة) = يوم الإنشاء.
+  downDate?: string; // YYYY-MM-DD
   installmentAmount: number; // قيمة القسط الشهري
   count: number; // عدد الأقساط
   firstDueDate: string; // YYYY-MM-DD أول موعد استحقاق
@@ -270,6 +273,48 @@ export interface InstallmentPlan {
   createdAt: string; // YYYY-MM-DD
   updatedAt?: number; // ms — يفوز به التعديل الأحدث لهذه الخطة في الدمج
 }
+
+// ===================== الأصول والاستهلاك (الإهلاك) =====================
+// «أصل» = شيءٌ غالٍ اشتريتَه وتملكه ويخدمك سنين (جوّال، لابتوب، أثاث، سيارة)،
+// لا مصروفاً يومياً ينتهي بيومه. الفكرة الوحيدة هنا: **الكلفة تتوزّع على أيام
+// الاستعمال لا على يوم الشراء**، فتعرف «كم يكلّفني هذا الشيء في اليوم فعلاً»
+// و«كم بقي من قيمته».
+//
+// النموذج مقصودٌ بسيطاً: إهلاكٌ خطّيٌّ يوميّ (كل يومٍ ينقص القيمة بمقدارٍ ثابت)
+// لأنه الوحيد الذي يمكن للمالك أن يتحقّق منه ذهنياً. العمر «على كيفك» بالأيام —
+// تختار سنةً أو ثلاثاً أو رقماً حرّاً.
+//
+// **لا يمسّ الأصلُ أيّ صرف**: الإهلاك عرضٌ محاسبيّ محض ولا يولّد معاملةً ولا
+// يدخل الميزانية اليومية ولا السقوف. المصروف الحقيقي هو ثمن الشراء (أو الأقساط)
+// حين سُجّل، ولا يجوز احتسابه مرّةً ثانيةً كإهلاك.
+export interface Asset {
+  id: string;
+  name: string; // «آيفون ١٦»، «لابتوب العمل»، «كنب المجلس»
+  icon?: string; // إيموجي اختياري
+  purchaseDate: string; // YYYY-MM-DD يوم امتلاكه (بداية الإهلاك)
+  purchasePrice: number; // ثمنه كاملاً (لا يهمّ أدُفع كاشاً أم بالتقسيط)
+  // القيمة المتوقّعة في نهاية العمر (ما تظنّ أنك ستبيعه به). 0 = يستهلك كلياً.
+  salvageValue?: number;
+  lifeDays: number; // العمر الافتراضي بالأيام (≥ 1) — «على كيفك»
+  planId?: string; // خطة الأقساط التي اشتريته بها (إن وُجدت) — ربطٌ للعرض فقط
+  transactionId?: string; // معاملة الشراء (إن رُبطت) — للعرض فقط
+  // البيع/التخلّص: يوقف الإهلاك عند هذا اليوم ويحسب الربح/الخسارة الفعليّ
+  // (ثمن البيع − القيمة الدفترية يومَها). لا يولّد معاملةً أيضاً.
+  soldDate?: string; // YYYY-MM-DD
+  soldPrice?: number;
+  note?: string;
+  createdAt: string; // YYYY-MM-DD
+  updatedAt?: number; // ms — يفوز به التعديل الأحدث لهذا الأصل في الدمج
+}
+
+// أعمارٌ جاهزة بضغطة (والحقل الحرّ باقٍ دائماً) — أيامٌ لا شهور، فالحساب يوميّ.
+export const ASSET_LIFE_PRESETS: { label: string; days: number }[] = [
+  { label: "سنة", days: 365 },
+  { label: "سنتان", days: 730 },
+  { label: "٣ سنوات", days: 1095 },
+  { label: "٥ سنوات", days: 1825 },
+  { label: "١٠ سنوات", days: 3650 },
+];
 
 // A monthly cap on a main category — either a fixed SAR amount or a
 // percentage of the monthly income (pct wins when both are set, and the
@@ -446,6 +491,8 @@ export interface AppData {
   recurring: RecurringTransaction[];
   // خطط الأقساط — وصفُ اتفاقٍ فقط؛ المدفوع يُشتَقّ من المعاملات المربوطة بها.
   installmentPlans: InstallmentPlan[];
+  // الأصول الغالية وإهلاكها اليومي — عرضٌ محاسبيّ لا يولّد مصروفاً ولا يمسّ رصيداً.
+  assets: Asset[];
   budgets: Budget[];
   categories: FinanceCategoryDef[];
   reserves: ReserveFund[];

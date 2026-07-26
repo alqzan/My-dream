@@ -156,6 +156,7 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     // خطط الأقساط تدخل النسخة الاحتياطية كأيّ مجموعة: تصديرها يحملها (snapshot)،
     // والاستعادة تُبقيها؛ ملفٌّ قديم بلا الحقل يُستعاد كقائمةٍ فارغة بلا خطأ.
     installmentPlans: g("installmentPlans", []),
+    assets: g("assets", []),
     budgets: g("budgets", []),
     categories: g("categories", DEFAULT_CATEGORIES),
     reserves: g("reserves", []),

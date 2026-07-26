@@ -481,3 +481,97 @@ describe("convertTransactionToPlan — حرّاس العدد والتاريخ", 
     })).toBe("");
   });
 });
+
+// حالة المالك التي عجز النموذج القديم عن استيعابها بيسر: دفعةٌ أولى ١٥٠٠ ريال ثمّ
+// ٧٨٠ ريال شهرياً لستّة أشهر — بلا أن يحسب الإجمالي بنفسه.
+describe("createInstallmentPlan — خطةٌ كاملة بخطوةٍ واحدة", () => {
+  it("يحسب الإجمالي من البنود ويسجّل الدفعة الأولى ويربط تذكيراً — بلا معاملةٍ لقسطٍ قادم", () => {
+    const id = useAppStore.getState().createInstallmentPlan({
+      name: "أثاث", provider: "معرض",
+      downPayment: 1500, downDate: "2026-07-01",
+      installmentAmount: 780, count: 6, firstDueDate: "2026-08-01",
+    });
+    expect(id).toBeTruthy();
+    const st = useAppStore.getState();
+    const p = st.installmentPlans.find((x) => x.id === id)!;
+    expect(p.totalPrice).toBe(6180); // ١٥٠٠ + ٧٨٠ × ٦
+    // معاملةٌ واحدة فقط: الدفعة الأولى بتاريخها. الأقساط تبقى جدولاً حتى تُدفع.
+    expect(st.transactions).toHaveLength(1);
+    expect(st.transactions[0]).toMatchObject({
+      amount: 1500, date: "2026-07-01", planId: id, planRole: "down",
+    });
+    expect(st.transactions[0].deferred).toBeUndefined(); // دفعةٌ خرجت فعلاً = صرفٌ حقيقيّ
+    // تذكيرٌ شهريّ لا يولّد معاملات أبداً.
+    const r = st.recurring.find((x) => x.planId === id)!;
+    expect(r.generationMode).toBe("reminder");
+    expect(r.amount).toBe(780);
+    const s = planSummary(p, st.transactions, "2026-07-05");
+    expect(s.paid).toBe(1500);
+    expect(s.remaining).toBe(4680);
+    expect(s.totalRows).toBe(6);
+    expect(s.next?.no).toBe(1);
+  });
+
+  it("يحترم إيقاف تسجيل الدفعة الأولى والتذكير", () => {
+    const id = useAppStore.getState().createInstallmentPlan({
+      name: "جوّال", downPayment: 1500, installmentAmount: 780, count: 6,
+      firstDueDate: "2026-08-01", recordDown: false, reminder: false,
+    });
+    const st = useAppStore.getState();
+    expect(st.transactions).toHaveLength(0);
+    expect(st.recurring).toHaveLength(0);
+    expect(st.installmentPlans.find((x) => x.id === id)!.downPayment).toBe(1500);
+  });
+
+  it("يرفض المدخلات المستحيلة بلا إنشاء شيء", () => {
+    const s = useAppStore.getState();
+    expect(s.createInstallmentPlan({ name: "", downPayment: 0, installmentAmount: 780, count: 6, firstDueDate: "2026-08-01" })).toBe("");
+    expect(s.createInstallmentPlan({ name: "x", downPayment: 0, installmentAmount: 0, count: 6, firstDueDate: "2026-08-01" })).toBe("");
+    expect(s.createInstallmentPlan({ name: "x", downPayment: 0, installmentAmount: 780, count: 0, firstDueDate: "2026-08-01" })).toBe("");
+    expect(s.createInstallmentPlan({ name: "x", downPayment: 0, installmentAmount: 780, count: 6, firstDueDate: "2026-13-45" })).toBe("");
+    expect(useAppStore.getState().installmentPlans).toHaveLength(0);
+    expect(useAppStore.getState().transactions).toHaveLength(0);
+  });
+});
+
+describe("autoLinkTransaction — الربط التلقائي بالقسط", () => {
+  it("يربط مصروفاً بمبلغ القسط في موعده", () => {
+    useAppStore.setState({
+      installmentPlans: [plan({ installmentAmount: 780, count: 6, downPayment: 0, totalPrice: 4680, firstDueDate: "2026-02-15" })],
+      transactions: [{ id: "t1", date: "2026-02-16", amount: 780, category: "cat-essentials", note: "تحويل" }],
+    });
+    const name = useAppStore.getState().autoLinkTransaction("t1");
+    expect(name).toBe("جوّال");
+    const t = useAppStore.getState().transactions[0];
+    expect(t.planId).toBe("p1");
+    expect(t.planRole).toBe("installment");
+    expect(t.planInstallmentNo).toBe(1);
+    expect(t.deferred).toBeUndefined(); // القسط صرفٌ حقيقيّ لا مؤجّل
+  });
+
+  it("لا يربط شيئاً عند غياب مرشّحٍ محسوم", () => {
+    useAppStore.setState({
+      installmentPlans: [plan({ installmentAmount: 780, count: 6, firstDueDate: "2026-02-15" })],
+      transactions: [{ id: "t1", date: "2026-02-16", amount: 55, category: "cat-essentials", note: "قهوة" }],
+    });
+    expect(useAppStore.getState().autoLinkTransaction("t1")).toBe("");
+    expect(useAppStore.getState().transactions[0].planId).toBeUndefined();
+  });
+});
+
+describe("الأصول — إهلاكٌ لا يمسّ الصرف", () => {
+  it("تُضاف وتُعدَّل وتُحذف بلا أن تولّد معاملةً واحدة", () => {
+    useAppStore.setState({ assets: [] });
+    const s = useAppStore.getState();
+    s.addAsset({ id: "a1", name: "لابتوب", purchaseDate: "2026-01-01", purchasePrice: 3650, lifeDays: 365, createdAt: "2026-01-01" });
+    expect(useAppStore.getState().assets).toHaveLength(1);
+    expect(useAppStore.getState().transactions).toHaveLength(0);
+    useAppStore.getState().updateAsset("a1", { lifeDays: 730 });
+    expect(useAppStore.getState().assets[0].lifeDays).toBe(730);
+    useAppStore.getState().deleteAsset("a1");
+    expect(useAppStore.getState().assets).toHaveLength(0);
+    // شاهدُ حذفٍ حتى لا يُعيده الدمج من جهازٍ آخر.
+    expect(useAppStore.getState().deleted?.a1).toBeTruthy();
+    expect(useAppStore.getState().transactions).toHaveLength(0);
+  });
+});

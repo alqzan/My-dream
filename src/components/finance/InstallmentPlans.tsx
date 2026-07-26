@@ -2,20 +2,25 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { InstallmentPlan } from "@/lib/types";
+import { ASSET_LIFE_PRESETS } from "@/lib/types";
 import {
-  planSummary, planExpectedTotal, validatePlanDraft, installmentsOverview,
+  planSummary, installmentsOverview, partsTotal, installmentDueDates,
   describeDueIn, daysBetween, INSTALLMENT_STATUS_LABEL, MAX_INSTALLMENT_COUNT, rowRemaining,
-  type ScheduleRow,
+  isValidDateKey, type ScheduleRow,
 } from "@/lib/installments";
-import { uid, today, formatAmount, formatDateShort, round2, cn } from "@/lib/utils";
+import { uid, today, formatAmount, formatDateShort, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { showUndo } from "@/components/ui/UndoToast";
-import { Plus, Trash2, X, CalendarClock, CheckCircle2, AlertTriangle, Bell, Pencil, Ban, RotateCcw, Wallet } from "lucide-react";
+import { Plus, Trash2, X, CalendarClock, CheckCircle2, Bell, Pencil, Ban, RotateCcw, Wallet } from "lucide-react";
 
-// «الأقساط» — قسمٌ داخل الخطة المالية فقط (لا بطاقة دائمة في واجهة اليوم).
-// المبدأ المعروض للمالك: الخطة اتفاقٌ مكتوب، والقسط لا يُحتسب مدفوعاً إلا بتسجيل
-// دفعةٍ حقيقية. لا رقم هنا يُخلق من تلقاء نفسه، ولا مصروفَ وهميّ لفرق سدادٍ مبكر.
+// «الأقساط» — أُعيد بناء المدخل كلّه حول القصّة الحقيقية للشراء بالتقسيط:
+// *دفعتُ أوّلاً كذا، ثمّ عليّ قسطٌ كذا كلّ شهر لكذا شهراً.* المالك يكتب ما يعرفه
+// فقط؛ الإجمالي يُحسب هنا (لا يُطالَب بجمعه)، والدفعة الأولى تُسجَّل مصروفاً
+// حقيقياً بتاريخها لأنها خرجت فعلاً، والتذكير الشهري يُربط تلقائياً.
+//
+// ما لم يتغيّر — وهو المبدأ الحاكم: **الخطة وصفُ اتفاقٍ لا مصروف**. لا معاملةَ
+// تُخلق لقسطٍ لمجرّد مرور موعده، ولا مصروفَ وهمياً لفرق سدادٍ مبكر.
 export function InstallmentPlans() {
   const { installmentPlans, transactions, categories, cancelInstallmentPlan, reopenInstallmentPlan,
     deleteInstallmentPlan, addInstallmentPlan, payNextInstallment } = useAppStore();
@@ -81,9 +86,7 @@ export function InstallmentPlans() {
         />
       )}
 
-      {/* ===== الطريق اليوميّ: القسط القادم بضغطةٍ واحدة =====
-          سطرٌ واحد يجيب سؤال «وش عليّ الآن؟» ويسجّل الدفع بمبلغه وتاريخ اليوم بلا
-          فتح خطةٍ ولا اختيار رقمٍ ولا تاريخ. التصحيح متاحٌ داخل الخطة عند الحاجة. */}
+      {/* ===== الطريق اليوميّ: القسط القادم بضغطةٍ واحدة ===== */}
       {overview.next && (
         <div className={cn(
           "flex items-center gap-2 rounded-xl border p-2.5",
@@ -118,7 +121,7 @@ export function InstallmentPlans() {
           onClick={() => setAdding(true)}
           className="w-full py-5 rounded-xl border-2 border-dashed border-finance/30 text-finance text-sm font-medium hover:bg-finance/5 press"
         >
-          🧾 سجّل خطة تقسيط — الجهة، الإجمالي، القسط وعدده
+          🧾 اشتريتَ شيئاً بالتقسيط؟ اكتب الدفعة الأولى والقسط وعدد الشهور
         </button>
       )}
 
@@ -195,7 +198,6 @@ function PlanCard({
               {categoryLabel ? ` · ${categoryLabel}` : ""}
               {` · ${formatAmount(plan.installmentAmount)} × ${formatAmount(plan.count)}`}
             </div>
-            {/* عدد الأقساط المكتملة صريحاً — «٣ من ١٢ قسطاً» أوضح من النسبة وحدها. */}
             <div className="text-[11px] font-semibold text-gray-500 mt-0.5">
               {formatAmount(s.paidRows)} من {formatAmount(s.totalRows)} قسطاً مكتملاً
             </div>
@@ -208,7 +210,6 @@ function PlanCard({
           </div>
         </div>
 
-        {/* شريط الإنجاز — نسبة المدفوع من الإجمالي */}
         <div className="h-1.5 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden mt-2">
           <div
             className="h-full rounded-full transition-all duration-700"
@@ -237,7 +238,6 @@ function PlanCard({
         </div>
       </button>
 
-      {/* ضغطةٌ واحدة تسجّل القسط القادم — بلا فتح الجدول (الطريق اليوميّ). */}
       {!closed && s.next && (
         <button
           onClick={() => payNextInstallment(plan.id)}
@@ -248,30 +248,14 @@ function PlanCard({
         </button>
       )}
 
-      {/* تحذيرٌ غير معطِّل: بنود الخطة لا تطابق السعر الإجمالي (المرجع الوحيد) */}
-      {s.mismatch && (
-        <div className="flex items-start gap-1.5 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2 py-1.5">
-          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-          <span>
-            بنود الخطة تجمع {formatAmount(s.mismatch.expected)} ر.س والإجمالي {formatAmount(plan.totalPrice)} ر.س
-            {" "}(فرق {formatAmount(Math.abs(s.mismatch.diff))}). الإجمالي هو المرجع — راجِع الأرقام إن شئت.
-          </span>
-        </div>
-      )}
-
       {open && (
         <div className="space-y-2.5 pt-1 border-t border-gray-100 dark:border-white/10">
-          {/* الأصل المؤجّل (إن كان الشراء مسجَّلاً كمصروفٍ ثمّ قُسِّط) */}
+          {/* الأصل المؤجّل (شراءٌ سُجّل مصروفاً ثمّ قُسِّط) */}
           {s.principal && (
             <div className="rounded-lg bg-gray-50 dark:bg-white/5 px-2.5 py-2 text-[10px] text-gray-500 leading-relaxed">
               🧾 الأصل مربوطٌ بمصروف {formatDateShort(s.principal.date)} بمبلغ{" "}
               {formatAmount(s.principal.amount)} ر.س — <strong>مؤجّل</strong>: لا يُحتسب في الميزانية
               ولا السقوف، والأقساط هي الصرف الفعليّ.
-              {Math.abs(s.principal.amount - plan.totalPrice) > 0.5 && (
-                <span className="text-amber-700 dark:text-amber-300">
-                  {" "}(يخالف إجمالي الخطة {formatAmount(plan.totalPrice)} — تحذيرٌ فقط.)
-                </span>
-              )}
             </div>
           )}
 
@@ -280,6 +264,7 @@ function PlanCard({
             <div className="flex items-center justify-between bg-gray-50 dark:bg-white/5 rounded-lg px-2.5 py-2">
               <span className="text-[11px] text-gray-500">
                 الدفعة الأولى · {formatAmount(plan.downPayment)} ر.س
+                {plan.downDate ? ` · ${formatDateShort(plan.downDate)}` : ""}
               </span>
               {s.downPaid ? (
                 <span className="text-[11px] font-bold text-finance flex items-center gap-1">
@@ -287,7 +272,9 @@ function PlanCard({
                 </span>
               ) : (
                 <button
-                  onClick={() => recordInstallmentPayment(plan.id, { role: "down", amount: plan.downPayment })}
+                  onClick={() => recordInstallmentPayment(plan.id, {
+                    role: "down", amount: plan.downPayment, date: plan.downDate,
+                  })}
                   className="text-[11px] font-bold text-finance bg-finance/10 rounded-lg px-2 py-1 press"
                 >
                   سجّل الدفعة
@@ -312,8 +299,7 @@ function PlanCard({
                     amount: rowRemaining(row),
                     installmentNo: row.no,
                     // **تاريخ الدفع الفعليّ = اليوم** حتى للقسط المتأخّر: المعاملة
-                    // سجلٌّ لخروج النقد، وموعد الاستحقاق يبقى في جدول الخطة. كتابةُ
-                    // الموعد القديم تُغيّر صرف شهرٍ مضى وميزانيته المرحّلة.
+                    // سجلٌّ لخروج النقد، وموعد الاستحقاق يبقى في جدول الخطة.
                     date: todayStr,
                   })
                 }
@@ -321,18 +307,6 @@ function PlanCard({
             ))}
           </div>
 
-          {/* الرسوم — توضيحية فقط */}
-          {(plan.fees ?? 0) > 0 && (
-            <p className="text-[10px] text-gray-400">
-              رسوم مذكورة: {formatAmount(plan.fees!)} ر.س (توضيحية — لا تُضاف على الإجمالي)
-            </p>
-          )}
-          {(plan.cashPrice ?? 0) > 0 && (
-            <p className="text-[10px] text-gray-400">
-              السعر النقدي {formatAmount(plan.cashPrice!)} ر.س · فرق التقسيط{" "}
-              {formatAmount(Math.max(0, plan.totalPrice - plan.cashPrice!))} ر.س
-            </p>
-          )}
           {plan.note && <p className="text-[11px] text-gray-500">{plan.note}</p>}
 
           {/* سدادٌ مبكر — بالمبلغ الفعليّ وحده */}
@@ -451,9 +425,7 @@ function ScheduleRowView({
         <span className="shrink-0 text-finance flex items-center gap-1">
           <CheckCircle2 size={12} /> مدفوع
         </span>
-      ) : row.closedEarly ? (
-        <span className="shrink-0 text-gray-400">—</span>
-      ) : closed ? (
+      ) : row.closedEarly || closed ? (
         <span className="shrink-0 text-gray-400">—</span>
       ) : (
         <button onClick={onPay} className="shrink-0 font-bold text-finance bg-finance/10 rounded-lg px-2 py-0.5 press">
@@ -465,134 +437,162 @@ function ScheduleRowView({
 }
 
 // ————————————————————————————————————————————————————————————————
-// نموذج الخطة (إضافة/تعديل). التعديل يعيد حساب الجدول تلقائياً — الجدول مشتقٌّ
-// من البنود ولا يُحفظ، فلا نسخةَ جدولٍ قديمة تتخلّف عن الأرقام.
+// نموذج الخطة — مرتّبٌ على ترتيب القصّة لا على ترتيب الحقول: ما اشتريتَه، ثمّ ما
+// دفعتَه أوّلاً، ثمّ ما عليك شهرياً. **لا خانة للسعر الإجمالي**: يُحسب من البنود
+// ويُعرَض حيّاً، فلا يوجد ما يتعارض ولا تحذير تطابقٍ أصلاً.
 function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () => void }) {
-  const { categories, addInstallmentPlan, updateInstallmentPlan } = useAppStore();
+  const { categories, createInstallmentPlan, updateInstallmentPlan, addAsset } = useAppStore();
   const mains = categories.filter((c) => !c.parentId);
-  const [provider, setProvider] = useState(initial?.provider ?? "");
   const [name, setName] = useState(initial?.name ?? "");
-  const [cashPrice, setCashPrice] = useState(initial?.cashPrice ? String(initial.cashPrice) : "");
-  const [totalPrice, setTotalPrice] = useState(initial?.totalPrice ? String(initial.totalPrice) : "");
+  const [provider, setProvider] = useState(initial?.provider ?? "");
   const [downPayment, setDownPayment] = useState(initial?.downPayment ? String(initial.downPayment) : "");
+  const [downDate, setDownDate] = useState(initial?.downDate ?? initial?.createdAt ?? today());
   const [installmentAmount, setInstallmentAmount] = useState(initial?.installmentAmount ? String(initial.installmentAmount) : "");
   const [count, setCount] = useState(initial?.count ? String(initial.count) : "");
-  const [firstDueDate, setFirstDueDate] = useState(initial?.firstDueDate ?? today());
-  const [fees, setFees] = useState(initial?.fees ? String(initial.fees) : "");
+  const [firstDueDate, setFirstDueDate] = useState(initial?.firstDueDate ?? nextMonth(today()));
+  const [touchedDue, setTouchedDue] = useState(!!initial);
   const [finalPayment, setFinalPayment] = useState(initial?.finalPayment ? String(initial.finalPayment) : "");
   const [category, setCategory] = useState(initial?.category ?? mains[0]?.id ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
+  // الدفعة الأولى مصروفٌ حقيقيّ يُسجَّل تلقائياً — إلا إذا كان المالك سجّلها بيده.
+  const [recordDown, setRecordDown] = useState(true);
+  const [reminder, setReminder] = useState(true);
+  // «هذا شيءٌ غالٍ يبقى معي» → يُضاف للأصول بثمنه الكامل ويبدأ إهلاكه اليوميّ.
+  const [asAsset, setAsAsset] = useState(false);
+  const [lifeDays, setLifeDays] = useState(730);
   const [errors, setErrors] = useState<string[]>([]);
-  // الحقول الإضافية (نقديّ · رسوم · دفعة أخيرة · ملاحظة) مطويّة — النموذج الظاهر
-  // ستّ خانات فقط: الجهة · الاسم · الإجمالي · القسط · العدد · أول موعد.
-  const [showExtras, setShowExtras] = useState(
-    !!(initial?.cashPrice || initial?.fees || initial?.finalPayment || initial?.note)
-  );
+  const [showExtras, setShowExtras] = useState(!!(initial?.finalPayment || initial?.note));
 
   const num = (v: string) => {
     const n = parseFloat(v);
     return Number.isFinite(n) ? n : 0;
   };
+  const down = num(downPayment);
+  const inst = num(installmentAmount);
+  const n = Math.floor(num(count));
+  const fin = num(finalPayment);
+  const total = partsTotal({ downPayment: down, installmentAmount: inst, count: n, finalPayment: fin || undefined });
+  const ready = !!name.trim() && inst > 0 && n >= 1;
 
-  // **اشتقاق تلقائيّ**: اثنان من الثلاثة (الإجمالي · القسط · العدد) يكفيان — الثالث
-  // يُحسب فيظهر رمادياً في الخانة الفارغة. أقلُّ كتابةٍ ممكنة، وبلا تحذير تطابقٍ
-  // في الحالة الشائعة (كتبتَ الإجمالي والعدد → القسط دقيقٌ بالقسمة).
-  const rawTotal = num(totalPrice);
-  const rawInst = num(installmentAmount);
-  const rawCount = Math.floor(num(count));
-  const derivedInst = !rawInst && rawTotal > 0 && rawCount >= 1
-    ? round2((rawTotal - num(downPayment)) / rawCount) : 0;
-  const derivedTotal = !rawTotal && rawInst > 0 && rawCount >= 1
-    ? round2(num(downPayment) + rawInst * rawCount) : 0;
-  const derivedCount = !rawCount && rawTotal > 0 && rawInst > 0
-    ? Math.max(1, Math.round((rawTotal - num(downPayment)) / rawInst)) : 0;
-
-  const draft = {
-    provider, name,
-    totalPrice: rawTotal || derivedTotal,
-    downPayment: num(downPayment),
-    installmentAmount: rawInst || derivedInst,
-    count: rawCount || derivedCount,
-    firstDueDate,
-  };
-  // معاينةٌ حيّة لعدم التطابق قبل الحفظ (تحذيرٌ لا يمنع).
-  const preview: InstallmentPlan = {
-    id: initial?.id ?? "preview",
-    ...draft,
-    fees: num(fees) || undefined,
-    finalPayment: num(finalPayment) || undefined,
-    status: initial?.status ?? "active",
-    createdAt: initial?.createdAt ?? today(),
-  };
-  const expected = draft.count >= 1 && draft.installmentAmount > 0 ? planExpectedTotal(preview) : 0;
-  const mismatch = expected > 0 && draft.totalPrice > 0 ? Math.round((expected - draft.totalPrice) * 100) / 100 : 0;
+  // أوّل موعد قسطٍ = بعد شهرٍ من الدفعة الأولى ما لم يغيّره المالك — الافتراض
+  // الصحيح في تسعة من عشرة عقود، فلا يبقى الحقل عبئاً.
+  function handleDownDate(v: string) {
+    setDownDate(v);
+    if (!touchedDue && isValidDateKey(v)) setFirstDueDate(nextMonth(v));
+  }
 
   function handleSave() {
-    const errs = validatePlanDraft(draft);
+    const errs: string[] = [];
+    if (!name.trim()) errs.push("اكتب ما اشتريتَه");
+    if (!(inst > 0)) errs.push("قيمة القسط الشهري مطلوبة");
+    if (!(n >= 1)) errs.push("عدد الشهور لا يقلّ عن ١");
+    else if (n > MAX_INSTALLMENT_COUNT) errs.push(`عدد الأقساط أكبر من المعقول (الحدّ ${MAX_INSTALLMENT_COUNT})`);
+    if (down < 0) errs.push("الدفعة الأولى لا تكون سالبة");
+    if (!isValidDateKey(firstDueDate)) errs.push("أول موعد قسط مطلوب");
     if (errs.length) { setErrors(errs); return; }
-    const payload = {
-      provider: provider.trim(),
-      name: name.trim() || provider.trim(),
-      cashPrice: num(cashPrice) || undefined,
-      totalPrice: draft.totalPrice,
-      downPayment: draft.downPayment,
-      installmentAmount: draft.installmentAmount,
-      count: draft.count,
-      firstDueDate,
-      fees: num(fees) || undefined,
-      finalPayment: num(finalPayment) || undefined,
+
+    if (initial) {
+      // التعديل يعيد حساب الإجمالي من البنود — الجدول مشتقٌّ فلا نسخةَ قديمة تتخلّف.
+      updateInstallmentPlan(initial.id, {
+        name: name.trim(), provider: provider.trim(),
+        downPayment: down, downDate,
+        installmentAmount: inst, count: n, firstDueDate,
+        finalPayment: fin || undefined,
+        totalPrice: total,
+        category: category || undefined,
+        note: note.trim() || undefined,
+      });
+      onDone();
+      return;
+    }
+
+    const planId = createInstallmentPlan({
+      provider, name, downPayment: down, downDate,
+      installmentAmount: inst, count: n, firstDueDate,
+      finalPayment: fin || undefined,
       category: category || undefined,
       note: note.trim() || undefined,
-    };
-    if (initial) {
-      updateInstallmentPlan(initial.id, payload);
-    } else {
-      addInstallmentPlan({ ...payload, id: uid(), status: "active", createdAt: today() });
+      recordDown, reminder,
+    });
+    if (!planId) { setErrors(["تعذّر حفظ الخطة — راجِع الأرقام"]); return; }
+    if (asAsset) {
+      addAsset({
+        id: uid(),
+        name: name.trim(),
+        purchaseDate: downDate,
+        purchasePrice: total, // ما سيكلّفك فعلاً بالتقسيط، لا السعر النقديّ
+        lifeDays,
+        planId,
+        createdAt: today(),
+      });
     }
     onDone();
   }
 
   const field = "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40";
+  const step = "text-[10px] font-bold text-finance";
 
   return (
-    <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-3 space-y-2.5 animate-fade-up">
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">الجهة</label>
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="تمارا، بنك، معرض..." className={field} />
+    <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-3 space-y-3 animate-fade-up">
+      {/* ١ — وش اشتريت */}
+      <div className="space-y-1.5">
+        <div className={step}>١ · وش اشتريت؟</div>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="جوّال، أثاث، لابتوب…" className={field} autoFocus />
+        <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="الجهة (تمارا، بنك، معرض…) — اختياري" className={field} />
+      </div>
+
+      {/* ٢ — الدفعة الأولى */}
+      <div className="space-y-1.5">
+        <div className={step}>٢ · كم دفعتَ أوّلاً؟</div>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput value={downPayment} onChange={setDownPayment} placeholder="٠ إن ما دفعت" inputMode="decimal" className={field} />
+          <input type="date" value={downDate} onChange={(e) => handleDownDate(e.target.value)} className={field} />
+        </div>
+        {down > 0 && !initial && (
+          <label className="flex items-start gap-2 text-[10px] text-gray-500 leading-relaxed">
+            <input type="checkbox" checked={recordDown} onChange={(e) => setRecordDown(e.target.checked)} className="mt-0.5 accent-[var(--finance,#3d9640)]" />
+            <span>سجّلها مصروفاً بتاريخها ({formatAmount(down)} ر.س) — أزِل العلامة إن كنتَ سجّلتَها بنفسك.</span>
+          </label>
+        )}
+      </div>
+
+      {/* ٣ — القسط الشهري */}
+      <div className="space-y-1.5">
+        <div className={step}>٣ · القسط الشهري وعدد الشهور</div>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput value={installmentAmount} onChange={setInstallmentAmount} placeholder="مثلاً ٧٨٠" inputMode="decimal" className={field} />
+          <NumberInput value={count} onChange={setCount} placeholder="مثلاً ٦ شهور" inputMode="numeric" min={1} max={MAX_INSTALLMENT_COUNT} className={field} />
         </div>
         <div>
-          <label className="block text-[10px] text-gray-400 mb-1">اسم الالتزام</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="جوّال، أثاث..." className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">السعر الإجمالي</label>
-          <NumberInput value={totalPrice} onChange={setTotalPrice} placeholder={derivedTotal ? formatAmount(derivedTotal) : "المرجع الوحيد"} inputMode="decimal" className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">الدفعة الأولى</label>
-          <NumberInput value={downPayment} onChange={setDownPayment} placeholder="0" inputMode="decimal" className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">قيمة القسط</label>
-          <NumberInput value={installmentAmount} onChange={setInstallmentAmount} placeholder={derivedInst ? formatAmount(derivedInst) : "شهرياً"} inputMode="decimal" className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">عدد الأقساط</label>
-          <NumberInput value={count} onChange={setCount} placeholder={derivedCount ? String(derivedCount) : "مثلاً 12"} inputMode="numeric" min={1} max={MAX_INSTALLMENT_COUNT} className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">أول موعد استحقاق</label>
-          <input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className={field} />
+          <label className="block text-[10px] text-gray-400 mb-1">أول موعد قسط</label>
+          <input
+            type="date"
+            value={firstDueDate}
+            onChange={(e) => { setFirstDueDate(e.target.value); setTouchedDue(true); }}
+            className={field}
+          />
         </div>
       </div>
+
+      {/* الخلاصة الحيّة — الإجمالي يُحسب هنا، ولا يُطالَب به المالك */}
+      {ready && (
+        <div className="rounded-lg bg-finance/5 border border-finance/20 px-3 py-2 text-[11px] leading-relaxed text-gray-700 dark:text-gray-200">
+          الإجمالي <strong className="tabular-nums">{formatAmount(total)} ر.س</strong>
+          {down > 0 ? ` = ${formatAmount(down)} + ${formatAmount(inst)} × ${formatAmount(fin > 0 ? n - 1 : n)}` : ` = ${formatAmount(inst)} × ${formatAmount(fin > 0 ? n - 1 : n)}`}
+          {fin > 0 ? ` + دفعة أخيرة ${formatAmount(fin)}` : ""}
+          {isValidDateKey(firstDueDate) && (
+            <span className="text-gray-400"> · آخر قسط {formatDateShort(lastDue(firstDueDate, n))}</span>
+          )}
+          {!initial && reminder && <span className="text-gray-400"> · تذكيرٌ شهريّ تلقائيّ</span>}
+        </div>
+      )}
 
       <button
         type="button"
         onClick={() => setShowExtras((v) => !v)}
         className="w-full flex items-center justify-between text-[11px] font-semibold text-gray-500 press"
       >
-        <span>تفاصيل إضافية (التصنيف · النقدي · الرسوم · دفعة أخيرة)</span>
+        <span>تفاصيل إضافية (التصنيف · دفعة أخيرة · ملاحظة{initial ? "" : " · أصل"})</span>
         <span className="text-gray-400">{showExtras ? "▲" : "▼"}</span>
       </button>
 
@@ -616,31 +616,33 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="block text-[10px] text-gray-400 mb-1">السعر النقدي</label>
-              <NumberInput value={cashPrice} onChange={setCashPrice} placeholder="للمقارنة" inputMode="decimal" className={field} />
-            </div>
-            <div>
-              <label className="block text-[10px] text-gray-400 mb-1">الرسوم</label>
-              <NumberInput value={fees} onChange={setFees} placeholder="توضيحية" inputMode="decimal" className={field} />
-            </div>
-            <div>
-              <label className="block text-[10px] text-gray-400 mb-1">دفعة أخيرة</label>
-              <NumberInput value={finalPayment} onChange={setFinalPayment} placeholder="تستبدل الأخير" inputMode="decimal" className={field} />
-            </div>
+          <div>
+            <label className="block text-[10px] text-gray-400 mb-1">دفعة أخيرة كبيرة (تستبدل آخر قسط)</label>
+            <NumberInput value={finalPayment} onChange={setFinalPayment} placeholder="اختياري" inputMode="decimal" className={field} />
           </div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ملاحظة (اختياري)" className={field} />
-        </div>
-      )}
-
-      {mismatch !== 0 && (
-        <div className="flex items-start gap-1.5 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2 py-1.5">
-          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-          <span>
-            بنود الخطة تجمع {formatAmount(expected)} ر.س والإجمالي {formatAmount(draft.totalPrice)} ر.س
-            {" "}(فرق {formatAmount(Math.abs(mismatch))}) — تحذيرٌ فقط، يمكنك الحفظ.
-          </span>
+          {!initial && (
+            <label className="flex items-start gap-2 text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
+              <input type="checkbox" checked={asAsset} onChange={(e) => setAsAsset(e.target.checked)} className="mt-0.5" />
+              <span>هذا شيءٌ غالٍ يبقى معي — تابِعه في «الأصول» واحسب استهلاكه اليوميّ.</span>
+            </label>
+          )}
+          {!initial && asAsset && (
+            <div className="flex gap-1.5 flex-wrap">
+              {ASSET_LIFE_PRESETS.map((p) => (
+                <button
+                  key={p.days}
+                  onClick={() => setLifeDays(p.days)}
+                  className={cn(
+                    "text-[11px] rounded-full px-2.5 py-1 border press",
+                    lifeDays === p.days ? "border-finance bg-finance/10 text-finance font-bold" : "border-gray-200 text-gray-500"
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -652,7 +654,7 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
 
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSave} className="flex-1 bg-finance hover:bg-finance/90">
-          {initial ? "حفظ التعديل" : "إضافة الخطة"}
+          {initial ? "حفظ التعديل" : "أضِف الخطة"}
         </Button>
         <Button size="sm" variant="secondary" onClick={onDone} className="gap-1">
           <X size={14} /> إلغاء
@@ -660,4 +662,20 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
       </div>
     </div>
   );
+}
+
+// بعد شهرٍ من تاريخٍ، بيوم المرساة نفسه ما أمكن (٣١ يناير → ٢٨/٢٩ فبراير).
+function nextMonth(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return dateStr;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const dt = new Date(y, m, Math.min(d, lastDay));
+  const p = (v: number) => String(v).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
+// موعد آخر قسطٍ — من مولّد الجدول نفسه، فلا تختلف المعاينة عن الجدول المعروض.
+function lastDue(first: string, count: number): string {
+  const dues = installmentDueDates(first, count);
+  return dues[dues.length - 1] ?? first;
 }

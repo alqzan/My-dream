@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
-  ReserveFund, ReserveDeposit, FutureLetter, InstallmentPlan, InstallmentRole,
+  ReserveFund, ReserveDeposit, FutureLetter, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
@@ -15,14 +15,14 @@ import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
-import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT } from "./installments";
+import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, suggestPlanLink } from "./installments";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
 // wrapper) so cloud sync can't resurrect a removed item from another device.
 const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
-  "quranReflections", "installmentPlans",
+  "quranReflections", "installmentPlans", "assets",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -124,6 +124,26 @@ interface AppStore extends AppData {
   settleInstallmentPlan: (planId: string, amount: number, date?: string) => string;
   // تذكيرٌ متكرّر للخطة (generationMode: "reminder" — لا يولّد معاملات أبداً).
   linkInstallmentReminder: (planId: string) => void;
+  // **إنشاء خطةٍ كاملة بخطوةٍ واحدة** (المسار الأساسي للأقساط): تُنشَأ الخطة،
+  // وتُسجَّل الدفعة الأولى مصروفاً حقيقياً بتاريخها (لأنها خرجت فعلاً)، ويُربط
+  // تذكيرٌ شهريّ — كل ذلك تلقائياً. لا تُنشأ معاملةٌ لأيّ قسطٍ قادم أبداً.
+  createInstallmentPlan: (draft: {
+    provider?: string; name: string;
+    downPayment: number; downDate?: string;
+    installmentAmount: number; count: number; firstDueDate: string;
+    finalPayment?: number; category?: string; note?: string;
+    recordDown?: boolean; // سجّل الدفعة الأولى مصروفاً (افتراضياً نعم)
+    reminder?: boolean; // اربط تذكيراً شهرياً (افتراضياً نعم)
+  }) => string;
+  // **الربط التلقائي**: يربط معاملةً بقسطٍ يطابقها حين لا يحتمل غير خطةٍ واحدة.
+  // يرجع اسم الخطة عند الربط، أو "" إن لم يكن هناك مرشّحٌ محسوم.
+  autoLinkTransaction: (txId: string) => string;
+
+  // الأصول الغالية وإهلاكها اليوميّ — عرضٌ محاسبيّ محض: لا معاملة، ولا أثر على
+  // الميزانية اليومية ولا السقوف ولا الإحصائيات.
+  addAsset: (asset: Asset) => void;
+  updateAsset: (id: string, updates: Partial<Asset>) => void;
+  deleteAsset: (id: string) => void;
 
   // Budgets — a fixed limit OR a % of monthly income
   setBudget: (category: string, cap: { limit?: number; pct?: number }) => void;
@@ -338,6 +358,7 @@ export const useAppStore = create<AppStore>()(
       ],
       recurring: [],
       installmentPlans: [],
+      assets: [],
       budgets: [],
       categories: DEFAULT_CATEGORIES,
       reserves: [],
@@ -839,6 +860,90 @@ export const useAppStore = create<AppStore>()(
           ),
         }));
       },
+
+      // **المسار الأساسي**: «اشتريتُ شيئاً بالتقسيط» في خطوةٍ واحدة. الحالة التي
+      // بُني عليها: دفعةٌ أولى ١٥٠٠ ثمّ ٧٨٠ × ٦ شهور. الإجمالي يُحسب من البنود
+      // (لا يُطالَب المالك بجمعه)، والدفعة الأولى تُسجَّل مصروفاً حقيقياً بتاريخها
+      // لأنها **خرجت فعلاً**، والتذكير الشهري يُربط تلقائياً. الأقساط القادمة لا
+      // تُنشأ لها معاملات — تبقى جدولاً حتى تُدفع (المبدأ الحاكم للأقساط).
+      createInstallmentPlan: (draft) => {
+        const st = get();
+        const name = draft.name.trim() || (draft.provider ?? "").trim();
+        const count = Math.floor(draft.count) || 0;
+        if (!name) return "";
+        if (!(draft.installmentAmount > 0)) return "";
+        if (count < 1 || count > MAX_INSTALLMENT_COUNT) return "";
+        if (!isValidDateKey(draft.firstDueDate)) return "";
+        const down = round2(Math.max(0, draft.downPayment || 0));
+        const downDate = draft.downDate && isValidDateKey(draft.downDate) ? draft.downDate : today();
+        const finalPayment = draft.finalPayment && draft.finalPayment > 0 ? round2(draft.finalPayment) : undefined;
+        const regular = finalPayment ? count - 1 : count;
+        const planId = uid();
+        const plan: InstallmentPlan = {
+          id: planId,
+          provider: (draft.provider ?? "").trim(),
+          name,
+          totalPrice: round2(down + regular * round2(draft.installmentAmount) + (finalPayment ?? 0)),
+          downPayment: down,
+          downDate,
+          installmentAmount: round2(draft.installmentAmount),
+          count,
+          firstDueDate: draft.firstDueDate,
+          finalPayment,
+          status: "active",
+          category: draft.category || undefined,
+          note: draft.note?.trim() || undefined,
+          createdAt: today(),
+          updatedAt: Date.now(),
+        };
+        set((s) => ({
+          installmentPlans: [plan, ...(s.installmentPlans ?? [])],
+          ...clearTombstone(s.deleted, planId),
+        }));
+        // دفعةٌ أولى حقيقية = مصروفٌ حقيقيّ بتاريخه. الإيقاف متاحٌ لمن سجّلها
+        // بنفسه قبل قليل، فلا تُحتسب مرّتين.
+        if (down > 0 && draft.recordDown !== false) {
+          get().recordInstallmentPayment(planId, { role: "down", amount: down, date: downDate });
+        }
+        if (draft.reminder !== false) get().linkInstallmentReminder(planId);
+        return planId;
+      },
+
+      // يربط معاملةً قائمة بالقسط الذي يطابقها — بلا أن يبحث المالك عن الخطة.
+      // لا يربط إلا حين يكون المرشّح وحيداً (راجع suggestPlanLink)، فلا يُنسب
+      // ريالٌ لخطةٍ بالخطأ.
+      autoLinkTransaction: (txId) => {
+        const st = get();
+        const tx = st.transactions.find((t) => t.id === txId);
+        if (!tx) return "";
+        const hit = suggestPlanLink(tx, st.installmentPlans ?? [], st.transactions, today());
+        if (!hit) return "";
+        get().linkTransactionToPlan(txId, {
+          planId: hit.plan.id,
+          role: hit.role,
+          installmentNo: hit.row.no,
+        });
+        return hit.plan.name || hit.plan.provider;
+      },
+
+      // ---------- الأصول (الإهلاك) ----------
+      // لا شيء هنا يلمس المعاملات: الأصل سجلُّ ملكيةٍ وقيمة، والمصروف سُجّل يوم
+      // الشراء (أو في أقساطه). الإهلاك يُحسب عند العرض ولا يُخزَّن.
+      addAsset: (asset) =>
+        set((s) => ({
+          assets: [{ ...asset, updatedAt: Date.now() }, ...(s.assets ?? [])],
+          ...clearTombstone(s.deleted, asset.id),
+        })),
+
+      updateAsset: (id, updates) =>
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) =>
+            a.id === id ? { ...a, ...updates, updatedAt: Date.now() } : a
+          ),
+        })),
+
+      deleteAsset: (id) =>
+        set((s) => ({ assets: (s.assets ?? []).filter((a) => a.id !== id) })),
 
       setBudget: (category, cap) =>
         set((s) => {
@@ -1552,6 +1657,7 @@ export const useAppStore = create<AppStore>()(
         const s = get();
         return {
           transactions: s.transactions,
+          assets: s.assets ?? [],
           books: s.books,
           readingLogs: s.readingLogs,
           journalEntries: s.journalEntries,
@@ -1584,7 +1690,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 14,
+      version: 15,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
@@ -1800,6 +1906,12 @@ export const useAppStore = create<AppStore>()(
             recurring: rec,
             installmentPlans: state.installmentPlans ?? [],
           };
+        }
+
+        // v15 يفتح «الأصول»: مجموعةٌ جديدة فارغة لا تمسّ أيّ بياناتٍ قائمة.
+        // كلّ قارئٍ يستعمل `assets ?? []` أصلاً، فالمهاجرة هنا للوضوح لا للإنقاذ.
+        if (version < 15) {
+          state = { ...state, assets: state.assets ?? [] };
         }
 
         return state as unknown as AppData;

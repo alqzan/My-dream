@@ -35,7 +35,7 @@ export interface FinanceOverview {
 // أقسام «الخطة المالية» القابلة للطيّ (مصادر الروابط العميقة أيضاً).
 // «الأقساط» بعد «المتكررة» وقبل «الاحتياطيات» — ترتيبٌ يقرأ من الالتزام الثابت
 // إلى الالتزام المؤقّت ثمّ إلى ما جُنِّب.
-export const PLAN_SECTIONS = ["daily", "budgets", "recurring", "installments", "reserves"] as const;
+export const PLAN_SECTIONS = ["daily", "budgets", "recurring", "installments", "assets", "reserves"] as const;
 export type PlanSectionId = (typeof PLAN_SECTIONS)[number];
 
 // عدد الأيام حتى الراتب القادم (0 = يوم الراتب نفسه). عرضٌ محض، لا يمسّ أيّ حساب.
@@ -167,7 +167,7 @@ export function defaultPlanOpen(attention: {
   installmentOverdue?: boolean;
 }): Record<PlanSectionId, boolean> {
   const base: Record<PlanSectionId, boolean> = {
-    daily: false, budgets: false, recurring: false, installments: false, reserves: false,
+    daily: false, budgets: false, recurring: false, installments: false, assets: false, reserves: false,
   };
   // قسطٌ فائت أعجل من سقفٍ مُتجاوَز: له جهةٌ خارجية تطالب به.
   if (attention.installmentOverdue) return { ...base, installments: true };

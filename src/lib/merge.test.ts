@@ -20,6 +20,7 @@ function base(overrides: Partial<AppData> = {}): AppData {
     habits: [],
     recurring: [],
     installmentPlans: [],
+    assets: [],
     budgets: [],
     categories: [],
     reserves: [],

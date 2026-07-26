@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
-import { planSummary, isPlanOpen, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
+import { planSummary, isPlanOpen, suggestPlanLink, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -42,6 +42,8 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   const [showDetails, setShowDetails] = useState(false); // التاريخ ومصدر الصرف
   // ربطُ هذا المصروف بخطة أقساط (الطريق اليوميّ: سجّل كالعادة ثمّ اربط بضغطة).
   const [linkPlan, setLinkPlan] = useState<string | null>(initial?.planId ?? null);
+  // هل اختار المالك الخطة بيده؟ عندها نكفّ عن الاقتراح التلقائي (بما فيه إلغاؤه).
+  const [touchedPlan, setTouchedPlan] = useState(false);
   const [showSplit, setShowSplit] = useState(false); // نموذج «قسّط هذا المصروف»
 
   // Auto-classify from the note while adding a new expense: learned merchant
@@ -62,6 +64,21 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       setSubCat("");
     }
   }, [note, initial, touchedCat, categories, merchantRules]);
+
+  // **الربط التلقائي بالقسط**: مبلغٌ يطابق قسطاً مستحقّاً في موعده → تُختار خطته
+  // من نفسها، فيسجّل المالك مصروفه كالعادة ويتقدّم جدول الأقساط بلا أن يبحث عن
+  // شيء. لا يقع الاقتراح إلا حين لا يحتمل غير خطةٍ واحدة (suggestPlanLink)، ويبقى
+  // مرئياً في بطاقة الربط أدناه فيستطيع إلغاءه.
+  useEffect(() => {
+    if (initial || touchedPlan) return;
+    const hit = suggestPlanLink(
+      { amount: parseFloat(amount) || 0, date },
+      installmentPlans ?? [],
+      transactions,
+      today()
+    );
+    setLinkPlan(hit ? hit.plan.id : null);
+  }, [amount, date, initial, touchedPlan, installmentPlans, transactions]);
 
   const selectedMain = categories.find((c) => c.id === mainCat);
   const subs = getSubCategories(categories, mainCat);
@@ -367,7 +384,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
-              onClick={() => setLinkPlan(null)}
+              onClick={() => { setLinkPlan(null); setTouchedPlan(true); }}
               className={cn(
                 "text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors",
                 !linkPlan ? "bg-finance text-white border-finance" : "bg-white text-gray-500 border-gray-200"
@@ -381,6 +398,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
                 type="button"
                 onClick={() => {
                   setLinkPlan(plan.id);
+                  setTouchedPlan(true);
                   // تعبئةٌ لطيفة: مبلغ القسط وتصنيف الخطة إن كان الحقل فارغاً.
                   if (next && !parsedAmount) setAmount(String(next.amount));
                   if (plan.category) { pickCategoryFor(plan.category); setTouchedCat(true); }
@@ -397,6 +415,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           </div>
           {linkedPlan && (
             <p className="text-[10px] text-gray-500">
+              {!touchedPlan && "رُبطت تلقائياً — "}
               ستُسجَّل كـ«{INSTALLMENT_ROLE_LABEL.installment}» في خطة «{linkedPlan.name || linkedPlan.provider}» — مصروفٌ واحدٌ لا يُحتسب مرّتين.
             </p>
           )}

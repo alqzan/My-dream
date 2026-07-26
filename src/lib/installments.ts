@@ -103,6 +103,20 @@ export function planExpectedTotal(plan: InstallmentPlan): number {
   return round2((plan.downPayment || 0) + rows.reduce((s, r) => s + r.amount, 0));
 }
 
+// الإجمالي من البنود مباشرةً (دون خطةٍ كاملة) — يستعمله النموذج ليحسب السعر
+// الإجمالي بنفسه بدل أن يطالِب المالك بجمعه بيده: ١٥٠٠ + ٧٨٠ × ٦ = ٦١٨٠.
+export function partsTotal(p: {
+  downPayment: number; installmentAmount: number; count: number; finalPayment?: number;
+}): number {
+  const n = Math.max(0, Math.floor(p.count) || 0);
+  if (!n) return round2(p.downPayment || 0);
+  const hasFinal = (p.finalPayment ?? 0) > 0;
+  const regular = hasFinal ? n - 1 : n;
+  return round2(
+    (p.downPayment || 0) + regular * (p.installmentAmount || 0) + (hasFinal ? p.finalPayment! : 0)
+  );
+}
+
 // فرقٌ بين ما تتوقّعه البنود والسعر الإجمالي (المرجع). تحذيرٌ **غير معطِّل**:
 // نعرضه ولا نصحّح أرقام المالك ولا نمنعه من الحفظ.
 export function planMismatch(plan: InstallmentPlan): { expected: number; diff: number } | null {
@@ -279,6 +293,52 @@ export function installmentsOverview(
     if (s.next && (!next || s.next.due < next.row.due)) next = { plan, row: s.next };
   }
   return { activeCount, remainingTotal, monthlyLoad, overdueCount, next, savedTotal };
+}
+
+// ===================== الربط التلقائي =====================
+// المالك يسجّل مصروفه كالعادة (أو يصله من رسالة البنك)، ونحن نربطه بالقسط الذي
+// يطابقه بلا أن يبحث عن الخطة. الربط **اقتراحٌ محسوم**: لا يُقترح إلا حين لا
+// يحتمل غير خطةٍ واحدة، فلا يُنسب ريالٌ لخطةٍ خطأً. التوسّع في الشكّ ممنوع —
+// عند تعدّد المرشّحين نُرجع null ويبقى القرار للمالك.
+
+// تفاوت المبلغ المقبول (ريال) — القسط قد يصل ٧٧٩٫٩٥ أو ٧٨٠٫٥ برسم تحويل.
+export const AUTO_LINK_TOLERANCE = 1;
+// نافذة التاريخ حول موعد الاستحقاق (أيام) — تُغطّي الدفع المبكر والمتأخّر بأسبوع
+// ونصف، ولا تمتدّ لقسط الشهر التالي (٣٠ يوماً).
+export const AUTO_LINK_WINDOW = 12;
+
+export interface PlanLinkSuggestion {
+  plan: InstallmentPlan;
+  row: ScheduleRow;
+  role: InstallmentRole; // "installment" أو "final"
+}
+
+// مرشّحٌ وحيدٌ لربط معاملةٍ بقسط، أو null. المعاملة المربوطة أصلاً أو المؤجّلة
+// لا تُقترح ثانيةً، والخطط المغلقة لا تطالِب بشيء.
+export function suggestPlanLink(
+  tx: { amount: number; date: string; planId?: string; deferred?: boolean },
+  plans: InstallmentPlan[],
+  transactions: Transaction[],
+  todayStr: string
+): PlanLinkSuggestion | null {
+  if (tx.planId || tx.deferred || !(tx.amount > 0)) return null;
+  const hits: PlanLinkSuggestion[] = [];
+  for (const plan of plans) {
+    if (plan.status !== "active") continue;
+    for (const row of planSchedule(plan, transactions, todayStr)) {
+      if (row.paid || row.closedEarly) continue;
+      const remaining = rowRemaining(row);
+      const amountFits =
+        Math.abs(tx.amount - remaining) <= AUTO_LINK_TOLERANCE ||
+        Math.abs(tx.amount - row.amount) <= AUTO_LINK_TOLERANCE;
+      if (!amountFits) continue;
+      if (Math.abs(daysBetween(row.due, tx.date)) > AUTO_LINK_WINDOW) continue;
+      hits.push({ plan, row, role: row.isFinal ? "final" : "installment" });
+    }
+  }
+  // الشكّ يمنع الربط: مرشّحان (خطّتان بنفس القسط والموعد) يعنيان أن الاختيار
+  // للمالك لا لنا.
+  return hits.length === 1 ? hits[0] : null;
 }
 
 // ===================== تحقّقٌ من المدخلات =====================

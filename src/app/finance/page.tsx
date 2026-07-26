@@ -11,6 +11,7 @@ import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { CategoryManager } from "@/components/finance/CategoryManager";
 import { ReserveFunds } from "@/components/finance/ReserveFunds";
 import { InstallmentPlans } from "@/components/finance/InstallmentPlans";
+import { Assets } from "@/components/finance/Assets";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceGlance } from "@/components/finance/FinanceGlance";
@@ -23,12 +24,13 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock } from "lucide-react";
+import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package } from "lucide-react";
 import { getCategoryInfo, normalizeArabic, formatAmount, today } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
 } from "@/lib/financeOverview";
+import { assetsOverview } from "@/lib/assets";
 import { showUndo } from "@/components/ui/UndoToast";
 
 // عنوانٌ خفيفٌ يجمّع البطاقات بصريًّا — مسمّى مكتوم صغير (ثمانية، عالميّ) مع خيطٍ
@@ -64,7 +66,7 @@ function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
 
 export default function FinancePage() {
   const {
-    transactions, recurring, installmentPlans, categories, dailyBudget, reserves, budgets, salaryDay, monthlyIncome,
+    transactions, recurring, installmentPlans, assets, categories, dailyBudget, reserves, budgets, salaryDay, monthlyIncome,
     deleteTransaction, addTransaction,
   } = useAppStore();
 
@@ -162,6 +164,8 @@ export default function FinancePage() {
     }),
     [dailyBudget, transactions, reserves, recurring, installmentPlans, salaryDay, currentMonth]
   );
+  // ملخّص الأصول لرأس القسم — حسابٌ نقيّ من assets.ts، بلا أثرٍ على أيّ صرف.
+  const assetsSummary = useMemo(() => assetsOverview(assets ?? [], today()), [assets]);
   const alerts = useMemo(
     () => budgetAlerts(budgets, transactions, categories, monthlyIncome, currentMonth),
     [budgets, transactions, categories, monthlyIncome, currentMonth]
@@ -328,6 +332,23 @@ export default function FinancePage() {
       >
         <Card>
           <InstallmentPlans />
+        </Card>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="assets"
+        title="الأصول"
+        icon={<Package size={16} />}
+        open={openSections.assets}
+        onToggle={() => toggleSection("assets")}
+        summary={
+          assetsSummary.count > 0
+            ? `${formatAmount(assetsSummary.count)} أصل · قيمتها ${formatAmount(assetsSummary.bookValue)} ر.س · ${formatAmount(assetsSummary.perDay)} ر.س يومياً`
+            : "لا أصول بعد"
+        }
+      >
+        <Card>
+          <Assets />
         </Card>
       </CollapsibleSection>
 
