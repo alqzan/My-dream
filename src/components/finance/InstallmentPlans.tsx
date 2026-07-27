@@ -12,7 +12,7 @@ import { uid, today, formatAmount, formatDateShort, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { showUndo } from "@/components/ui/UndoToast";
-import { Plus, Trash2, X, CalendarClock, CheckCircle2, Bell, Pencil, Ban, RotateCcw, Wallet } from "lucide-react";
+import { Plus, Trash2, X, CheckCircle2, Bell, Pencil, Ban, RotateCcw, Wallet } from "lucide-react";
 
 // «الأقساط» — أُعيد بناء المدخل كلّه حول القصّة الحقيقية للشراء بالتقسيط:
 // *دفعتُ أوّلاً كذا، ثمّ عليّ قسطٌ كذا كلّ شهر لكذا شهراً.* المالك يكتب ما يعرفه
@@ -47,21 +47,10 @@ export function InstallmentPlans() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <CalendarClock size={16} className="text-finance shrink-0" />
-          <span className="text-sm font-semibold text-gray-700">الأقساط</span>
-          {overview.activeCount > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-finance/10 text-finance shrink-0">
-              متبقٍّ {formatAmount(overview.remainingTotal)} ر.س
-            </span>
-          )}
-          {overview.overdueCount > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white shrink-0">
-              {formatAmount(overview.overdueCount)} متأخّر
-            </span>
-          )}
-        </div>
+      {/* لا عنوان هنا: البطاقة تعيش داخل «الأقساط» القابل للطيّ في صفحة الأموال،
+          ورأسُه يحمل الاسم والمتبقّي وشارة المتأخّر — تكرارُهما هنا كان يعرض
+          القسم مرّتين متطابقتين. */}
+      <div className="flex items-center justify-end">
         <button
           onClick={() => { setAdding((v) => !v); setEditId(null); }}
           className="text-finance hover:text-finance/80 p-1.5 press shrink-0"
@@ -86,8 +75,11 @@ export function InstallmentPlans() {
         />
       )}
 
-      {/* ===== الطريق اليوميّ: القسط القادم بضغطةٍ واحدة ===== */}
-      {overview.next && (
+      {/* ===== الطريق اليوميّ: القسط القادم بضغطةٍ واحدة =====
+          اختصارٌ **عبر الخطط**: يُظهر أقرب قسطٍ من بينها كلّها. مع خطةٍ واحدة
+          مفتوحة يصير هو نفسَه زرَّ بطاقتها حرفياً (نفس القسط ونفس المبلغ ونفس
+          الفعل)، فيقرأه المالك عمليةً مكرّرة — فلا نعرضه إلا حين يوفّر بحثاً. */}
+      {overview.next && overview.activeCount > 1 && (
         <div className={cn(
           "flex items-center gap-2 rounded-xl border p-2.5",
           overview.next.row.due < todayStr
@@ -111,7 +103,7 @@ export function InstallmentPlans() {
             onClick={() => payNextInstallment(overview.next!.plan.id)}
             className="shrink-0 text-[11px] font-bold text-white bg-finance rounded-lg px-3 py-2 press"
           >
-            سجّلت الدفع
+            سجّل الدفع
           </button>
         </div>
       )}
@@ -243,7 +235,7 @@ function PlanCard({
           onClick={() => payNextInstallment(plan.id)}
           className="w-full text-[11px] font-bold text-finance bg-finance/10 rounded-lg py-2 press"
         >
-          سجّلت دفع القسط {s.next.no} ({formatAmount(rowRemaining(s.next))} ر.س
+          سجّل دفع القسط {s.next.no} ({formatAmount(rowRemaining(s.next))} ر.س
           {s.next.paidAmount > 0 ? " — الباقي عليه" : ""})
         </button>
       )}

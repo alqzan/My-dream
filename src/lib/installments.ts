@@ -341,6 +341,42 @@ export function suggestPlanLink(
   return hits.length === 1 ? hits[0] : null;
 }
 
+// **تعرّفٌ بالمبلغ وحده** — بلا نافذة تاريخ. الحالة الواقعية: تُسجّل دفعة القسط
+// قبل موعده بشهرٍ أو بعده بأسابيع، فيمرّ المبلغ مطابقاً تماماً بينما يرفضه
+// `suggestPlanLink` لبُعد التاريخ، فيُحسب مصروفاً عادياً ويتخلّف جدول الخطة.
+//
+// الفرق عن `suggestPlanLink` جوهريّ ومقصود: هذه **لا تربط تلقائياً أبداً** —
+// مطابقةُ المبلغ وحدها ليست يقيناً (قد يكون شراءً عادياً بنفس الرقم)، فالمخرَج
+// سؤالٌ يُعرض للمالك ويربط بضغطته هو. تبقى شرطُ الوحدانية كما هي: مرشّحان
+// يعنيان أن القرار له.
+export function suggestPlanByAmount(
+  tx: { amount: number; date: string; planId?: string; deferred?: boolean },
+  plans: InstallmentPlan[],
+  transactions: Transaction[],
+  todayStr: string
+): PlanLinkSuggestion | null {
+  if (tx.planId || tx.deferred || !(tx.amount > 0)) return null;
+  const hits: PlanLinkSuggestion[] = [];
+  for (const plan of plans) {
+    if (plan.status !== "active") continue;
+    for (const row of planSchedule(plan, transactions, todayStr)) {
+      if (row.paid || row.closedEarly) continue;
+      const remaining = rowRemaining(row);
+      const amountFits =
+        Math.abs(tx.amount - remaining) <= AUTO_LINK_TOLERANCE ||
+        Math.abs(tx.amount - row.amount) <= AUTO_LINK_TOLERANCE;
+      if (!amountFits) continue;
+      hits.push({ plan, row, role: row.isFinal ? "final" : "installment" });
+    }
+  }
+  // صفوفُ خطةٍ واحدة متساويةُ المبلغ (٧٩٤ × ٥) تُنتج مرشّحين لنفس الخطة — وهذا
+  // ليس شكّاً: الخطة واحدة، والصفّ المقصود أقدمُ صفٍّ غير مكتمل. الشكّ الحقيقيّ
+  // هو تعدّد **الخطط**.
+  const planIds = new Set(hits.map((h) => h.plan.id));
+  if (planIds.size !== 1) return null;
+  return hits[0];
+}
+
 // ===================== تحقّقٌ من المدخلات =====================
 
 // أخطاءٌ تمنع الحفظ (بيانات لا معنى لها). عدم تطابق الحساب **ليس** منها — ذاك

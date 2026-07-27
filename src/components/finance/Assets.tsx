@@ -11,7 +11,7 @@ import { uid, today, formatAmount, formatDateShort, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { showUndo } from "@/components/ui/UndoToast";
-import { Plus, Trash2, X, Package, Pencil, TrendingDown } from "lucide-react";
+import { Plus, Trash2, X, Pencil, TrendingDown } from "lucide-react";
 
 // «الأصول» — الأشياء الغالية التي تملكها وتخدمك سنين (جوّال، لابتوب، أثاث،
 // سيارة). السؤال الذي تجيب عنه هذه الشاشة: *كم يكلّفني هذا الشيء في اليوم فعلاً،
@@ -44,16 +44,9 @@ export function Assets() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <Package size={16} className="text-finance shrink-0" />
-          <span className="text-sm font-semibold text-gray-700">الأصول</span>
-          {o.count > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-finance/10 text-finance shrink-0">
-              قيمتها اليوم {formatAmount(o.bookValue)} ر.س
-            </span>
-          )}
-        </div>
+      {/* لا عنوان هنا: البطاقة تعيش داخل «الأصول» القابل للطيّ في صفحة الأموال،
+          ورأسُه يحمل الاسم والملخّص — تكرارُهما هنا كان يعرض القسم مرّتين. */}
+      <div className="flex items-center justify-end">
         <button
           onClick={() => { setAdding((v) => !v); setEditId(null); }}
           className="text-finance hover:text-finance/80 p-1.5 press shrink-0"

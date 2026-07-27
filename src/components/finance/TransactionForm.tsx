@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
-import { planSummary, isPlanOpen, suggestPlanLink, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
+import { planSummary, isPlanOpen, suggestPlanLink, suggestPlanByAmount, describeDueIn, daysBetween, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -121,6 +121,18 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       });
   }, [installmentPlans, transactions, parsedAmount]);
   const linkedPlan = (installmentPlans ?? []).find((p) => p.id === linkPlan);
+
+  // **«يبدو أنه قسط»**: المبلغ يطابق قسطاً مستحقّاً لكن تاريخه بعيدٌ عن موعده،
+  // فالربط التلقائي لا يقع (وهو محقّ: مطابقةُ رقمٍ ليست يقيناً). بدل أن يمرّ
+  // مصروفاً عادياً ويتخلّف جدول الخطة، نسأل سؤالاً واحداً ونربط بضغطته.
+  // لا يظهر بعد اختيارٍ يدويّ، ولا حين وقع الربط التلقائي أصلاً.
+  const amountHint = useMemo(() => {
+    if (initial || touchedPlan || linkPlan) return null;
+    const t = today();
+    const tx = { amount: parsedAmount, date };
+    if (suggestPlanLink(tx, installmentPlans ?? [], transactions, t)) return null;
+    return suggestPlanByAmount(tx, installmentPlans ?? [], transactions, t);
+  }, [initial, touchedPlan, linkPlan, parsedAmount, date, installmentPlans, transactions]);
 
   function pickCategoryFor(catId: string) {
     const cat = categories.find((c) => c.id === catId);
@@ -381,6 +393,32 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
           <div className="flex items-center gap-1.5 text-xs font-semibold text-finance">
             <CalendarClock size={14} /> دفعة قسط؟
           </div>
+
+          {/* تعرّفٌ بالمبلغ حين يبعد التاريخ عن الموعد — سؤالٌ لا حكم. */}
+          {amountHint && (
+            <div className="rounded-lg border border-finance/30 bg-white dark:bg-white/5 px-2.5 py-2 flex items-center gap-2">
+              <div className="flex-1 min-w-0 text-[11px] leading-relaxed">
+                <div className="font-bold text-gray-800 dark:text-gray-100 truncate">
+                  يبدو أنه القسط {formatAmount(amountHint.row.no)} من «{amountHint.plan.name || amountHint.plan.provider}»
+                </div>
+                <div className="text-gray-500">
+                  مستحقٌّ {describeDueIn(daysBetween(today(), amountHint.row.due))} · بنفس المبلغ
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkPlan(amountHint.plan.id);
+                  setTouchedPlan(true);
+                  if (amountHint.plan.category) { pickCategoryFor(amountHint.plan.category); setTouchedCat(true); }
+                }}
+                className="shrink-0 text-[11px] font-bold text-white bg-finance rounded-lg px-2.5 py-1.5 press"
+              >
+                نعم، اربطه
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"

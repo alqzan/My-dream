@@ -3,7 +3,7 @@ import {
   installmentDueDates, planScheduleAmounts, planExpectedTotal, planMismatch,
   planPaid, planSchedule, planSummary, installmentsOverview, validatePlanDraft,
   describeDueIn, isPlanOpen, planPrincipal, planLinkedTransactions,
-  rowRemaining, isValidDateKey, partsTotal, suggestPlanLink,
+  rowRemaining, isValidDateKey, partsTotal, suggestPlanLink, suggestPlanByAmount,
 } from "./installments";
 import type { InstallmentPlan, Transaction } from "./types";
 
@@ -393,5 +393,34 @@ describe("suggestPlanLink — الربط التلقائي لا يخمّن عند
   });
   it("لا يقترح شيئاً لخطةٍ ملغاة", () => {
     expect(suggestPlanLink({ amount: 780, date: "2026-03-01" }, [{ ...p, status: "cancelled" }], [], "2026-03-01")).toBeNull();
+  });
+});
+
+describe("suggestPlanByAmount — تعرّفٌ بالمبلغ بلا نافذة تاريخ (سؤالٌ لا ربط)", () => {
+  const p = plan({ downPayment: 1500, installmentAmount: 780, count: 6, totalPrice: 6180, firstDueDate: "2026-03-01" });
+
+  it("يتعرّف على القسط ولو دُفع قبل موعده بشهرين — وهو ما يفوت الربط التلقائي", () => {
+    const tx = { amount: 780, date: "2026-01-05" };
+    expect(suggestPlanLink(tx, [p], [], "2026-01-05")).toBeNull();
+    const s = suggestPlanByAmount(tx, [p], [], "2026-01-05");
+    expect(s?.plan.id).toBe("p1");
+    expect(s?.row.no).toBe(1);
+    expect(s?.role).toBe("installment");
+  });
+
+  it("صفوفٌ متساوية في خطةٍ واحدة ليست شكّاً — يُختار أقدم صفٍّ غير مكتمل", () => {
+    const paid = [pay({ id: "t1", planRole: "installment", planInstallmentNo: 1, amount: 780 })];
+    expect(suggestPlanByAmount({ amount: 780, date: "2026-08-01" }, [p], paid, "2026-08-01")?.row.no).toBe(2);
+  });
+
+  it("يمتنع عند تعدّد الخطط المرشّحة", () => {
+    expect(suggestPlanByAmount({ amount: 780, date: "2026-08-01" }, [p, { ...p, id: "p2" }], [], "2026-08-01")).toBeNull();
+  });
+
+  it("يرفض مبلغاً بعيداً، ومعاملةً مربوطةً أو مؤجّلة، وخطةً ملغاة", () => {
+    expect(suggestPlanByAmount({ amount: 90, date: "2026-03-01" }, [p], [], "2026-03-01")).toBeNull();
+    expect(suggestPlanByAmount({ amount: 780, date: "2026-03-01", planId: "x" }, [p], [], "2026-03-01")).toBeNull();
+    expect(suggestPlanByAmount({ amount: 780, date: "2026-03-01", deferred: true }, [p], [], "2026-03-01")).toBeNull();
+    expect(suggestPlanByAmount({ amount: 780, date: "2026-03-01" }, [{ ...p, status: "cancelled" }], [], "2026-03-01")).toBeNull();
   });
 });
