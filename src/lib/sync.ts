@@ -730,7 +730,23 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
   //    photo AND no pointer, so the next save (prepareForCloud) writes it with
   //    no ref and the object is orphaned in R2. Keeping the ref means the photo
   //    re-hydrates on the next successful load and the object stays owned.
-  const journalEntries = main.journalEntries.map((e) => {
+  // Bytes this device holds that the refs don't cover yet — a photo added here
+  // and not uploaded (or not yet re-read) when this entry ALSO carries cloud
+  // refs, which is exactly the shape a merge produces. Replacing `photos` with
+  // the resolved refs alone would drop it from view until the next full load.
+  // Hashing is memoized and only runs for the few entries that have both.
+  const keepUncovered = async (items: string[], refs: string[]): Promise<string[]> => {
+    const inline = items.filter((u) => u.startsWith("data:"));
+    if (!inline.length) return [];
+    const covered = new Set(refs);
+    const out: string[] = [];
+    for (const u of inline) {
+      const h = await photoHash(u);
+      if (!covered.has(h)) out.push(u);
+    }
+    return out;
+  };
+  const journalEntries = await Promise.all(main.journalEntries.map(async (e) => {
     const ce = e as CloudEntry & { audioRef?: string; photoOrder?: string[]; audioOrder?: string[] };
     const refs = photoRefsOf(ce);
     const arefs = audioRefsOf(ce);
@@ -739,7 +755,9 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
     let out = rest as JournalEntry & MediaOrderFields;
     if (refs.length) {
       const imgs = refs.map((h) => resolved.get(`photos:${h}`)).filter(Boolean) as string[];
-      if (imgs.length) out = { ...out, photos: imgs, photo: imgs[0] };
+      const extra = await keepUncovered(entryPhotos(e), refs);
+      const all = [...imgs, ...extra];
+      if (all.length) out = { ...out, photos: all, photo: all[0] };
       const keep = refs.filter((h) => !resolved.has(`photos:${h}`));
       // Some refs survived unresolved → stash the FULL original order so the
       // next save can splice the survivor back into its slot instead of tacking
@@ -748,12 +766,14 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
     }
     if (arefs.length) {
       const auds = arefs.map((h) => resolved.get(`audios:${h}`)).filter(Boolean) as string[];
-      if (auds.length) out = { ...out, audios: auds, audio: auds[0] };
+      const extra = await keepUncovered(entryAudios(e), arefs);
+      const all = [...auds, ...extra];
+      if (all.length) out = { ...out, audios: all, audio: all[0] };
       const keep = arefs.filter((h) => !resolved.has(`audios:${h}`));
       if (keep.length) out = { ...out, audioRefs: keep, audioOrder: arefs };
     }
     return out as JournalEntry;
-  });
+  }));
   return { ...main, journalEntries };
 }
 

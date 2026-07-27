@@ -402,3 +402,97 @@ describe("saveUserData — a surviving ref is never orphaned", () => {
     expect(mainDoc.photoManifest).toContain(HASH_A);
   });
 });
+
+// ===================== الدمج على المراجع ثمّ الترطيب =====================
+// المسار المختلط في SyncProvider: `mergeAppData(local, cloudMain)` **والمراجع ما
+// تزال على مذكرات السحابة**، ثمّ `hydrateCloudPhotos` على الناتج للعرض. لو رُطّبت
+// السحابة أوّلاً لصارت مصفوفةَ بايتات، وقاعدةُ mergeEntryMedia «لا نستبدل مجموعةً
+// موجودة» تُسقط الصورة الثانية بلا مرجعٍ يُعيدها — فتصير يتيمةً في R2.
+describe("mergeAppData ثمّ hydrateCloudPhotos — استكمالٌ جزئيّ بلا فقد", () => {
+  const BYTES_1 = "data:image/png;base64,AAAA";
+  const BYTES_2 = "data:image/png;base64,BBBB";
+  const AUD_1 = "data:audio/webm;base64,CCCC";
+  const AUD_2 = "data:audio/webm;base64,DDDD";
+
+  it("صورةٌ على الجهازين + صورةٌ ثانية في السحابة: النصّ المحرَّر والصورتان يبقون (بالاتجاهين)", async () => {
+    const { photoHash } = await import("./mediaHash");
+    const h1 = await photoHash(BYTES_1);
+    const h2 = await photoHash(BYTES_2);
+    // كلا الهاشين متاحان محلياً فيُرطَّبان (كأنّ R2 استجاب).
+    idbStore.set(MEDIA_CACHE_PREFIX + h1, BYTES_1);
+    idbStore.set(MEDIA_CACHE_PREFIX + h2, BYTES_2);
+
+    // الجهاز A: حرّر النصّ ويحمل الصورة الأولى بايتاتٍ محلية.
+    const local = appData([
+      { id: "e1", date: "2026-01-01", content: "النصّ المحرَّر", updatedAt: 5000, photos: [BYTES_1], photo: BYTES_1 },
+    ]);
+    // السحابة: النصّ القديم، ومرجعان (الصورة الأولى + ثانيةٌ أُضيفت من الجهاز B).
+    const cloud = appData([
+      { ...cloudEntry("e1", { photoRefs: [h1, h2] }), content: "النصّ القديم", updatedAt: 100 },
+    ]);
+
+    for (const merged of [sync.mergeAppData(local, cloud), sync.mergeAppData(cloud, local)]) {
+      // ما يُحفظ: غنيٌّ بالمراجع — المرجع الثاني لم يسقط، فلا صورة يتيمة.
+      const rich = merged.journalEntries[0] as JournalEntry & { photoRefs?: string[] };
+      expect(rich.photoRefs).toEqual(expect.arrayContaining([h1, h2]));
+
+      // ما يُعرض: النصّ المحرَّر مع الصورتين.
+      const shown = await sync.hydrateCloudPhotos("space", merged);
+      const e = shown.journalEntries[0];
+      expect(e.content).toBe("النصّ المحرَّر");
+      expect(e.photos).toEqual(expect.arrayContaining([BYTES_1, BYTES_2]));
+      expect(e.photos).toHaveLength(2);
+    }
+  });
+
+  it("النظير للصوت: ملاحظتان صوتيتان تبقيان مع النصّ المحرَّر (بالاتجاهين)", async () => {
+    const { photoHash } = await import("./mediaHash");
+    const h1 = await photoHash(AUD_1);
+    const h2 = await photoHash(AUD_2);
+    idbStore.set(MEDIA_CACHE_PREFIX + h1, AUD_1);
+    idbStore.set(MEDIA_CACHE_PREFIX + h2, AUD_2);
+
+    const local = appData([
+      { id: "e1", date: "2026-01-01", content: "النصّ المحرَّر", updatedAt: 5000, audios: [AUD_1], audio: AUD_1 },
+    ]);
+    const cloud = appData([
+      { ...cloudEntry("e1", { audioRefs: [h1, h2] }), content: "النصّ القديم", updatedAt: 100 },
+    ]);
+
+    for (const merged of [sync.mergeAppData(local, cloud), sync.mergeAppData(cloud, local)]) {
+      const rich = merged.journalEntries[0] as JournalEntry & { audioRefs?: string[] };
+      expect(rich.audioRefs).toEqual(expect.arrayContaining([h1, h2]));
+
+      const shown = await sync.hydrateCloudPhotos("space", merged);
+      const e = shown.journalEntries[0];
+      expect(e.content).toBe("النصّ المحرَّر");
+      expect(e.audios).toEqual(expect.arrayContaining([AUD_1, AUD_2]));
+      expect(e.audios).toHaveLength(2);
+    }
+  });
+
+  it("بايتاتٌ محلية لم تُرفع بعد لا تختفي حين تحمل المذكرة مراجع سحابية", async () => {
+    const { photoHash } = await import("./mediaHash");
+    const h1 = await photoHash(BYTES_1);
+    idbStore.set(MEDIA_CACHE_PREFIX + h1, BYTES_1);
+    // المذكرة تحمل مرجعاً سحابياً (h1) وصورةً محلّيةً جديدة لا مرجع لها بعد.
+    const merged = appData([
+      { ...cloudEntry("e1", { photoRefs: [h1] }), photos: [BYTES_2], photo: BYTES_2 },
+    ]);
+    const shown = await sync.hydrateCloudPhotos("space", merged);
+    expect(shown.journalEntries[0].photos).toEqual([BYTES_1, BYTES_2]);
+  });
+
+  it("إشارات فيديو Day One تتّحد بلا فقد ولا تكرار", async () => {
+    const local = appData([
+      { id: "e1", date: "2026-01-01", content: "ن", updatedAt: 5000, videoRefs: [{ type: "mov", duration: 3 }] },
+    ]);
+    const cloud = appData([
+      { id: "e1", date: "2026-01-01", content: "ن", updatedAt: 100,
+        videoRefs: [{ type: "mov", duration: 3 }, { type: "mp4", duration: 7 }] },
+    ]);
+    for (const merged of [sync.mergeAppData(local, cloud), sync.mergeAppData(cloud, local)]) {
+      expect(merged.journalEntries[0].videoRefs).toHaveLength(2);
+    }
+  });
+});

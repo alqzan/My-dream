@@ -123,14 +123,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // happens to be ahead (the bug: iPad journal entries vanished on the
           // iPhone). mergeAppData keeps every entry and resolves per-item
           // conflicts by the newer stamp.
-          const full = await hydrateCloudPhotos(space, cloudMain);
-          const merged = mergeAppData(local, full);
+          //
+          // **الدمج على المراجع لا على البايتات**: `cloudMain` يدخل الدمج وهو ما
+          // يزال يحمل `photoRefs`/`audioRefs`، فيوحّدها `mergeEntryMedia` بلا
+          // فقد. لو رطّبنا الصور أولاً لصارت النسخة السحابية مصفوفةَ بايتات،
+          // وقاعدةُ «لا نستبدل مجموعةً موجودة» تُسقط الصورة الثانية بلا مرجعٍ
+          // يعيدها — فتصير يتيمةً في R2. الترطيب بعد الدمج، للعرض وحده.
+          const merged = mergeAppData(local, cloudMain);
+          const shown = await hydrateCloudPhotos(space, merged);
           applyingRemoteRef.current = true;
-          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, local)));
+          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(shown, local)));
           applyingRemoteRef.current = false;
           // Push the union back up so the cloud gains any entries that lived
           // only on this device; other devices then pull them. We just read the
-          // cloud doc, so pass its revision for the transaction's CAS.
+          // cloud doc, so pass its revision for the transaction's CAS. نحفظ
+          // **الناتج الغنيّ بالمراجع** (`merged`) لا نسخةَ العرض، فيبقى الاستكمال
+          // الجزئي: مرجعٌ لم يُنزَّل هذه الجلسة يعود كما هو بدل أن يُسقَط.
           const r = await saveUserData(space, merged, cloudMain.revision ?? 0);
           mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
@@ -142,7 +150,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // skips mergeAppData, and the journal shards can still hold entries
           // the owner deleted (empty shards are deliberately never deleted), so
           // without this a fresh device resurrects them.
-          const full = applyTombstones(await hydrateCloudPhotos(space, cloudMain));
+          // الشواهد **قبل** الترطيب: صورةٌ محذوفة يُسقط مرجعَها التنقيةُ، فلا
+          // تُنزَّل بايتاتها أصلاً (كنّا ننزّلها ثمّ نرميها).
+          const full = await hydrateCloudPhotos(space, applyTombstones(cloudMain));
           applyingRemoteRef.current = true;
           hydrate(await inlineCachedMedia(space, mergeLocalPhotos(full, local)));
           applyingRemoteRef.current = false;
@@ -183,12 +193,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             ((cloudMain.lastUpdated ?? "") > lastCloudUpdatedRef.current ||
               (cloudMain.revision ?? 0) > lastRevisionRef.current)
           ) {
-            const full = await hydrateCloudPhotos(space, cloudMain);
-            const merged = mergeAppData(toSave, full);
+            // كما في الدمج الأوّل: الدمج على المراجع، والترطيب بعده للعرض.
+            const merged = mergeAppData(toSave, cloudMain);
+            const shown = await hydrateCloudPhotos(space, merged);
             applyingRemoteRef.current = true;
-            hydrate(await inlineCachedMedia(space, mergeLocalPhotos(merged, toSave)));
+            hydrate(await inlineCachedMedia(space, mergeLocalPhotos(shown, toSave)));
             applyingRemoteRef.current = false;
-            toSave = merged;
+            toSave = merged; // الغنيّ بالمراجع هو ما يُحفظ
             lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
           }
           const stamp = new Date().toISOString();
@@ -261,7 +272,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         })) return;
         (async () => {
           try {
-            const full = await hydrateCloudPhotos(space, cloudMain);
             const local = snapshot();
             // Does THIS device hold changes the incoming cloud snapshot lacks?
             // (reverse of cloudHasUnseen). If so, the merge below will contain
@@ -270,8 +280,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const localHasUnpushed = cloudHasUnseen(local, cloudMain);
             // Merge, so unsynced local edits aren't overwritten by the incoming
             // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
-            const merged = mergeAppData(local, full);
-            const inlined = await inlineCachedMedia(space, mergeLocalPhotos(merged, local));
+            // بمراجع السحابة كما هي — ثمّ نرطّب الناتج للعرض.
+            const merged = mergeAppData(local, cloudMain);
+            const shown = await hydrateCloudPhotos(space, merged);
+            const inlined = await inlineCachedMedia(space, mergeLocalPhotos(shown, local));
             applyingRemoteRef.current = true;
             hydrate(inlined);
             setTimeout(() => {

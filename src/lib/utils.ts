@@ -414,8 +414,20 @@ export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): Journa
   if (photoRefs) out = { ...out, photoRefs };
   const audioRefs = unionRefs(b.audioRefs, o.audioRefs);
   if (audioRefs) out = { ...out, audioRefs };
-  if (!(base.videoRefs?.length) && other.videoRefs?.length) {
-    out = { ...out, videoRefs: other.videoRefs };
+  // إشارات الفيديو (نوع/مدّة، بلا ملفّ) تتّحد كالمراجع لا «تُملأ إن كانت فارغة»:
+  // نسختان لكلٍّ منهما إشارةٌ مختلفة كانتا تفقدان إحداهما. الاتحاد بالقيمة يُبقي
+  // الاثنتين ويسقط المكرّر، وهو ما يبرّر استثناءها من ختم تعديل المذكرة
+  // (`UNSTAMPED_FIELDS` في store.ts) — لها دمجُها المستقل مثل بقية الوسائط.
+  const vids = [...(base.videoRefs ?? []), ...(other.videoRefs ?? [])];
+  if (vids.length) {
+    const seen = new Set<string>();
+    const merged = vids.filter((v) => {
+      const k = JSON.stringify(v);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (merged.length !== (base.videoRefs?.length ?? 0)) out = { ...out, videoRefs: merged };
   }
   return out as JournalEntry;
 }
