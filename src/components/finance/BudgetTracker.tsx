@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, cashOut, today, formatDate } from "@/lib/utils";
-import { budgetCycleStart, cycleDays } from "@/lib/budgetCycle";
+import { spendWindow, cycleDays, inSpendWindow } from "@/lib/budgetCycle";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, X, Pencil, Check } from "lucide-react";
 
@@ -16,7 +16,7 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // percentage of the monthly income (and then it follows the income).
 export function BudgetTracker() {
   const {
-    categories, budgets, transactions, monthlyIncome, salaryDay, lastSalaryConfirm,
+    categories, budgets, transactions, monthlyIncome, salaryDay, lastSalaryConfirm, budgetWindow,
     setBudget, removeBudget, setMonthlyIncome,
   } = useAppStore();
   const [adding, setAdding] = useState(false);
@@ -30,16 +30,17 @@ export function BudgetTracker() {
   const [pct, setPct] = useState("30");
   const [income, setIncome] = useState(monthlyIncome?.toString() ?? "");
 
-  // نافذة السقوف = دورة الراتب لا الشهر الميلادي: تبدأ من تأكيد «نزل الراتب»
-  // (أو آخر يوم راتبٍ مرّ إن لم يؤكّد بعد)، فتتصفّر الأرقام مع كل دورة جديدة.
+  // نافذة الحساب يختارها المالك من الإعدادات: دورة الراتب (الافتراضي — تبدأ من
+  // تأكيد «نزل الراتب»، أو آخر يوم راتبٍ مرّ إن لم يؤكّد بعد) أو الشهر الميلادي.
   const todayStr = today();
-  const cycleStart = budgetCycleStart(lastSalaryConfirm, salaryDay ?? 27, todayStr);
-  const daysIn = cycleDays(cycleStart, todayStr);
+  const byMonth = budgetWindow === "month";
+  const win = spendWindow(budgetWindow, lastSalaryConfirm, salaryDay ?? 27, todayStr);
+  const daysIn = byMonth ? Number(todayStr.slice(8)) : cycleDays(win, todayStr);
 
   // A budget cap sits on a main category; spending in its subs counts too.
   const spentByCategory = (category: string) =>
     transactions
-      .filter((t) => getMainCategory(categories, t.category).id === category && t.date >= cycleStart)
+      .filter((t) => getMainCategory(categories, t.category).id === category && inSpendWindow(t.date, win))
       .reduce((s, t) => s + cashOut(t), 0);
 
   function startEdit(category: string) {
@@ -86,7 +87,7 @@ export function BudgetTracker() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-gray-700">ميزانية الدورة</span>
+          <span className="text-sm font-semibold text-gray-700">{byMonth ? "ميزانية الشهر" : "ميزانية الدورة"}</span>
           {monthlyIncome ? (
             <span className="text-[10px] text-gray-400">💼 دخلك {formatAmount(monthlyIncome)} ر.س</span>
           ) : null}
@@ -100,7 +101,10 @@ export function BudgetTracker() {
 
       {budgets.length > 0 && (
         <p className="text-[10px] text-gray-400">
-          🔄 الحساب من نزول الراتب ({formatDate(cycleStart)}) — اليوم {daysIn} من الدورة. تتصفّر تلقائياً عند تأكيد «نزل الراتب»، والسقوف نفسها تبقى وتُعدَّل متى شئت.
+          {byMonth
+            ? `📅 الحساب على الشهر الميلادي — اليوم ${daysIn} من الشهر، ويتصفّر أوّل كل شهر.`
+            : `🔄 الحساب من نزول الراتب (${formatDate(win)}) — اليوم ${daysIn} من الدورة، ويتصفّر عند تأكيد «نزل الراتب».`}
+          {" "}السقوف نفسها تبقى وتُعدَّل متى شئت (بدّل النافذة من الإعدادات).
         </p>
       )}
 

@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/Card";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
 import { FinancePace } from "@/components/finance/FinancePace";
-import { budgetCycleStart, cycleDays } from "@/lib/budgetCycle";
+import { spendWindow, cycleDays } from "@/lib/budgetCycle";
 import { daysUntilSalary } from "@/lib/financeOverview";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import dynamic from "next/dynamic";
@@ -93,7 +93,7 @@ function GroupLabel({ children }: { children: ReactNode }) {
 }
 
 export default function SpendInsightsPage() {
-  const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome, salaryDay, lastSalaryConfirm } = useAppStore();
+  const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome, salaryDay, lastSalaryConfirm, budgetWindow } = useAppStore();
   const [period, setPeriod] = useState<Period>("أسبوع");
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
 
@@ -101,13 +101,16 @@ export default function SpendInsightsPage() {
   const ranges = periodRanges(period, todayStr);
   // نافذة السقوف/الوتيرة = دورة الراتب (نفس منطق صفحة الأموال وBudgetTracker).
   const paceCycle = useMemo(() => {
-    const start = budgetCycleStart(lastSalaryConfirm, salaryDay ?? 27, todayStr);
-    return {
-      start,
-      daysLeft: daysUntilSalary(salaryDay ?? 27, todayStr),
-      length: cycleDays(start, todayStr) + daysUntilSalary(salaryDay ?? 27, todayStr),
-    };
-  }, [lastSalaryConfirm, salaryDay, todayStr]);
+    if (budgetWindow === "month") {
+      // الشهر الميلادي: النافذة من أوّل الشهر، والباقي حتى آخره.
+      const d = parseDate(todayStr);
+      const inMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return { start: `${todayStr.slice(0, 8)}01`, daysLeft: inMonth - d.getDate() + 1, length: inMonth };
+    }
+    const start = spendWindow(budgetWindow, lastSalaryConfirm, salaryDay ?? 27, todayStr);
+    const left = daysUntilSalary(salaryDay ?? 27, todayStr);
+    return { start, daysLeft: left, length: cycleDays(start, todayStr) + left };
+  }, [budgetWindow, lastSalaryConfirm, salaryDay, todayStr]);
 
   // The essential/luxury gauge, budget-pace and discipline cards below are
   // inherently about the CURRENT calendar month (their "days left"/"this month

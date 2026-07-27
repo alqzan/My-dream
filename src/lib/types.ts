@@ -319,6 +319,9 @@ export const ASSET_LIFE_PRESETS: { label: string; days: number }[] = [
 // A monthly cap on a main category — either a fixed SAR amount or a
 // percentage of the monthly income (pct wins when both are set, and the
 // effective cap follows the income automatically if it changes).
+// نافذة حساب السقوف — راجع budgetCycle.ts.
+export type BudgetWindowMode = "salary" | "month";
+
 export interface Budget {
   category: string; // FinanceCategoryDef id
   limit?: number; // fixed monthly cap in SAR
@@ -507,6 +510,10 @@ export interface AppData {
   monthlyIncome: number | null; // shared by %-based budgets and the daily budget editor
   futureLetters: FutureLetter[];
   salaryDay: number; // يوم نزول الراتب (افتراضياً 27) — يظهر بعده سؤال «نزل الراتب؟»
+  // نافذة حساب سقوف التصنيفات: «دورة الراتب» (الافتراضي — تتصفّر عند تأكيد
+  // «نزل الراتب») أو «الشهر الميلادي» (من أوّل الشهر إلى آخره). إعدادٌ مفرد
+  // يختاره المالك من صفحة الإعدادات؛ غيابه في بياناتٍ قديمة = دورة الراتب.
+  budgetWindow?: BudgetWindowMode;
   lastSalaryConfirm: string | null; // YYYY-MM-DD لآخر تأكيد «نزل الراتب»
   readingGoal: number | null; // هدف عدد الكتب المُنهاة هذا العام (null = بلا هدف)
   // العادات المجمّدة مؤقتاً — مفاتيح للبطاقات الموقوفة في «عاداتي اليوم»: مفتاح

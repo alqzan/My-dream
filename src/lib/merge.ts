@@ -392,6 +392,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     monthlyIncome: pickSingleton("monthlyIncome", primary.monthlyIncome ?? secondary.monthlyIncome),
     futureLetters: byId(primary.futureLetters, secondary.futureLetters),
     salaryDay: pickSingleton("salaryDay", primary.salaryDay),
+    budgetWindow: pickSingleton("budgetWindow", primary.budgetWindow ?? secondary.budgetWindow ?? "salary"),
     lastSalaryConfirm: pickSingleton("lastSalaryConfirm", primary.lastSalaryConfirm),
     readingGoal: pickSingleton("readingGoal", primary.readingGoal ?? secondary.readingGoal ?? null),
     // العادات المجمّدة إعدادٌ مفرد (تبديل مقصود): آخر ضبطٍ يفوز كي يسري

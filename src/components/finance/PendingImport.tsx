@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { budgetCycleStart } from "@/lib/budgetCycle";
+import { spendWindow } from "@/lib/budgetCycle";
 import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate } from "@/lib/bankParser";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
 import { today, formatAmount, getCategoryInfo, budgetWarningFor, cn, uid, toLatinDigits } from "@/lib/utils";
@@ -107,7 +107,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     // Live budget alert for any category these expenses pushed to its limit.
     const st = useAppStore.getState();
     const fresh = st.transactions;
-    const cycleStart = budgetCycleStart(st.lastSalaryConfirm, st.salaryDay ?? 27, today());
+    const cycleStart = spendWindow(st.budgetWindow, st.lastSalaryConfirm, st.salaryDay ?? 27, today());
     const seen = new Set<string>();
     let warn: { label: string; over: boolean; pct: number } | null = null;
     for (const r of chosen) {

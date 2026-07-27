@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lastSalaryDate, budgetCycleStart, nextSalaryDate, cycleDays, inSpendWindow,
+  spendWindow,
 } from "./budgetCycle";
 import { budgetAlerts, projectedCycleSurplus } from "./financeOverview";
 import type { Budget, FinanceCategoryDef, Transaction } from "./types";
@@ -84,5 +85,15 @@ describe("projectedCycleSurplus", () => {
   });
   it("is the plain balance on salary day itself", () => {
     expect(projectedCycleSurplus({ balance: 250, spent: 0, days: 1 }, 400, 0).projected).toBe(250);
+  });
+});
+
+describe("spendWindow (اختيار المالك)", () => {
+  it("يرجع الشهر الميلادي عند اختيار «month»", () => {
+    expect(spendWindow("month", "2026-07-27", 27, "2026-07-29")).toBe("2026-07");
+  });
+  it("يرجع بداية دورة الراتب افتراضياً وعند «salary»", () => {
+    expect(spendWindow("salary", "2026-07-27", 27, "2026-07-29")).toBe("2026-07-27");
+    expect(spendWindow(undefined, null, 27, "2026-07-29")).toBe("2026-07-27");
   });
 });

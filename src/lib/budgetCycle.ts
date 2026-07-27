@@ -58,3 +58,15 @@ export function cycleDays(startDate: string, todayStr: string): number {
 export function inSpendWindow(date: string, windowStart: string): boolean {
   return windowStart.length === 7 ? date.startsWith(windowStart) : date >= windowStart;
 }
+
+// نافذة حساب السقوف الفعّالة حسب اختيار المالك (الإعدادات):
+// «month» → شهرٌ ميلادي «YYYY-MM» · «salary» (الافتراضي) → بداية دورة الراتب.
+// هذه الدالّة هي ما تستدعيه الواجهة، فلا يتكرّر الشرط في كل مكوّن.
+export function spendWindow(
+  mode: "salary" | "month" | undefined,
+  lastSalaryConfirm: string | null | undefined,
+  salaryDay: number,
+  todayStr: string
+): string {
+  return mode === "month" ? todayStr.slice(0, 7) : budgetCycleStart(lastSalaryConfirm, salaryDay, todayStr);
+}

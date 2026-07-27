@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { budgetCycleStart } from "@/lib/budgetCycle";
+import { spendWindow } from "@/lib/budgetCycle";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
 import { planSummary, isPlanOpen, suggestPlanLink, suggestPlanByAmount, describeDueIn, daysBetween, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
@@ -217,7 +217,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     const st = useAppStore.getState();
     const w = budgetWarningFor(
       tx.category, budgets, st.transactions, categories, monthlyIncome,
-      budgetCycleStart(st.lastSalaryConfirm, st.salaryDay ?? 27, today())
+      spendWindow(st.budgetWindow, st.lastSalaryConfirm, st.salaryDay ?? 27, today())
     );
     if (w) {
       showToast(

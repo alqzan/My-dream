@@ -5,6 +5,7 @@ import type {
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
+  BudgetWindowMode,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -31,7 +32,7 @@ const ID_COLLECTIONS = [
 // the other device's stale non-null copy.
 const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
-  "lastSalaryConfirm", "frozenHabits",
+  "lastSalaryConfirm", "frozenHabits", "budgetWindow",
 ] as const;
 
 // Undo of a delete re-adds the item with its original id — but the delete left
@@ -171,6 +172,7 @@ interface AppStore extends AppData {
 
   // دورة الراتب: يوم النزول + تحويل باقي الميزانية اليومية إلى «الفوائض»
   setSalaryDay: (day: number) => void;
+  setBudgetWindow: (mode: BudgetWindowMode) => void;
   confirmSalary: () => number; // ينقل الفائض لصندوق الفوائض ويصفّر العداد؛ يرجع المبلغ
   // نقل مبلغ من فائض الميزانية اليومية إلى احتياطي محدد (ويصفّر عداد اليومية)
   sweepToReserve: (fundId: string, amount: number, note?: string) => void;
@@ -371,6 +373,7 @@ export const useAppStore = create<AppStore>()(
       monthlyIncome: null,
       futureLetters: [],
       salaryDay: 27,
+      budgetWindow: "salary",
       lastSalaryConfirm: null,
       readingGoal: null,
       frozenHabits: [],
@@ -1078,6 +1081,9 @@ export const useAppStore = create<AppStore>()(
       removeDailyBudget: () =>
         set(() => ({ dailyBudget: null })),
 
+      // نافذة حساب السقوف: دورة الراتب (افتراضياً) أو الشهر الميلادي.
+      setBudgetWindow: (mode) => set(() => ({ budgetWindow: mode })),
+
       setSalaryDay: (day) =>
         set(() => ({ salaryDay: Math.min(Math.max(Math.round(day) || 27, 1), 31) })),
 
@@ -1643,6 +1649,7 @@ export const useAppStore = create<AppStore>()(
           monthlyIncome: data.monthlyIncome ?? null,
           futureLetters: data.futureLetters ?? [],
           salaryDay: data.salaryDay ?? 27,
+          budgetWindow: data.budgetWindow ?? "salary",
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
           readingGoal: data.readingGoal ?? null,
           frozenHabits: data.frozenHabits ?? [],
@@ -1676,6 +1683,7 @@ export const useAppStore = create<AppStore>()(
           monthlyIncome: s.monthlyIncome,
           futureLetters: s.futureLetters,
           salaryDay: s.salaryDay,
+          budgetWindow: s.budgetWindow ?? "salary",
           lastSalaryConfirm: s.lastSalaryConfirm,
           readingGoal: s.readingGoal,
           frozenHabits: s.frozenHabits ?? [],

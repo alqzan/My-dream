@@ -169,6 +169,7 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     monthlyIncome: g("monthlyIncome", null),
     futureLetters: g("futureLetters", []),
     salaryDay: g("salaryDay", 27),
+    budgetWindow: g("budgetWindow", "salary"),
     lastSalaryConfirm: g("lastSalaryConfirm", null),
     readingGoal: g("readingGoal", null),
     merchantRules: g("merchantRules", {}),
