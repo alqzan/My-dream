@@ -7,7 +7,7 @@ import { mediaTombKey } from "./mediaHash";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type {
   AppData, JournalEntry, Transaction, ReserveFund, Habit, HifzState, HifzPlan,
-  RecurringTransaction, InstallmentPlan,
+  RecurringTransaction, InstallmentPlan, Asset,
 } from "./types";
 
 // Minimal valid AppData; override only what a test cares about.
@@ -675,5 +675,40 @@ describe("mergeAppData — خطط الأقساط", () => {
     expect(merged.transactions).toHaveLength(1);
     expect(merged.transactions[0].planRole).toBe("installment");
     expect(merged.transactions[0].planInstallmentNo).toBe(1);
+  });
+});
+
+// الأصول كانت بلا اختبار دمجٍ واحد رغم أنها المجموعة التي تخلّفت بين الأجهزة
+// (0.1.298). نغطّيها بما غُطّيت به خطط الأقساط بالضبط.
+describe("mergeAppData — الأصول تعبر بين الأجهزة ولا تعود بعد حذفها", () => {
+  const asset = (over: Partial<Asset> & { id: string }): Asset => ({
+    name: "ماك بوك", purchaseDate: "2026-07-26", purchasePrice: 5499, lifeDays: 1825, ...over,
+  });
+
+  it("unions assets from both devices", () => {
+    const local = base({ assets: [asset({ id: "a1" })] });
+    const cloud = base({ assets: [asset({ id: "a2" })] });
+    expect(mergeAppData(local, cloud).assets.map((a) => a.id).sort()).toEqual(["a1", "a2"]);
+    expect(mergeAppData(cloud, local).assets.map((a) => a.id).sort()).toEqual(["a1", "a2"]);
+  });
+
+  it("the newer per-asset edit wins even when the OTHER device holds the newer doc stamp", () => {
+    const local = base({
+      lastUpdated: "2026-05-01T00:00:00.000Z",
+      assets: [asset({ id: "a1", lifeDays: 730, updatedAt: 9000 })],
+    });
+    const cloud = base({
+      lastUpdated: "2026-05-20T00:00:00.000Z",
+      assets: [asset({ id: "a1", lifeDays: 1825, updatedAt: 100 })],
+    });
+    expect(mergeAppData(local, cloud).assets[0].lifeDays).toBe(730);
+    expect(mergeAppData(cloud, local).assets[0].lifeDays).toBe(730);
+  });
+
+  it("a deleted asset is not resurrected by the other device's copy", () => {
+    const local = base({ assets: [], deleted: { a1: Date.now() } });
+    const cloud = base({ assets: [asset({ id: "a1" })], lastUpdated: "2026-06-01T00:00:00.000Z" });
+    expect(mergeAppData(local, cloud).assets).toHaveLength(0);
+    expect(mergeAppData(cloud, local).assets).toHaveLength(0);
   });
 });

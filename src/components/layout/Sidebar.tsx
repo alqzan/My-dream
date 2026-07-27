@@ -15,15 +15,34 @@ export function Sidebar() {
   const pathname = normPath(usePathname());
 
   return (
-    <aside className="hidden lg:flex flex-col w-56 bg-white border-l border-gray-100 min-h-screen fixed right-0 top-0 z-40">
-      <div className="p-6 border-b border-gray-100 dark:border-[#3a2e1e] flex items-center gap-3">
+    // ارتفاعٌ **بالضبط** بمقدار المساحة المرئية، لا `min-h-screen`: العنصر `fixed`
+    // فلا يتمرّر معه شيء، و`100vh` على آيباد/آيفون Safari أطولُ من المرئيّ فعلاً
+    // (شريط المتصفّح ومؤشّر الهوم يغطّيان الأسفل) — فكان صفّ المزامنة والإعدادات
+    // يسقط تحت الحافة في الزاوية ولا يظهر ولا يُلمس. `100dvh` يتبع المرئيّ حيّاً،
+    // و`shrink-0` على الطرفين مع `overflow-y-auto` على التنقّل يجعل القائمة هي
+    // التي تتقلّص عند ضيق الارتفاع — فيبقى الصفّ السفليّ مرئياً دائماً.
+    <aside className="hidden lg:flex flex-col w-56 bg-white border-l border-gray-100 h-[100dvh] fixed right-0 top-0 z-40">
+      <div className="shrink-0 p-6 border-b border-gray-100 dark:border-[#3a2e1e] flex items-center gap-3">
         <BrandMark size={38} />
         <div>
           <h1 className="text-xl font-bold text-gray-900">مدار</h1>
           <p className="text-xs text-gray-400 mt-0.5">مساحتك الشخصية</p>
         </div>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+
+      {/* المزامنة والإعدادات والسمة **في الأعلى** — كما هي في ترويسة الجوّال
+          تماماً. كانت في ذيل الشريط: أبعدُ نقطةٍ عن العين، وأوّلُ ما يُقتطع حين
+          يقصر الارتفاع، فبدا التطبيق على الآيباد بلا إعداداتٍ ولا حالة مزامنة
+          بينما هي ظاهرةٌ على الآيفون. مكانٌ واحد على الجهازين. */}
+      <div className="shrink-0 px-3 py-2 border-b border-gray-100 dark:border-[#3a2e1e] flex items-center justify-between gap-2">
+        <SyncStatus />
+        <div className="flex items-center gap-1">
+          <SettingsButton />
+          <ThemeToggle />
+        </div>
+      </div>
+
+      <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
         {NAV_ITEMS.map((item) => {
           const active = normPath(item.href) === pathname;
           return (
@@ -43,13 +62,8 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-3 border-t border-gray-100 dark:border-[#3a2e1e] flex items-center justify-between gap-2">
-        <SyncStatus />
-        <div className="flex items-center gap-1">
-          <SettingsButton />
-          <ThemeToggle />
-        </div>
-      </div>
+      {/* حشوٌ سفليّ بمنطقة الأمان وحدها: القائمة تنتهي فوق مؤشّر الهوم لا تحته. */}
+      <div className="shrink-0 pb-[env(safe-area-inset-bottom,0px)]" />
     </aside>
   );
 }
