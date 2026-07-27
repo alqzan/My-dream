@@ -808,7 +808,7 @@ export function mergeLocalPhotos(cloud: Partial<AppData>, local: AppData): Parti
 
 // Multi-device merge lives in ./merge (Firebase-free, so it is unit-testable).
 // Re-exported here so existing importers (SyncProvider, BackupCard) are unchanged.
-export { mergeAppData } from "./merge";
+export { mergeAppData, applyTombstones } from "./merge";
 
 // Upload local media directly to R2 using a short-lived URL from the Worker.
 // The Worker signs the exact Content-Type, rejects declared oversize files,

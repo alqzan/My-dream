@@ -42,14 +42,15 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button onClick={next} className="p-1.5 hover:bg-gray-100 rounded-full">
+        {/* هدف لمسٍ 44px واسمٌ للوصول — كان زرّاً أيقونياً صغيراً بلا اسم. */}
+        <button onClick={next} aria-label="الشهر التالي" className="h-11 w-11 flex items-center justify-center hover:bg-gray-100 rounded-full">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
         <div className="text-center">
           <span className="block text-sm font-semibold text-gray-700">{arabicMonthName(month)} {year}</span>
           <span className="block text-[10px] text-gray-400 mt-0.5">{hijriMonthLabel(year, month)}</span>
         </div>
-        <button onClick={prev} className="p-1.5 hover:bg-gray-100 rounded-full">
+        <button onClick={prev} aria-label="الشهر السابق" className="h-11 w-11 flex items-center justify-center hover:bg-gray-100 rounded-full">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
       </div>

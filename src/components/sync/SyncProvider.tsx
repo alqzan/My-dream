@@ -13,6 +13,7 @@ import {
   saveUserData,
   mergeLocalPhotos,
   mergeAppData,
+  applyTombstones,
   subscribeUserMain,
   primeUrlCache,
   inlineCachedMedia,
@@ -137,7 +138,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           lastRevisionRef.current = r.revision;
         } else if (cloudMain && cloudHasData) {
           // Only the cloud has data → adopt it wholesale onto this fresh device.
-          const full = await hydrateCloudPhotos(space, cloudMain);
+          // Filter the cloud's own tombstones first: this is the ONE path that
+          // skips mergeAppData, and the journal shards can still hold entries
+          // the owner deleted (empty shards are deliberately never deleted), so
+          // without this a fresh device resurrects them.
+          const full = applyTombstones(await hydrateCloudPhotos(space, cloudMain));
           applyingRemoteRef.current = true;
           hydrate(await inlineCachedMedia(space, mergeLocalPhotos(full, local)));
           applyingRemoteRef.current = false;

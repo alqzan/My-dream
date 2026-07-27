@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
-  RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, DailyBudget,
+  RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode,
@@ -13,7 +13,7 @@ import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
-import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen } from "./merge";
+import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, suggestPlanLink } from "./installments";
@@ -32,8 +32,38 @@ const ID_COLLECTIONS = [
 // the other device's stale non-null copy.
 const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
-  "lastSalaryConfirm", "frozenHabits", "budgetWindow",
+  "lastSalaryConfirm", "frozenHabits", "budgetWindow", "quranKhatma",
 ] as const;
+
+// Id-keyed collections whose items carry their own `updatedAt` edit stamp, so
+// the merge resolves a per-item conflict by which COPY was edited last instead
+// of which DOCUMENT was saved last. Same list as ID_COLLECTIONS: every id-keyed
+// item is editable, and a stamp on one that never changes costs nothing.
+const STAMPED_COLLECTIONS = ID_COLLECTIONS;
+type StampedItem = { id: string; updatedAt?: number };
+
+// Fields the APP maintains on an item without the owner editing it. They must
+// not count as an edit: `lastGenerated` moves every time runRecurring fires, and
+// stamping it would let mere app-opening outrank a real edit made on the other
+// device (the merge has its own never-goes-backwards rule for it).
+const AUTO_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], readonly string[]>> = {
+  recurring: ["lastGenerated"],
+};
+
+// Did this item actually change? Identity first (the common case: an action
+// rebuilds the array but keeps untouched items), then by value with the stamp
+// itself — and any machine-maintained field — excluded.
+function changedItem(before: unknown, after: unknown, ignore: readonly string[] = []): boolean {
+  if (before === after) return false;
+  if (!before) return true;
+  const strip = (x: unknown) => {
+    const rest = { ...(x as Record<string, unknown>) };
+    delete rest.updatedAt;
+    for (const f of ignore) delete rest[f];
+    return JSON.stringify(rest);
+  };
+  return strip(before) !== strip(after);
+}
 
 // Undo of a delete re-adds the item with its original id — but the delete left
 // a tombstone in `deleted` (id → ts), and the cloud merge's `alive()` drops any
@@ -294,6 +324,63 @@ export const useAppStore = create<AppStore>()(
       }
 
       const patch: Record<string, unknown> = { ...next, lastUpdated: new Date().toISOString() };
+
+      // Per-item edit stamps: every id-keyed item this change ADDED or MODIFIED
+      // gets `updatedAt = now`. Without it the merge could only compare the
+      // document-level `lastUpdated`, so editing an existing item on one device
+      // lost to an unrelated (but later) edit on the other — a book's page
+      // progress rolling back after the iPad synced. Applied centrally here so
+      // no action can forget it; items that didn't change keep their old stamp
+      // (compared by identity first, then by value ignoring the stamp itself).
+      for (const key of STAMPED_COLLECTIONS) {
+        if (!(key in patch)) continue;
+        const before = prev[key] as StampedItem[] | undefined;
+        const after = patch[key] as StampedItem[] | undefined;
+        if (!Array.isArray(after)) continue;
+        const beforeById = new Map((Array.isArray(before) ? before : []).map((x) => [x?.id, x]));
+        patch[key] = after.map((item) =>
+          item && changedItem(beforeById.get(item.id), item, AUTO_FIELDS[key])
+            ? { ...item, updatedAt: Date.now() }
+            : item
+        );
+      }
+      // Prayer days are keyed by date, not id — same rule, own key.
+      if (Array.isArray(patch.prayerLogs)) {
+        const before = new Map((prev.prayerLogs ?? []).map((p) => [p.date, p]));
+        patch.prayerLogs = (patch.prayerLogs as PrayerLog[]).map((p) =>
+          changedItem(before.get(p.date), p) ? { ...p, updatedAt: Date.now() } : p
+        );
+      }
+      // Budgets are keyed by category — likewise.
+      if (Array.isArray(patch.budgets)) {
+        const before = new Map((prev.budgets ?? []).map((b) => [b.category, b]));
+        patch.budgets = (patch.budgets as Budget[]).map((b) =>
+          changedItem(before.get(b.category), b) ? { ...b, updatedAt: Date.now() } : b
+        );
+      }
+      // Merchant rules are a plain map — stamp the keys whose value changed
+      // (namespaced in fieldUpdatedAt) so relearning a merchant on one device
+      // isn't undone by the other's stale copy.
+      if (patch.merchantRules) {
+        const before = prev.merchantRules ?? {};
+        for (const [k, v] of Object.entries(patch.merchantRules as Record<string, string>)) {
+          if (before[k] !== v) (stamped ??= {})[merchantStampKey(k)] = Date.now();
+        }
+      }
+      // Category ORDER is a property of the array, not of any item — moveCategory
+      // reorders it, so it needs its own stamp for the merge to honour.
+      if (Array.isArray(patch.categories) && Array.isArray(prev.categories)) {
+        const ids = (xs: FinanceCategoryDef[]) => xs.map((c) => c.id).join(",");
+        const nextIds = ids(patch.categories as FinanceCategoryDef[]);
+        const prevIds = ids(prev.categories);
+        // A pure reorder (same set, different sequence) — adds/deletes carry
+        // their own item stamps/tombstones and mustn't claim ownership of order.
+        if (nextIds !== prevIds &&
+            [...nextIds.split(",")].sort().join() === [...prevIds.split(",")].sort().join()) {
+          (stamped ??= {})[CATEGORY_ORDER_FIELD] = Date.now();
+        }
+      }
+
       if (removed) patch.deleted = { ...prev.deleted, ...removed };
       if (stamped) patch.fieldUpdatedAt = { ...prev.fieldUpdatedAt, ...stamped };
       rawSet(patch as Partial<AppStore>, replace as false);
@@ -1637,6 +1724,12 @@ export const useAppStore = create<AppStore>()(
           habits: data.habits ?? [],
           recurring: data.recurring ?? [],
           installmentPlans: data.installmentPlans ?? [],
+          // الأصول كانت غائبةً هنا رغم وجودها في snapshot والدمج والنسخة
+          // الاحتياطية: فكان أصلٌ قادمٌ من السحابة (أو من ملفٍ مُستعاد) لا يدخل
+          // المتجر أبداً. أيّ حقلٍ في AppData يجب أن يُغطّى في الستة كلّها
+          // (snapshot · hydrate · normalizeBackup · mergeAppData · hasData ·
+          // cloudHasUnseen) — راجع CLAUDE.md.
+          assets: data.assets ?? [],
           budgets: data.budgets ?? [],
           categories: data.categories ?? DEFAULT_CATEGORIES,
           reserves: data.reserves ?? [],

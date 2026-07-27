@@ -13,6 +13,9 @@ export interface FinanceCategoryDef {
   // Only mains with this flag get sub-categories (per the user's setup:
   // أساسيات وكماليات فقط) — the sub row/inline-add UI hides elsewhere.
   allowSubs?: boolean;
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 // Colors drawn from the app's warm Andalusian palette (terracotta / gold /
@@ -87,6 +90,9 @@ export interface ReserveFund {
   target?: number; // optional goal amount for the envelope
   deposits: ReserveDeposit[];
   createdAt: string; // YYYY-MM-DD
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 export interface Book {
@@ -101,6 +107,9 @@ export interface Book {
   coverColor?: string;
   rating?: number; // 1-5
   notes?: string;
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 export interface ReadingLog {
@@ -109,6 +118,9 @@ export interface ReadingLog {
   date: string; // YYYY-MM-DD
   pagesRead: number;
   minutesRead?: number;
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 export interface JournalEntry {
@@ -152,6 +164,9 @@ export interface Habit {
   icon: string;
   color: string;
   logs: string[]; // dates YYYY-MM-DD
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 // ===================== Prayers =====================
@@ -166,6 +181,9 @@ export type PrayerStatus = "لم" | "منفردة" | "جماعة";
 export interface PrayerLog {
   date: string; // YYYY-MM-DD
   prayers: Partial<Record<PrayerName, PrayerStatus>>;
+  // طابع آخر تعديلٍ لهذا اليوم (ms) — عند تعارض اليوم نفسه بين جهازين تفوز
+  // خريطةُ الأحدث لكلّ صلاةٍ اختلفت، بدل الاعتماد على ختم المستند كاملاً.
+  updatedAt?: number;
 }
 
 export const PRAYER_META: Record<PrayerName, { icon: string; angle: number }> = {
@@ -326,6 +344,9 @@ export interface Budget {
   category: string; // FinanceCategoryDef id
   limit?: number; // fixed monthly cap in SAR
   pct?: number; // 1-100 — share of monthlyIncome
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 // A personal daily spending allowance that rolls over — under-spend one day
@@ -356,6 +377,9 @@ export interface FutureLetter {
   content: string;
   opened?: boolean;
   openedDate?: string;
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 // ===================== القرآن =====================
@@ -372,6 +396,9 @@ export interface QuranReflection {
   text: string; // نصّ التأمّل
   tags?: string[]; // وسوم اختيارية (إيمان، صبر، رزق، دعاء…) — للبحث والفلترة
   createdAt: string; // YYYY-MM-DD وقت الإنشاء (للترتيب الثانوي)
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج
+  // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
+  updatedAt?: number;
 }
 
 // ===================== خطة الحفظ (متتابعة) =====================

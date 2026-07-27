@@ -2,12 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   mergeAppData, mergeHifz, mergeRecurringRules, legacyHifzGen, unionOrdered, journalShardId,
   budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey,
+  applyTombstones, merchantStampKey, CATEGORY_ORDER_FIELD,
 } from "./merge";
 import { mediaTombKey } from "./mediaHash";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type {
   AppData, JournalEntry, Transaction, ReserveFund, Habit, HifzState, HifzPlan,
-  RecurringTransaction, InstallmentPlan, Asset,
+  RecurringTransaction, InstallmentPlan, Asset, Book, ReadingLog, QuranReflection,
+  FutureLetter, FinanceCategoryDef,
 } from "./types";
 
 // Minimal valid AppData; override only what a test cares about.
@@ -710,5 +712,219 @@ describe("mergeAppData — الأصول تعبر بين الأجهزة ولا ت
     const cloud = base({ assets: [asset({ id: "a1" })], lastUpdated: "2026-06-01T00:00:00.000Z" });
     expect(mergeAppData(local, cloud).assets).toHaveLength(0);
     expect(mergeAppData(cloud, local).assets).toHaveLength(0);
+  });
+});
+
+// ===================== تعديلُ عنصرٍ قائم لا يرجع للخلف =====================
+// السيناريو الحقيقي: تُعدَّل صفحةُ كتابٍ على الآيفون، والآيباد غيرُ متّصلٍ يحمل
+// النسخة القديمة ثمّ يسجّل شيئاً آخر (فيصير ختمُ مستنده أحدث) ويعود للاتصال.
+// قبل هذه الأختام كانت نسخةُ الكتاب القديمة تفوز فيرجع تقدّم القراءة.
+describe("mergeAppData — تعديلُ عنصرٍ قائم يفوز بطابعه لا بختم المستند", () => {
+  const olderDoc = "2026-05-01T00:00:00.000Z";
+  const newerDoc = "2026-05-20T00:00:00.000Z";
+  // جهازٌ حرّر العنصر متأخّراً (طابع عنصرٍ أحدث) لكنّ ختم مستنده أقدم.
+  const bothWays = <T,>(a: Partial<AppData>, b: Partial<AppData>, pick: (d: AppData) => T, want: T) => {
+    const edited = base({ lastUpdated: olderDoc, ...a });
+    const stale = base({ lastUpdated: newerDoc, ...b });
+    expect(pick(mergeAppData(edited, stale))).toEqual(want);
+    expect(pick(mergeAppData(stale, edited))).toEqual(want); // تبادلية
+  };
+
+  it("الكتب: تقدّم الصفحة لا يرجع", () => {
+    const book = (o: Partial<Book> & { id: string }): Book => ({
+      title: "ك", author: "م", totalPages: 300, currentPage: 0, status: "أقرأ", ...o,
+    });
+    bothWays(
+      { books: [book({ id: "b1", currentPage: 210, updatedAt: 9000 })] },
+      { books: [book({ id: "b1", currentPage: 120, updatedAt: 100 })] },
+      (d) => d.books[0].currentPage, 210
+    );
+  });
+
+  it("جلسات القراءة: تصحيح عدد الصفحات يبقى", () => {
+    const log = (o: Partial<ReadingLog> & { id: string }): ReadingLog => ({
+      bookId: "b1", date: "2026-05-01", pagesRead: 0, ...o,
+    });
+    bothWays(
+      { readingLogs: [log({ id: "r1", pagesRead: 40, updatedAt: 9000 })] },
+      { readingLogs: [log({ id: "r1", pagesRead: 12, updatedAt: 100 })] },
+      (d) => d.readingLogs[0].pagesRead, 40
+    );
+  });
+
+  it("التأمّلات القرآنية: تحرير النصّ يبقى", () => {
+    const refl = (o: Partial<QuranReflection> & { id: string }): QuranReflection => ({
+      date: "2026-05-01", text: "", createdAt: "2026-05-01", ...o,
+    });
+    bothWays(
+      { quranReflections: [refl({ id: "q1", text: "المحرَّر", updatedAt: 9000 })] },
+      { quranReflections: [refl({ id: "q1", text: "القديم", updatedAt: 100 })] },
+      (d) => d.quranReflections[0].text, "المحرَّر"
+    );
+  });
+
+  it("الصناديق: تعديل الاسم والهدف يبقى، والإيداعات تتّحد رغم ذلك", () => {
+    const fund = (o: Partial<ReserveFund> & { id: string }): ReserveFund => ({
+      name: "صندوق", icon: "🎯", color: "#000", deposits: [], createdAt: "2026-01-01", ...o,
+    });
+    const edited = base({
+      lastUpdated: olderDoc,
+      reserves: [fund({ id: "f1", name: "سفرة الصيف", target: 5000, updatedAt: 9000,
+        deposits: [{ id: "d1", amount: 100, date: "2026-05-01" }] })],
+    });
+    const stale = base({
+      lastUpdated: newerDoc,
+      reserves: [fund({ id: "f1", name: "صندوق", target: 1000, updatedAt: 100,
+        deposits: [{ id: "d2", amount: 50, date: "2026-05-02" }] })],
+    });
+    for (const merged of [mergeAppData(edited, stale), mergeAppData(stale, edited)]) {
+      expect(merged.reserves[0].name).toBe("سفرة الصيف");
+      expect(merged.reserves[0].target).toBe(5000);
+      expect(merged.reserves[0].deposits.map((d) => d.id).sort()).toEqual(["d1", "d2"]);
+    }
+  });
+
+  it("العادات: إعادة تسمية عادة تبقى، وأيام السجلّ تتّحد", () => {
+    const habit = (o: Partial<Habit> & { id: string }): Habit => ({
+      name: "عادة", icon: "✅", color: "#000", logs: [], ...o,
+    });
+    const edited = base({
+      lastUpdated: olderDoc,
+      habits: [habit({ id: "h1", name: "مشي 30د", updatedAt: 9000, logs: ["2026-05-01"] })],
+    });
+    const stale = base({
+      lastUpdated: newerDoc,
+      habits: [habit({ id: "h1", name: "مشي", updatedAt: 100, logs: ["2026-05-02"] })],
+    });
+    for (const merged of [mergeAppData(edited, stale), mergeAppData(stale, edited)]) {
+      expect(merged.habits[0].name).toBe("مشي 30د");
+      expect(merged.habits[0].logs).toEqual(["2026-05-01", "2026-05-02"]);
+    }
+  });
+
+  it("التصنيفات: إعادة التسمية تبقى", () => {
+    const cat = (o: Partial<FinanceCategoryDef> & { id: string }): FinanceCategoryDef => ({
+      label: "تصنيف", icon: "📌", color: "#000", ...o,
+    });
+    bothWays(
+      { categories: [cat({ id: "c1", label: "قهوة", updatedAt: 9000 })] },
+      { categories: [cat({ id: "c1", label: "أخرى", updatedAt: 100 })] },
+      (d) => d.categories[0].label, "قهوة"
+    );
+  });
+
+  it("الرسائل المستقبلية: فتحُ رسالةٍ لا يُلغى", () => {
+    const letter = (o: Partial<FutureLetter> & { id: string }): FutureLetter => ({
+      writtenDate: "2026-01-01", deliveryDate: "2026-05-01", content: "", ...o,
+    });
+    bothWays(
+      { futureLetters: [letter({ id: "l1", opened: true, openedDate: "2026-05-01", updatedAt: 9000 })] },
+      { futureLetters: [letter({ id: "l1", opened: false, updatedAt: 100 })] },
+      (d) => d.futureLetters[0].opened, true
+    );
+  });
+
+  it("السقوف: رفعُ سقفٍ قائم لا يرجع للخلف", () => {
+    bothWays(
+      { budgets: [{ category: "c1", limit: 900, updatedAt: 9000 }] },
+      { budgets: [{ category: "c1", limit: 400, updatedAt: 100 }] },
+      (d) => d.budgets[0].limit, 900
+    );
+  });
+
+  it("حالة الصلاة في اليوم نفسه: التصحيح الأحدث يفوز، وصلاةٌ سُجّلت على الآخر تبقى", () => {
+    const edited = base({
+      lastUpdated: olderDoc,
+      prayerLogs: [{ date: "2026-05-01", prayers: { الفجر: "جماعة" }, updatedAt: 9000 }],
+    });
+    const stale = base({
+      lastUpdated: newerDoc,
+      prayerLogs: [{ date: "2026-05-01", prayers: { الفجر: "منفردة", العشاء: "جماعة" }, updatedAt: 100 }],
+    });
+    for (const merged of [mergeAppData(edited, stale), mergeAppData(stale, edited)]) {
+      expect(merged.prayerLogs[0].prayers.الفجر).toBe("جماعة");
+      expect(merged.prayerLogs[0].prayers.العشاء).toBe("جماعة"); // لا يضيع ما سُجّل هناك
+    }
+  });
+
+  it("قواعد التجار: إعادة تصنيف تاجرٍ على جهازٍ تسري", () => {
+    bothWays(
+      { merchantRules: { كافيه: "cat-coffee" }, fieldUpdatedAt: { [merchantStampKey("كافيه")]: 9000 } },
+      { merchantRules: { كافيه: "cat-others" }, fieldUpdatedAt: { [merchantStampKey("كافيه")]: 100 } },
+      (d) => d.merchantRules["كافيه"], "cat-coffee"
+    );
+  });
+
+  it("تقدّم الختمة: الجهاز الذي سجّل آخِراً يفوز، والختمات المكتملة لا تنقص", () => {
+    bothWays(
+      { quranKhatma: { juz: 12, completed: 1 }, fieldUpdatedAt: { quranKhatma: 9000 } },
+      { quranKhatma: { juz: 3, completed: 2 }, fieldUpdatedAt: { quranKhatma: 100 } },
+      (d) => d.quranKhatma, { juz: 12, completed: 2 }
+    );
+  });
+
+  it("ترتيب التصنيفات: يأتي من الجهاز الذي رتّب آخِراً بلا فقد", () => {
+    const cat = (id: string): FinanceCategoryDef => ({ id, label: id, icon: "📌", color: "#000" });
+    const ordered = base({
+      lastUpdated: olderDoc,
+      categories: [cat("c3"), cat("c1"), cat("c2")],
+      fieldUpdatedAt: { [CATEGORY_ORDER_FIELD]: 9000 },
+    });
+    const stale = base({
+      lastUpdated: newerDoc,
+      categories: [cat("c1"), cat("c2"), cat("c3"), cat("c4")],
+      fieldUpdatedAt: { [CATEGORY_ORDER_FIELD]: 100 },
+    });
+    for (const merged of [mergeAppData(ordered, stale), mergeAppData(stale, ordered)]) {
+      // ترتيب المرتِّب أولاً، ثمّ ما لم يره (c4) في ذيل القائمة بلا حذف.
+      expect(merged.categories.map((c) => c.id)).toEqual(["c3", "c1", "c2", "c4"]);
+    }
+  });
+
+  it("بلا طوابع (بياناتٌ قديمة) يبقى السلوك السابق: نسخة الأساس", () => {
+    const a = base({ lastUpdated: newerDoc, books: [{ id: "b1", title: "أ", author: "", totalPages: 1, currentPage: 5, status: "أقرأ" }] });
+    const b = base({ lastUpdated: olderDoc, books: [{ id: "b1", title: "ب", author: "", totalPages: 1, currentPage: 9, status: "أقرأ" }] });
+    expect(mergeAppData(a, b).books[0].currentPage).toBe(5); // الأحدث ختماً هو الأساس
+  });
+});
+
+// ===================== شواهدُ الحذف تُطبَّق بلا دمج =====================
+// مسار «جهازٌ جديد يتبنّى السحابة كاملةً» يتخطّى mergeAppData، وshards المذكرات
+// لا تُحذف عمداً حين تفرغ — فكانت مذكرةٌ محذوفة تعود على الجهاز الجديد.
+describe("applyTombstones — لقطةٌ تُنقّى بشواهدها وحدها", () => {
+  it("تُسقِط المذكرة المحذوفة التي بقيت في shard قديم", () => {
+    const cloud = base({
+      journalEntries: [entry({ id: "E1" }), entry({ id: "E2" })],
+      deleted: { E1: Date.now() },
+    });
+    const clean = applyTombstones(cloud);
+    expect(clean.journalEntries.map((e) => e.id)).toEqual(["E2"]);
+  });
+
+  it("حذفُ كلّ المذكرات ثمّ فتحُ جهازٍ جديد: لا شيء يعود", () => {
+    const cloud = base({
+      journalEntries: [entry({ id: "E1" }), entry({ id: "E2" })],
+      deleted: { E1: Date.now(), E2: Date.now() },
+    });
+    expect(applyTombstones(cloud).journalEntries).toEqual([]);
+  });
+
+  it("تُسقِط كذلك يوم عادةٍ أُلغي ووِرداً أُلغي وسقفاً حُذف — ولا تمسّ الباقي", () => {
+    const cloud = base({
+      habits: [{ id: "h1", name: "ح", icon: "✅", color: "#000", logs: ["2026-05-01", "2026-05-02"] }],
+      quranWird: ["2026-05-01", "2026-05-02"],
+      budgets: [{ category: "c1", limit: 100 }, { category: "c2", limit: 200 }],
+      transactions: [tx({ id: "T1" })],
+      deleted: {
+        [habitLogTombKey("h1", "2026-05-01")]: Date.now(),
+        [wirdTombKey("2026-05-01")]: Date.now(),
+        [budgetTombKey("c1")]: Date.now(),
+      },
+    });
+    const clean = applyTombstones(cloud);
+    expect(clean.habits[0].logs).toEqual(["2026-05-02"]);
+    expect(clean.quranWird).toEqual(["2026-05-02"]);
+    expect(clean.budgets.map((b) => b.category)).toEqual(["c2"]);
+    expect(clean.transactions).toHaveLength(1);
   });
 });

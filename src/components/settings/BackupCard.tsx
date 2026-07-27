@@ -144,7 +144,7 @@ function inspectBackup(parsed: Record<string, unknown>): {
 
 // Fill any fields a legacy/partial backup is missing so it's a full AppData —
 // mergeAppData walks every collection, and the store tolerates extra fields.
-function normalizeBackup(d: Record<string, unknown>): AppData {
+export function normalizeBackup(d: Record<string, unknown>): AppData {
   const g = <T,>(k: string, fallback: T): T => (d[k] === undefined ? fallback : (d[k] as T));
   return {
     transactions: g("transactions", []),
@@ -172,6 +172,9 @@ function normalizeBackup(d: Record<string, unknown>): AppData {
     budgetWindow: g("budgetWindow", "salary"),
     lastSalaryConfirm: g("lastSalaryConfirm", null),
     readingGoal: g("readingGoal", null),
+    // العادات المجمّدة تُصدَّر ضمن اللقطة، وكان التطبيع يُسقطها: فاستبدالُ نسخةٍ
+    // احتياطية يفكّ تجميد كل العادات، ودمجُها يترك القيمة والطابع غير متوافقين.
+    frozenHabits: g("frozenHabits", []),
     merchantRules: g("merchantRules", {}),
     // نُبقي شواهد الحذف (tombstones) فلا تُبعث العناصر المحذوفة عند الدمج —
     // بما فيها شواهد الوسائط (deletedMedia)، وإلا عادت صورةٌ/صوتٌ محذوفٌ عند

@@ -459,38 +459,46 @@ export function DailyHabits() {
           {/* الوِرد اليومي — عادة أساسية مبنيّة: نقرة تُتمّها، وسهمٌ صغير يفتح
               قسم قرآن. تشبه بطاقات العادات لكنها ثابتة لا تُحذف. */}
           {!wirdFrozen && (
-            <button
-              onClick={() => { if (!wirdDone) buzz(); toggleWird(todayStr); }}
+            // البطاقة غلافٌ لا زرّ: كان الرابط (سهم قرآن) داخل الزرّ — عنصرٌ
+            // تفاعليٌّ داخل آخر، وهو غير صالحٍ في HTML ويربك قارئ الشاشة. الآن
+            // الزرّ (إتمام الوِرد) والرابط شقيقان، وللرابط هدف لمسٍ 44px.
+            <div
               className={cn(
-                "relative rounded-2xl border p-3 text-right press transition-all duration-300",
+                "relative rounded-2xl border transition-all duration-300",
                 wirdDone ? "card-shadow" : "bg-white border-gray-200 hover:border-gray-300"
               )}
               style={wirdDone ? { borderColor: "#1b6b4c66", background: "linear-gradient(135deg, #1b6b4c1f, #1b6b4c0a)" } : undefined}
             >
+              <button
+                onClick={() => { if (!wirdDone) buzz(); toggleWird(todayStr); }}
+                aria-pressed={wirdDone}
+                aria-label={wirdDone ? "ألغِ إتمام وِرد اليوم" : "أتمِمْ وِرد اليوم"}
+                className="w-full p-3 text-right press rounded-2xl"
+              >
+                <TileBody
+                  icon="🌿"
+                  name="وِرد اليوم"
+                  color="#1b6b4c"
+                  done={wirdDone}
+                  weekKept={wirdDates}
+                  statusLine={wirdStreak > 0 ? `${wirdStreak} يوم متواصل` : "اقرأ وردك"}
+                />
+              </button>
               {manage ? (
                 <FreezeButton
                   label="جمّد وِرد اليوم"
-                  onClick={(e) => { e.stopPropagation(); toggleFreezeHabit("core:wird"); }}
+                  onClick={() => toggleFreezeHabit("core:wird")}
                 />
               ) : (
                 <Link
                   href="/quran"
-                  onClick={(e) => e.stopPropagation()}
                   aria-label="افتح قسم قرآن"
-                  className="absolute top-2 left-2 text-gray-300 hover:text-quran press"
+                  className="absolute top-0 left-0 h-11 w-11 flex items-center justify-center text-gray-300 hover:text-quran press"
                 >
                   <ChevronLeft size={13} />
                 </Link>
               )}
-              <TileBody
-                icon="🌿"
-                name="وِرد اليوم"
-                color="#1b6b4c"
-                done={wirdDone}
-                weekKept={wirdDates}
-                statusLine={wirdStreak > 0 ? `${wirdStreak} يوم متواصل` : "اقرأ وردك"}
-              />
-            </button>
+            </div>
           )}
 
           {/* Custom habits — tap toggles done */}

@@ -93,7 +93,7 @@ export function BudgetTracker() {
           ) : null}
         </div>
         {availableCats.length > 0 && (
-          <button onClick={() => { setAdding(!adding); setCat(availableCats[0].id); }} className="text-finance p-1">
+          <button onClick={() => { setAdding(!adding); setCat(availableCats[0].id); }} aria-label="إضافة سقف لتصنيف" className="text-finance h-11 w-11 flex items-center justify-center -me-2">
             <Plus size={16} />
           </button>
         )}

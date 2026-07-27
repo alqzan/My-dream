@@ -25,7 +25,9 @@ export function Sidebar() {
       <div className="shrink-0 p-6 border-b border-gray-100 dark:border-[#3a2e1e] flex items-center gap-3">
         <BrandMark size={38} />
         <div>
-          <h1 className="text-xl font-bold text-gray-900">مدار</h1>
+          {/* اسم التطبيق لا عنوان الصفحة: كان <h1> فتحمل كلّ صفحةٍ عنوانين
+              رئيسيين، وقارئ الشاشة يرى بنيةً مكسورة. الشكل كما هو. */}
+          <p className="text-xl font-bold text-gray-900">مدار</p>
           <p className="text-xs text-gray-400 mt-0.5">مساحتك الشخصية</p>
         </div>
       </div>
