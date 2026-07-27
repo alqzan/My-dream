@@ -15,7 +15,8 @@ export function hasData(d: Partial<AppData>): boolean {
     arr(d.transactions) || arr(d.journalEntries) || arr(d.books) ||
     arr(d.readingLogs) || arr(d.recurring) || arr(d.budgets) ||
     arr(d.reserves) || arr(d.prayerLogs) || arr(d.futureLetters) ||
-    arr(d.quranReflections) || arr(d.quranWird) || arr(d.installmentPlans)
+    arr(d.quranReflections) || arr(d.quranWird) || arr(d.installmentPlans) ||
+    arr(d.assets)
   ) return true;
   if ((d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0)) return true;
   const hifz = d.quranHifz;
@@ -39,6 +40,11 @@ export function hasData(d: Partial<AppData>): boolean {
 // delete/un-complete propagates live instead of waiting for the next unrelated
 // edit. ملاحظة مهمّة: هذا الفحص يرى **العناصر الجديدة** فقط، لا تعديلَ عنصرٍ
 // قائم — ولذلك وحده لا يكفي (راجع shouldAdoptCloud).
+//
+// **عند إضافة مجموعةٍ جديدة لـAppData أضِفها هنا وفي `hasData` معاً.** إغفالُها
+// عطلٌ صامت: `assets` أُضيفت في 0.1.295 ونُسيت في الدالتين، فأصلٌ سُجّل على
+// الجوّال لم يُعدّ «محتوىً لم يُرَ» على الآيباد — تسقط شبكة الأمان الثالثة
+// ويبقى الجهازان مختلفين. الحارس في `syncDecision.test.ts` يكشف الإغفال التالي.
 export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean {
   const hasNewId = (localItems: { id: string }[], cloudItems?: { id: string }[]) => {
     const ids = new Set(localItems.map((i) => i.id));
@@ -52,6 +58,7 @@ export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean
     hasNewId(local.futureLetters, cloud.futureLetters) ||
     hasNewId(local.recurring, cloud.recurring) ||
     hasNewId(local.installmentPlans ?? [], cloud.installmentPlans) ||
+    hasNewId(local.assets ?? [], cloud.assets) ||
     hasNewId(local.reserves, cloud.reserves) ||
     hasNewId(local.habits, cloud.habits) ||
     hasNewId(local.categories, cloud.categories) ||

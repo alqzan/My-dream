@@ -141,3 +141,26 @@ describe("cloudHasUnseen — يرى خطة أقساطٍ جديدة", () => {
     expect(cloudHasUnseen(local, cloud)).toBe(false);
   });
 });
+
+// حارسُ الإغفال: `assets` أُضيفت لـAppData في 0.1.295 ونُسيت في `hasData`
+// و`cloudHasUnseen` معاً، فبقي جهازان مختلفين بلا سببٍ ظاهر. الاختباران هنا
+// يمنعان تكرار ذلك — وكل مجموعةٍ جديدة تستحقّ مثلهما.
+const asset = (id: string) => ({
+  id, name: "ماك بوك", purchaseDate: "2026-07-26", purchasePrice: 5499, lifeDays: 1825,
+});
+
+describe("hasData — يشمل الأصول", () => {
+  it("counts a device that only holds an asset as non-empty", () => {
+    expect(hasData(base())).toBe(false);
+    expect(hasData(base({ assets: [asset("a1")] }))).toBe(true);
+  });
+});
+
+describe("cloudHasUnseen — يرى أصلاً جديداً", () => {
+  it("detects an asset the cloud has and this device doesn't", () => {
+    const local = base();
+    const cloud = base({ assets: [asset("a9")] });
+    expect(cloudHasUnseen(cloud, local)).toBe(true);
+    expect(cloudHasUnseen(local, cloud)).toBe(false);
+  });
+});
