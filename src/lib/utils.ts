@@ -514,16 +514,20 @@ export function budgetWarningFor(
   budgets: Budget[],
   transactions: Transaction[],
   categories: FinanceCategoryDef[],
-  monthlyIncome: number | null
+  monthlyIncome: number | null,
+  // نافذة الحساب: شهرٌ ميلادي «YYYY-MM» (الافتراضي القديم) أو بدايةُ دورة راتب
+  // «YYYY-MM-DD» فيُحسب كل ما بعدها. راجع budgetCycle.ts.
+  windowStart?: string
 ): { label: string; over: boolean; pct: number; remaining: number } | null {
   const mainId = getMainCategory(categories, categoryId).id;
   const b = budgets.find((x) => x.category === mainId);
   if (!b) return null;
   const cap = budgetLimit(b, monthlyIncome);
   if (!cap) return null;
-  const monthPrefix = today().slice(0, 7);
+  const win = windowStart || today().slice(0, 7);
+  const inWindow = (d: string) => (win.length === 7 ? d.startsWith(win) : d >= win);
   const spent = transactions
-    .filter((t) => t.date.startsWith(monthPrefix) && getMainCategory(categories, t.category).id === mainId)
+    .filter((t) => inWindow(t.date) && getMainCategory(categories, t.category).id === mainId)
     .reduce((s, t) => s + cashOut(t), 0);
   const pct = (spent / cap) * 100;
   if (pct < 80) return null;

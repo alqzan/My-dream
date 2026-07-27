@@ -1,13 +1,10 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, cashOut } from "@/lib/utils";
+import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, cashOut, today, formatDate } from "@/lib/utils";
+import { budgetCycleStart, cycleDays } from "@/lib/budgetCycle";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { Plus, X } from "lucide-react";
-
-interface BudgetTrackerProps {
-  monthPrefix: string; // YYYY-MM
-}
+import { Plus, X, Pencil, Check } from "lucide-react";
 
 type CapMode = "pct" | "fixed";
 
@@ -17,20 +14,49 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // empty and glowing gold when you're safe, amber as you approach the cap,
 // red once it overflows past the rim. A cap is either a fixed amount or a
 // percentage of the monthly income (and then it follows the income).
-export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
-  const { categories, budgets, transactions, monthlyIncome, setBudget, removeBudget, setMonthlyIncome } = useAppStore();
+export function BudgetTracker() {
+  const {
+    categories, budgets, transactions, monthlyIncome, salaryDay, lastSalaryConfirm,
+    setBudget, removeBudget, setMonthlyIncome,
+  } = useAppStore();
   const [adding, setAdding] = useState(false);
+  // تعديل سقفٍ قائم في مكانه — بلا حذفٍ وإعادة إضافة.
+  const [editCat, setEditCat] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState<CapMode>("fixed");
+  const [editValue, setEditValue] = useState("");
   const [cat, setCat] = useState<string>(categories[0]?.id ?? "");
   const [mode, setMode] = useState<CapMode>("pct");
   const [limit, setLimit] = useState("");
   const [pct, setPct] = useState("30");
   const [income, setIncome] = useState(monthlyIncome?.toString() ?? "");
 
+  // نافذة السقوف = دورة الراتب لا الشهر الميلادي: تبدأ من تأكيد «نزل الراتب»
+  // (أو آخر يوم راتبٍ مرّ إن لم يؤكّد بعد)، فتتصفّر الأرقام مع كل دورة جديدة.
+  const todayStr = today();
+  const cycleStart = budgetCycleStart(lastSalaryConfirm, salaryDay ?? 27, todayStr);
+  const daysIn = cycleDays(cycleStart, todayStr);
+
   // A budget cap sits on a main category; spending in its subs counts too.
   const spentByCategory = (category: string) =>
     transactions
-      .filter((t) => getMainCategory(categories, t.category).id === category && t.date.startsWith(monthPrefix))
+      .filter((t) => getMainCategory(categories, t.category).id === category && t.date >= cycleStart)
       .reduce((s, t) => s + cashOut(t), 0);
+
+  function startEdit(category: string) {
+    const b = budgets.find((x) => x.category === category);
+    if (!b) return;
+    setEditCat(category);
+    setEditMode(b.pct ? "pct" : "fixed");
+    setEditValue(String(b.pct ?? b.limit ?? ""));
+    setAdding(false);
+  }
+
+  function saveEdit(category: string) {
+    const v = parseFloat(editValue);
+    if (!v || v <= 0) return;
+    setBudget(category, editMode === "pct" ? { pct: v } : { limit: v });
+    setEditCat(null);
+  }
 
   // The live store income wins over the local input — the input only
   // exists for the very first time, and the store may have been set from
@@ -59,8 +85,8 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-700">ميزانية الشهر</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-gray-700">ميزانية الدورة</span>
           {monthlyIncome ? (
             <span className="text-[10px] text-gray-400">💼 دخلك {formatAmount(monthlyIncome)} ر.س</span>
           ) : null}
@@ -71,6 +97,12 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
           </button>
         )}
       </div>
+
+      {budgets.length > 0 && (
+        <p className="text-[10px] text-gray-400">
+          🔄 الحساب من نزول الراتب ({formatDate(cycleStart)}) — اليوم {daysIn} من الدورة. تتصفّر تلقائياً عند تأكيد «نزل الراتب»، والسقوف نفسها تبقى وتُعدَّل متى شئت.
+        </p>
+      )}
 
       {budgets.length === 0 && !adding && (
         <p className="text-xs text-gray-400 text-center py-3">
@@ -196,15 +228,62 @@ export function BudgetTracker({ monthPrefix }: BudgetTrackerProps) {
                     >
                       {over ? `تجاوز ${formatAmount(spent - cap)}` : `باقي ${formatAmount(remaining)}`}
                     </span>
-                    <button
-                      onClick={() => removeBudget(b.category)}
-                      className="text-gray-300 hover:text-red-400 p-0.5 press"
-                      title="حذف السقف"
-                    >
-                      <X size={13} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => (editCat === b.category ? setEditCat(null) : startEdit(b.category))}
+                        className="text-gray-300 hover:text-finance p-0.5 press"
+                        title="تعديل السقف"
+                        aria-label={`تعديل سقف ${info.label}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => removeBudget(b.category)}
+                        className="text-gray-300 hover:text-red-400 p-0.5 press"
+                        title="حذف السقف"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {editCat === b.category && (
+                  <div className="bg-white dark:bg-white/5 rounded-xl p-2 space-y-2 animate-fade-up">
+                    <div className="flex bg-gray-100 rounded-lg p-0.5">
+                      {([["pct", "٪ من الدخل"], ["fixed", "مبلغ ثابت"]] as [CapMode, string][]).map(([m, label]) => (
+                        <button
+                          key={m}
+                          onClick={() => setEditMode(m)}
+                          className={cn(
+                            "flex-1 text-[11px] font-semibold py-1 rounded-md transition-all",
+                            editMode === m ? "bg-white text-finance shadow-sm" : "text-gray-400"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <NumberInput
+                        value={editValue} onChange={setEditValue}
+                        placeholder={editMode === "pct" ? "٪" : "السقف بالريال"}
+                        inputMode="decimal"
+                        aria-label={`سقف ${info.label}`}
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
+                      />
+                      <button
+                        onClick={() => saveEdit(b.category)}
+                        className="bg-finance text-white text-xs px-3 rounded-lg hover:bg-finance/90 press inline-flex items-center gap-1"
+                      >
+                        <Check size={13} /> حفظ
+                      </button>
+                    </div>
+                    {editMode === "pct" && !monthlyIncome && (
+                      <p className="text-[10px] text-orange-500">حدّد دخلك الشهري أولاً حتى تعمل النسبة.</p>
+                    )}
+                  </div>
+                )}
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden ring-1 ring-black/5 dark:ring-white/5">
                   <div
                     className="h-full rounded-full transition-all duration-700"

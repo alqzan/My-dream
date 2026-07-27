@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { skyView, clusterByMonth, SKY_CLUSTER_THRESHOLD } from "./memorySky";
+import { skyView, clusterByMonth, entryVoice, silentDates, SKY_CLUSTER_THRESHOLD } from "./memorySky";
 import type { JournalEntry } from "./types";
 
 // يولّد n مذكرة موزّعة على أشهرٍ حقيقية عبر ~3 سنوات.
@@ -65,5 +65,39 @@ describe("clusterByMonth", () => {
     expect(clusters).toHaveLength(2); // Jan + Feb, malformed dropped
     const jan = clusters.find((c) => c.key === "2026-01");
     expect(jan?.count).toBe(2);
+  });
+});
+
+describe("entryVoice / silentDates", () => {
+  const e = (over: Partial<JournalEntry>): JournalEntry =>
+    ({ id: over.date ?? "x", date: "2026-07-10", content: "", ...over } as JournalEntry);
+
+  it("counts a title or content as text", () => {
+    expect(entryVoice(e({ content: "يومٌ جميل" }))).toBe("text");
+    expect(entryVoice(e({ content: "   ", title: "عنوان" }))).toBe("text");
+  });
+  it("marks photo/audio-only entries as media", () => {
+    expect(entryVoice(e({ content: "", photos: ["a"] }))).toBe("media");
+    expect(entryVoice(e({ content: "\n ", audio: "b" }))).toBe("media");
+  });
+  it("marks a fully empty entry as empty", () => {
+    expect(entryVoice(e({ content: "" }))).toBe("empty");
+  });
+
+  it("lists the days with no entry, newest first", () => {
+    const entries = [e({ date: "2026-07-01" }), e({ date: "2026-07-04" })];
+    expect(silentDates(entries, "2026-07-01", "2026-07-05")).toEqual([
+      "2026-07-05", "2026-07-03", "2026-07-02",
+    ]);
+  });
+  it("respects the limit and rejects a bad range", () => {
+    expect(silentDates([], "2026-07-01", "2026-07-31", 3)).toHaveLength(3);
+    expect(silentDates([], "2026-07-05", "2026-07-01")).toEqual([]);
+    expect(silentDates([], "bogus", "2026-07-01")).toEqual([]);
+  });
+  it("crosses a month boundary", () => {
+    expect(silentDates([e({ date: "2026-07-01" })], "2026-06-29", "2026-07-01")).toEqual([
+      "2026-06-30", "2026-06-29",
+    ]);
   });
 });

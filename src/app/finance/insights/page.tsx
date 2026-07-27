@@ -21,6 +21,8 @@ import { Card } from "@/components/ui/Card";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
 import { FinancePace } from "@/components/finance/FinancePace";
+import { budgetCycleStart, cycleDays } from "@/lib/budgetCycle";
+import { daysUntilSalary } from "@/lib/financeOverview";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
 import dynamic from "next/dynamic";
 // recharts (~90KB) loads on demand so the insights shell paints without
@@ -91,12 +93,21 @@ function GroupLabel({ children }: { children: ReactNode }) {
 }
 
 export default function SpendInsightsPage() {
-  const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome } = useAppStore();
+  const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome, salaryDay, lastSalaryConfirm } = useAppStore();
   const [period, setPeriod] = useState<Period>("أسبوع");
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
 
   const todayStr = today();
   const ranges = periodRanges(period, todayStr);
+  // نافذة السقوف/الوتيرة = دورة الراتب (نفس منطق صفحة الأموال وBudgetTracker).
+  const paceCycle = useMemo(() => {
+    const start = budgetCycleStart(lastSalaryConfirm, salaryDay ?? 27, todayStr);
+    return {
+      start,
+      daysLeft: daysUntilSalary(salaryDay ?? 27, todayStr),
+      length: cycleDays(start, todayStr) + daysUntilSalary(salaryDay ?? 27, todayStr),
+    };
+  }, [lastSalaryConfirm, salaryDay, todayStr]);
 
   // The essential/luxury gauge, budget-pace and discipline cards below are
   // inherently about the CURRENT calendar month (their "days left"/"this month
@@ -425,7 +436,15 @@ export default function SpendInsightsPage() {
 
       {/* وتيرة الصرف مقابل ميزانيات التصنيفات + درجة الانضباط — تحليلٌ للشهر
           الحالي، بلا بطاقة (كلٌّ يرسم إطاره)، فيختفيان بلا فجوة عند غياب بياناتهما */}
-      <FinancePace budgets={budgets} monthTransactions={monthTx} categories={categories} monthlyIncome={monthlyIncome} />
+      <FinancePace
+        budgets={budgets}
+        transactions={transactions}
+        categories={categories}
+        monthlyIncome={monthlyIncome}
+        cycleStart={paceCycle.start}
+        daysLeft={paceCycle.daysLeft}
+        cycleLength={paceCycle.length}
+      />
 
       <BudgetDisciplineScore
         transactions={transactions}

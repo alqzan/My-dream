@@ -48,3 +48,43 @@ export function skyView(entries: JournalEntry[], threshold = SKY_CLUSTER_THRESHO
   if (entries.length <= threshold) return { mode: "stars", entries };
   return { mode: "constellations", clusters: clusterByMonth(entries) };
 }
+
+// ===================== الأيام الصامتة ونجوم بلا كلمات =====================
+// ليست كل ذكرى نصّاً: بعض المذكرات (خاصةً مستوردات Day One) صورةٌ وحدها أو
+// تسجيلٌ صوتيّ بلا سطرٍ واحد، وبعض الأيام لم تُكتب أصلاً. نميّزها هنا بمنطقٍ
+// نقيّ حتى ترسمها السماء بشكلٍ مختلف: نجمةٌ مصمتة للنصّ، وحلقةٌ مفرغة لِما
+// بلا كلمات، ونقطةٌ خافتة لليوم الصامت. لا شيء من هذا يغيّر البيانات.
+
+export type EntryVoice = "text" | "media" | "empty";
+
+// هل تحمل المذكرة نصّاً حقيقياً؟ العنوان يُحتسب نصّاً أيضاً.
+export function entryVoice(e: JournalEntry): EntryVoice {
+  const text = `${e.title ?? ""} ${e.content ?? ""}`.replace(/\s+/g, "");
+  if (text.length > 0) return "text";
+  const media =
+    (e.photos?.length ?? 0) > 0 || !!e.photo || (e.audios?.length ?? 0) > 0 || !!e.audio;
+  return media ? "media" : "empty";
+}
+
+// أيام النطاق [from..to] التي لا مذكرة فيها إطلاقاً — الأحدث أوّلاً، ومحدودةٌ
+// بـ`limit` حتى لا يُغرِق أرشيفٌ قديمٌ السماءَ بمئات النقاط.
+export function silentDates(
+  entries: JournalEntry[],
+  from: string,
+  to: string,
+  limit = 60
+): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return [];
+  const written = new Set(entries.map((e) => e.date));
+  const out: string[] = [];
+  // نمشي من الأحدث إلى الأقدم فيبقى ما نعرضه أقربَ إلى الآن حين نبلغ الحدّ.
+  const [ty, tm, td] = to.split("-").map(Number);
+  const cur = new Date(ty, tm - 1, td);
+  for (;;) {
+    const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+    if (key < from || out.length >= limit) break;
+    if (!written.has(key)) out.push(key);
+    cur.setDate(cur.getDate() - 1);
+  }
+  return out;
+}

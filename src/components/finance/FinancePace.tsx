@@ -4,30 +4,32 @@ import { formatAmount, budgetLimit, getMainCategory, cashOut } from "@/lib/utils
 
 interface FinancePaceProps {
   budgets: Budget[];
-  monthTransactions: Transaction[];
+  transactions: Transaction[]; // كل المعاملات — تُصفّى هنا على نافذة الدورة
   categories: FinanceCategoryDef[];
   monthlyIncome: number | null;
+  cycleStart: string; // بداية دورة الراتب (YYYY-MM-DD)
+  daysLeft: number; // ما بقي حتى نزول الراتب القادم
+  cycleLength: number; // طول الدورة بالأيام (للوتيرة المعتادة)
 }
 
 // Turns "how much budget do I have left" into "how much can I spend per
 // day for the rest of the month" — the same pacing idea as the reading
 // caravan (ReadingJourney), applied to money instead of pages.
-export function FinancePace({ budgets, monthTransactions, categories, monthlyIncome }: FinancePaceProps) {
+export function FinancePace({ budgets, transactions, categories, monthlyIncome, cycleStart, daysLeft, cycleLength }: FinancePaceProps) {
   if (!budgets.length) return null;
 
   const totalBudget = budgets.reduce((s, b) => s + budgetLimit(b, monthlyIncome), 0);
   const budgetedCats = new Set(budgets.map((b) => b.category));
   // Sub-category spending rolls up onto the main category's budget.
-  const spent = monthTransactions
-    .filter((t) => budgetedCats.has(getMainCategory(categories, t.category).id))
+  const spent = transactions
+    .filter((t) => t.date >= cycleStart && budgetedCats.has(getMainCategory(categories, t.category).id))
     .reduce((s, t) => s + cashOut(t), 0);
   const remaining = totalBudget - spent;
 
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1);
-  const dailyAllowance = remaining / daysLeft;
-  const averagePace = totalBudget / daysInMonth;
+  // الوتيرة تُقاس على دورة الراتب لا على الشهر الميلادي — نفس نافذة السقوف.
+  const left = Math.max(1, daysLeft);
+  const dailyAllowance = remaining / left;
+  const averagePace = totalBudget / Math.max(1, cycleLength);
 
   const over = remaining < 0;
   const tight = !over && dailyAllowance < averagePace * 0.5;
@@ -39,11 +41,11 @@ export function FinancePace({ budgets, monthTransactions, categories, monthlyInc
       <p className="text-xs font-medium text-gray-500">وتيرة الصرف</p>
       {over ? (
         <p className="text-sm leading-relaxed" style={{ color }}>
-          تجاوزت ميزانية الشهر بـ <strong>{formatAmount(Math.abs(remaining))} ر.س</strong> — بقي {daysLeft} يوم.
+          تجاوزت ميزانية الدورة بـ <strong>{formatAmount(Math.abs(remaining))} ر.س</strong> — بقي {left} يوم.
         </p>
       ) : (
         <p className="text-sm leading-relaxed text-gray-700">
-          متبقي <strong style={{ color }}>{formatAmount(remaining)} ر.س</strong> لـ {daysLeft} يوم — يعني
+          متبقي <strong style={{ color }}>{formatAmount(remaining)} ر.س</strong> لـ {left} يوم — يعني
           {" "}<strong style={{ color }}>{formatAmount(Math.round(dailyAllowance))} ر.س/يوم</strong> متاح لك.
         </p>
       )}

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
+import { daysUntilSalary, projectedCycleSurplus } from "@/lib/financeOverview";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Settings2, PiggyBank } from "lucide-react";
 
@@ -251,6 +252,9 @@ export function DailyBudgetCard() {
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
   const over = status.balance < 0;
+  // «كم راح يتبقّى لي عند نزول الراتب؟» — على وتيرة صرفك الفعلية في هذه الدورة،
+  // ومعها السقف الأعلى (لو ما صرفت شيئاً) حتى لا يُقرأ الرقم على أنه وعد.
+  const projection = projectedCycleSurplus(status, dailyBudget.amount, daysUntilSalary(salaryDay ?? 27, today()));
   // نسبة امتلاء الإناء = الرصيد المتراكم ÷ يوميّة يوم واحد — لا ÷ المتاح
   // التراكمي (status.allowance) الذي يكبر كل يوم، فيقسم رصيداً صحياً على رقم
   // ضخم ويُظهر إناءً شبه فارغ رغم الفائض. فرصيدٌ يعادل يوميّة كاملة (أو أكثر)
@@ -298,6 +302,23 @@ export function DailyBudgetCard() {
           {formatAmount(dailyBudget.amount)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
         </p>
       )}
+      {projection.daysLeft > 0 && (
+        <div className="rounded-xl bg-white/60 dark:bg-white/5 px-3 py-2 text-center space-y-0.5">
+          <p className="text-[11px] text-gray-600 leading-relaxed">
+            🔮 باقي <b>{projection.daysLeft}</b> يوم على الراتب — على وتيرتك الحالية
+            {" "}(متوسط صرفك {formatAmount(Math.round(projection.avgSpend))} ر.س/يوم) متوقّع{" "}
+            {projection.projected >= 0 ? (
+              <>فائض <b className="text-finance">{formatAmount(Math.round(projection.projected))} ر.س</b></>
+            ) : (
+              <>عجز <b className="text-red-500">{formatAmount(Math.round(Math.abs(projection.projected)))} ر.س</b></>
+            )}
+          </p>
+          <p className="text-[10px] text-gray-400">
+            لو ما صرفت شيئاً حتى الراتب: {formatAmount(Math.round(projection.optimistic))} ر.س (السقف الأعلى)
+          </p>
+        </div>
+      )}
+
       {dailyBudget.incomePct && dailyBudget.monthlyIncome ? (
         <p className="text-[10px] text-gray-400 text-center">
           💼 {dailyBudget.incomePct}٪ من دخلك الشهري ({formatAmount(dailyBudget.monthlyIncome)} ر.س)

@@ -523,7 +523,7 @@ export default function JournalPage() {
 
       {view === "sky" ? (
         <div className="animate-fade-up stagger-4">
-          <MemorySky entries={filtered} memories={memories} onOpen={openViewer} />
+          <MemorySky entries={filtered} memories={memories} onOpen={openViewer} onPickDate={setSelectedDay} todayStr={todayStr} />
         </div>
       ) : view === "list" ? (
         <div className="space-y-4 animate-fade-up stagger-4">

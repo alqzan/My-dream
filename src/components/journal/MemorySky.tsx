@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { parseDate, entryPhotos, formatDate } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Photo } from "@/components/ui/Photo";
-import { skyView, type MonthCluster } from "@/lib/memorySky";
+import { skyView, entryVoice, silentDates, type MonthCluster, type EntryVoice } from "@/lib/memorySky";
 import type { JournalEntry } from "@/lib/types";
-import { ChevronRight, X } from "lucide-react";
+import { ChevronRight, X, PenLine } from "lucide-react";
 
 // ===================== سماء الذكريات =====================
 // A night-sky dome where every memory is a star, a sibling to PrayerOrbit's
@@ -62,6 +62,7 @@ interface Star {
   o: number; // brightness (opacity)
   gold: boolean; // starred → gold, else pale white
   halo: boolean; // photo or starred → soft glow
+  voice: EntryVoice; // نصّ / بلا كلمات (صورة أو صوت) / خالية
   delay: number; // twinkle stagger
 }
 
@@ -75,9 +76,13 @@ interface MemorySkyProps {
   // most-recent first. Drives the comet.
   memories: JournalEntry[];
   onOpen: (entry: JournalEntry) => void;
+  // فتح يومٍ صامت (لا مذكرة فيه) — لعرض اليوم والكتابة فيه.
+  onPickDate?: (date: string) => void;
+  // آخر يومٍ يُحسب ضمن «الأيام الصامتة» (اليوم عادةً) — يُمرَّر للاختبار.
+  todayStr?: string;
 }
 
-export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
+export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: MemorySkyProps) {
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
     setReduceMotion(
@@ -104,8 +109,44 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
   );
   const showConstellations = view.mode === "constellations" && !activeMonth;
 
+  // ===== الأيام الصامتة =====
+  // الأيام التي لم تُكتب فيها مذكرة داخل المدى المعروض — تُرسم كحلقاتٍ خافتة
+  // («مدارات خالية») على القبّة، ولمسها يفتح ذلك اليوم للكتابة فيه. اختياريّة
+  // بمفتاحٍ صغير حتى لا تُثقل السماء إلا حين يطلبها المالك.
+  const [showSilent, setShowSilent] = useState(false);
+  const [silentPick, setSilentPick] = useState<string | null>(null);
+  const now = todayStr ?? (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  const silent = useMemo(() => {
+    const scope = activeMonth ? activeMonth.entries : starEntries;
+    if (!scope.length) return [] as string[];
+    const dates = scope.map((e) => e.date).sort();
+    const from = activeMonth ? `${activeMonth.key}-01` : dates[0];
+    const latest = activeMonth
+      ? [`${activeMonth.key}-31`, now].sort()[0] // آخر الشهر أو اليوم، أيّهما أسبق
+      : dates[dates.length - 1];
+    // نمدّ المدى إلى اليوم فقط داخل الشهر الجاري — تصفّح سنةٍ قديمة لا يعني
+    // أنّ كل الأيام حتى اليوم «صامتة».
+    const to = !activeMonth && latest < now && latest.slice(0, 7) === now.slice(0, 7) ? now : latest;
+    return silentDates(scope, from, to);
+  }, [activeMonth, starEntries, now]);
+  const silentMarks = useMemo(
+    () =>
+      silent.map((date) => {
+        const doy = dayOfYear(date);
+        const jitter = (hashFrac(date, 0x45d9f3b) - 0.5) * 6;
+        const angle = Math.max(8, Math.min(172, baseAngle(doy) + jitter));
+        const f = 0.3 + hashFrac(date, 0x27d4eb2f) * 0.66;
+        return { date, ...domePoint(angle, f) };
+      }),
+    [silent]
+  );
+  const showSilentMarks = showSilent && !showConstellations && silentMarks.length > 0;
+
   // إعادة ضبط التركيز عند تبدّل ما يُعرض.
-  useEffect(() => { setFocusIdx(0); nodeRefs.current = []; }, [openMonth, view.mode]);
+  useEffect(() => { setFocusIdx(0); nodeRefs.current = []; setSilentPick(null); }, [openMonth, view.mode]);
 
   const interactiveCount = showConstellations ? clusters.length : starEntries.length;
   function moveFocus(delta: number) {
@@ -128,12 +169,13 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
       const angle = Math.max(8, Math.min(172, baseAngle(doy) + jitter));
       const f = 0.36 + hashFrac(key, 0x1000193) * 0.64; // radius fraction
       const { x, y } = domePoint(angle, f);
+      const voice = entryVoice(entry);
       const hasPhoto = entryPhotos(entry).length > 0;
       const starred = !!entry.starred;
       const r = 0.5 + (hasPhoto ? 0.35 : 0) + (starred ? 0.35 : 0);
       const o = starred ? 0.98 : hasPhoto ? 0.85 : 0.55;
       return {
-        entry, x, y, r, o,
+        entry, x, y, r, o, voice,
         gold: starred,
         halo: starred || hasPhoto,
         delay: hashFrac(key, 0x2a) * 3.6,
@@ -303,6 +345,26 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
             </g>
           ))}
 
+          {/* الأيام الصامتة — حلقاتٌ خافتة، لمسها يفتح اليوم للكتابة */}
+          {showSilentMarks && silentMarks.map((m) => (
+            <g
+              key={`silent-${m.date}`}
+              role="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              onClick={() => { setPreview(null); setSilentPick(m.date); }}
+              style={{ cursor: "pointer" }}
+            >
+              <circle
+                cx={m.x} cy={m.y} r={0.85}
+                fill="none" stroke="#b9a8d6"
+                strokeWidth={silentPick === m.date ? 0.5 : 0.28}
+                strokeOpacity={silentPick === m.date ? 0.95 : 0.4}
+              />
+              <circle cx={m.x} cy={m.y} r={2.8} fill="transparent" />
+            </g>
+          ))}
+
           {/* نجوم الذكريات — تركيزٌ متنقّل ومعاينةٌ عند اللمس */}
           {!showConstellations && stars.map((st, i) => (
             <g
@@ -312,16 +374,20 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
               tabIndex={i === focusIdx ? 0 : -1}
               aria-label={st.entry.title ? `${st.entry.title} — ${formatDate(st.entry.date)}` : formatDate(st.entry.date)}
               onFocus={() => setFocusIdx(i)}
-              onClick={() => setPreview(st.entry)}
+              onClick={() => { setSilentPick(null); setPreview(st.entry); }}
               onKeyDown={(e) => onNodeKey(e, () => setPreview(st.entry))}
               style={{ cursor: "pointer" }}
             >
               {st.halo && (
                 <circle cx={st.x} cy={st.y} r={st.r * 3.2} fill={st.gold ? "url(#skyHaloGold)" : "url(#skyHalo)"} />
               )}
+              {/* مذكرةٌ بلا كلمات (صورة أو صوت فقط) تُرسم حلقةً مضيئة بدل قرصٍ
+                  مصمت — تُقرأ من السماء دون فتحها. */}
               <circle
-                cx={st.x} cy={st.y} r={st.r}
-                fill={st.gold ? "#f4d488" : "#fdfbf5"}
+                cx={st.x} cy={st.y} r={st.voice === "text" ? st.r : st.r + 0.35}
+                fill={st.voice === "text" ? (st.gold ? "#f4d488" : "#fdfbf5") : "none"}
+                stroke={st.voice === "text" ? undefined : st.gold ? "#f4d488" : "#cfe3ff"}
+                strokeWidth={st.voice === "text" ? undefined : 0.42}
                 className={reduceMotion ? undefined : "sky-star"}
                 style={reduceMotion ? { opacity: st.o } : ({ "--star-o": st.o, animationDelay: `${st.delay}s` } as React.CSSProperties)}
               />
@@ -349,6 +415,31 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
         )}
       </div>
 
+      {/* بطاقة اليوم الصامت — يومٌ بلا مذكرة، ودعوةٌ للكتابة فيه */}
+      {silentPick && (
+        <div className="absolute inset-x-3 bottom-3 z-20 bg-[#1c1435]/95 border border-[#b9a8d6]/25 rounded-2xl p-3 backdrop-blur animate-fade-up">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/5 border border-[#b9a8d6]/30 flex items-center justify-center text-lg shrink-0">🌑</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] text-[#b9a8d6]">{formatDate(silentPick)}</div>
+              <p className="text-sm font-bold text-[#f4ead6]">يومٌ صامت</p>
+              <p className="text-[11px] text-[#cfc4e6] mt-0.5">ما كتبت فيه شيئاً — تحبّ تضيء نجمته الآن؟</p>
+            </div>
+            <button onClick={() => setSilentPick(null)} aria-label="إغلاق" className="shrink-0 text-[#b9a8d6] hover:text-white press">
+              <X size={16} />
+            </button>
+          </div>
+          {onPickDate && (
+            <button
+              onClick={() => { const d = silentPick; setSilentPick(null); onPickDate(d); }}
+              className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#1c1435] bg-[#e8c99a] hover:brightness-105 rounded-lg py-2 press"
+            >
+              <PenLine size={13} /> افتح هذا اليوم
+            </button>
+          )}
+        </div>
+      )}
+
       {/* بطاقة معاينة النجمة — تاريخ، عنوان، سطر، صورة، وزر فتح */}
       {preview && (
         <div className="absolute inset-x-3 bottom-3 z-20 bg-[#1c1435]/95 border border-[#e8c99a]/25 rounded-2xl p-3 backdrop-blur animate-fade-up">
@@ -374,11 +465,25 @@ export function MemorySky({ entries, memories, onOpen }: MemorySkyProps) {
         </div>
       )}
 
-      {/* أسطورة خفيفة أسفل السماء */}
-      <div className="flex items-center justify-center gap-3 pb-3 pt-0.5 text-[10px] text-[#b9a8d6]/80">
+      {/* أسطورة خفيفة أسفل السماء + مفتاح الأيام الصامتة */}
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pb-3 pt-0.5 text-[10px] text-[#b9a8d6]/80">
         <span className="flex items-center gap-1"><span className="text-[#f4d488]">✦</span> مفضّلة</span>
         <span className="flex items-center gap-1"><span className="text-white">✦</span> بصورة</span>
         <span className="flex items-center gap-1"><span className="text-white/50 text-[8px]">✦</span> مذكرة</span>
+        <span className="flex items-center gap-1"><span className="text-[#cfe3ff]">◌</span> بلا كلمات</span>
+        {!showConstellations && silentMarks.length > 0 && (
+          <button
+            onClick={() => { setShowSilent((v) => !v); setSilentPick(null); }}
+            aria-pressed={showSilent}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border press transition-colors ${
+              showSilent
+                ? "border-[#e8c99a]/60 text-[#e8c99a] bg-white/10"
+                : "border-white/15 text-[#b9a8d6]/80 hover:border-white/30"
+            }`}
+          >
+            🌑 الأيام الصامتة ({silentMarks.length})
+          </button>
+        )}
       </div>
     </div>
   );

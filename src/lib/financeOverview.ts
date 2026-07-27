@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr, cashOut } from "./utils";
 import { installmentsOverview, type InstallmentsOverview } from "./installments";
+import { inSpendWindow } from "./budgetCycle";
 
 export interface NearestCommitment {
   id: string;
@@ -109,7 +110,8 @@ export function budgetAlerts(
   transactions: Transaction[],
   categories: FinanceCategoryDef[],
   monthlyIncome: number | null,
-  monthPrefix: string
+  // شهرٌ ميلادي «YYYY-MM» أو بدايةُ دورةِ راتب «YYYY-MM-DD» (راجع budgetCycle.ts)
+  windowStart: string
 ): { over: number; near: number } {
   let over = 0;
   let near = 0;
@@ -117,7 +119,7 @@ export function budgetAlerts(
     const cap = budgetLimit(b, monthlyIncome);
     if (!cap) continue;
     const spent = transactions
-      .filter((t) => getMainCategory(categories, t.category).id === b.category && t.date.startsWith(monthPrefix))
+      .filter((t) => getMainCategory(categories, t.category).id === b.category && inSpendWindow(t.date, windowStart))
       .reduce((s, t) => s + cashOut(t), 0);
     if (spent > cap) over++;
     else if ((spent / cap) * 100 >= 80) near++;
@@ -199,4 +201,22 @@ export function biggestCashExpense(transactions: Transaction[]): Transaction | n
 export function historySlice<T>(sorted: T[], limit: number): { visible: T[]; hasMore: boolean; remaining: number } {
   const visible = sorted.slice(0, Math.max(0, limit));
   return { visible, hasMore: sorted.length > visible.length, remaining: sorted.length - visible.length };
+}
+
+// ===================== الفائض المتوقّع عند نزول الراتب =====================
+// «كم سيتبقّى لي حين ينزل الراتب؟» — سؤالٌ عرضيٌّ محض يعيد استعمال أرقام
+// computeDailyBudgetStatus كما هي: الرصيد المتراكم اليوم، زائد يوميّة كل يومٍ
+// باقٍ حتى الراتب، ناقص ما يُتوقَّع صرفه على **وتيرتك الفعلية** في هذه الدورة
+// (متوسط الصرف اليومي منذ بدايتها). الرقم المتفائل (بلا أيّ صرف) يُعرض بجانبه
+// كسقفٍ أعلى حتى لا يُقرأ المتوقَّع على أنه وعد. لا يمسّ أيّ بيانات.
+export function projectedCycleSurplus(
+  status: { balance: number; spent: number; days: number },
+  dailyAmount: number,
+  daysLeft: number
+): { avgSpend: number; projected: number; optimistic: number; daysLeft: number } {
+  const left = Math.max(0, Math.round(daysLeft));
+  const avgSpend = status.days > 0 ? Math.round((status.spent / status.days) * 100) / 100 : 0;
+  const projected = Math.round((status.balance + (dailyAmount - avgSpend) * left) * 100) / 100;
+  const optimistic = Math.round((status.balance + dailyAmount * left) * 100) / 100;
+  return { avgSpend, projected, optimistic, daysLeft: left };
 }

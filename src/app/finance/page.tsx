@@ -31,6 +31,7 @@ import {
   PLAN_SECTIONS, type PlanSectionId,
 } from "@/lib/financeOverview";
 import { assetsOverview } from "@/lib/assets";
+import { budgetCycleStart } from "@/lib/budgetCycle";
 import { showUndo } from "@/components/ui/UndoToast";
 
 // عنوانٌ خفيفٌ يجمّع البطاقات بصريًّا — مسمّى مكتوم صغير (ثمانية، عالميّ) مع خيطٍ
@@ -66,7 +67,7 @@ function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
 
 export default function FinancePage() {
   const {
-    transactions, recurring, installmentPlans, assets, categories, dailyBudget, reserves, budgets, salaryDay, monthlyIncome,
+    transactions, recurring, installmentPlans, assets, categories, dailyBudget, reserves, budgets, salaryDay, lastSalaryConfirm, monthlyIncome,
     deleteTransaction, addTransaction,
   } = useAppStore();
 
@@ -166,9 +167,15 @@ export default function FinancePage() {
   );
   // ملخّص الأصول لرأس القسم — حسابٌ نقيّ من assets.ts، بلا أثرٍ على أيّ صرف.
   const assetsSummary = useMemo(() => assetsOverview(assets ?? [], today()), [assets]);
+  // تنبيهات السقوف على نافذة دورة الراتب (لا الشهر الميلادي) — نفس نافذة
+  // BudgetTracker، فتتصفّر مع تأكيد «نزل الراتب».
+  const cycleStart = useMemo(
+    () => budgetCycleStart(lastSalaryConfirm, salaryDay ?? 27, today()),
+    [lastSalaryConfirm, salaryDay]
+  );
   const alerts = useMemo(
-    () => budgetAlerts(budgets, transactions, categories, monthlyIncome, currentMonth),
-    [budgets, transactions, categories, monthlyIncome, currentMonth]
+    () => budgetAlerts(budgets, transactions, categories, monthlyIncome, cycleStart),
+    [budgets, transactions, categories, monthlyIncome, cycleStart]
   );
   // ما يستحقّ الفتح عند أوّل زيارةٍ بلا تفضيلٍ محفوظ — في مرجعٍ يُقرأ داخل تأثير
   // الوصول (لا يُعاد تشغيله مع كل تغيّر رقم).
@@ -278,7 +285,7 @@ export default function FinancePage() {
         badge={alerts.over > 0 ? <AlertBadge>{formatAmount(alerts.over)}</AlertBadge> : undefined}
       >
         <Card>
-          <BudgetTracker monthPrefix={monthFilter} />
+          <BudgetTracker />
         </Card>
         <button
           onClick={() => setShowCategories(true)}

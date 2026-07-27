@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
+import { budgetCycleStart } from "@/lib/budgetCycle";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, budgetWarningFor, cn } from "@/lib/utils";
 import { planSummary, isPlanOpen, suggestPlanLink, suggestPlanByAmount, describeDueIn, daysBetween, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
@@ -213,7 +214,11 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     // Learn this merchant → category so the next one is auto-classified.
     if (note.trim()) rememberMerchant(note, tx.category);
     // Live budget alert: warn the moment a category crosses 80% / its cap.
-    const w = budgetWarningFor(tx.category, budgets, useAppStore.getState().transactions, categories, monthlyIncome);
+    const st = useAppStore.getState();
+    const w = budgetWarningFor(
+      tx.category, budgets, st.transactions, categories, monthlyIncome,
+      budgetCycleStart(st.lastSalaryConfirm, st.salaryDay ?? 27, today())
+    );
     if (w) {
       showToast(
         w.over ? `📛 تجاوزت سقف «${w.label}»` : `⚠️ وصلت ${w.pct}% من سقف «${w.label}»`,
