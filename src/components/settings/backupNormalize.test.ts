@@ -28,10 +28,16 @@ describe("normalizeBackup — لا يسقط حقلاً من الملف", () => {
     expect(mergeAppData(local, restored).frozenHabits).toEqual(["core:reading"]);
   });
 
-  it("يغطّي كلّ مفاتيح AppData التي يحملها الملف", () => {
-    const keys = Object.keys(normalizeBackup({}));
+  it("لا يُخرج حقلاً غير معرَّف — والنوع Required<AppData> يمنع الإغفال أصلاً", () => {
+    // الضمانة الأولى ترجمةٌ لا تشغيل: `normalizeBackup` تُرجع `Required<AppData>`
+    // فلا يُترجَم الملفّ حتى يُذكر كلّ حقلٍ جديد. وهذا فحصٌ مُكمِّل: ملفٌّ فارغٌ
+    // تماماً يخرج منه كلّ مفتاحٍ بقيمةٍ حقيقية لا `undefined`.
+    const out = normalizeBackup({}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(out)) {
+      expect(v, `الحقل ${k} خرج undefined من normalizeBackup`).not.toBeUndefined();
+    }
     for (const k of ["assets", "installmentPlans", "frozenHabits", "budgetWindow", "deletedMedia", "fieldUpdatedAt"]) {
-      expect(keys, `الحقل ${k} غائبٌ عن normalizeBackup`).toContain(k);
+      expect(Object.keys(out), `الحقل ${k} غائبٌ عن normalizeBackup`).toContain(k);
     }
   });
 });

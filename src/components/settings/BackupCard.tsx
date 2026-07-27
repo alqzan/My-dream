@@ -144,7 +144,10 @@ function inspectBackup(parsed: Record<string, unknown>): {
 
 // Fill any fields a legacy/partial backup is missing so it's a full AppData —
 // mergeAppData walks every collection, and the store tolerates extra fields.
-export function normalizeBackup(d: Record<string, unknown>): AppData {
+// **`Required<AppData>` عمداً**: الحقول الاختيارية هي التي تنزلق بلا خطأ ترجمة
+// (كما انزلقت `frozenHabits` فكانت الاستعادة تفكّ تجميد كلّ العادات)، فبهذا
+// النوع لا يُترجَم الملفّ حتى يُذكر كلّ حقلٍ جديد هنا صراحةً.
+export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
   const g = <T,>(k: string, fallback: T): T => (d[k] === undefined ? fallback : (d[k] as T));
   return {
     transactions: g("transactions", []),

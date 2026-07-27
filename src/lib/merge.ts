@@ -2,7 +2,7 @@
 // has NO Firebase imports and can be unit-tested in plain Node. sync.ts re-
 // exports mergeAppData, so existing importers are unaffected. Pure functions of
 // (local, cloud) → merged AppData; touches no I/O.
-import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, RecurringTransaction } from "./types";
+import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, PrayerName, RecurringTransaction } from "./types";
 import { EMPTY_HIFZ } from "./types";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 
@@ -32,6 +32,9 @@ export const wirdTombKey = (date: string) => `wird:${date}`;
 //    single item, so reordering on one device needs a stamp of its own.
 export const merchantStampKey = (merchant: string) => `merchant:${merchant}`;
 export const CATEGORY_ORDER_FIELD = "categoriesOrder";
+// هدف الصفحات اليومي تفضيلٌ شخصيّ يعيش عبر الختمات، وتقدّمُ الختمة قراءةُ اليوم:
+// طابعان منفصلان، وإلّا ألغى ضبطُ الهدف على جهازٍ تقدّماً سُجّل على الآخر.
+export const KHATMA_GOAL_FIELD = "khatmaGoal";
 
 // ===================== Multi-device merge =====================
 // Combine a local and a cloud snapshot so neither device's edits are lost to a
@@ -374,20 +377,34 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     return { ...f, deposits };
   });
 
-  // Prayer logs: union by date; on a shared date merge the per-prayer maps so a
-  // prayer logged only on the other device stays. Where BOTH devices set the
-  // same prayer differently, the day's own `updatedAt` decides (falling back to
-  // primary for legacy days without it) — else correcting a prayer on one device
-  // was undone by the other's stale copy riding a newer document stamp.
+  // Prayer logs: union by date, and on a shared date resolve **each prayer on
+  // its own stamp** — the day is five independent values, so a prayer logged
+  // only on one device stays, and a correction to another prayer that same day
+  // isn't overruled by it. No stamps either side (legacy) → primary wins that
+  // prayer, exactly as before.
   const prayerLogs = unionOrdered(primary.prayerLogs, secondary.prayerLogs, (p) => p.date).map((pl) => {
     const sMatch = secondary.prayerLogs.find((x) => x.date === pl.date);
     if (!sMatch) return pl;
-    const secondaryNewer = (sMatch.updatedAt ?? 0) > (pl.updatedAt ?? 0);
-    const [older, newer] = secondaryNewer ? [pl, sMatch] : [sMatch, pl];
+    const prayers = { ...sMatch.prayers, ...pl.prayers };
+    const stamps: Partial<Record<PrayerName, number>> = {
+      ...sMatch.prayerUpdatedAt, ...pl.prayerUpdatedAt,
+    };
+    for (const name of Object.keys(prayers) as PrayerName[]) {
+      const pt = pl.prayerUpdatedAt?.[name] ?? 0;
+      const st = sMatch.prayerUpdatedAt?.[name] ?? 0;
+      // A prayer the winner CLEARED must stay cleared: take the winner's value
+      // even when it's absent, so an un-log propagates instead of being refilled.
+      const winner = st > pt ? sMatch : pl;
+      const val = winner.prayers?.[name];
+      if (val === undefined) delete prayers[name];
+      else prayers[name] = val;
+      const newest = Math.max(pt, st);
+      if (newest) stamps[name] = newest;
+    }
     return {
-      ...(secondaryNewer ? sMatch : pl),
-      prayers: { ...older.prayers, ...newer.prayers },
-      updatedAt: Math.max(pl.updatedAt ?? 0, sMatch.updatedAt ?? 0) || undefined,
+      ...pl,
+      prayers,
+      ...(Object.keys(stamps).length ? { prayerUpdatedAt: stamps } : {}),
     };
   });
 
@@ -398,7 +415,19 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const pk = primary.quranKhatma ?? { juz: 0, completed: 0 };
   const sk = secondary.quranKhatma ?? { juz: 0, completed: 0 };
   const kBase = pickSingleton("quranKhatma", pk) ?? pk;
-  const quranKhatma = { ...kBase, completed: Math.max(pk.completed ?? 0, sk.completed ?? 0) };
+  // هدف الصفحات اليومي تفضيلٌ شخصيّ بطابعٍ مستقل: ضبطُه على جهاز لا يجرّ معه
+  // تقدّماً قديماً، وتسجيلُ تقدّمٍ على الآخر لا يُرجع الهدف. بلا طوابع يبقى هدف
+  // اللقطة الفائزة بالتقدّم (السلوك السابق).
+  const goalPt = primary.fieldUpdatedAt?.[KHATMA_GOAL_FIELD] ?? 0;
+  const goalSt = secondary.fieldUpdatedAt?.[KHATMA_GOAL_FIELD] ?? 0;
+  const dailyPageGoal = goalPt === 0 && goalSt === 0
+    ? kBase.dailyPageGoal
+    : (goalPt >= goalSt ? pk.dailyPageGoal : sk.dailyPageGoal);
+  const quranKhatma = {
+    ...kBase,
+    dailyPageGoal,
+    completed: Math.max(pk.completed ?? 0, sk.completed ?? 0),
+  };
 
   // Quran حفظ: دمجٌ واعٍ بجيل الخطة — الجيل الأحدث يفوز كاملاً عند اختلاف
   // الجيلين، والتقدّم يتّحد بلا فقد عند اتّفاقهما. راجع mergeHifz أدناه.

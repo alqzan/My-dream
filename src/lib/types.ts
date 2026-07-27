@@ -181,9 +181,10 @@ export type PrayerStatus = "لم" | "منفردة" | "جماعة";
 export interface PrayerLog {
   date: string; // YYYY-MM-DD
   prayers: Partial<Record<PrayerName, PrayerStatus>>;
-  // طابع آخر تعديلٍ لهذا اليوم (ms) — عند تعارض اليوم نفسه بين جهازين تفوز
-  // خريطةُ الأحدث لكلّ صلاةٍ اختلفت، بدل الاعتماد على ختم المستند كاملاً.
-  updatedAt?: number;
+  // طابع آخر تعديل **لكلّ صلاةٍ على حدة** (ms). اليوم خمس قيمٍ مستقلّة: تسجيل
+  // العشاء على الجوّال يجب ألّا يفوز على تصحيح الفجر في اليوم نفسه على الآيباد،
+  // وهو ما يفعله طابعٌ واحدٌ لليوم. الدمج يحسم كلّ صلاةٍ بطابعها.
+  prayerUpdatedAt?: Partial<Record<PrayerName, number>>;
 }
 
 export const PRAYER_META: Record<PrayerName, { icon: string; angle: number }> = {

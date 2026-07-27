@@ -13,7 +13,7 @@ import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
-import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD } from "./merge";
+import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { idbStorage } from "./idbStorage";
 import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, suggestPlanLink } from "./installments";
@@ -35,6 +35,10 @@ const SINGLETON_FIELDS = [
   "lastSalaryConfirm", "frozenHabits", "budgetWindow", "quranKhatma",
 ] as const;
 
+// حقول تقدّم الختمة (قراءةُ اليوم) — يقابلها `dailyPageGoal` وحده كتفضيلٍ شخصيّ
+// له طابعه المستقل، فضبطُ الهدف لا يُلغي تقدّماً سُجّل على الجهاز الآخر ولا العكس.
+const KHATMA_PROGRESS_FIELDS = ["juz", "page", "startDate", "lastReadDate", "completed", "pageLog"] as const;
+
 // Id-keyed collections whose items carry their own `updatedAt` edit stamp, so
 // the merge resolves a per-item conflict by which COPY was edited last instead
 // of which DOCUMENT was saved last. Same list as ID_COLLECTIONS: every id-keyed
@@ -42,12 +46,20 @@ const SINGLETON_FIELDS = [
 const STAMPED_COLLECTIONS = ID_COLLECTIONS;
 type StampedItem = { id: string; updatedAt?: number };
 
-// Fields the APP maintains on an item without the owner editing it. They must
-// not count as an edit: `lastGenerated` moves every time runRecurring fires, and
-// stamping it would let mere app-opening outrank a real edit made on the other
-// device (the merge has its own never-goes-backwards rule for it).
-const AUTO_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], readonly string[]>> = {
+// Fields that must NOT count as "the owner edited this item", per collection.
+// Two kinds live here:
+//  • آليّة: `lastGenerated` يتحرّك مع كلّ runRecurring، وختمُه يجعل مجرّد فتح
+//    التطبيق يطغى على تعديلٍ حقيقيّ من الجهاز الآخر.
+//  • **مركّبة لها دمجُها المستقل**: سجلّات العادة وإيداعات الصندوق تتّحد عنصراً
+//    عنصراً ولها شواهد حذفٍ خاصّة (habitlog:/deposit:)، ووسائط المذكرة تتّحد
+//    بالاتحاد وتُحذف بشاهد (deletedMedia). لو رفع تغييرُها طابع العنصر لصار
+//    تسجيلُ يومٍ — أو استكمالُ صور Day One — «تعديلاً» يفوز على إعادة تسمية
+//    العادة أو تحرير نصّ المذكرة على الجهاز الآخر، وهو ما لا يريده أحد.
+const UNSTAMPED_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], readonly string[]>> = {
   recurring: ["lastGenerated"],
+  habits: ["logs"],
+  reserves: ["deposits"],
+  journalEntries: ["photo", "photos", "audio", "audios", "videoRefs", "photoRefs", "audioRefs"],
 };
 
 // Did this item actually change? Identity first (the common case: an action
@@ -320,7 +332,20 @@ export const useAppStore = create<AppStore>()(
       // pick it by recency (and a clear-to-null wins over a stale value).
       let stamped: Record<string, number> | undefined;
       for (const f of SINGLETON_FIELDS) {
-        if (f in next) (stamped ??= {})[f] = Date.now();
+        if (f !== "quranKhatma" && f in next) (stamped ??= {})[f] = Date.now();
+      }
+      // الختمة قيمتان مختلفتا الطبيعة في كائنٍ واحد: تقدّمُ القراءة، وهدفُ
+      // الصفحات اليومي (تفضيلٌ يبقى عبر الختمات). كلٌّ بطابعه، فلا يُلغي أحدهما
+      // الآخر عند الدمج.
+      if (next && "quranKhatma" in next) {
+        const before = prev.quranKhatma ?? EMPTY_KHATMA;
+        const after = (next as Partial<AppStore>).quranKhatma ?? EMPTY_KHATMA;
+        if (KHATMA_PROGRESS_FIELDS.some((f) => JSON.stringify(before[f]) !== JSON.stringify(after[f]))) {
+          (stamped ??= {}).quranKhatma = Date.now();
+        }
+        if (before.dailyPageGoal !== after.dailyPageGoal) {
+          (stamped ??= {})[KHATMA_GOAL_FIELD] = Date.now();
+        }
       }
 
       const patch: Record<string, unknown> = { ...next, lastUpdated: new Date().toISOString() };
@@ -339,17 +364,37 @@ export const useAppStore = create<AppStore>()(
         if (!Array.isArray(after)) continue;
         const beforeById = new Map((Array.isArray(before) ? before : []).map((x) => [x?.id, x]));
         patch[key] = after.map((item) =>
-          item && changedItem(beforeById.get(item.id), item, AUTO_FIELDS[key])
+          item && changedItem(beforeById.get(item.id), item, UNSTAMPED_FIELDS[key])
             ? { ...item, updatedAt: Date.now() }
             : item
         );
       }
-      // Prayer days are keyed by date, not id — same rule, own key.
+      // Prayer days are keyed by date, and a day is FIVE independent values —
+      // so the stamp is per (date, prayer), not per day. With a whole-day stamp,
+      // logging العشاء on the phone would outrank a correction to الفجر made on
+      // the iPad for the same day; now each prayer carries its own stamp and the
+      // merge resolves them one by one.
       if (Array.isArray(patch.prayerLogs)) {
         const before = new Map((prev.prayerLogs ?? []).map((p) => [p.date, p]));
-        patch.prayerLogs = (patch.prayerLogs as PrayerLog[]).map((p) =>
-          changedItem(before.get(p.date), p) ? { ...p, updatedAt: Date.now() } : p
-        );
+        patch.prayerLogs = (patch.prayerLogs as PrayerLog[]).map((p) => {
+          const was = before.get(p.date);
+          if (was === p) return p;
+          let stamps = p.prayerUpdatedAt;
+          let touched = false;
+          for (const name of Object.keys(p.prayers ?? {}) as PrayerName[]) {
+            if (was?.prayers?.[name] === p.prayers[name]) continue;
+            if (!touched) { stamps = { ...(p.prayerUpdatedAt ?? {}) }; touched = true; }
+            stamps![name] = Date.now();
+          }
+          // A prayer CLEARED on this day is a change too — its stamp must move
+          // or the other device's stale value wins it back on merge.
+          for (const name of Object.keys(was?.prayers ?? {}) as PrayerName[]) {
+            if (name in (p.prayers ?? {})) continue;
+            if (!touched) { stamps = { ...(p.prayerUpdatedAt ?? {}) }; touched = true; }
+            stamps![name] = Date.now();
+          }
+          return touched ? { ...p, prayerUpdatedAt: stamps } : p;
+        });
       }
       // Budgets are keyed by category — likewise.
       if (Array.isArray(patch.budgets)) {
@@ -491,10 +536,12 @@ export const useAppStore = create<AppStore>()(
         // later merge can't resurrect it from a copy that still references it.
         const before = get().journalEntries.find((e) => e.id === id);
         if (before) trackMediaChange(before, updates);
+        // بلا ختمٍ يدويّ: غلاف `set` يختم ما تغيّر فعلاً، وهو وحده الذي يعرف أنّ
+        // تغييراً في الوسائط لا يُعدّ تعديلاً لمحتوى المذكرة (الوسائط تتّحد وتُحذف
+        // بشواهدها). ختمٌ هنا كان يجعل إضافةَ صورةٍ — أو استكمال صور Day One —
+        // يطغى على تحرير النصّ على الجهاز الآخر.
         set((s) => ({
-          journalEntries: s.journalEntries.map((e) =>
-            e.id === id ? { ...e, ...updates, updatedAt: Date.now() } : e
-          ),
+          journalEntries: s.journalEntries.map((e) => (e.id === id ? { ...e, ...updates } : e)),
         }));
       },
 

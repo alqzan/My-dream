@@ -16,7 +16,12 @@ import type { AppData } from "./types";
 // ويُنسى في `hydrate` يسقط هنا فوراً: هذا ما فات في الأصول (كانت في snapshot
 // والدمج والنسخة الاحتياطية، وغائبةً عن hydrate — فأصلٌ من السحابة أو من ملفٍ
 // مُستعاد لا يدخل المتجر أبداً).
-const FULL: AppData = {
+//
+// النوع `Required<AppData>` لا `AppData`: الحقول **الاختيارية** (`assets` و
+// `budgetWindow` و`frozenHabits` و`deletedMedia`…) هي بالضبط التي تنزلق بلا
+// خطأ ترجمة، وهي التي وقع فيها الخلل فعلاً. بهذا لا يُترجَم الملفّ أصلاً حتى
+// يُذكر الحقل الجديد هنا، ثمّ يفحص الاختبارُ عبورَه الدورة.
+const FULL: Required<AppData> = {
   transactions: [{ id: "t1", date: "2026-05-01", amount: 25, category: "c1", note: "قهوة" }],
   books: [{ id: "b1", title: "ك", author: "م", totalPages: 300, currentPage: 42, status: "أقرأ" }],
   readingLogs: [{ id: "r1", bookId: "b1", date: "2026-05-01", pagesRead: 20 }],
@@ -33,6 +38,7 @@ const FULL: AppData = {
   }],
   assets: [{
     id: "a1", name: "ماك بوك", purchaseDate: "2026-07-26", purchasePrice: 5499, lifeDays: 1825,
+    createdAt: "2026-07-26",
   }],
   budgets: [{ category: "c1", limit: 900 }],
   categories: [{ id: "c1", label: "قهوة", icon: "☕", color: "#c1663f" }],
@@ -123,14 +129,59 @@ describe("أختام التعديل لكل عنصر — يضعها المتجر 
     ]) expect(stamp).toBeGreaterThanOrEqual(before);
   });
 
-  it("حالةُ الصلاة والسقف يحملان طابعَي يومهما/تصنيفهما", () => {
+  it("حالةُ الصلاة تُختم لكلّ صلاةٍ على حدة، والسقف بطابع تصنيفه", () => {
     useAppStore.getState().hydrate(FULL);
     const before = Date.now();
     useAppStore.getState().setPrayerStatus("2026-05-01", "الظهر", "منفردة");
     useAppStore.getState().setBudget("c1", { limit: 1200 });
     const s = useAppStore.getState();
-    expect(s.prayerLogs.find((p) => p.date === "2026-05-01")!.updatedAt).toBeGreaterThanOrEqual(before);
+    const day = s.prayerLogs.find((p) => p.date === "2026-05-01")!;
+    expect(day.prayerUpdatedAt?.الظهر).toBeGreaterThanOrEqual(before);
+    // الفجر كان مسجّلاً في اللقطة ولم يُمسّ — لا طابع له من هذا التعديل.
+    expect(day.prayerUpdatedAt?.الفجر).toBeUndefined();
     expect(s.budgets.find((b) => b.category === "c1")!.updatedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it("تسجيلُ يومِ عادةٍ لا يرفع طابع العادة (للسجلّات دمجُها وشواهدها)", () => {
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().updateHabit("h1", { name: "مشي 30د" });
+    const stampAfterRename = useAppStore.getState().habits[0].updatedAt!;
+    useAppStore.getState().toggleHabitLog("h1", "2026-05-09");
+    const s = useAppStore.getState();
+    expect(s.habits[0].logs).toContain("2026-05-09");
+    expect(s.habits[0].updatedAt).toBe(stampAfterRename); // لم يتحرّك
+  });
+
+  it("إيداعٌ في صندوقٍ لا يرفع طابع الصندوق", () => {
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().updateReserve("f1", { target: 9000 });
+    const stampAfterEdit = useAppStore.getState().reserves[0].updatedAt!;
+    useAppStore.getState().addReserveDeposit("f1", { id: "d2", amount: 300, date: "2026-05-09" });
+    const s = useAppStore.getState();
+    expect(s.reserves[0].deposits).toHaveLength(2);
+    expect(s.reserves[0].updatedAt).toBe(stampAfterEdit);
+  });
+
+  it("تعديلُ وسائط مذكرةٍ وحده لا يرفع طابع محتواها، وتعديلُ النصّ يرفعه", () => {
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().updateJournalEntry("e1", { content: "نصٌّ محرَّر" });
+    const afterText = useAppStore.getState().journalEntries[0].updatedAt!;
+    expect(afterText).toBeGreaterThan(0);
+    useAppStore.getState().updateJournalEntry("e1", { photos: ["data:img-a"] });
+    const s = useAppStore.getState();
+    expect(s.journalEntries[0].photos).toEqual(["data:img-a"]);
+    expect(s.journalEntries[0].updatedAt).toBe(afterText); // الوسائط لا تُعدّ تعديلاً
+  });
+
+  it("هدفُ الصفحات اليومي يُختم بمفتاحه، وتقدّمُ الختمة بمفتاحه", () => {
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().setKhatmaPageGoal(15);
+    let f = useAppStore.getState().fieldUpdatedAt ?? {};
+    expect(f.khatmaGoal).toBeGreaterThan(0);
+    expect(f.quranKhatma).toBeUndefined(); // ضبطُ الهدف ليس تقدّماً
+    useAppStore.getState().setKhatmaPage(300);
+    f = useAppStore.getState().fieldUpdatedAt ?? {};
+    expect(f.quranKhatma).toBeGreaterThan(0);
   });
 
   it("إعادةُ ترتيب التصنيفات وحدها تختم categoriesOrder", () => {
