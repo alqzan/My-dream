@@ -540,7 +540,7 @@ export function budgetWarningFor(
   const inWindow = (d: string) => (win.length === 7 ? d.startsWith(win) : d >= win);
   const spent = transactions
     .filter((t) => inWindow(t.date) && getMainCategory(categories, t.category).id === mainId)
-    .reduce((s, t) => s + cashOut(t), 0);
+    .reduce((s, t) => s + budgetSpend(t), 0);
   const pct = (spent / cap) * 100;
   if (pct < 80) return null;
   const info = categories.find((c) => c.id === mainId);
@@ -562,12 +562,30 @@ export function isCashOut(t: Pick<Transaction, "deferred">): boolean {
   return !t.deferred;
 }
 
+// ===================== ما تُحاسِبه الميزانيات =====================
+// **البوابة الوحيدة** لسؤال «كم تستهلك هذه المعاملة من الميزانية اليومية أو من
+// سقف قسمها؟». تختلف عن `cashOut` في حالةٍ واحدة: مصروفٌ وُسم `offBudget` — صرفٌ
+// حقيقيّ خرج من الجيب ويظهر في السجل والإحصائيات ومجاميع الشهر، لكنّه استثنائيّ
+// لا يتكرّر (رسوم اختبار، عمرة، حادث) فلا يُحاسَب عليه في الميزانية ولا السقوف.
+// كلّ حسابٍ يقارن صرفاً بميزانيةٍ أو سقفٍ يمرّ من هنا؛ وما عداه (المجاميع
+// والرسوم والإحصائيات) يبقى على `cashOut` فلا يختفي الصرف من صورة الشهر.
+export function budgetSpend(t: Pick<Transaction, "amount" | "deferred" | "offBudget">): number {
+  return t.offBudget ? 0 : cashOut(t);
+}
+
+// هل تُحاسِب الميزانياتُ هذه المعاملة أصلاً؟ (للتصفية قبل التجميع)
+export function countsInBudget(t: Pick<Transaction, "deferred" | "offBudget">): boolean {
+  return isCashOut(t) && !t.offBudget;
+}
+
 // ===================== Reserve funds & split spending =====================
 
 // Share of a transaction charged to the daily budget (the remainder after
 // any reserve splits). A transaction with no splits is 100% daily.
 export function dailyShare(t: Transaction): number {
-  const paid = cashOut(t); // المؤجّل لا يستهلك ميزانيةً — لم يُدفع بعد
+  // المؤجّل لا يستهلك ميزانيةً (لم يُدفع)، والموسوم `offBudget` لا يستهلكها
+  // (دُفع لكنّه استثناءٌ لا يُحاسَب عليه) — كلاهما عبر البوابة الواحدة.
+  const paid = budgetSpend(t);
   if (!t.reserveSplits?.length) return paid;
   const reservedPct = Math.min(100, t.reserveSplits.reduce((s, sp) => s + sp.pct, 0));
   return round2((paid * (100 - reservedPct)) / 100);

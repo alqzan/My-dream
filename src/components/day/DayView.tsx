@@ -219,6 +219,11 @@ export function DayView({ date, onClose }: DayViewProps) {
                         مؤجّل — لا يُحتسب
                       </span>
                     )}
+                    {tx.offBudget && !tx.deferred && (
+                      <span className="shrink-0 text-[9px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full">
+                        خارج الميزانيات
+                      </span>
+                    )}
                     <span className={tx.deferred ? "text-gray-400 font-semibold line-through" : "text-red-500 font-semibold"}>
                       {tx.deferred ? "" : "-"}{formatAmount(tx.amount)}
                     </span>

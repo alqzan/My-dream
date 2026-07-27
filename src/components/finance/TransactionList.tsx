@@ -74,6 +74,13 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                     مؤجّل — لا يُحتسب
                   </span>
                 )}
+                {/* مصروفٌ استثنائيّ خارج الميزانيات: صرفٌ حقيقيّ (يبقى بالأحمر
+                    وفي المجاميع) لكنّه لا يخصم من اليومية ولا السقوف. */}
+                {tx.offBudget && !tx.deferred && (
+                  <span className="text-[10px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full shrink-0">
+                    خارج الميزانيات
+                  </span>
+                )}
               </div>
               {tx.note && <div className="text-xs text-gray-400 truncate">{tx.note}</div>}
               <div className="text-xs text-gray-400 mt-0.5">{formatDate(tx.date)}</div>

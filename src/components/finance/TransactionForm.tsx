@@ -9,7 +9,7 @@ import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { PiggyBank, CalendarClock, Link2Off } from "lucide-react";
+import { PiggyBank, CalendarClock, Link2Off, ShieldOff } from "lucide-react";
 
 interface TransactionFormProps {
   onClose: () => void;
@@ -46,6 +46,9 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
   // هل اختار المالك الخطة بيده؟ عندها نكفّ عن الاقتراح التلقائي (بما فيه إلغاؤه).
   const [touchedPlan, setTouchedPlan] = useState(false);
   const [showSplit, setShowSplit] = useState(false); // نموذج «قسّط هذا المصروف»
+  // «تجاهله من الميزانيات»: مصروفٌ حقيقيّ لكنّه استثناءٌ لا يتكرّر (رسوم اختبار…)
+  // فلا يستهلك اليومية ولا السقوف — ويبقى في السجل والإحصائيات كما هو.
+  const [offBudget, setOffBudget] = useState(!!initial?.offBudget);
 
   // Auto-classify from the note while adding a new expense: learned merchant
   // rules first, then keyword guess. Silently pre-selects the section/sub so
@@ -187,6 +190,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
       category: subCat || mainCat,
       note,
       reserveSplits: splits.length ? splits : undefined,
+      offBudget: offBudget || undefined,
     };
     if (initial) {
       updateTransaction(initial.id, tx);
@@ -483,6 +487,46 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
             <CalendarClock size={13} /> شريته بالتقسيط (مؤجّل)؟ قسّطه
           </button>
         )
+      )}
+
+      {/* «تجاهله من الميزانيات» — للمصروف الاستثنائيّ الذي لا يتكرّر (رسوم اختبار،
+          عمرة، حادث): يبقى مصروفاً حقيقياً في السجل والإحصائيات ومجموع الشهر،
+          لكنّه لا يستهلك الميزانية اليومية ولا سقوف الأقسام فتبقى الميزانية
+          مقياساً لصرفك المعتاد. لا يظهر للأصل المؤجّل — ذاك لا يُحتسب أصلاً. */}
+      {initial?.planRole !== "principal" && (
+        <button
+          type="button"
+          onClick={() => setOffBudget((v) => !v)}
+          aria-pressed={offBudget}
+          className={cn(
+            "w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-right press transition-colors",
+            offBudget
+              ? "border-finance bg-finance/5"
+              : "border-gray-200 dark:border-white/10 bg-white dark:bg-white/5"
+          )}
+        >
+          <span className={cn("shrink-0", offBudget ? "text-finance" : "text-gray-400")}>
+            <ShieldOff size={16} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className={cn("block text-xs font-bold", offBudget ? "text-finance" : "text-gray-600 dark:text-gray-300")}>
+              تجاهله من الميزانيات
+            </span>
+            <span className="block text-[10px] text-gray-400 leading-relaxed">
+              {offBudget
+                ? "مصروفٌ استثنائي — يظهر في السجل والإحصائيات ولا يخصم من اليومية ولا السقوف"
+                : "لمصروفٍ لا يتكرّر (رسوم اختبار، سفر طارئ) حتى لا يخرّب حساب الميزانية"}
+            </span>
+          </span>
+          <span
+            className={cn(
+              "shrink-0 w-9 h-5 rounded-full p-0.5 transition-colors",
+              offBudget ? "bg-finance" : "bg-gray-200 dark:bg-white/20"
+            )}
+          >
+            <span className={cn("block w-4 h-4 rounded-full bg-white transition-transform", offBudget && "-translate-x-4")} />
+          </span>
+        </button>
       )}
 
       {/* تفاصيل: التاريخ ومصدر الصرف — مطويّة للمصروف العادي */}

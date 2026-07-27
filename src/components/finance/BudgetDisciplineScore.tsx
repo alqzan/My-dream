@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { Transaction, Budget, DailyBudget, FinanceCategoryDef } from "@/lib/types";
-import { computeDailyBudgetStatus, toDateStr, getMainCategory, budgetLimit, cashOut } from "@/lib/utils";
+import { computeDailyBudgetStatus, toDateStr, getMainCategory, budgetLimit, budgetSpend, cashOut } from "@/lib/utils";
 
 interface BudgetDisciplineScoreProps {
   transactions: Transaction[]; // all-time, for trend + daily budget calc
@@ -28,7 +28,7 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
       // Budgets sit on main categories — sub-category spending counts too.
       const spent = monthTransactions
         .filter((t) => getMainCategory(categories, t.category).id === b.category)
-        .reduce((s, t) => s + cashOut(t), 0);
+        .reduce((s, t) => s + budgetSpend(t), 0);
       return spent <= budgetLimit(b, monthlyIncome);
     }).length;
     budgetScore = Math.round((within / budgets.length) * 40);

@@ -11,7 +11,7 @@ import { PRAYERS } from "./types";
 import {
   getJournalStreak, getPrayerStreak, getMosqueStreak, prayerConsistency,
   computeDailyBudgetStatus, budgetLimit, getMainCategory, reserveBalance,
-  formatAmount, today, toDateStr, parseDate, cashOut, isCashOut,
+  formatAmount, today, toDateStr, parseDate, cashOut, isCashOut, budgetSpend,
 } from "./utils";
 import { installmentsOverview, describeDueIn, daysBetween } from "./installments";
 import { idToSurahAyah, SURAHS, describeRange } from "./quran/meta";
@@ -329,7 +329,7 @@ export function generateInsights(data: InsightData): Insight[] {
     if (!cap) continue;
     const spent = transactions
       .filter((t) => getMainCategory(categories, t.category).id === b.category && t.date.startsWith(monthPrefix))
-      .reduce((s, t) => s + cashOut(t), 0);
+      .reduce((s, t) => s + budgetSpend(t), 0);
     const pct = (spent / cap) * 100;
     const info = categories.find((c) => c.id === b.category);
     const label = info?.label ?? "قسم";

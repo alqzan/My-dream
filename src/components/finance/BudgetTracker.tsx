@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, cashOut, today, formatDate } from "@/lib/utils";
+import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, budgetSpend, today, formatDate } from "@/lib/utils";
 import { spendWindow, cycleDays, inSpendWindow } from "@/lib/budgetCycle";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, X, Pencil, Check } from "lucide-react";
@@ -41,7 +41,8 @@ export function BudgetTracker() {
   const spentByCategory = (category: string) =>
     transactions
       .filter((t) => getMainCategory(categories, t.category).id === category && inSpendWindow(t.date, win))
-      .reduce((s, t) => s + cashOut(t), 0);
+      // السقف يقيس المصروف المعتاد: المؤجّل والموسوم «خارج الميزانيات» لا يستهلكه.
+      .reduce((s, t) => s + budgetSpend(t), 0);
 
   function startEdit(category: string) {
     const b = budgets.find((x) => x.category === category);

@@ -6,7 +6,7 @@ import type {
   DailyBudget, Transaction, ReserveFund, RecurringTransaction, Budget, FinanceCategoryDef,
   InstallmentPlan,
 } from "./types";
-import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr, cashOut } from "./utils";
+import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr, cashOut, budgetSpend } from "./utils";
 import { installmentsOverview, type InstallmentsOverview } from "./installments";
 import { inSpendWindow } from "./budgetCycle";
 
@@ -120,7 +120,7 @@ export function budgetAlerts(
     if (!cap) continue;
     const spent = transactions
       .filter((t) => getMainCategory(categories, t.category).id === b.category && inSpendWindow(t.date, windowStart))
-      .reduce((s, t) => s + cashOut(t), 0);
+      .reduce((s, t) => s + budgetSpend(t), 0);
     if (spent > cap) over++;
     else if ((spent / cap) * 100 >= 80) near++;
   }
