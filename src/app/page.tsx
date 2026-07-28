@@ -20,6 +20,7 @@ import { SmartInsights } from "@/components/dashboard/SmartInsights";
 import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { RamadanCard } from "@/components/dashboard/RamadanCard";
+import { CountdownCard } from "@/components/dashboard/CountdownCard";
 import { DayView } from "@/components/day/DayView";
 import { DayDigestCard } from "@/components/quran/DayDigestCard";
 import { HifzReminder } from "@/components/quran/HifzReminder";
@@ -35,7 +36,7 @@ import { BrandMark } from "@/components/layout/BrandMark";
 
 // Dashboard layout, top to bottom — one card per idea, nothing repeated:
 //   1. التحية والتاريخ (هجري + ميلادي) + مدار السنة
-//   2. صلوات اليوم
+//   2. العدّ التنازلي للأحداث المهمّة (إن وُجدت) ثم صلوات اليوم
 //   3. بطاقة اليوم الموحّدة (السلسلة + المهام الثلاث بروابطها)
 //   4. عاداتي
 //   5. حصيلة الأسبوع
@@ -166,6 +167,11 @@ export default function Dashboard() {
 
       <div className="animate-fade-up stagger-1">
         <RamadanCard />
+      </div>
+
+      {/* العدّ التنازلي للأحداث المهمّة — يختفي كلياً حين لا حدثَ معروضاً. */}
+      <div className="animate-fade-up stagger-1">
+        <CountdownCard />
       </div>
 
       <Card className="animate-fade-up stagger-1">

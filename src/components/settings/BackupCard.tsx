@@ -171,6 +171,7 @@ export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
     dailyBudget: g("dailyBudget", null),
     monthlyIncome: g("monthlyIncome", null),
     futureLetters: g("futureLetters", []),
+    countdownEvents: g("countdownEvents", []),
     salaryDay: g("salaryDay", 27),
     budgetWindow: g("budgetWindow", "salary"),
     lastSalaryConfirm: g("lastSalaryConfirm", null),

@@ -514,6 +514,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // الرسائل المستقبلية: فتحُ رسالةٍ (opened/openedDate) تعديلٌ على عنصرٍ قائم
     // — يفوز بطابعه فلا تعود «مغلقة» من نسخةٍ قديمة على الجهاز الآخر.
     futureLetters: byIdNewer(primary.futureLetters, secondary.futureLetters),
+    // الأحداث المهمّة: عنصرٌ بمعرّفٍ وطابع تعديل — تعديلُ تاريخٍ على جهاز لا
+    // يضيع لأن ختم مستند الجهاز الآخر أحدث، والحذف يبقى شاهداً فلا يعود.
+    countdownEvents: byIdNewer(primary.countdownEvents ?? [], secondary.countdownEvents ?? []),
     salaryDay: pickSingleton("salaryDay", primary.salaryDay),
     budgetWindow: pickSingleton("budgetWindow", primary.budgetWindow ?? secondary.budgetWindow ?? "salary"),
     lastSalaryConfirm: pickSingleton("lastSalaryConfirm", primary.lastSalaryConfirm),

@@ -375,6 +375,22 @@ export interface DailyBudget {
 }
 
 // رسالة لنفسك المستقبلية — تُقفل حتى تاريخ التسليم ثم تُفتح باحتفال.
+// ===================== الأحداث المهمّة (العدّ التنازلي) =====================
+// حدثٌ له تاريخٌ واحد يُعدّ إليه: اختبار، ولادة، سفر، موعد. لا تكرار ولا تنبيه
+// — بطاقةٌ تقول «كم بقي» وحسب. `date` مفتاحٌ محليّ YYYY-MM-DD (لا ISO/UTC، فهو
+// يومٌ في تقويم المالك لا لحظةٌ زمنية)، و`allDay` ليست حقلاً لأن كلّ حدثٍ يوم.
+export interface CountdownEvent {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  emoji?: string;
+  // يبقى معروضاً بعد مروره كـ«مضى كذا يوماً» بدل أن يختفي — لحظةُ ميلادٍ مثلاً
+  // يريد المالك عدّ الأيام منها لا إليها. الافتراضي: يُخفى بعد يومٍ من مروره.
+  countUpAfter?: boolean;
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — كبقيّة العناصر المعرّفة بـid.
+  updatedAt?: number;
+}
+
 export interface FutureLetter {
   id: string;
   writtenDate: string; // YYYY-MM-DD
@@ -542,6 +558,9 @@ export interface AppData {
   dailyBudget: DailyBudget | null;
   monthlyIncome: number | null; // shared by %-based budgets and the daily budget editor
   futureLetters: FutureLetter[];
+  // الأحداث المهمّة بعدّها التنازلي (اختبار، ولادة، سفر) — عناصر بمعرّفات
+  // وأختام تعديل، كبقيّة المجموعات. اختياريّ فبياناتٌ قديمة بلا الحقل تعمل.
+  countdownEvents?: CountdownEvent[];
   salaryDay: number; // يوم نزول الراتب (افتراضياً 27) — يظهر بعده سؤال «نزل الراتب؟»
   // نافذة حساب سقوف التصنيفات: «دورة الراتب» (الافتراضي — تتصفّر عند تأكيد
   // «نزل الراتب») أو «الشهر الميلادي» (من أوّل الشهر إلى آخره). إعدادٌ مفرد

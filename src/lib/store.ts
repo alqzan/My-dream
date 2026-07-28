@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, DailyBudget,
-  ReserveFund, ReserveDeposit, FutureLetter, InstallmentPlan, InstallmentRole, Asset,
+  ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode,
 } from "./types";
@@ -23,7 +23,7 @@ import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, sugge
 const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
-  "quranReflections", "installmentPlans", "assets",
+  "quranReflections", "installmentPlans", "assets", "countdownEvents",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -220,6 +220,11 @@ interface AppStore extends AppData {
   sweepToReserve: (fundId: string, amount: number, note?: string) => void;
 
   // رسائل لنفسك المستقبلية
+  // الأحداث المهمّة (العدّ التنازلي) — إضافة/تعديل/حذف كبقيّة العناصر
+  // المعرّفة بـid: غلاف `set` يختم `updatedAt` ويكتب شاهد الحذف تلقائياً.
+  addCountdownEvent: (event: CountdownEvent) => void;
+  updateCountdownEvent: (id: string, updates: Partial<CountdownEvent>) => void;
+  deleteCountdownEvent: (id: string) => void;
   addFutureLetter: (letter: FutureLetter) => void;
   openFutureLetter: (id: string) => void;
   deleteFutureLetter: (id: string) => void;
@@ -504,6 +509,7 @@ export const useAppStore = create<AppStore>()(
       dailyBudget: null,
       monthlyIncome: null,
       futureLetters: [],
+      countdownEvents: [],
       salaryDay: 27,
       budgetWindow: "salary",
       lastSalaryConfirm: null,
@@ -1313,6 +1319,21 @@ export const useAppStore = create<AppStore>()(
           };
         }),
 
+      addCountdownEvent: (event) =>
+        set((s) => ({ countdownEvents: [event, ...(s.countdownEvents ?? [])] })),
+
+      updateCountdownEvent: (id, updates) =>
+        set((s) => ({
+          countdownEvents: (s.countdownEvents ?? []).map((e) =>
+            e.id === id ? { ...e, ...updates } : e
+          ),
+        })),
+
+      deleteCountdownEvent: (id) =>
+        set((s) => ({
+          countdownEvents: (s.countdownEvents ?? []).filter((e) => e.id !== id),
+        })),
+
       addFutureLetter: (letter) =>
         set((s) => ({ futureLetters: [letter, ...s.futureLetters] })),
 
@@ -1788,6 +1809,7 @@ export const useAppStore = create<AppStore>()(
           dailyBudget: data.dailyBudget ?? null,
           monthlyIncome: data.monthlyIncome ?? null,
           futureLetters: data.futureLetters ?? [],
+          countdownEvents: data.countdownEvents ?? [],
           salaryDay: data.salaryDay ?? 27,
           budgetWindow: data.budgetWindow ?? "salary",
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
@@ -1822,6 +1844,7 @@ export const useAppStore = create<AppStore>()(
           dailyBudget: s.dailyBudget,
           monthlyIncome: s.monthlyIncome,
           futureLetters: s.futureLetters,
+          countdownEvents: s.countdownEvents ?? [],
           salaryDay: s.salaryDay,
           budgetWindow: s.budgetWindow ?? "salary",
           lastSalaryConfirm: s.lastSalaryConfirm,

@@ -1,6 +1,7 @@
 "use client";
 import { BackupCard } from "@/components/settings/BackupCard";
 import { BudgetWindowCard } from "@/components/settings/BudgetWindowCard";
+import { EventsCard } from "@/components/settings/EventsCard";
 import { DataHealthCard } from "@/components/settings/DataHealthCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
@@ -17,9 +18,13 @@ export default function SettingsPage() {
     <div className="page-shell">
       <div className="animate-fade-up">
         <h1 className="page-title">الإعدادات</h1>
-        <p className="page-subtitle">حساب السقوف، النسخ الاحتياطي، القفل، ومفتاح المزامنة</p>
+        <p className="page-subtitle">الأحداث المهمّة، حساب السقوف، النسخ الاحتياطي، القفل، ومفتاح المزامنة</p>
       </div>
 
+      {/* مرساةُ الرابط القادم من بطاقة الرئيسية (/settings#events). */}
+      <div id="events" className="animate-fade-up stagger-1 scroll-mt-20">
+        <EventsCard />
+      </div>
       <div className="animate-fade-up stagger-1">
         <BudgetWindowCard />
       </div>

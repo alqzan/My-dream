@@ -16,7 +16,7 @@ export function hasData(d: Partial<AppData>): boolean {
     arr(d.readingLogs) || arr(d.recurring) || arr(d.budgets) ||
     arr(d.reserves) || arr(d.prayerLogs) || arr(d.futureLetters) ||
     arr(d.quranReflections) || arr(d.quranWird) || arr(d.installmentPlans) ||
-    arr(d.assets)
+    arr(d.assets) || arr(d.countdownEvents)
   ) return true;
   if ((d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0)) return true;
   const hifz = d.quranHifz;
@@ -59,6 +59,7 @@ export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean
     hasNewId(local.recurring, cloud.recurring) ||
     hasNewId(local.installmentPlans ?? [], cloud.installmentPlans) ||
     hasNewId(local.assets ?? [], cloud.assets) ||
+    hasNewId(local.countdownEvents ?? [], cloud.countdownEvents) ||
     hasNewId(local.reserves, cloud.reserves) ||
     hasNewId(local.habits, cloud.habits) ||
     hasNewId(local.categories, cloud.categories) ||
