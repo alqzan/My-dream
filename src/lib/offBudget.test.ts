@@ -6,8 +6,9 @@
 import { describe, it, expect } from "vitest";
 import {
   cashOut, isCashOut, budgetSpend, countsInBudget, dailyShare, reserveShare,
-  computeDailyBudgetStatus, budgetWarningFor, today,
+  computeDailyBudgetStatus, today,
 } from "./utils";
+import { budgetWarningFor } from "./budgetStatus";
 import { buildFinanceOverview, budgetAlerts, biggestCashExpense } from "./financeOverview";
 import { aggregateDay } from "./dayAggregator";
 import { generateInsights } from "./insights";

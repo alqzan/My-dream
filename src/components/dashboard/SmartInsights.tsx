@@ -7,6 +7,7 @@ import {
   filterInsights, loadPrefs, snoozeInsight, dismissInsight, actInsight, type InsightPrefs,
 } from "@/lib/insightPrefs";
 import { today } from "@/lib/utils";
+import { spendWindow } from "@/lib/budgetCycle";
 import { Compass, X, Clock, ChevronLeft } from "lucide-react";
 
 const TONE: Record<InsightTone, string> = {
@@ -28,9 +29,17 @@ export function SmartInsights() {
     transactions, journalEntries, readingLogs, books, habits,
     budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
     installmentPlans, quranHifz, quranKhatma,
+    budgetWindow, lastSalaryConfirm, salaryDay,
   } = useAppStore();
   const [prefs, setPrefs] = useState<InsightPrefs>({});
   useEffect(() => { setPrefs(loadPrefs()); }, []);
+
+  // نافذة حساب السقوف — **نفس** ما تستعمله صفحة الأموال وBudgetTracker
+  // والتنبيه الحيّ. تُمرَّر للمحرّك فلا يخترع البوصلةُ مدىً خاصاً بها.
+  const spendWindowStart = useMemo(
+    () => spendWindow(budgetWindow, lastSalaryConfirm, salaryDay ?? 27, today()),
+    [budgetWindow, lastSalaryConfirm, salaryDay]
+  );
 
   const all = useMemo(() => {
     // التوصيات إضافة تحسينية — أي خلل فيها يجب ألا يسقط الصفحة كلها.
@@ -42,12 +51,13 @@ export function SmartInsights() {
         prayerLogs: prayerLogs ?? [], dailyBudget: dailyBudget ?? null, monthlyIncome: monthlyIncome ?? null,
         futureLetters: futureLetters ?? [], installmentPlans: installmentPlans ?? [],
         quranHifz: quranHifz ?? null, quranKhatma: quranKhatma ?? null,
+        spendWindowStart,
         lastBackup: typeof window !== "undefined" ? localStorage.getItem("madar-last-backup") : null,
       });
     } catch {
       return [];
     }
-  }, [transactions, journalEntries, readingLogs, books, habits, budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters, installmentPlans, quranHifz, quranKhatma]);
+  }, [transactions, journalEntries, readingLogs, books, habits, budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters, installmentPlans, quranHifz, quranKhatma, spendWindowStart]);
 
   const visible = useMemo(() => filterInsights(all, prefs, today()), [all, prefs]);
 
@@ -99,6 +109,11 @@ function PrimaryCard({ ins, onSnooze, onDismiss, onAct }: {
             <span className="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">{ins.title}</span>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300 mt-1">{ins.body}</p>
+          {/* سطر السند: على أيّ مدىً حُسب الرقم — يجعل التوصية قابلةً للتحقّق
+              بدل أن تُقرأ كإشعارٍ قديمٍ لا يُعرف مصدره. */}
+          {ins.reason && (
+            <p className="text-[10px] leading-relaxed text-gray-400 dark:text-gray-500 mt-1">{ins.reason}</p>
+          )}
         </div>
         {ins.dismissible && (
           <button onClick={() => onDismiss(ins.dedupeKey)} aria-label="إخفاء" className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-black/5 dark:hover:bg-white/5 press">
@@ -140,6 +155,9 @@ function SecondaryRow({ ins, onDismiss, onAct }: { ins: Insight; onDismiss: (k: 
       <span className="text-base shrink-0">{ins.icon}</span>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium leading-relaxed text-gray-700 dark:text-gray-200 line-clamp-2">{ins.body}</p>
+        {ins.reason && (
+          <p className="text-[10px] leading-relaxed text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{ins.reason}</p>
+        )}
       </div>
     </>
   );

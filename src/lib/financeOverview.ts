@@ -6,9 +6,9 @@ import type {
   DailyBudget, Transaction, ReserveFund, RecurringTransaction, Budget, FinanceCategoryDef,
   InstallmentPlan,
 } from "./types";
-import { computeDailyBudgetStatus, reserveBalance, nextDueDate, budgetLimit, getMainCategory, parseDate, toDateStr, cashOut, budgetSpend } from "./utils";
+import { computeDailyBudgetStatus, reserveBalance, nextDueDate, parseDate, toDateStr, cashOut } from "./utils";
 import { installmentsOverview, type InstallmentsOverview } from "./installments";
-import { inSpendWindow } from "./budgetCycle";
+import { budgetStatuses } from "./budgetStatus";
 
 export interface NearestCommitment {
   id: string;
@@ -103,8 +103,8 @@ export function nearestCommitment(
   )[0];
 }
 
-// عدد السقوف المتجاوزة/القريبة هذا الشهر — نفس منطق insights/BudgetTracker
-// (budgetLimit + getMainCategory + عتبة 80%). للشارة والملخّص فقط.
+// عدد السقوف المتجاوزة/القريبة داخل النافذة — عدٌّ محضٌ على `budgetStatuses`
+// (المصدر الوحيد في `budgetStatus.ts`). للشارة والملخّص فقط.
 export function budgetAlerts(
   budgets: Budget[],
   transactions: Transaction[],
@@ -113,18 +113,11 @@ export function budgetAlerts(
   // شهرٌ ميلادي «YYYY-MM» أو بدايةُ دورةِ راتب «YYYY-MM-DD» (راجع budgetCycle.ts)
   windowStart: string
 ): { over: number; near: number } {
-  let over = 0;
-  let near = 0;
-  for (const b of budgets) {
-    const cap = budgetLimit(b, monthlyIncome);
-    if (!cap) continue;
-    const spent = transactions
-      .filter((t) => getMainCategory(categories, t.category).id === b.category && inSpendWindow(t.date, windowStart))
-      .reduce((s, t) => s + budgetSpend(t), 0);
-    if (spent > cap) over++;
-    else if ((spent / cap) * 100 >= 80) near++;
-  }
-  return { over, near };
+  const rows = budgetStatuses(budgets, transactions, categories, monthlyIncome, windowStart);
+  return {
+    over: rows.filter((r) => r.state === "over").length,
+    near: rows.filter((r) => r.state === "near").length,
+  };
 }
 
 export function buildFinanceOverview(data: {

@@ -2,7 +2,8 @@
 // هذا الاختبار يمسك الحساباتَ النقيّة كلّها عند بوابةٍ واحدة (`cashOut`)، فلو
 // أُضيف تجميعٌ جديد يقرأ `t.amount` مباشرةً ظهر الخلل هنا لا في جيب المالك.
 import { describe, it, expect } from "vitest";
-import { cashOut, isCashOut, dailyShare, reserveShare, computeDailyBudgetStatus, budgetWarningFor } from "./utils";
+import { cashOut, isCashOut, dailyShare, reserveShare, computeDailyBudgetStatus } from "./utils";
+import { budgetWarningFor } from "./budgetStatus";
 import { buildFinanceOverview, budgetAlerts, biggestCashExpense } from "./financeOverview";
 import { aggregateDay } from "./dayAggregator";
 import { generateInsights } from "./insights";
@@ -116,6 +117,6 @@ describe("بوصلة مدار", () => {
     expect(generateInsights(data).some((i) => i.dedupeKey.startsWith("finance:budget-"))).toBe(false);
     // ولو كان مصروفاً عادياً لظهر التجاوز.
     const cash = { ...data, transactions: [{ ...principal, deferred: undefined }] };
-    expect(generateInsights(cash).some((i) => i.dedupeKey === "finance:budget-over:cat-x")).toBe(true);
+    expect(generateInsights(cash).some((i) => i.dedupeKey.startsWith("finance:budget-over:cat-x:"))).toBe(true);
   });
 });

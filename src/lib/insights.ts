@@ -10,9 +10,10 @@ import type {
 import { PRAYERS } from "./types";
 import {
   getJournalStreak, getPrayerStreak, getMosqueStreak, prayerConsistency,
-  computeDailyBudgetStatus, budgetLimit, getMainCategory, reserveBalance,
-  formatAmount, today, toDateStr, parseDate, cashOut, isCashOut, budgetSpend,
+  computeDailyBudgetStatus, getMainCategory, reserveBalance,
+  formatAmount, today, toDateStr, parseDate, cashOut, isCashOut,
 } from "./utils";
+import { budgetStatuses, describeSpendWindow } from "./budgetStatus";
 import { installmentsOverview, describeDueIn, daysBetween } from "./installments";
 import { idToSurahAyah, SURAHS, describeRange } from "./quran/meta";
 import { plannedPortion, openMistakes, testDue, mistakeStreak, MISTAKE_MASTERY } from "./quran/hifz";
@@ -52,6 +53,10 @@ interface InsightData {
   habits: Habit[];
   budgets: Budget[];
   categories: FinanceCategoryDef[];
+  // نافذة حساب السقوف كما تحسبها `spendWindow()` من إعدادات المالك: بدايةُ دورة
+  // راتب «YYYY-MM-DD» (الافتراضي) أو شهرٌ ميلادي «YYYY-MM». تُمرَّر ولا تُستنتَج
+  // هنا حتى تبقى البوصلة على **نفس** نافذة صفحة الأموال دائماً.
+  spendWindowStart?: string;
   reserves: ReserveFund[];
   prayerLogs: PrayerLog[];
   dailyBudget: DailyBudget | null;
@@ -96,6 +101,8 @@ export function generateInsights(data: InsightData): Insight[] {
     budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
     installmentPlans, quranHifz, quranKhatma, lastBackup,
   } = data;
+  // بلا نافذةٍ صريحة نبقى على الشهر الميلادي (السلوك القديم) — الواجهة تمرّرها.
+  const spendWindowStart = data.spendWindowStart || monthPrefix;
 
   /* ---------- القرآن (يقود «خطوتك الآن» حين يكون هناك محفوظ) ---------- */
 
@@ -324,26 +331,31 @@ export function generateInsights(data: InsightData): Insight[] {
     });
   }
 
-  for (const b of budgets) {
-    const cap = budgetLimit(b, monthlyIncome);
-    if (!cap) continue;
-    const spent = transactions
-      .filter((t) => getMainCategory(categories, t.category).id === b.category && t.date.startsWith(monthPrefix))
-      .reduce((s, t) => s + budgetSpend(t), 0);
-    const pct = (spent / cap) * 100;
-    const info = categories.find((c) => c.id === b.category);
-    const label = info?.label ?? "قسم";
-    if (spent > cap) {
+  // السقوف: **نفس نافذة الحساب التي تراها صفحة الأموال** (دورة الراتب افتراضياً،
+  // أو الشهر الميلادي إن اختاره المالك). كانت البوصلة وحدها تجمع على الشهر
+  // الميلادي فتُنذر بـ«وصلت 97% من أساسيات» في اليوم الثاني من دورةٍ صرفُها 209
+  // ريالاً — لأنها كانت تعدّ صرف الدورة المنتهية معه، بينما الصفحة تقول «ضمن
+  // السقوف». الحساب الآن من `budgetStatuses` وحدها، ولكلّ تحذيرٍ سطرُ سندٍ يذكر
+  // مداه (`reason`) فلا يُقرأ الرقم مجهولَ المصدر.
+  const windowReason = describeSpendWindow(spendWindowStart, todayStr);
+  for (const st of budgetStatuses(budgets, transactions, categories, monthlyIncome, spendWindowStart)) {
+    if (st.state === "over") {
       add({
-        domain: "finance", dedupeKey: `finance:budget-over:${b.category}`, icon: "📛", tone: "warning", priority: 85,
-        title: `تجاوز «${label}»`, href: "/finance#budgets", actionLabel: "راجِع السقوف",
-        body: `تجاوزت سقف «${label}» بـ ${formatAmount(spent - cap)} ر.س هذا الشهر.`,
+        // المفتاح مقيَّدٌ بالنافذة: إخفاء تحذير هذه الدورة لا يُسكِت الدورة
+        // القادمة (نفس علاج مفتاح القسط المرتبط بموعده).
+        domain: "finance", dedupeKey: `finance:budget-over:${st.category}:${spendWindowStart}`,
+        icon: "📛", tone: "warning", priority: 85,
+        title: `تجاوز «${st.label}»`, href: "/finance#budgets", actionLabel: "راجِع السقوف",
+        body: `تجاوزت سقف «${st.label}» بـ ${formatAmount(-st.remaining)} ر.س (${formatAmount(st.spent)} من ${formatAmount(st.cap)}).`,
+        reason: windowReason,
       });
-    } else if (pct >= 80) {
+    } else if (st.state === "near") {
       add({
-        domain: "finance", dedupeKey: `finance:budget-near:${b.category}`, icon: "⚠️", tone: "warning", priority: 75,
-        title: `اقتربت من «${label}»`, href: "/finance#budgets", actionLabel: "راجِع السقوف",
-        body: `وصلت ${Math.round(pct)}% من سقف «${label}» — باقي ${formatAmount(cap - spent)} ر.س فقط.`,
+        domain: "finance", dedupeKey: `finance:budget-near:${st.category}:${spendWindowStart}`,
+        icon: "⚠️", tone: "warning", priority: 75,
+        title: `اقتربت من «${st.label}»`, href: "/finance#budgets", actionLabel: "راجِع السقوف",
+        body: `وصلت ${Math.round(st.pct)}% من سقف «${st.label}» — باقي ${formatAmount(st.remaining)} ر.س فقط.`,
+        reason: windowReason,
       });
     }
   }
@@ -373,6 +385,8 @@ export function generateInsights(data: InsightData): Insight[] {
         domain: "finance", dedupeKey: "finance:cat-rise", icon: "📈", tone: "warning", priority: 65,
         title: `صرف «${info?.label ?? "قسم"}» يرتفع`, href: "/finance#budgets", actionLabel: "راجِع القسم",
         body: `صرفك على «${info?.label ?? "قسم"}» ارتفع ${Math.round(((amount - prev) / prev) * 100)}% عن نفس الفترة من الشهر الماضي (${formatAmount(amount)} مقابل ${formatAmount(prev)}).`,
+        // مقارنةُ شهرٍ بشهر — مدىً غير مدى السقوف عمداً، فنُصرّح به.
+        reason: `مقارنة أوّل ${dayOfMonth} يوماً من ${monthPrefix} بمثلها من ${lastPrefix}.`,
       });
       break;
     }

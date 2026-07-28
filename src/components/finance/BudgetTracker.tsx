@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { formatAmount, getCategoryInfo, getMainCategory, budgetLimit, cn, budgetSpend, today, formatDate } from "@/lib/utils";
-import { spendWindow, cycleDays, inSpendWindow } from "@/lib/budgetCycle";
+import { formatAmount, getCategoryInfo, budgetLimit, cn, today, formatDate } from "@/lib/utils";
+import { spendWindow, cycleDays } from "@/lib/budgetCycle";
+import { budgetStatuses } from "@/lib/budgetStatus";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, X, Pencil, Check } from "lucide-react";
 
@@ -37,12 +38,10 @@ export function BudgetTracker() {
   const win = spendWindow(budgetWindow, lastSalaryConfirm, salaryDay ?? 27, todayStr);
   const daysIn = byMonth ? Number(todayStr.slice(8)) : cycleDays(win, todayStr);
 
-  // A budget cap sits on a main category; spending in its subs counts too.
-  const spentByCategory = (category: string) =>
-    transactions
-      .filter((t) => getMainCategory(categories, t.category).id === category && inSpendWindow(t.date, win))
-      // السقف يقيس المصروف المعتاد: المؤجّل والموسوم «خارج الميزانيات» لا يستهلكه.
-      .reduce((s, t) => s + budgetSpend(t), 0);
+  // حالة كل سقفٍ من المصدر الوحيد (`budgetStatus.ts`) — نفس ما تقرأه شارة
+  // الصفحة وبوصلة مدار والتنبيه الحيّ، فلا تختلف شاشتان في الرقم نفسه.
+  const statuses = budgetStatuses(budgets, transactions, categories, monthlyIncome, win);
+  const statusOf = (category: string) => statuses.find((s) => s.category === category);
 
   function startEdit(category: string) {
     const b = budgets.find((x) => x.category === category);
@@ -82,7 +81,7 @@ export function BudgetTracker() {
   }
 
   const availableCats = categories.filter((c) => !c.parentId && !budgets.some((b) => b.category === c.id));
-  const anyOver = budgets.some((b) => spentByCategory(b.category) > budgetLimit(b, monthlyIncome));
+  const anyOver = statuses.some((s) => s.state === "over");
 
   return (
     <div className="space-y-3">
@@ -195,11 +194,12 @@ export function BudgetTracker() {
       {budgets.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {budgets.map((b) => {
-            const cap = budgetLimit(b, monthlyIncome);
-            const spent = spentByCategory(b.category);
+            const st = statusOf(b.category);
+            const cap = st?.cap ?? budgetLimit(b, monthlyIncome);
+            const spent = st?.spent ?? 0;
             const pctFill = cap > 0 ? Math.min((spent / cap) * 100, 100) : 0;
-            const over = cap > 0 && spent > cap;
-            const near = !over && pctFill >= 80;
+            const over = st?.state === "over";
+            const near = st?.state === "near";
             const info = getCategoryInfo(categories, b.category);
             const barColor = over ? "#e05555" : near ? "#e07b39" : info.color;
             const remaining = cap - spent;

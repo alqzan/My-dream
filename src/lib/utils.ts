@@ -518,34 +518,10 @@ export function budgetLimit(b: Budget, monthlyIncome: number | null): number {
   return b.limit ?? 0;
 }
 
-// Live budget check for a category (rolls up to its main): returns a warning
-// once this month's spend hits 80% of the cap, or null. Used to alert the
-// moment an expense is added, not just passively on the dashboard.
-export function budgetWarningFor(
-  categoryId: string,
-  budgets: Budget[],
-  transactions: Transaction[],
-  categories: FinanceCategoryDef[],
-  monthlyIncome: number | null,
-  // نافذة الحساب: شهرٌ ميلادي «YYYY-MM» (الافتراضي القديم) أو بدايةُ دورة راتب
-  // «YYYY-MM-DD» فيُحسب كل ما بعدها. راجع budgetCycle.ts.
-  windowStart?: string
-): { label: string; over: boolean; pct: number; remaining: number } | null {
-  const mainId = getMainCategory(categories, categoryId).id;
-  const b = budgets.find((x) => x.category === mainId);
-  if (!b) return null;
-  const cap = budgetLimit(b, monthlyIncome);
-  if (!cap) return null;
-  const win = windowStart || today().slice(0, 7);
-  const inWindow = (d: string) => (win.length === 7 ? d.startsWith(win) : d >= win);
-  const spent = transactions
-    .filter((t) => inWindow(t.date) && getMainCategory(categories, t.category).id === mainId)
-    .reduce((s, t) => s + budgetSpend(t), 0);
-  const pct = (spent / cap) * 100;
-  if (pct < 80) return null;
-  const info = categories.find((c) => c.id === mainId);
-  return { label: info?.label ?? "قسم", over: spent > cap, pct: Math.round(pct), remaining: cap - spent };
-}
+// التنبيه الحيّ لسقف التصنيف (`budgetWarningFor`) انتقل إلى `budgetStatus.ts`
+// مع بقيّة حساب السقوف: كان هنا نسخةٌ ثانية من «كم صُرف داخل النافذة»، ولا
+// يستطيع `utils.ts` استيراد `budgetCycle.ts` (دَوْرٌ في الاستيراد) فكانت تعيد
+// كتابة `inSpendWindow` بيدها. المصدر الوحيد الآن `budgetStatuses`.
 
 // ===================== الصرف النقديّ فعلاً =====================
 // **البوابة الوحيدة** لسؤال «كم خرج من الجيب في هذه المعاملة؟». معاملةٌ مؤجّلة
