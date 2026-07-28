@@ -100,7 +100,25 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setLastSyncedAt(Date.now());
     };
 
+    // مستمعُ إخفاءِ الصفحة (يُسجَّل بعد تعريف attemptSave أدناه) — يُنظَّف مع الأثر.
+    let unsubFlush: () => void = () => {};
+
     (async () => {
+      // ===== انتظر ترطيب المتجر من IndexedDB قبل أيّ قرار مزامنة =====
+      // `persist` غير متزامن: من دون هذا الانتظار تقرأ المزامنة `snapshot()` وهي
+      // الحالة الافتراضية، فيبدو الجهاز «فارغاً» (`hasData` = false) فيتبنّى
+      // السحابة كاملة، ثمّ ينتهي الترطيب فيستبدل الحالةَ بنسخة الجهاز القديمة —
+      // فتختفي عمليةٌ سُجّلت على جهازٍ آخر. والأسوأ: `lastCloudUpdatedRef` و
+      // `lastRevisionRef` صارا لتوّهما قيمَ السحابة، فشرط إعادة الدمج في
+      // `pushLocal` لا يتحقّق، فتُكتب اللقطة القديمة بـ`merge:false` وتُمحى
+      // العملية من السحابة أيضاً. الانتظار هنا يسدّ الباب من أصله.
+      if (!useAppStore.persist.hasHydrated()) {
+        await new Promise<void>((resolve) => {
+          const un = useAppStore.persist.onFinishHydration(() => { un(); resolve(); });
+        });
+      }
+      if (cancelled) return;
+
       // Reuse any Storage URLs we already hold locally so hydrate doesn't
       // re-fetch every media download URL from scratch.
       primeUrlCache(snapshot().journalEntries);
@@ -252,6 +270,29 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           });
       };
 
+      // ===== إفراغ الحفظ المؤجّل عند إخفاء الصفحة =====
+      // الحفظ مؤجّل 1500ms. على iOS يُجمَّد التبويب فور الانتقال لتطبيقٍ آخر أو
+      // إقفال الشاشة، فتعديلٌ سُجّل قبل لحظة **لا يغادر الجهاز أبداً** — وهذا
+      // بالضبط شكلُ «سجّلتُ عمليةً بالجوال ولم أجدها على الآيباد». عند أول إشارة
+      // إخفاء نُلغي المؤقّت ونحفظ فوراً بدل انتظار المهلة. `visibilitychange`
+      // هي الإشارة الموثوقة على iOS (لا `beforeunload`)، و`pagehide` تغطّي
+      // إغلاق التبويب/التنقّل.
+      const flushPendingSave = () => {
+        if (!saveTimer.current && !retryTimer.current) return; // لا شيء معلّق
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+        if (retryTimer.current) { clearTimeout(retryTimer.current); retryTimer.current = null; }
+        attemptSave();
+      };
+      const onHide = () => {
+        if (document.visibilityState === "hidden") flushPendingSave();
+      };
+      document.addEventListener("visibilitychange", onHide);
+      window.addEventListener("pagehide", flushPendingSave);
+      unsubFlush = () => {
+        document.removeEventListener("visibilitychange", onHide);
+        window.removeEventListener("pagehide", flushPendingSave);
+      };
+
       // 2) Live updates coming from the owner's other devices.
       unsubSnap = subscribeUserMain(space, (cloudMain) => {
         if (!cloudMain) return;
@@ -317,6 +358,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       unsubStore();
       unsubSnap();
+      unsubFlush();
       if (saveTimer.current) clearTimeout(saveTimer.current);
       if (retryTimer.current) clearTimeout(retryTimer.current);
     };
