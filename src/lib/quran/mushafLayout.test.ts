@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import {
   buildPage, countWords, chunkOf, linesOnPage, pageFontSize, ayahRangeOf,
-  loadPageLines, PAGE_WIDTH, BASE_FONT_SIZE, CHUNK_COUNT, PAGES_PER_CHUNK, SURA_HEADER, BASMALA,
+  loadPageLines, setChunkLoader, clearChunkCache,
+  PAGE_WIDTH, BASE_FONT_SIZE, CHUNK_COUNT, PAGES_PER_CHUNK, SURA_HEADER, BASMALA,
 } from "./mushafLayout";
 import { pageRange, idToPage, TOTAL_PAGES, TOTAL_AYAT, SURAHS } from "./meta";
 import ayahText from "./ayahText.json";
@@ -62,11 +63,80 @@ describe("buildPage", () => {
   });
 });
 
+// ===================== التعافي من فشل إحضار الحزمة =====================
+// كان الوعد المرفوض يُحفظ في خريطة الحِزَم، فانقطاعةٌ واحدة تُبقي الرفض إلى
+// نهاية الجلسة: كلُّ وجهٍ من تلك الحزمة يفشل بعدها فوراً بلا محاولةٍ ثانية،
+// فيبقى القارئ على هيكلٍ فارغ لا مخرج منه ولو عادت الشبكة.
+describe("إحضارُ الحزمة يتعافى", () => {
+  afterEach(() => { setChunkLoader(null); clearChunkCache(); });
+
+  it("تفشل المحاولة الأولى ثمّ تنجح الثانية", async () => {
+    clearChunkCache();
+    let calls = 0;
+    setChunkLoader(async () => {
+      if (++calls === 1) throw new Error("network");
+      return { "3": [[1, [[8, "الم", 1]]]] };
+    });
+
+    await expect(loadPageLines(3)).rejects.toThrow("network");
+    // الرفض نُزع من الخريطة، فالمحاولة الثانية تُحضر الحزمة فعلاً.
+    const lines = await loadPageLines(3);
+    expect(calls).toBe(2);
+    expect(lines).not.toBeNull();
+    expect(lines![0].runs[0].text).toBe("الم");
+  });
+
+  it("لا يُعيد الطلبَ بعد النجاح (الحزمة تُقرأ مرّةً وتُشارَك)", async () => {
+    clearChunkCache();
+    let calls = 0;
+    setChunkLoader(async () => {
+      calls++;
+      return { "3": [[1, [[8, "الم", 1]]]], "4": [[1, [[9, "ذلك", 2]]]] };
+    });
+    await loadPageLines(3);
+    await loadPageLines(4); // الوجه نفسه من الحزمة نفسها
+    await loadPageLines(3);
+    expect(calls).toBe(1);
+  });
+
+  it("طلبان متزامنان على حزمةٍ فاشلة يشتركان في الرفض ثمّ يتعافيان معاً", async () => {
+    clearChunkCache();
+    let calls = 0;
+    setChunkLoader(async () => {
+      if (++calls === 1) throw new Error("network");
+      return { "3": [[1, [[8, "الم", 1]]]], "4": [[1, [[9, "ذلك", 2]]]] };
+    });
+    const [a, b] = await Promise.allSettled([loadPageLines(3), loadPageLines(4)]);
+    expect(a.status).toBe("rejected");
+    expect(b.status).toBe("rejected");
+    expect(calls).toBe(1); // طلبٌ واحد لا اثنان
+    expect(await loadPageLines(3)).not.toBeNull();
+    expect(calls).toBe(2);
+  });
+});
+
 // ===================== انطباق التخطيط على بنية المصحف =====================
 // هذه الاختبارات تقرأ البيانات المولَّدة كلّها: هي الحارس على أنّ ما وُلِّد مرّةً
 // لا ينحرف عمّا يفترضه باقي التطبيق (مدى كلّ وجه، وترقيم الآيات، وترتيب
 // الكلمات الذي حُفظت به مواضعُ الخطأ عند المستخدم).
+//
+// **المسحُ الشامل ومهلتُه**: أربعةُ اختباراتٍ تمرّ على 604 أوجه. الكلفة الحقيقية
+// ليست الحساب بل إحضارُ الحِزَم الإحدى والثلاثين: كانت تُحضر **بالتتابع** داخل
+// الحلقة (`await` لكلّ وجه)، فبلغ الاختبارُ الأوّل 4.85 ثانية من مهلة الخمس
+// الافتراضية وسقط مرّةً بفارق عشرة أجزاء من الألف. هنا تُحضر الحِزَم كلّها
+// **دفعةً واحدة** في `beforeAll`، فتصير الحلقات بعدها حساباً محضاً على ذاكرةٍ
+// دافئة. والمهلةُ المحلّية (15 ثانية) حارسٌ لآلة CI البطيئة — ولم تُرفع مهلةُ
+// Vitest العامّة، فيبقى كلُّ اختبارٍ آخر تحت خمس ثوانٍ كما ينبغي.
+const SWEEP_TIMEOUT_MS = 15000;
+
 describe("بيانات الأوجه", () => {
+  beforeAll(async () => {
+    // إحضارٌ متوازٍ لكلّ حزمةٍ مرّةً واحدة (وجهٌ واحد من كلّ حزمة يكفي لجلبها).
+    await Promise.all(
+      Array.from({ length: CHUNK_COUNT }, (_, c) => loadPageLines(c * PAGES_PER_CHUNK + 1))
+    );
+  }, SWEEP_TIMEOUT_MS);
+
   it("كلُّ وجهٍ بعدد أسطره ومداه من المعرّفات كما في meta", async () => {
     for (let page = 1; page <= TOTAL_PAGES; page++) {
       const lines = await loadPageLines(page);
@@ -74,7 +144,7 @@ describe("بيانات الأوجه", () => {
       expect(lines!.length, `ص${page} عدد الأسطر`).toBe(linesOnPage(page));
       expect(ayahRangeOf(lines!), `ص${page} المدى`).toEqual(pageRange(page));
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("لكلّ آيةٍ رقمٌ واحدٌ في موضعه، والمجموع 6236", async () => {
     const numbered = new Map<number, number>();
@@ -93,7 +163,7 @@ describe("بيانات الأوجه", () => {
       const s = SURAHS.findLast((x) => x.first <= id)!;
       expect(num, `الآية ${id}`).toBe(id - s.first + 1);
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   // كلماتُ الآية في التخطيط تُعدّ كما تُعدّ في `ayahText.json`، فترتيبُ الكلمة
   // واحدٌ في الاثنين — وعليه تتعلّق مواضعُ الخطأ المحفوظة عند المستخدم. ستُّ
@@ -122,7 +192,7 @@ describe("بيانات الأوجه", () => {
       if (n !== countWords((ayahText as string[])[id] ?? "")) off.push(key);
     }
     expect(off).toEqual([]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("لا يذكر الوجهُ آيةً من وجهٍ آخر", async () => {
     for (const page of [1, 2, 3, 100, 255, 604]) {

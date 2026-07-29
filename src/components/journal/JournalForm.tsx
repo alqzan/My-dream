@@ -11,6 +11,7 @@ import { AudioRecorder } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown } from "lucide-react";
+import { AppImage } from "@/components/ui/AppImage";
 
 interface JournalFormProps {
   onClose: () => void;
@@ -493,7 +494,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           <div className="grid grid-cols-3 gap-2 mb-2">
             {photos.map((p, i) => (
               <div key={i} className="relative">
-                <img src={p} alt={`صورة ${i + 1}`} className="w-full h-24 object-cover rounded-xl" />
+                <AppImage src={p} alt={`صورة ${i + 1}`} className="w-full h-24 object-cover rounded-xl" />
                 <button
                   onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
                   className="absolute top-1 left-1 bg-black/50 text-white p-1 rounded-full hover:bg-red-500/80 transition-colors"

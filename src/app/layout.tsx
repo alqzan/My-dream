@@ -34,10 +34,17 @@ const amiriQuran = localFont({
 // المحفوظ في البيانات هو عرضُه بهذا الملفّ بالذات، فنسخةٌ أخرى من الخطّ نفسه
 // بمقاييس مختلفة تُخرج الأسطر عن حدّها. النسخة الأخرى (`amiri-quran.woff2`)
 // تبقى للنصّ المقتبس خارج الوجه.
+// و`display` هنا **"block" لا "swap"**، وهذا الخطّ وحده: تخطيطُ الأسطر مقيسٌ على
+// مقاييس هذا الملفّ بعينه (عرضُ السطر المحفوظ في البيانات هو عرضُه به). ومع
+// `swap` يُرسم الوجه أوّلاً بخطٍّ بديلٍ مختلف المقاييس — فتفيض الأسطر عن عرضها
+// وتنكسر صورةُ الوجه — ثمّ يقفز كلُّ شيء إلى مكانه حين يصل أميري. و«صورة الوجه»
+// هي رأس مال الحافظ، فوميضٌ بخطٍّ مخالف أسوأ من انتظارٍ قصير. مع "block" لا
+// يُرسم النصّ حتى يجهز الخطّ (والهيكل في `MushafSheet` يملأ المكان ريثما يصل)،
+// فلا يرى القارئ وجهاً بخطٍّ ليس خطَّه. الخطوط الأخرى تبقى على "swap".
 const amiriQuranMushaf = localFont({
   src: [{ path: "../../public/fonts/AmiriQuranMushaf.woff2", weight: "400", style: "normal" }],
   variable: "--font-amiri-mushaf",
-  display: "swap",
+  display: "block",
 });
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { Card } from "@/components/ui/Card";
-import { today, formatDate } from "@/lib/utils";
+import { today, formatDate, isValidDateKey, keepValidDate } from "@/lib/utils";
 import { visibleEvents, sortEvents, daysUntil, describeDays } from "@/lib/countdown";
 import type { CountdownEvent } from "@/lib/types";
 import { CalendarClock, Plus, Trash2, Pencil, X, Check } from "lucide-react";
@@ -27,7 +27,9 @@ export function EventsCard() {
 
   function save(draft: { title: string; date: string; emoji: string; countUpAfter: boolean }) {
     const title = draft.title.trim();
-    if (!title || !draft.date) return;
+    // `isValidDateKey` لا `!!draft.date`: «2026-02-30» يملأ الحقل وليس يوماً،
+    // و`parseDate` تُدوّره لتاريخٍ آخر فيظهر عدٌّ تنازليّ لموعدٍ لم يُقصد.
+    if (!title || !isValidDateKey(draft.date)) return;
     if (editing && editing !== "new") {
       updateEvent(editing.id, {
         title, date: draft.date, emoji: draft.emoji, countUpAfter: draft.countUpAfter,
@@ -87,7 +89,9 @@ export function EventsCard() {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{e.title}</div>
                     <div className="text-[10px] text-gray-400">
-                      {formatDate(e.date)} · {describeDays(d)}
+                      {/* تاريخٌ فاسد يُعرض كما هو مخزَّن لا مُدوَّراً: `formatDate`
+                          تُظهر «2026-02-30» يومَ 2 مارس، فيبدو الخطأ صواباً. */}
+                      {isValidDateKey(e.date) ? formatDate(e.date) : e.date || "—"} · {describeDays(d)}
                       {!shownOnHome.has(e.id) && " · لا يظهر في الرئيسية"}
                     </div>
                   </div>
@@ -146,7 +150,13 @@ function EventForm({
   const [date, setDate] = useState(initial?.date ?? "");
   const [emoji, setEmoji] = useState(initial?.emoji ?? "📌");
   const [countUpAfter, setCountUpAfter] = useState(initial?.countUpAfter ?? false);
-  const valid = title.trim().length > 0 && !!date;
+
+  // نواقص المسوّدة **حيّةً** أثناء الكتابة لا بعد الضغط: زرٌّ يرفض الحفظ صامتاً
+  // يبدو معطّلاً لا مانعاً — وهو بالضبط ما شكا منه المالك في الأقساط والأصول.
+  const problems: string[] = [];
+  if (!title.trim()) problems.push("اكتب اسم الحدث");
+  if (!isValidDateKey(date)) problems.push("اختر تاريخاً صالحاً للحدث");
+  const valid = problems.length === 0;
 
   return (
     <div className="space-y-2.5 border border-brand-600/20 bg-brand-600/[0.04] rounded-xl p-3">
@@ -160,7 +170,10 @@ function EventForm({
       <input
         type="date"
         value={date}
-        onChange={(e) => setDate(e.target.value)}
+        // قيمةٌ فارغة من منتقي التاريخ (يحدث في Safari حين يكون تقويم الجهاز
+        // هجرياً) كانت تمحو آخر تاريخٍ صالح فيرفض الزرّ الحفظ صامتاً — القاعدة
+        // في `keepValidDate` (مختبَرة)، وهي نفسها المتّبعة في الأقساط والأصول.
+        onChange={(e) => setDate(keepValidDate(e.target.value, date))}
         aria-label="تاريخ الحدث"
         className="w-full text-sm border border-gray-200 dark:border-transparent rounded-lg px-3 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-brand-600/40"
       />
@@ -202,6 +215,12 @@ function EventForm({
           إلغاء
         </button>
       </div>
+      {/* سببُ التعطيل مكتوبٌ تحت الزرّ — لا زرَّ صامتاً */}
+      {!valid && (
+        <p className="text-[10px] text-amber-600 dark:text-amber-500 leading-relaxed">
+          {problems.join(" · ")}
+        </p>
+      )}
     </div>
   );
 }

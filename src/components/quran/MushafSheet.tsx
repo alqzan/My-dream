@@ -192,26 +192,51 @@ function PageLines({
 }) {
   // حزمةُ الوجه قد تكون محمّلةً من وجهٍ سابق — فنرسم بها فوراً بلا وميض.
   const [lines, setLines] = useState<MushafPageLines | null>(() => peekPageLines(page));
+  // تعذّر إحضارُ الحزمة (انقطاعٌ أو ملفٌّ لم يصل). `retry` يزيد فيُعاد الأثر.
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let alive = true;
     const ready = peekPageLines(page);
     setLines(ready);
-    if (!ready) loadPageLines(page).then((l) => { if (alive) setLines(l); });
+    setFailed(false);
+    if (!ready) {
+      loadPageLines(page).then(
+        (l) => { if (alive) setLines(l); },
+        // بلا هذا يبقى القارئ على هيكلٍ فارغ إلى الأبد، ويخرج الرفضُ غيرَ
+        // ملتقَط إلى وحدة التحكّم. الآن حالةُ خطأٍ هادئة وزرُّ إعادةِ محاولة.
+        () => { if (alive) setFailed(true); }
+      );
+    }
     return () => { alive = false; };
-  }, [page]);
+  }, [page, retry]);
 
   // ريثما تصل الحزمة: أسطرُ الوجه بعددها فارغة — يبقى للوجه ارتفاعُه فلا يقفز
-  // ما تحته حين يصل النصّ.
+  // ما تحته حين يصل النصّ. وحالةُ الخطأ تُرسم **داخل** هذا الهيكل نفسه، فيبقى
+  // للوجه ارتفاعُه ولا ينكمش المصحف تحت يد القارئ.
   if (!lines) {
     return (
-      <div className="mushaf-sheet" style={{ width: `${zoom * 100}%` }} aria-busy>
-        <div className="mushaf-page">
+      <div className="mushaf-sheet relative" style={{ width: `${zoom * 100}%` }} aria-busy={!failed}>
+        <div className={`mushaf-page ${failed ? "opacity-40" : ""}`}>
           {Array.from({ length: linesOnPage(page) }, (_, i) => (
             <div key={i} className="mushaf-line">
               <span className="mushaf-trace">&nbsp;</span>
             </div>
           ))}
         </div>
+        {failed && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+              تعذّر إحضار هذا الوجه
+            </p>
+            <button
+              onClick={() => setRetry((n) => n + 1)}
+              className="text-[11px] font-bold text-white bg-quran rounded-lg px-3 py-1.5 press"
+            >
+              إعادة المحاولة
+            </button>
+          </div>
+        )}
       </div>
     );
   }

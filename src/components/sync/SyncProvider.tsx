@@ -21,16 +21,16 @@ import {
   RevisionConflictError,
 } from "@/lib/sync";
 import { useAppStore } from "@/lib/store";
+import type { AppData } from "@/lib/types";
 import { hasData, cloudHasUnseen, shouldAdoptCloud } from "@/lib/syncDecision";
+import { adoptCloudSnapshot } from "@/lib/syncAdopt";
+import { createSaveScheduler, type SaveScheduler } from "@/lib/saveScheduler";
 import { showToast } from "@/components/ui/UndoToast";
 
 // "partial": the main doc synced but the picture is incomplete — a journal
 // shard couldn't be read, or some media hasn't reached the cloud yet. Honest
 // middle state between "synced" and "offline" so the UI never over-claims.
 type SyncState = "idle" | "syncing" | "synced" | "partial" | "offline";
-
-const RETRY_BASE_MS = 2000;
-const RETRY_MAX_MS = 30000;
 
 interface SyncContextValue {
   enabled: boolean;
@@ -63,11 +63,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [mediaPending, setMediaPending] = useState(false);
 
-  const hydratedRef = useRef(false);
   // True while we're applying a remote snapshot, so the store subscription
   // doesn't treat that change as a local edit and echo it straight back.
   const applyingRemoteRef = useRef(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // عدّادُ التعديل المحلّي. يبدأ الالتقاط **فور ترطيب IndexedDB وقبل أوّل انتظارٍ
+  // شبكيّ**، فكلّ تعديلٍ يقع في نافذة الإقلاع يُرى: `adoptCloudSnapshot` تقرأه
+  // فتعيد الدمج على أحدث لقطة، و`pendingEditRef` يضمن رفعه للسحابة بعدها.
+  const editSeqRef = useRef(0);
+  const pendingEditRef = useRef(false);
+  // جدولةُ الحفظ — تُبنى بعد الدمج الأوّل. قبل ذلك تُسجَّل التعديلات في
+  // `pendingEditRef` وحده (لا حفظ قبل أن نعرف مراجعة السحابة).
+  const saverRef = useRef<SaveScheduler | null>(null);
   // The cloud doc's lastUpdated we last adopted/wrote. Before a save we re-read
   // the cloud doc; if it advanced past this, another device wrote in the
   // meantime and we merge instead of overwriting.
@@ -76,9 +82,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // on the next save so a concurrent write (another device) is caught by the
   // transaction (RevisionConflictError) instead of silently overwriting it.
   const lastRevisionRef = useRef<number>(0);
-  // Failed-save retry with exponential backoff (2s → 4s → … capped at 30s).
-  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryDelay = useRef(RETRY_BASE_MS);
   const failNotified = useRef(false); // toast only once per failure streak
 
   const hydrate = useAppStore((s) => s.hydrate);
@@ -100,7 +103,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setLastSyncedAt(Date.now());
     };
 
-    // مستمعُ إخفاءِ الصفحة (يُسجَّل بعد تعريف attemptSave أدناه) — يُنظَّف مع الأثر.
+    // مستمعُ إخفاءِ الصفحة (يُسجَّل بعد بناء جدولة الحفظ أدناه) — يُنظَّف مع الأثر.
     let unsubFlush: () => void = () => {};
 
     (async () => {
@@ -119,9 +122,39 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
       if (cancelled) return;
 
+      // ===== التقاطُ التعديل المحلّي يبدأ هنا — قبل أوّل انتظارٍ شبكيّ =====
+      // كان الاشتراك يُسجَّل في آخر الأثر: بعد `loadUserMain` والدمج وترطيب
+      // الصور وأوّل كتابة. فتعديلٌ يقع في تلك النافذة (وهي ثوانٍ على شبكةٍ
+      // بطيئة) لا يراه أحد: يمحوه `hydrate` المبنيّ على لقطةٍ أقدم منه، ولا
+      // يُدفع للسحابة لأنّ الاشتراك لم يكن قد وُجد. الاشتراك الآن أوّلُ شيءٍ بعد
+      // ترطيب IndexedDB، ولا يحفظ بنفسه — يرفع العدّاد والراية، ويتولّى
+      // `adoptCloudSnapshot` إبقاءَ التعديل في الناتج، والحافظُ رفعَه.
+      unsubStore = useAppStore.subscribe(() => {
+        if (applyingRemoteRef.current) return;
+        editSeqRef.current++;
+        pendingEditRef.current = true;
+        if (saverRef.current) {
+          setStatus("syncing");
+          saverRef.current.schedule();
+        }
+      });
+
       // Reuse any Storage URLs we already hold locally so hydrate doesn't
       // re-fetch every media download URL from scratch.
       primeUrlCache(snapshot().journalEntries);
+
+      // نسخةُ العرض من الاتحاد: الترطيب **بعد** الدمج دائماً (قاعدة المستودع).
+      const toDisplay = (merged: AppData, local: AppData) =>
+        hydrateCloudPhotos(space, merged).then((shown) =>
+          inlineCachedMedia(space, mergeLocalPhotos(shown, local))
+        );
+
+      // تطبيقُ ناتج التبنّي على المتجر — محروساً كي لا يراه الاشتراك تعديلاً محلّياً.
+      const applyDisplay = (display: Partial<AppData>) => {
+        applyingRemoteRef.current = true;
+        hydrate(display);
+        applyingRemoteRef.current = false;
+      };
 
       // 1) Initial merge. Adopt the cloud when this device is empty (so a
       //    fresh device pulls the owner's existing data) OR when the cloud is
@@ -147,16 +180,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // فقد. لو رطّبنا الصور أولاً لصارت النسخة السحابية مصفوفةَ بايتات،
           // وقاعدةُ «لا نستبدل مجموعةً موجودة» تُسقط الصورة الثانية بلا مرجعٍ
           // يعيدها — فتصير يتيمةً في R2. الترطيب بعد الدمج، للعرض وحده.
-          const merged = mergeAppData(local, cloudMain);
-          const shown = await hydrateCloudPhotos(space, merged);
-          applyingRemoteRef.current = true;
-          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(shown, local)));
-          applyingRemoteRef.current = false;
+          //
+          // و`adoptCloudSnapshot` تحرس النافذة نفسها من جهةٍ ثانية: `local`
+          // أعلاه لقطةٌ أُخذت قبل الانتظار، فإن سجّل المالك عمليةً أثناء تنزيل
+          // الصور أُعيد الدمج على أحدث لقطةٍ بدل أن يمحوها `hydrate`.
+          const { display, save } = await adoptCloudSnapshot({
+            snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
+          });
+          applyDisplay(display);
           // Push the union back up so the cloud gains any entries that lived
           // only on this device; other devices then pull them. We just read the
           // cloud doc, so pass its revision for the transaction's CAS. نحفظ
-          // **الناتج الغنيّ بالمراجع** (`merged`) لا نسخةَ العرض، فيبقى الاستكمال
+          // **الناتج الغنيّ بالمراجع** (`save`) لا نسخةَ العرض، فيبقى الاستكمال
           // الجزئي: مرجعٌ لم يُنزَّل هذه الجلسة يعود كما هو بدل أن يُسقَط.
+          const merged = save;
           const r = await saveUserData(space, merged, cloudMain.revision ?? 0);
           mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
@@ -170,18 +207,26 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // without this a fresh device resurrects them.
           // الشواهد **قبل** الترطيب: صورةٌ محذوفة يُسقط مرجعَها التنقيةُ، فلا
           // تُنزَّل بايتاتها أصلاً (كنّا ننزّلها ثمّ نرميها).
+          const mark = editSeqRef.current;
           const full = await hydrateCloudPhotos(space, applyTombstones(cloudMain));
-          applyingRemoteRef.current = true;
-          hydrate(await inlineCachedMedia(space, mergeLocalPhotos(full, local)));
-          applyingRemoteRef.current = false;
+          const shown = await inlineCachedMedia(space, mergeLocalPhotos(full, local));
+          // الجهاز كان فارغاً حين قرأنا، لكنّ التنزيل يستغرق — وقد يكتب المالك
+          // مذكرةً أثناءه. عندها فقط نطوي أحدثَ لقطةٍ فوق نسخة السحابة (وهي
+          // الأحدث ختماً فتفوز بعناصرها)، فلا يُمحى ما كُتب. بلا تعديلٍ عارض
+          // يبقى المسار كما هو: تبنٍّ كاملٌ بلا `mergeAppData`.
+          const raced = editSeqRef.current !== mark;
+          const fresh = raced ? snapshot() : null;
+          applyDisplay(fresh ? mergeAppData(fresh, { ...fresh, ...shown }) : shown);
           lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
           lastRevisionRef.current = cloudMain.revision ?? 0;
         } else if (localHasData) {
-          // Only this device has data → seed the cloud from it.
-          const r = await saveUserData(space, local, cloudMain?.revision ?? 0);
+          // Only this device has data → seed the cloud from it. لقطةٌ طازجة لا
+          // `local` القديمة: قراءةُ السحابة استغرقت، وما كُتب أثناءها يُرفع معها.
+          const seed = snapshot();
+          const r = await saveUserData(space, seed, cloudMain?.revision ?? 0);
           mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
-          lastCloudUpdatedRef.current = local.lastUpdated ?? "";
+          lastCloudUpdatedRef.current = seed.lastUpdated ?? "";
           lastRevisionRef.current = r.revision;
         } else {
           lastCloudUpdatedRef.current = cloudMain?.lastUpdated ?? "";
@@ -192,7 +237,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setStatus("offline");
       }
       if (cancelled) return;
-      hydratedRef.current = true;
 
       // Push the local snapshot up. Before overwriting, re-read the cloud doc;
       // if another device wrote since we last synced, merge its data in first
@@ -203,21 +247,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // retry — bounded, so a persistent conflict can't spin forever.
       const pushLocal = async (): Promise<boolean> => {
         for (let attempt = 0; attempt < 4; attempt++) {
-          let toSave = snapshot();
           const cloudMain = await loadUserMain(space);
+          // اللقطة **بعد** قراءة السحابة لا قبلها: القراءة رحلةُ شبكةٍ كاملة،
+          // وما سُجّل أثناءها يجب أن يركب هذه الكتابة لا التي بعدها.
+          let toSave = snapshot();
           if (
             cloudMain &&
             hasData(cloudMain) &&
             ((cloudMain.lastUpdated ?? "") > lastCloudUpdatedRef.current ||
               (cloudMain.revision ?? 0) > lastRevisionRef.current)
           ) {
-            // كما في الدمج الأوّل: الدمج على المراجع، والترطيب بعده للعرض.
-            const merged = mergeAppData(toSave, cloudMain);
-            const shown = await hydrateCloudPhotos(space, merged);
-            applyingRemoteRef.current = true;
-            hydrate(await inlineCachedMedia(space, mergeLocalPhotos(shown, toSave)));
-            applyingRemoteRef.current = false;
-            toSave = merged; // الغنيّ بالمراجع هو ما يُحفظ
+            // كما في الدمج الأوّل: الدمج على المراجع، والترطيب بعده للعرض —
+            // وبالحارس نفسه، فتعديلٌ يقع أثناء تنزيل الصور هنا لا يمحوه `hydrate`.
+            const { display, save } = await adoptCloudSnapshot({
+              snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
+            });
+            applyDisplay(display);
+            toSave = save; // الغنيّ بالمراجع هو ما يُحفظ
             lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
           }
           const stamp = new Date().toISOString();
@@ -247,44 +293,42 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         throw new Error("revision conflict: retries exhausted");
       };
 
-      // Attempt a push; on failure surface a toast (once per streak) and retry
-      // with exponential backoff so a transient outage doesn't leave the edit
-      // stranded on this device until the next manual change.
-      const attemptSave = () => {
-        pushLocal()
-          .then((mediaComplete) => {
-            retryDelay.current = RETRY_BASE_MS;
+      // جدولةُ الحفظ: تأجيلٌ، وإفراغٌ عند الإخفاء، وإعادةُ محاولةٍ بتباعدٍ
+      // متضاعف، وحفظٌ واحدٌ في الطريق دائماً — آلةُ الحالة كلّها في
+      // `@/lib/saveScheduler` (نقيّة ومختبَرة بمؤقّتاتٍ وهمية). كانت هنا مؤقّتات
+      // `useRef` لا يمسّها اختبار، ومراجعُها لا تُصفَّر عند انطلاق المؤقّت فيبدو
+      // مؤقّتٌ منتهٍ حفظاً معلّقاً، فيتكرّر الحفظ مع كلّ إخفاءٍ للصفحة.
+      const saver = createSaveScheduler({
+        save: () =>
+          pushLocal().then((mediaComplete) => {
             failNotified.current = false;
             setMediaPending(!mediaComplete);
             markSynced(mediaComplete);
-          })
-          .catch(() => {
-            setStatus("offline");
-            if (!failNotified.current) {
-              failNotified.current = true;
-              showToast("فشلت المزامنة — سيُعاد المحاولة", "warning");
-            }
-            if (retryTimer.current) clearTimeout(retryTimer.current);
-            retryTimer.current = setTimeout(attemptSave, retryDelay.current);
-            retryDelay.current = Math.min(retryDelay.current * 2, RETRY_MAX_MS);
-          });
-      };
+          }),
+        onError: () => {
+          setStatus("offline");
+          if (!failNotified.current) {
+            failNotified.current = true;
+            showToast("فشلت المزامنة — سيُعاد المحاولة", "warning");
+          }
+        },
+      });
+      saverRef.current = saver;
+      // تعديلٌ وقع أثناء الإقلاع (قبل جهوز الحافظ): `adoptCloudSnapshot` أبقته
+      // في المتجر، وهذه الجدولةُ ترفعه للسحابة — وإلّا بقي حبيس الجهاز.
+      if (pendingEditRef.current) saver.schedule();
 
       // ===== إفراغ الحفظ المؤجّل عند إخفاء الصفحة =====
       // الحفظ مؤجّل 1500ms. على iOS يُجمَّد التبويب فور الانتقال لتطبيقٍ آخر أو
       // إقفال الشاشة، فتعديلٌ سُجّل قبل لحظة **لا يغادر الجهاز أبداً** — وهذا
       // بالضبط شكلُ «سجّلتُ عمليةً بالجوال ولم أجدها على الآيباد». عند أول إشارة
-      // إخفاء نُلغي المؤقّت ونحفظ فوراً بدل انتظار المهلة. `visibilitychange`
-      // هي الإشارة الموثوقة على iOS (لا `beforeunload`)، و`pagehide` تغطّي
-      // إغلاق التبويب/التنقّل.
-      const flushPendingSave = () => {
-        if (!saveTimer.current && !retryTimer.current) return; // لا شيء معلّق
-        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-        if (retryTimer.current) { clearTimeout(retryTimer.current); retryTimer.current = null; }
-        attemptSave();
-      };
+      // إخفاء نحفظ فوراً بدل انتظار المهلة. `visibilitychange` هي الإشارة
+      // الموثوقة على iOS (لا `beforeunload`)، و`pagehide` تغطّي إغلاق
+      // التبويب/التنقّل — وتقعان معاً في الانتقال الواحد، فـ`flush` خاملةٌ إن لم
+      // يكن ثمّ شيءٌ معلّق: إفراغٌ واحد لا اثنان.
+      const flushPendingSave = () => saver.flush();
       const onHide = () => {
-        if (document.visibilityState === "hidden") flushPendingSave();
+        if (document.visibilityState === "hidden") saver.flush();
       };
       document.addEventListener("visibilitychange", onHide);
       window.addEventListener("pagehide", flushPendingSave);
@@ -321,12 +365,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const localHasUnpushed = cloudHasUnseen(local, cloudMain);
             // Merge, so unsynced local edits aren't overwritten by the incoming
             // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
-            // بمراجع السحابة كما هي — ثمّ نرطّب الناتج للعرض.
-            const merged = mergeAppData(local, cloudMain);
-            const shown = await hydrateCloudPhotos(space, merged);
-            const inlined = await inlineCachedMedia(space, mergeLocalPhotos(shown, local));
+            // بمراجع السحابة كما هي — ثمّ نرطّب الناتج للعرض. والحارس نفسه:
+            // تنزيلُ صور اللقطة الواردة يستغرق، وتعديلٌ يقع أثناءه يبقى.
+            const mark = editSeqRef.current;
+            const { display } = await adoptCloudSnapshot({
+              snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
+            });
             applyingRemoteRef.current = true;
-            hydrate(inlined);
+            hydrate(display);
             setTimeout(() => {
               applyingRemoteRef.current = false;
             }, 0);
@@ -335,23 +381,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             markSynced();
             // Converge the cloud: push the merged union up so the entry that
             // lived only here reaches the other devices. Guarded by
-            // localHasUnpushed so two idle devices don't ping-pong saves.
-            if (localHasUnpushed) attemptSave();
+            // localHasUnpushed so two idle devices don't ping-pong saves — ومعه
+            // تعديلٌ وقع أثناء التبنّي (بلعه الحارس فلم يره الاشتراك حفظاً).
+            if (localHasUnpushed || editSeqRef.current !== mark) saver.schedule();
           } catch {
             setStatus("offline");
           }
         })();
       });
 
-      // 3) Push local edits up (debounced).
-      unsubStore = useAppStore.subscribe(() => {
-        if (!hydratedRef.current || applyingRemoteRef.current) return;
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-        // A fresh edit supersedes any pending retry — the new snapshot covers it.
-        if (retryTimer.current) clearTimeout(retryTimer.current);
-        setStatus("syncing");
-        saveTimer.current = setTimeout(attemptSave, 1500);
-      });
+      // (٣) دفعُ التعديلات المحلّية مؤجَّلاً: الاشتراك سُجّل في أوّل الأثر أعلاه،
+      //     وقد صار `saverRef` جاهزاً الآن فيجدول كلُّ تعديلٍ حفظَه من نفسه.
     })();
 
     return () => {
@@ -359,8 +399,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       unsubStore();
       unsubSnap();
       unsubFlush();
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (retryTimer.current) clearTimeout(retryTimer.current);
+      saverRef.current?.dispose();
+      saverRef.current = null;
     };
   }, [hydrate, snapshot]);
 

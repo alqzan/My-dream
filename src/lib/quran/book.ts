@@ -75,3 +75,29 @@ export function turnStep(dx: number, threshold: number = TURN_THRESHOLD_PX): -1 
   if (dx <= -threshold) return -1;
   return 0;
 }
+
+// ===================== ماذا تعني اللمسة على الحافّة؟ =====================
+// ثلاث نهاياتٍ للمسةٍ بدأت على حافّة الوجه، ولكلٍّ معنى:
+//   • **إلغاءٌ من النظام** (`pointercancel`): سحبةُ تصفّحٍ ابتلعها المتصفّح، أو
+//     مكالمةٌ واردة، أو خرج الإصبع عن النافذة. النظام قال «لم تكن لمسة» —
+//     فالاستجابةُ الصحيحة إرجاعُ الشكل إلى مكانه **بلا تنقّل**. كانت
+//     `pointercancel` تُنادي `onUp` نفسها، فتقلب صفحةً ألغى النظامُ لمستَها.
+//   • **لمسةٌ قصيرة** (إزاحةٌ دون `TAP_SLOP_PX`): نقرةٌ على الحافّة — يقلبها
+//     اتّجاهُ الحافّة نفسها: اليسرى تتقدّم واليمنى ترجع.
+//   • **سحبةٌ حقيقية**: يقرّرها `turnStep` بإزاحتها، لا بجهة الحافّة — فمن أمسك
+//     الحافّة اليسرى وسحب يميناً تقدّم، كما تفعل الورقة بيدك.
+/** ما دون هذا إزاحةً لمسةٌ لا سحبة (ارتعاشُ الإصبع لا يقلب ورقة). */
+export const TAP_SLOP_PX = 6;
+
+export type EdgeSide = "left" | "right";
+
+export function edgeGesture(
+  dx: number,
+  edge: EdgeSide,
+  cancelled = false,
+  threshold: number = TURN_THRESHOLD_PX
+): -1 | 0 | 1 {
+  if (cancelled) return 0; // ألغى النظام اللمسة — لا تقلب شيئاً
+  if (Math.abs(dx) < TAP_SLOP_PX) return edge === "left" ? 1 : -1;
+  return turnStep(dx, threshold);
+}

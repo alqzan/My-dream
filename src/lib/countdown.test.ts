@@ -103,3 +103,52 @@ describe("progressTo", () => {
     expect(progressTo(45)).toBeCloseTo(0.5, 5);
   });
 });
+
+// ===================== تاريخٌ فاسد لا يُسقط الشاشة ولا يكذب =====================
+// المصادر الثلاثة لتاريخٍ فاسد: منتقي Safari يعيد قيمةً فارغة حين يكون تقويم
+// الجهاز هجرياً، ونسخةٌ احتياطية قديمة، وجهازٌ حفظ قبل حارس الإدخال. كان
+// `parseDate("")` يعطي سنة 1900، و«2026-02-30» تُدوَّر إلى 2 مارس — فيظهر عدٌّ
+// تنازليّ لموعدٍ لا وجود له، وقد تنزلق `sort` بمقارنات NaN فيختلف الترتيب.
+describe("تاريخُ الحدث الفاسد", () => {
+  it("تاريخٌ صحيح يُعدّ كما هو", () => {
+    expect(daysUntil("2026-02-15", "2026-02-01")).toBe(14);
+    expect(isVisible(ev("a", "2026-02-15"), "2026-02-01")).toBe(true);
+    expect(describeDays(daysUntil("2026-02-15", "2026-02-01"))).toBe("بعد 14 يوماً");
+  });
+
+  it("تاريخٌ مستحيل (2026-02-30) لا يُدوَّر إلى يومٍ آخر", () => {
+    expect(daysUntil("2026-02-30", "2026-02-01")).toBeNaN();
+    expect(describeDays(daysUntil("2026-02-30", "2026-02-01"))).toBe("تاريخ غير صالح");
+    expect(isVisible(ev("bad", "2026-02-30"), "2026-02-01")).toBe(false);
+    // ولا يعود بـ`countUpAfter` من الباب الخلفيّ
+    expect(isVisible(ev("bad", "2026-02-30", "bad", { countUpAfter: true }), "2026-02-01")).toBe(false);
+  });
+
+  it("قيمةٌ فارغة عابرة من منتقي Safari لا تُنتج عدّاً ولا تظهر في الرئيسية", () => {
+    expect(daysUntil("", "2026-02-01")).toBeNaN();
+    expect(isVisible(ev("empty", ""), "2026-02-01")).toBe(false);
+    expect(visibleEvents([ev("empty", ""), ev("ok", "2026-02-15")], "2026-02-01").map((e) => e.id))
+      .toEqual(["ok"]);
+  });
+
+  it("وكذلك شهرٌ 13 ونصٌّ ليس تاريخاً", () => {
+    for (const bad of ["2026-13-01", "2026-00-10", "2026-2-5", "غداً", "2026/02/15"]) {
+      expect(daysUntil(bad, "2026-02-01"), bad).toBeNaN();
+      expect(isVisible(ev("x", bad), "2026-02-01"), bad).toBe(false);
+    }
+  });
+
+  it("الترتيب حتميّ: الفاسدة في الذيل بعد القادمة والماضية، مرتّبةً بعنوانها", () => {
+    const list = [
+      ev("bad-b", "2026-02-30", "ب"),
+      ev("past", "2026-01-20", "ماضٍ"),
+      ev("bad-a", "", "أ"),
+      ev("soon", "2026-02-05", "قريب"),
+      ev("later", "2026-03-05", "بعيد"),
+    ];
+    const order = sortEvents(list, "2026-02-01").map((e) => e.id);
+    expect(order).toEqual(["soon", "later", "past", "bad-a", "bad-b"]);
+    // والترتيب نفسه أيّاً كان ترتيب المصفوفة الواردة من الدمج
+    expect(sortEvents([...list].reverse(), "2026-02-01").map((e) => e.id)).toEqual(order);
+  });
+});

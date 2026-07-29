@@ -245,7 +245,9 @@ export default function SpendInsightsPage() {
     }
 
     return list;
-  }, [periodTx, chartData, byMain, total, deltaPct, dailyBudget, reserves, categories, period, ranges.prevLabel, todayStr]);
+    // `deltaPct` و`ranges.prevLabel` كانا في القائمة ولا يُقرآن داخل الحساب —
+    // تبعيّتان زائدتان تُعيدان الحساب بلا سبب (وتحذيرُ ESLint عليهما).
+  }, [periodTx, chartData, byMain, total, dailyBudget, reserves, categories, period, todayStr]);
 
   const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
   const spentFromDaily = periodTx.reduce((s, t) => s + dailyShare(t), 0);

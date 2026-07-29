@@ -28,6 +28,7 @@ import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3 } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function JournalPage() {
   const { journalEntries, deleteJournalEntry, addJournalEntry, updateJournalEntry } = useAppStore();
@@ -581,13 +582,7 @@ export default function JournalPage() {
                     onClick={() => openViewer(item.entry)}
                     className="aspect-square overflow-hidden rounded-lg press"
                   >
-                    <img
-                      src={item.url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover"
-                    />
+                    <AppImage src={item.url} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>

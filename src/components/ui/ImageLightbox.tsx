@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { AppImage } from "./AppImage";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
@@ -187,10 +188,12 @@ export function ImageLightbox({
         onPointerCancel={endPointer}
         style={{ cursor: scale > 1 ? "grab" : "zoom-in" }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <AppImage
           src={images[i]}
           alt=""
+          // الصورة المفتوحة تُرى الآن — لا تأجيل تحميلٍ ولا فكٌّ غيرُ متزامن.
+          loading="eager"
+          decoding="sync"
           draggable={false}
           className="max-w-full max-h-full object-contain will-change-transform"
           style={{

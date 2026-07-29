@@ -2,6 +2,7 @@
 import type { JournalEntry } from "@/lib/types";
 import { formatDate, entryPhotos, entryAudios } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/markdown";
+import { AppImage } from "@/components/ui/AppImage";
 import { Trash2, Clock, Images, Mic, Film, Star } from "lucide-react";
 
 interface JournalEntryCardProps {
@@ -23,7 +24,7 @@ export function JournalEntryCard({ entry, onDelete, onClick, onToggleStar }: Jou
     >
       {photos.length > 0 && (
         <div className="relative">
-          <img src={photos[0]} alt="صورة اليوم" loading="lazy" decoding="async" className="w-full h-36 object-cover" />
+          <AppImage src={photos[0]} alt="صورة اليوم" className="w-full h-36 object-cover" />
           {photos.length > 1 && (
             <span className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/55 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
               <Images size={11} />

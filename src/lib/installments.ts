@@ -11,7 +11,7 @@
 //               (31 → 30 → 28/29 في فبراير والسنة الكبيسة) ثمّ يعود ليوم المرساة.
 // الرسوم توضيحية لا تُضاف على الإجمالي، و`finalPayment` **تستبدل** آخر قسط.
 import type { InstallmentPlan, InstallmentRole, InstallmentStatus, Transaction } from "./types";
-import { round2, toDateStr, parseDate } from "./utils";
+import { round2, toDateStr, parseDate, isValidDateKey } from "./utils";
 
 export const INSTALLMENT_STATUS_LABEL: Record<InstallmentStatus, string> = {
   active: "نشطة",
@@ -41,15 +41,10 @@ const MAX_SCHEDULE_ROWS = 600;
 // أقصى عددٍ يقبله النموذج (عشر سنوات) — ما فوقه خطأُ إدخالٍ شبه مؤكّد.
 export const MAX_INSTALLMENT_COUNT = 120;
 
-// تاريخٌ صالحٌ فعلاً بصيغة YYYY-MM-DD — لا الشكل وحده: «2026-13-45» يطابق النمط
-// لكنه ليس يوماً، و`parseDate` كانت تُدوّره لتاريخٍ آخر بلا إشعار (شهر 13 → يناير
-// التالي). حارسٌ واحد يشترك فيه النموذج و«قسّط هذا المصروف» وتوليد الجدول.
-export function isValidDateKey(v: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [y, m, d] = v.split("-").map(Number);
-  if (m < 1 || m > 12 || d < 1) return false;
-  return d <= new Date(y, m, 0).getDate(); // آخر يوم في الشهر m
-}
+// `isValidDateKey` انتقل إلى `utils.ts` مع بقيّة قواعد التاريخ — صار يحرس
+// الأقساط والأصول **والأحداث** معاً، فلا يصحّ أن يسكن وحدةَ الأقساط. يُعاد
+// تصديره هنا لأنّ نموذج الأقساط وشاشاته تستورده من هذا الملفّ.
+export { isValidDateKey } from "./utils";
 
 // مواعيد الاستحقاق: `count` موعداً شهرياً من `firstDueDate`. يوم المرساة هو يوم
 // أوّل استحقاق؛ في شهرٍ أقصر يُقلَّم لآخر يومٍ فيه (31 يناير → 28/29 فبراير) ثمّ

@@ -71,6 +71,34 @@ export function today() {
   return toDateStr(new Date());
 }
 
+// تاريخٌ صالحٌ **فعلاً** بصيغة YYYY-MM-DD — لا الشكل وحده: «2026-13-45» و
+// «2026-02-30» يطابقان النمط وليسا يوماً، و`parseDate` تُدوّرهما إلى تاريخٍ آخر
+// بلا إشعار (شهر 13 → يناير التالي، و30 فبراير → 2 مارس). فأيّ قيمةٍ تصل من
+// منتقي تاريخٍ أو نسخةٍ احتياطية أو جهازٍ قديم تمرّ من هنا أوّلاً.
+//
+// يعيش مع بقيّة قواعد التاريخ في هذا الملفّ لا في `installments.ts`: صار
+// يحرس الأقساط والأصول والأحداث معاً، فمكانُه حيث `toDateStr`/`parseDate`.
+export function isValidDateKey(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(y, m, 0).getDate(); // آخر يوم في الشهر m
+}
+
+// ماذا تفعل بقيمةٍ وصلت من `<input type="date">`؟
+//
+// منتقي التاريخ في Safari — وخاصّةً حين يكون تقويم الجهاز هجرياً — يُطلق
+// `change` بقيمةٍ **فارغة** أثناء تنقّل المستخدم في التقويم قبل أن يستقرّ على
+// يوم. كتابةُ تلك الفارغة في الحالة تمحو آخر تاريخٍ صالح، فيصير الزرّ معطّلاً بلا
+// سبب ظاهر — وهي البقّة التي عطّلت حفظَ الأقساط والأصول من قبل.
+//
+// القاعدة: الفارغةُ العابرة تُتجاهَل ما دام بيدنا تاريخٌ سابق؛ وأيّ قيمةٍ أخرى
+// تُقبل كما هي (فيبقى `isValidDateKey` هو من يحكم عليها عند الحفظ، ويبقى
+// المستخدم حرّاً في تصحيح ما كتب).
+export function keepValidDate(next: string, current: string): string {
+  return next || current;
+}
+
 // Intl formatters are expensive to construct, so build each once at module
 // level and reuse it — with hundreds of journal/finance cards rendering, a
 // fresh formatter per call was a measurable chunk of render time.

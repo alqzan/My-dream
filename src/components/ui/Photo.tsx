@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { ImageLightbox } from "./ImageLightbox";
+import { AppImage } from "./AppImage";
 
 /**
  * A journal photo thumbnail that opens a full-screen zoomable viewer on tap.
@@ -23,8 +24,7 @@ export function Photo({
   if (!src) return null;
   return (
     <>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <AppImage
         src={src}
         alt={alt}
         className={`${className ?? ""} cursor-zoom-in`}

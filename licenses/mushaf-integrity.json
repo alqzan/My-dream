@@ -1,0 +1,56 @@
+{
+  "_": "مولَّد لا يُحرَّر بيد. لإعادة توليده بعد تغييرٍ مقصود في بيانات المصحف: node scripts/gen-mushaf-integrity.mjs",
+  "source": {
+    "package": "quran-madina-html",
+    "version": "1.0.1",
+    "registry": "https://registry.npmjs.org/quran-madina-html/-/quran-madina-html-1.0.1.tgz",
+    "repository": "https://github.com/tarekeldeeb/quran-madina-html",
+    "variant": "Madina05-Amiri_Quran-16px",
+    "integrity": "sha512-fgcsp4dnNkYTLXt3mJzRZpG0sPA4YWgi+UF3dG/jy4Ny3lmnafJ6qZ6ZWGBg0HDy8GBFV7N9FJbNpbshCm3nZg==",
+    "shasum": "e83f01d5db26edbac138ca1377f4d7d304661b7a",
+    "tarballSha256": "83adba91d990ff3bbac783e46c1f5d8540073ab8c2f412e320c2a97a58884307"
+  },
+  "font": {
+    "path": "public/fonts/AmiriQuranMushaf.woff2",
+    "from": "assets/fonts/AmiriQuran.woff2",
+    "identical": true,
+    "bytes": 62792,
+    "sha256": "42a4934e67ff1891ead0193c91786dc34ccee3f6da575522861b844c58cdf905"
+  },
+  "generated": {
+    "dir": "src/lib/quran/mushaf",
+    "chunks": {
+      "chunk-00.json": "f02232944a59c3980cd4d211ef9ab69408bbf9e41dce2c7769b1e37ba75a07d7",
+      "chunk-01.json": "cc549c4d93d99eca32caab3a23b96e252ac7192ebaf5ad117f61e66d28f9a769",
+      "chunk-02.json": "2cee80029471678aa004d0479f127f4194c85a1695b950302c091d0cb1cbc2b9",
+      "chunk-03.json": "f06776ccdcf75668b2236803aa2f52a6294d0b73d035d5004cbbc798f69679bf",
+      "chunk-04.json": "c6997b883f6b20e442788a847d9bac13b5f06b61ab0ec689091322824c9d6e4a",
+      "chunk-05.json": "18e3ac5867ded02b71a7ce496a856b0c4b151d30f558f97264f639bd4f3dcf40",
+      "chunk-06.json": "688e9e91e2c29a11fe952f0135af3d763e85163fd2118d3d97d2b9e248338806",
+      "chunk-07.json": "ae577965646ad64500c79dc4d9f4f420a4e7249e57743cf48eb071c6fc0e1e64",
+      "chunk-08.json": "a21218f008f21b962bc6291221d133c2958e68447b26d1fa2b390456105bb675",
+      "chunk-09.json": "1e5e59cc2060752df423c759dfad50e968291ddada19ea8ac39272ea93125184",
+      "chunk-10.json": "b8dea22097b89e919aac51657c97a08915ff683547d2b5e79a3ac50874608683",
+      "chunk-11.json": "832cf077779d65b1ef360574e828f3c9d1d18fbac56e0236a5f3357b92185eeb",
+      "chunk-12.json": "62fec516f378ac7867505fe5f9b304c1405875337da386b351409ff171bd3fd8",
+      "chunk-13.json": "e1ce1aacf828c52e97b0f96ce02631fe46a35307c0cf5909522cd48ff292ceb7",
+      "chunk-14.json": "0a6137a7925e49aeae25cd914c0c0490a14f2b04d2253ee4c5d069085f6329b6",
+      "chunk-15.json": "2496da3508a1d9f0ed4dddd153cf8f2e78c064fb673696b19b98af835d701bf8",
+      "chunk-16.json": "b500dd8b3618aaf254ddf37f0d1f244a3216ebc6c37112c0c6771d0a692c4bcb",
+      "chunk-17.json": "a002cf3dcef19930dbe7af79dcdd10744b77cda26cc469d7ceb4c398fdbefe7b",
+      "chunk-18.json": "bd0d1c990646911f8c7bb793160c3af117dcfdf772a8824e5da402c86fd88c37",
+      "chunk-19.json": "071eec39ebd1209e39fadc4721d7d1211b08977f58a42a891803f939bc2d1591",
+      "chunk-20.json": "5c2dc87ff3e2a279dcaf8be7a3a9490dbde7e4fb21cae7d02031460c6786d1ac",
+      "chunk-21.json": "edf84bffd6cbd082b214fc2b656f987f71ba6af6860e03a7f92e6921c7fddc1c",
+      "chunk-22.json": "3511f56b14cd50f5e8cafc2b6133677816d5893b718b77416dc785ea862c3bca",
+      "chunk-23.json": "bfde815d817e6fc97499831f0ea0abac7d2b4e6fc35998f41db128d7be3efcd0",
+      "chunk-24.json": "6bfd551866d561ca7bdde11002ca02f2d3345609e4bf5c04bcdec46219af3067",
+      "chunk-25.json": "21bab115533ee2013602a45893128039ce1ad12d7972dfa6d955ac6f9cc8a69f",
+      "chunk-26.json": "16c6d57dbaf23b98e9c81a4cd1bfef06ed8f00a5353553081dd02fec0198239e",
+      "chunk-27.json": "3f1e37d163cadbcf2347232d3dead648b39cfee2345c225dfc754de1e7d1a368",
+      "chunk-28.json": "ca21b1a63a445b702880d2a4acbca90a0f92bf5e2c5921d6499265557e1051af",
+      "chunk-29.json": "fa29808a5cff2f43d8ec43e4a74459a05c4bd133191a11a15e5e22e76117e433",
+      "chunk-30.json": "7f8d2a3a9a47abc4cf69cb2972b1d54f644b5997e237918517f72cb44dd8835c"
+    }
+  }
+}

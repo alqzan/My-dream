@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  spreadOf, sameSpread, leafStack, edgeWidth, outerEdge, turnStep,
-  EDGE_MIN_PX, EDGE_MAX_PX,
+  spreadOf, sameSpread, leafStack, edgeWidth, outerEdge, turnStep, edgeGesture,
+  EDGE_MIN_PX, EDGE_MAX_PX, TAP_SLOP_PX, TURN_THRESHOLD_PX,
 } from "./book";
 import { TOTAL_PAGES } from "./meta";
 
@@ -100,5 +100,40 @@ describe("turnStep", () => {
   it("العتبة قابلةٌ للضبط", () => {
     expect(turnStep(30, 20)).toBe(1);
     expect(turnStep(30, 40)).toBe(0);
+  });
+});
+
+// ===================== نهايةُ اللمسة على الحافّة =====================
+// **البقّة الأصلية**: كانت `pointercancel` تُنادي معالِج `pointerup` نفسه، فإذا
+// ألغى النظامُ اللمسة (سحبةُ تصفّحٍ ابتلعها المتصفّح، أو مكالمةٌ واردة، أو خرج
+// الإصبع عن النافذة) انقلبت الصفحةُ رغم أنّ اللمسة لم تكتمل — فيفقد القارئ
+// موضعه بلا أن يطلب شيئاً.
+describe("edgeGesture", () => {
+  it("الإلغاء من النظام لا يقلب ورقةً مهما بلغت الإزاحة", () => {
+    expect(edgeGesture(150, "left", true)).toBe(0);
+    expect(edgeGesture(-150, "right", true)).toBe(0);
+    expect(edgeGesture(0, "left", true)).toBe(0);   // ولا حتى كلمسةٍ على الحافّة
+    expect(edgeGesture(0, "right", true)).toBe(0);
+  });
+
+  it("لمسةٌ على الحافّة تقلب بجهتها: اليسرى تتقدّم واليمنى ترجع", () => {
+    expect(edgeGesture(0, "left")).toBe(1);
+    expect(edgeGesture(0, "right")).toBe(-1);
+    expect(edgeGesture(TAP_SLOP_PX - 1, "left")).toBe(1);   // ارتعاشُ إصبعٍ لا سحبة
+    expect(edgeGesture(-(TAP_SLOP_PX - 1), "right")).toBe(-1);
+  });
+
+  it("السحبةُ الحقيقية يحكمها اتّجاهُها لا جهةُ الحافّة", () => {
+    // أمسكَ الحافّة اليسرى وسحب يميناً → تقدّم (حركة الورقة نفسها بيدك)
+    expect(edgeGesture(TURN_THRESHOLD_PX, "left")).toBe(1);
+    expect(edgeGesture(TURN_THRESHOLD_PX, "right")).toBe(1);
+    // وسحبٌ يساراً رجوعٌ من أيّ حافّةٍ بدأ
+    expect(edgeGesture(-TURN_THRESHOLD_PX, "left")).toBe(-1);
+    expect(edgeGesture(-TURN_THRESHOLD_PX, "right")).toBe(-1);
+  });
+
+  it("سحبةٌ تجاوزت اللمسة ولم تبلغ العتبة: لا شيء (لا ترتدّ لجهة الحافّة)", () => {
+    expect(edgeGesture(TAP_SLOP_PX + 1, "left")).toBe(0);
+    expect(edgeGesture(-(TAP_SLOP_PX + 1), "right")).toBe(0);
   });
 });

@@ -5,13 +5,20 @@
 // `Date.now()` مباشرةً، وإلّا أزاح UTC اليومَ في الخليج فقال «باقي يومان»
 // ليلةَ الحدث.
 import type { CountdownEvent } from "./types";
-import { parseDate, today } from "./utils";
+import { parseDate, today, isValidDateKey } from "./utils";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // عدد الأيام من `fromKey` إلى تاريخ الحدث: موجبٌ قبله، صفرٌ يومَه، سالبٌ بعده.
 // الطرح على منتصف اليوم المحلّي يجعل الفارق سليماً حتى عبر التوقيت الصيفي.
+//
+// **تاريخٌ فاسد** (من نسخةٍ احتياطية قديمة، أو جهازٍ حفظ قبل حارس الإدخال، أو
+// منتقٍ أعاد قيمةً فارغة) يعيد `NaN` صريحاً لا رقماً مخترعاً: `parseDate("")`
+// كانت تعطي سنة 1900، و«2026-02-30» تُدوَّر إلى 2 مارس — فيظهر عدٌّ تنازليّ
+// لموعدٍ لا وجود له. و`NaN` هنا **لا يتسرّب**: `isVisible` تُخفي الحدث،
+// و`sortEvents` تضعه في ذيلٍ ثابت، و`describeDays` تقولها صراحةً.
 export function daysUntil(dateKey: string, fromKey: string = today()): number {
+  if (!isValidDateKey(dateKey)) return NaN;
   const target = parseDate(dateKey).getTime();
   const from = parseDate(fromKey).getTime();
   return Math.round((target - from) / DAY_MS);
@@ -24,21 +31,28 @@ const GRACE_DAYS = 1;
 
 export function isVisible(e: CountdownEvent, fromKey: string = today()): boolean {
   const d = daysUntil(e.date, fromKey);
+  if (Number.isNaN(d)) return false; // تاريخٌ فاسد: لا يُعرض في الرئيسية
   return d >= 0 || e.countUpAfter === true || d >= -GRACE_DAYS;
 }
 
 // ترتيب العرض: الأقربُ وقوعاً أولاً. الأحداث القادمة (d >= 0) تتقدّم دائماً على
 // الماضية مهما قرُبت الماضية، ثمّ يُكسر التعادل بالعنوان فيثبت الترتيب عبر
 // الأجهزة (لا يعتمد على ترتيب المصفوفة القادم من الدمج).
+// الأحداث الفاسدة التاريخ تُجمَع في ذيلٍ ثالث بعد القادمة والماضية. الترتيب
+// **حتميّ**: مقارنةُ NaN تعيد false دائماً، فلو تُركت لتخترق `sort` لخرج ترتيبٌ
+// يختلف من متصفّحٍ لآخر وباختلاف ترتيب المصفوفة القادم من الدمج — وقائمةُ
+// الإعدادات تعرض هذه الأحداث ليصلحها المالك أو يحذفها، فيجب أن تستقرّ.
+const rank = (d: number): 0 | 1 | 2 => (Number.isNaN(d) ? 2 : d >= 0 ? 0 : 1);
+
 export function sortEvents(events: CountdownEvent[], fromKey: string = today()): CountdownEvent[] {
   return [...events].sort((a, b) => {
     const da = daysUntil(a.date, fromKey);
     const db = daysUntil(b.date, fromKey);
-    const fa = da >= 0 ? 0 : 1;
-    const fb = db >= 0 ? 0 : 1;
+    const fa = rank(da);
+    const fb = rank(db);
     if (fa !== fb) return fa - fb;
     // القادمة تصاعدياً (الأقرب أولاً)، والماضية تنازلياً (الأحدث مروراً أولاً).
-    if (da !== db) return fa === 0 ? da - db : db - da;
+    if (fa !== 2 && da !== db) return fa === 0 ? da - db : db - da;
     return a.title.localeCompare(b.title, "ar");
   });
 }
@@ -53,6 +67,7 @@ export function visibleEvents(
 
 // صياغةٌ عربية سليمة للعدد (مثنّى وجمع) — «باقي يومان» لا «باقي 2 يوم».
 export function describeDays(days: number): string {
+  if (Number.isNaN(days)) return "تاريخ غير صالح";
   if (days === 0) return "اليوم";
   if (days === 1) return "غداً";
   if (days === -1) return "أمس";

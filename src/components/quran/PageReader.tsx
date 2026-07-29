@@ -4,7 +4,7 @@ import {
   SURAHS, pageRange, idToSurahAyah, idToJuz, idToPage, TOTAL_PAGES,
 } from "@/lib/quran/meta";
 import { placeOf, pageSide, facingPage, clampPage } from "@/lib/quran/page";
-import { spreadOf, sameSpread, turnStep } from "@/lib/quran/book";
+import { spreadOf, sameSpread, edgeGesture } from "@/lib/quran/book";
 import { loadReadPrefs, saveReadPrefs, DEFAULT_READ_PREFS, ZOOM_RANGE, clampZoom } from "@/lib/quran/readPrefs";
 import { MushafSheet } from "@/components/quran/MushafSheet";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
@@ -79,6 +79,9 @@ export function PageReader({
     clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(""), 1600);
   }
+  // ومؤقّتُ الرسالة يُلغى عند التفكيك: خروجٌ من القارئ بعد «نُسخت الآية» كان
+  // يترك مؤقّتاً يحدّث حالةَ مكوّنٍ رُفع.
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
 
   // Wake Lock أثناء القراءة — بكشف الميزة فقط.
   useEffect(() => {
@@ -323,13 +326,25 @@ function BookSpread({
   const paneEls = useRef(new Map<number, HTMLDivElement>());
   const prevPage = useRef(page);
   const settle = useRef<ReturnType<typeof setTimeout>>();
+  const turnTimer = useRef<ReturnType<typeof setTimeout>>();
   const dragFrom = useRef<{ x: number; edge: "left" | "right" } | null>(null);
   const [dragDx, setDragDx] = useState(0);
+  // آخرُ إزاحةٍ مقروءةً **فوراً**. الحالة (`dragDx`) للرسم وحده: `setState` غير
+  // متزامنة، فآخرُ `pointermove` قد لا يكون انعكس فيها حين تصل `pointerup` —
+  // فتُقرأ إزاحةٌ أقدم فلا تُقلب الورقة رغم اكتمال السحبة (أو تُقلب خطأً).
+  const dragDxRef = useRef(0);
   const [turning, setTurning] = useState<0 | 1 | -1>(0);
   const [calm, setCalm] = useState(false); // تفضيل تقليل الحركة
 
   useEffect(() => {
     setCalm(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+  }, []);
+
+  // كلُّ مؤقّتٍ في هذا المكوّن يُلغى عند التفكيك: مؤقّتُ استقرار التمرير، ومؤقّتُ
+  // قلب الورقة الذي ينادي `onPage` بعد 190ms — وهو تحديثُ حالةٍ على مكوّنٍ رُفع.
+  useEffect(() => () => {
+    clearTimeout(settle.current);
+    clearTimeout(turnTimer.current);
   }, []);
 
   // أحضر الصفحة الحالية إلى المنظر: بسلاسةٍ داخل الوجه الواحد، وفوراً بعد قلب
@@ -365,28 +380,35 @@ function BookSpread({
     if (target === page) return;
     if (sameSpread(target, page) || calm) { onPage(target); return; }
     setTurning(dir);
-    setTimeout(() => { onPage(target); setTurning(0); }, 190);
+    clearTimeout(turnTimer.current);
+    turnTimer.current = setTimeout(() => { onPage(target); setTurning(0); }, 190);
   }
 
   const onDown = (e: React.PointerEvent, edge: "left" | "right") => {
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     dragFrom.current = { x: e.clientX, edge };
+    dragDxRef.current = 0;
   };
   const onMove = (e: React.PointerEvent) => {
     if (!dragFrom.current) return;
-    const dx = e.clientX - dragFrom.current.x;
-    setDragDx(Math.max(-170, Math.min(170, dx)));
+    const dx = Math.max(-170, Math.min(170, e.clientX - dragFrom.current.x));
+    dragDxRef.current = dx; // المرجع أوّلاً: هو ما تقرأه `onUp`
+    setDragDx(dx);
   };
-  const onUp = () => {
+  /** نهايةُ اللمسة: `cancelled` تعني أنّ النظام ألغاها فلا تنقّل — إرجاعٌ فقط. */
+  const endDrag = (cancelled: boolean) => {
     const from = dragFrom.current;
-    const dx = dragDx;
+    const dx = dragDxRef.current;
     dragFrom.current = null;
+    dragDxRef.current = 0;
     setDragDx(0);
     if (!from) return;
-    if (Math.abs(dx) < 6) { step(from.edge === "left" ? 1 : -1); return; } // لمسةٌ على الحافّة
-    const s = turnStep(dx);
+    // القرار نفسه في `edgeGesture` (نقيّ ومختبَر) — لا تُعِد عتباته هنا.
+    const s = edgeGesture(dx, from.edge, cancelled);
     if (s) step(s);
   };
+  const onUp = () => endDrag(false);
+  const onCancel = () => endDrag(true);
 
   const shift = dragDx ? dragDx * 0.45 : turning ? turning * 70 : 0;
 
@@ -431,10 +453,10 @@ function BookSpread({
       {/* حافّتا الوجه: امسك الورقة من طرفها واسحب، أو المس الحافّة. اليمينُ نحو
           ما قرأت واليسارُ نحو ما بقي — كما تُمسك المصحف. */}
       <TurnEdge edge="right" label="الوجه السابق" disabled={page <= 1}
-        onPointerDown={(e) => onDown(e, "right")} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onPointerDown={(e) => onDown(e, "right")} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}
         onKeyTurn={() => step(-1)} />
       <TurnEdge edge="left" label="الوجه التالي" disabled={page >= TOTAL_PAGES}
-        onPointerDown={(e) => onDown(e, "left")} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onPointerDown={(e) => onDown(e, "left")} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}
         onKeyTurn={() => step(1)} />
 
       {!veilOn && (

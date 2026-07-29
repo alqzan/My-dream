@@ -116,16 +116,49 @@ type RawRun = [number, string, number];
 type RawLine = [number, RawRun[]];
 type RawChunk = Record<string, RawLine[]>;
 
+/**
+ * محمِّلُ الحزمة. الاستيراد الديناميّ هو الأصل (يقسمه المُحزِّم إلى ملفّاتٍ
+ * تُطلب عند الحاجة)، وهذا المتغيّر منفذٌ لاستبداله في الاختبار وحده — فمحاكاةُ
+ * فشل شبكةٍ لا تُنال من `import()` مباشرةً.
+ */
+type ChunkLoader = (index: number) => Promise<RawChunk>;
+
+const importChunk: ChunkLoader = (index) => {
+  const name = String(index).padStart(2, "0");
+  return import(`./mushaf/chunk-${name}.json`).then((m) => (m.default ?? m) as RawChunk);
+};
+
+let loader: ChunkLoader = importChunk;
+
 const chunks = new Map<number, Promise<RawChunk>>();
 
+/**
+ * وعدُ الحزمة يُحفظ ليُشارَك بين الأوجه — لكنّ **الوعد المرفوض لا يُحفظ**.
+ * كان يُحفظ، فانقطاعةٌ واحدة أو ملفٌّ لم يصل تُبقي الرفضَ في الخريطة إلى نهاية
+ * الجلسة: كلُّ وجهٍ من تلك الحزمة يفشل بعدها فوراً بلا محاولةٍ ثانية، ويبقى
+ * القارئ على هيكلٍ فارغ إلى الأبد. الآن يُنزع المرفوض فتصحّ إعادةُ المحاولة.
+ */
 function loadChunk(index: number): Promise<RawChunk> {
   let p = chunks.get(index);
   if (!p) {
-    const name = String(index).padStart(2, "0");
-    p = import(`./mushaf/chunk-${name}.json`).then((m) => (m.default ?? m) as RawChunk);
+    p = loader(index).catch((err) => {
+      if (chunks.get(index) === p) chunks.delete(index);
+      throw err;
+    });
     chunks.set(index, p);
   }
   return p;
+}
+
+/** استبدالُ محمِّل الحِزَم — للاختبار. `null` يعيد الاستيراد الديناميّ الأصليّ. */
+export function setChunkLoader(fn: ChunkLoader | null): void {
+  loader = fn ?? importChunk;
+}
+
+/** إفراغُ ما حُفظ من حِزَمٍ وأوجه — للاختبار. */
+export function clearChunkCache(): void {
+  chunks.clear();
+  built.clear();
 }
 
 const built = new Map<number, MushafPageLines>();
