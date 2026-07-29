@@ -2,8 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
-import { describeRange, idToSurahAyah } from "@/lib/quran/meta";
-import { textsInRange } from "@/lib/quran/text";
+import { describeRange } from "@/lib/quran/meta";
 import { today } from "@/lib/utils";
 import { countPages, type Portion } from "@/lib/quran/hifz";
 import {
@@ -11,6 +10,7 @@ import {
   STEP_LABEL, type SessionStep, type SessionTally,
 } from "@/lib/quran/session";
 import { HifzCoach } from "@/components/quran/HifzCoach";
+import { MushafSheet } from "@/components/quran/MushafSheet";
 import { MistakeDrill } from "@/components/quran/MistakeDrill";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
 import {
@@ -250,8 +250,14 @@ function StepView({
       </div>
       <p className="text-xs text-gray-500 leading-relaxed">{meta.hint}</p>
 
-      {/* في التسميع لا نعرض النصّ مسبقاً — الكشف جزءٌ من الاختبار داخل المُدرّب. */}
-      {isMemorize ? <PortionBlock text={text} portion={portion} /> : null}
+      {/* في التسميع لا يُكشف النصّ — لكنّ الوجه يُعرض والمقطع مستورٌ في موضعه
+          منه: ترى **أين** مراجعة اليوم من المصحف قبل أن تسمّع، وهو نصفُ
+          التذكّر. الكشف يبقى داخل المُدرّب. */}
+      {isMemorize ? (
+        <PortionBlock text={text} portion={portion} />
+      ) : (
+        <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} hidden={() => true} maxHeight={280} />
+      )}
       <MutashabihatAlert portion={portion} />
 
       <button
@@ -306,18 +312,10 @@ function ResultStat({ label, value }: { label: string; value: number }) {
   );
 }
 
+// ورد اليوم يُعرض في وجهه من المصحف لا مقتطعاً في صندوق: تراه حيث ستراه في
+// المصحف الورقيّ، فتبدأ الذاكرة التصويرية عملها من أوّل نظرة.
 function PortionBlock({ text, portion }: { text: string[]; portion: Portion }) {
-  const rows = textsInRange(text, portion.fromId, portion.toId);
-  return (
-    <div className="rounded-xl bg-white/60 dark:bg-[#2c2318] p-3 max-h-64 overflow-y-auto">
-      <p className="font-quran text-center text-[20px] leading-[2.4] font-bold text-gray-800 dark:text-gray-100" dir="rtl">
-        {rows.map((r) => {
-          const { ayah } = idToSurahAyah(r.id);
-          return <span key={r.id}>{r.text}<span className="text-quran text-[12px] align-middle mx-0.5">﴿{ayah}﴾</span>{" "}</span>;
-        })}
-      </p>
-    </div>
-  );
+  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={320} />;
 }
 
 function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {

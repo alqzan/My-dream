@@ -5,7 +5,9 @@ import { EMPTY_HIFZ } from "@/lib/types";
 import { idToSurahAyah, SURAHS } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
 import { MISTAKE_MASTERY } from "@/lib/quran/hifz";
+import { leadOnPage } from "@/lib/quran/portionPage";
 import { LeadPrompt } from "@/components/quran/LeadPrompt";
+import { MushafSheet } from "@/components/quran/MushafSheet";
 import { Eye, Check, X, RotateCcw, ShieldCheck, Target } from "lucide-react";
 
 // ===================== اختبار موضع الخطأ =====================
@@ -67,31 +69,37 @@ export function MistakeDrill({
       </p>
 
       {/* الآية كاملةً مطموسة بلا تلقين ليست اختباراً: رقمُ الآية وحده لا يدلّ
-          عليها. نعرض الآية السابقة كما في شاشة التسميع فيكون للسؤال مدخل. */}
-      {wholeAyah && !revealed && <LeadPrompt text={text} targetId={ayahId} />}
+          عليها. والسياق على الوجه تلقينٌ في موضعه — فلا نعرض البطاقة إلا حين
+          تبدأ الآيةُ الوجهَ فلا سابقةَ لها على الورقة. */}
+      {wholeAyah && !revealed && leadOnPage(ayahId) == null && <LeadPrompt text={text} targetId={ayahId} />}
 
-      <div className="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-[#241c12] p-5 min-h-[110px] flex items-center justify-center">
-        <p className="font-quran text-center text-[21px] leading-[2.5] font-bold text-gray-800 dark:text-gray-100" dir="rtl">
-          {wholeAyah && !revealed ? (
-            <span className="text-gray-300 dark:text-gray-600 tracking-[0.3em]">▁▁▁▁▁▁▁▁</span>
-          ) : (
-            words.map((w, i) => {
-              const hidden = !revealed && i === blankIdx;
+      {/* الموضع يُختبَر **في وجهه**: الطمس يقع على الصورة نفسها التي حفظتَ
+          عليها، فيرتبط تذكّرُ الكلمة بمكانها من الوجه لا بصندوقٍ معزول. */}
+      <MushafSheet
+        text={text}
+        fromId={ayahId}
+        toId={ayahId}
+        spotlightId={ayahId}
+        maxHeight={330}
+        hidden={wholeAyah ? () => !revealed : undefined}
+        renderAyah={wholeAyah ? undefined : () => (
+          <>
+            {words.map((w, i) => {
+              const blanked = !revealed && i === blankIdx;
               const marked = revealed && i === blankIdx;
               return (
                 <span key={i}>
-                  {hidden ? (
+                  {blanked ? (
                     <span className="text-gray-300 dark:text-gray-600 tracking-[0.2em]">▁▁▁▁</span>
                   ) : (
                     <span className={marked ? "text-red-600 dark:text-red-400 bg-red-500/10 rounded px-1" : undefined}>{w}</span>
                   )}{" "}
                 </span>
               );
-            })
-          )}
-          <span className="text-quran text-[13px] align-middle mx-0.5">﴿{ayah}﴾</span>
-        </p>
-      </div>
+            })}
+          </>
+        )}
+      />
 
       {streak > 0 && (
         <p className="text-[11px] text-center text-emerald-700 dark:text-emerald-300">

@@ -9,7 +9,9 @@ import {
 } from "@/lib/quran/hifz";
 import { presetOf } from "@/lib/quran/intensity";
 import { nextDueDays } from "@/lib/quran/schedule";
+import { leadOnPage } from "@/lib/quran/portionPage";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
+import { MushafSheet, type SheetAyah } from "@/components/quran/MushafSheet";
 import { LeadPrompt } from "@/components/quran/LeadPrompt";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzMistake, type HifzRating } from "@/lib/types";
@@ -22,6 +24,12 @@ import {
 // المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعدد مرّاتٍ تحدّده شدّة التمرين،
 // ثم تسميعٌ بتلقين الآية السابقة، ثم «أتقنتها» للانتقال، وأخيراً مرحلة ربطٍ
 // للمقطع كله. له وضعان: memorize (تكرار+تسميع) للورد، وrecall (تسميع) للمراجعة.
+//
+// **كلّ نصٍّ هنا يُعرض في وجهه من المصحف** (`MushafSheet`): الآية في موضعها من
+// اللوح، وحولها سياقُ وجهها، والوجهُ برقمه وجهته. الحفظ من آياتٍ مجرّدةٍ من
+// وجهها يهدم الذاكرة التصويرية — وهي ما يستند إليه الحافظ حين يتعثّر: «الآية في
+// أعلى اليمنى بعد آية كذا». والسترُ يُبقي أثر الآية في موضعها فلا تضيع الصورة
+// أثناء الاسترجاع.
 //
 // في وضع التسميع لا نسأل «كيف كانت مراجعتك؟» بعد أن وسمتَ مواضع تعثّرك — بل
 // يُشتقّ التقييم من عددها ويُعرض سببُه وموعدُ المراجعة القادمة، ولك أن تخالفه.
@@ -68,11 +76,18 @@ export function HifzCoach({
   if (mode === "recall") {
     return (
       <Shell title={recallTitle} subtitle={describeRange(portion.fromId, portion.toId)} onClose={onClose}>
-        <LeadPrompt text={text} targetId={portion.fromId} />
+        {/* التلقين المرسوم يغني عن بطاقته: الآية السابقة ظاهرةٌ في موضعها من
+            الوجه. فإن بدأ المقطعُ الوجهَ فلا سابقةَ على الورقة — فتُعرض. */}
+        {leadOnPage(portion.fromId) == null && <LeadPrompt text={text} targetId={portion.fromId} />}
         {!revealed ? (
           <>
-            <HiddenBox label="سمّع المقطع من حفظك…" />
-            <button onClick={() => setRevealed(true)} className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
+            {/* المقطع مستورٌ **في وجهه**: أثرُ كلّ آيةٍ في موضعها، والسياق حولها
+                — تسترجع والصورةُ التي حفظتَ عليها قائمةٌ أمامك. */}
+            <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} hidden={() => true} />
+            <p className="text-[11px] text-gray-400 text-center mt-2 flex items-center justify-center gap-1">
+              <EyeOff size={12} /> سمّع المقطع من حفظك…
+            </p>
+            <button onClick={() => setRevealed(true)} className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
               <Eye size={16} /> اكشف للتحقّق
             </button>
           </>
@@ -81,7 +96,7 @@ export function HifzCoach({
             <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
               <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها — واضغطها ثانيةً للتراجع
             </div>
-            <MarkableAyatBlock ayat={ayat} today={todayStr} onToggle={store.toggleMistakeWord} />
+            <MarkableSheet text={text} portion={portion} today={todayStr} onToggle={store.toggleMistakeWord} />
             <SpotStrip items={openHere} today={todayStr} onClear={store.resolveMistake} />
             <div className="mt-3">
               <MutashabihatAlert portion={portion} compact />
@@ -105,7 +120,7 @@ export function HifzCoach({
         <>
           <div className="text-center text-[11px] font-semibold text-quran mb-2 flex items-center justify-center gap-1"><Link2 size={13} /> اربط المقطع كاملاً</div>
           <p className="text-[11px] text-gray-400 text-center mb-3">اقرأ المقطع كله مرّةً موصولاً لتثبيت الربط بين الآيات.</p>
-          <AyatBlock ayat={ayat} />
+          <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} />
           <div className="mt-4">
             <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف تقيّم حفظك للورد؟</div>
             <RatingRow onRate={(r) => onDone(r)} />
@@ -115,7 +130,9 @@ export function HifzCoach({
       ) : phase === "repeat" ? (
         <>
           <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
-          <AyatBlock ayat={[cur]} big />
+          {/* الآية مُبرَزةٌ في وجهها والباقي خافت: تحفظها وأنت ترى أين تقع من
+              الوجه — لا مقتطعةً في صندوق. */}
+          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} maxHeight={330} />
           <div className="mt-3"><MutashabihatAlert portion={{ fromId: cur.id, toId: cur.id }} compact /></div>
           <RepsDots reps={reps} target={repTarget} />
           <button
@@ -140,8 +157,16 @@ export function HifzCoach({
       ) : (
         <>
           <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><CornerDownLeft size={13} /> سمّع الآية التالية من حفظك</div>
-          <LeadPrompt text={text} targetId={cur.id} />
-          {revealed ? <AyatBlock ayat={[cur]} big /> : <HiddenBox label="سمّع من حفظك…" />}
+          {leadOnPage(cur.id) == null && <LeadPrompt text={text} targetId={cur.id} />}
+          {/* مستورةٌ في موضعها من الوجه — لا صندوقٌ فارغ خارج المصحف. */}
+          <MushafSheet
+            text={text}
+            fromId={cur.id}
+            toId={cur.id}
+            spotlightId={cur.id}
+            hidden={() => !revealed}
+            maxHeight={330}
+          />
           <div className="flex gap-2 mt-4">
             <button onClick={() => setRevealed((v) => !v)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran/10 text-quran font-semibold press">
               {revealed ? <><EyeOff size={15} /> أخفِ</> : <><Eye size={15} /> تحقّق</>}
@@ -178,18 +203,6 @@ function Shell({
       <div className="flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
         <div>{children}</div>
       </div>
-    </div>
-  );
-}
-
-function AyatBlock({ ayat, big }: { ayat: { id: number; no: number; text: string }[]; big?: boolean }) {
-  return (
-    <div className="rounded-2xl border border-quran/15 bg-white dark:bg-[#241c12] p-5 min-h-[100px] flex items-center justify-center">
-      <p className={`font-quran text-center font-bold text-gray-800 dark:text-gray-100 ${big ? "text-[26px] leading-[2.5]" : "text-[21px] leading-[2.3]"}`} dir="rtl">
-        {ayat.map((a) => (
-          <span key={a.id}>{a.text}<span className="text-quran text-[13px] align-middle mx-0.5">﴿{a.no}﴾</span>{" "}</span>
-        ))}
-      </p>
     </div>
   );
 }
@@ -256,82 +269,96 @@ function GradeVerdict({
   );
 }
 
-// كتلة آياتٍ قابلة للتحديد: كلُّ كلمةٍ زرٌّ يبدّل وسمها كخطأ، وكلُّ آيةٍ لها زرٌّ
-// (رقمها) لوسمها كاملةً.
+// لوحُ الوجه وآياتُ المقطع فيه **قابلة للتحديد**: كلُّ كلمةٍ زرٌّ يبدّل وسمها
+// كخطأ، وكلُّ آيةٍ لها زرٌّ (رقمها) لوسمها كاملةً. الوسم يقع على الصورة التي
+// حفظتَ عليها، فتبقى في ذهنك مقترنةً بموضعها من الوجه.
 //
 // اللونان مقصودان: الأحمرُ تعثُّرُ *اليوم*، والكهرمانيُّ الباهت وسمٌ سابق لم
 // يُغلَق بعد. كان اللون واحداً فيظنّ المستخدم أنّ الوسم القديم خطأٌ سجّله الآن،
 // ويضغطه ليُزيله — فتُضاف ضربةٌ جديدة (عكس المقصود) ويبقى ملوّناً، فيبدو أنّ
 // الضغط لا يفعل شيئاً. الإزالة الصريحة صارت في SpotStrip أسفل النصّ.
-function MarkableAyatBlock({
-  ayat, today: todayStr, onToggle,
+function MarkableSheet({
+  text, portion, today: todayStr, onToggle,
 }: {
-  ayat: { id: number; no: number; text: string }[];
+  text: string[];
+  portion: Portion;
   today: string;
   onToggle: (ayahId: number, wordIndex: number | null, word?: string) => void;
 }) {
   const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
-  return (
-    <div className="rounded-2xl border border-quran/15 bg-white dark:bg-[#241c12] p-5 min-h-[100px]">
-      <p className="font-quran text-center font-bold text-gray-800 dark:text-gray-100 text-[21px] leading-[2.5]" dir="rtl">
-        {ayat.map((a) => {
-          const marks = mistakesForAyah(h, a.id);
-          const ayahMark = marks.get("all");
-          const ayahNow = ayahMark != null && markedToday(ayahMark, todayStr);
-          const words = a.text.split(/\s+/).filter(Boolean);
+
+  const renderAyah = (a: SheetAyah) => {
+    const marks = mistakesForAyah(h, a.id);
+    const ayahMark = marks.get("all");
+    const ayahNow = ayahMark != null && markedToday(ayahMark, todayStr);
+    const words = a.text.split(/\s+/).filter(Boolean);
+    return (
+      <span
+        className={
+          ayahMark
+            ? ayahNow
+              ? "rounded-md bg-red-500/10 ring-1 ring-red-400/60 px-0.5 box-decoration-clone"
+              : "rounded-md bg-amber-400/10 ring-1 ring-amber-400/40 px-0.5 box-decoration-clone"
+            : undefined
+        }
+      >
+        {words.map((w, i) => {
+          const mk = marks.get(i);
+          const now = mk != null && markedToday(mk, todayStr);
+          const repeats = mk ? mk.hits.length : 0;
           return (
-            <span
-              key={a.id}
-              className={
-                ayahMark
-                  ? ayahNow
-                    ? "rounded-md bg-red-500/10 ring-1 ring-red-400/60 px-0.5"
-                    : "rounded-md bg-amber-400/10 ring-1 ring-amber-400/40 px-0.5"
-                  : undefined
-              }
-            >
-              {words.map((w, i) => {
-                const mk = marks.get(i);
-                const now = mk != null && markedToday(mk, todayStr);
-                const repeats = mk ? mk.hits.length : 0;
-                return (
-                  <span key={i}>
-                    <button
-                      type="button"
-                      onClick={() => onToggle(a.id, i, w)}
-                      aria-pressed={now}
-                      title={mk && !now ? "موضعٌ سابق لم يُغلق — اضغط إن تعثّرتَ فيه اليوم أيضاً" : undefined}
-                      className={`press align-middle transition-colors ${
-                        mk
-                          ? now
-                            ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4"
-                            : "text-amber-700 dark:text-amber-400 underline decoration-amber-400/70 decoration-dotted decoration-2 underline-offset-4"
-                          : "hover:text-quran"
-                      }`}
-                    >
-                      {w}
-                      {repeats >= 2 && (
-                        <sup className={`text-[10px] font-sans font-bold mx-0.5 ${now ? "text-red-500" : "text-amber-600"}`}>{repeats}</sup>
-                      )}
-                    </button>{" "}
-                  </span>
-                );
-              })}
+            <span key={i}>
               <button
                 type="button"
-                onClick={() => onToggle(a.id, null)}
-                title="وسم الآية كاملةً كخطأ"
-                className={`inline-flex items-center justify-center text-[13px] mx-0.5 align-middle press ${
-                  ayahMark ? (ayahNow ? "text-red-500" : "text-amber-600") : "text-quran"
+                onClick={() => onToggle(a.id, i, w)}
+                aria-pressed={now}
+                title={mk && !now ? "موضعٌ سابق لم يُغلق — اضغط إن تعثّرتَ فيه اليوم أيضاً" : undefined}
+                className={`press align-middle transition-colors ${
+                  mk
+                    ? now
+                      ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4"
+                      : "text-amber-700 dark:text-amber-400 underline decoration-amber-400/70 decoration-dotted decoration-2 underline-offset-4"
+                    : "hover:text-quran"
                 }`}
               >
-                ﴿{a.no}﴾
+                {w}
+                {repeats >= 2 && (
+                  <sup className={`text-[10px] font-sans font-bold mx-0.5 ${now ? "text-red-500" : "text-amber-600"}`}>{repeats}</sup>
+                )}
               </button>{" "}
             </span>
           );
         })}
-      </p>
-    </div>
+      </span>
+    );
+  };
+
+  const renderNumber = (a: SheetAyah) => {
+    const marks = mistakesForAyah(h, a.id);
+    const ayahMark = marks.get("all");
+    const ayahNow = ayahMark != null && markedToday(ayahMark, todayStr);
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle(a.id, null)}
+        title="وسم الآية كاملةً كخطأ"
+        className={`inline-flex items-center justify-center text-[0.6em] mx-1 align-middle press ${
+          ayahMark ? (ayahNow ? "text-red-500" : "text-amber-600") : "text-quran"
+        }`}
+      >
+        ﴿{a.ayah}﴾
+      </button>
+    );
+  };
+
+  return (
+    <MushafSheet
+      text={text}
+      fromId={portion.fromId}
+      toId={portion.toId}
+      renderAyah={renderAyah}
+      renderNumber={renderNumber}
+    />
   );
 }
 
@@ -388,15 +415,6 @@ function SpotStrip({
           );
         })}
       </div>
-    </div>
-  );
-}
-
-// صندوق مكان الآية المخفيّة أثناء التسميع.
-function HiddenBox({ label }: { label: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-quran/30 bg-quran/[0.03] p-5 min-h-[100px] flex items-center justify-center">
-      <span className="text-sm text-gray-400 flex items-center gap-1.5"><EyeOff size={15} /> {label}</span>
     </div>
   );
 }

@@ -2,10 +2,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzUnit, type HifzRating } from "@/lib/types";
-import {
-  SURAHS, surahAyahToId, idToSurahAyah, describeRange,
-} from "@/lib/quran/meta";
-import { loadAyahText, textsInRange } from "@/lib/quran/text";
+import { SURAHS, surahAyahToId, describeRange } from "@/lib/quran/meta";
+import { loadAyahText } from "@/lib/quran/text";
 import { today } from "@/lib/utils";
 import { plannedPortion, hifzProgress, smartTestPortion, type Portion } from "@/lib/quran/hifz";
 import { INTENSITY_LABEL, intensityOf } from "@/lib/quran/intensity";
@@ -13,6 +11,7 @@ import type { HifzIntensity } from "@/lib/types";
 import { buildTodayPlan } from "@/lib/quran/session";
 import { HifzCoach } from "@/components/quran/HifzCoach";
 import { TodaySessionCard, TodaySessionFlow } from "@/components/quran/TodaySession";
+import { MushafSheet } from "@/components/quran/MushafSheet";
 import { HifzMap } from "@/components/quran/HifzMap";
 import { HifzChart } from "@/components/quran/HifzChart";
 import { HifzLog } from "@/components/quran/HifzLog";
@@ -355,24 +354,9 @@ function IntensityCard() {
 }
 
 // ---------------- عناصر مساعدة ----------------
-function PortionText({ text, portion, muted }: { text: string[] | null; portion: Portion; muted?: boolean }) {
-  if (!text) return <p className="text-xs text-gray-400 text-center py-4">…جارٍ تحميل المصحف</p>;
-  const rows = textsInRange(text, portion.fromId, portion.toId);
-  return (
-    <div className="rounded-xl bg-white/60 dark:bg-[#2c2318] p-3 max-h-56 overflow-y-auto">
-      <p className={`font-quran text-center text-[20px] leading-[2.4] font-bold ${muted ? "text-gray-600 dark:text-gray-300" : "text-gray-800 dark:text-gray-100"}`} dir="rtl">
-        {rows.map((r) => {
-          const { ayah } = idToSurahAyah(r.id);
-          return (
-            <span key={r.id}>
-              {r.text}
-              <span className="text-quran text-[12px] align-middle mx-0.5">﴿{ayah}﴾</span>{" "}
-            </span>
-          );
-        })}
-      </p>
-    </div>
-  );
+// نصّ المقطع في وجهه من المصحف (لوحٌ واحد مشترك — راجع `MushafSheet`).
+function PortionText({ text, portion }: { text: string[] | null; portion: Portion }) {
+  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={300} />;
 }
 
 function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {

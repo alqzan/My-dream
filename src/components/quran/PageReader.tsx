@@ -1,9 +1,12 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   SURAHS, pageRange, idToSurahAyah, idToJuz, idToPage, TOTAL_PAGES,
 } from "@/lib/quran/meta";
 import { placeOf, pageSide, facingPage, clampPage } from "@/lib/quran/page";
+import { loadReadPrefs, saveReadPrefs, DEFAULT_READ_PREFS, SIZE_RANGE, LH_RANGE } from "@/lib/quran/readPrefs";
+import { MushafSheet } from "@/components/quran/MushafSheet";
+import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 import {
   ChevronLeft, ChevronRight, Settings2, Minus, Plus, Focus, X,
   Bookmark, Copy, Sprout, EyeOff, Eye, Layers,
@@ -18,19 +21,11 @@ import {
 // بالترتيب — فتسترجع من ذاكرتك قبل أن ترى. الكشفُ لا يُخزَّن ولا يُزامَن (حالة
 // جلسةٍ محضة)، فلا يمسّ المزامنة بشيء.
 //
-// الحسابُ كلّه في `@/lib/quran/page` (نقيّ ومختبَر) — لا تعريفَ ثانياً هنا.
+// الحسابُ كلّه في `@/lib/quran/page` (نقيّ ومختبَر)، ورسمُ لوح الوجه في
+// `MushafSheet` — وهو نفسه لوحُ الحفظ والتسميع في قسم الحفظ، فصورةُ الوجه واحدةٌ
+// أينما رأيتها. لا تعريفَ ثانياً هنا.
 
 type VeilMode = "off" | "all" | "step";
-
-const READ_KEY = "madar-mushaf-read";
-function readReadSettings(): { size: number; lh: number } {
-  if (typeof window === "undefined") return { size: 22, lh: 2.6 };
-  try {
-    const r = JSON.parse(window.localStorage.getItem(READ_KEY) || "null");
-    if (r && typeof r.size === "number" && typeof r.lh === "number") return r;
-  } catch { /* ignore */ }
-  return { size: 22, lh: 2.6 };
-}
 
 export function PageReader({
   page, text, onPage, onBack, onReflect, onResume,
@@ -42,7 +37,8 @@ export function PageReader({
   onReflect?: (surah: number, ayah: number) => void;
   onResume: (surah: number, ayah: number) => void;
 }) {
-  const [rs, setRs] = useState(readReadSettings);
+  const [rs, setRs] = useState(DEFAULT_READ_PREFS);
+  useEffect(() => { setRs(loadReadPrefs()); }, []);
   const [focus, setFocus] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [sel, setSel] = useState<number | null>(null); // معرّف الآية المحدّدة
@@ -67,7 +63,7 @@ export function PageReader({
 
   const save = (next: { size: number; lh: number }) => {
     setRs(next);
-    try { window.localStorage.setItem(READ_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    saveReadPrefs(next);
   };
   function flashMsg(m: string) {
     setFlash(m);
@@ -83,30 +79,14 @@ export function PageReader({
     return () => { try { lock?.release?.(); } catch { /* ignore */ } };
   }, []);
 
-  // آياتُ هذه الصفحة، ومع كلّ آيةٍ سورتُها ورقمُها فيها (فالصفحة قد تعبر سوراً).
-  const ayat = useMemo(() => {
-    if (!text) return [];
-    const out: { id: number; surah: number; ayah: number; text: string }[] = [];
-    for (let id = start; id <= end; id++) {
-      const { surah, ayah } = idToSurahAyah(id);
-      out.push({ id, surah, ayah, text: text[id] ?? "" });
-    }
-    return out;
-  }, [text, start, end]);
-
-  // السور المبدوءة في هذه الصفحة (لعرض ترويسة البسملة في موضعها الصحيح).
-  const surahStarts = useMemo(() => {
-    const m = new Map<number, number>(); // معرّف الآية → رقم السورة التي تبدأ عندها
-    for (const v of ayat) if (v.ayah === 1) m.set(v.id, v.surah);
-    return m;
-  }, [ayat]);
+  const ayatCount = end - start + 1;
 
   const isVeiled = (id: number): boolean => {
     if (veil === "off" || peeked.has(id)) return false;
     if (veil === "all") return true;
     return id >= start + revealed; // step: كُشف ما قبل العدّاد
   };
-  const allRevealed = veil === "step" && revealed >= ayat.length;
+  const allRevealed = veil === "step" && revealed >= ayatCount;
 
   function toggleVeil() {
     setVeil((v) => (v === "off" ? "step" : v === "step" ? "all" : "off"));
@@ -204,12 +184,12 @@ export function PageReader({
         <div className="flex items-center gap-2 rounded-xl border border-quran/20 bg-white dark:bg-[#241c12] px-3 py-2">
           <Layers size={14} className="text-quran shrink-0" />
           <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
-            {revealed} / {ayat.length}
+            {revealed} / {ayatCount}
           </span>
           <div className="flex-1 h-1 rounded-full bg-quran/10 overflow-hidden">
             <div
               className="h-full bg-quran/70 rounded-full transition-[width] duration-300"
-              style={{ width: `${ayat.length ? (revealed / ayat.length) * 100 : 0}%` }}
+              style={{ width: `${ayatCount ? (revealed / ayatCount) * 100 : 0}%` }}
             />
           </div>
           <button
@@ -220,7 +200,7 @@ export function PageReader({
             استر
           </button>
           <button
-            onClick={() => setRevealed((n) => Math.min(ayat.length, n + 1))}
+            onClick={() => setRevealed((n) => Math.min(ayatCount, n + 1))}
             disabled={allRevealed}
             className="text-[11px] font-bold text-white bg-quran rounded-lg px-2.5 py-1 press disabled:opacity-40"
           >
@@ -234,15 +214,15 @@ export function PageReader({
         <div className="flex items-center gap-3 flex-wrap bg-white dark:bg-[#241c12] border border-gray-100 dark:border-transparent rounded-xl p-2.5 text-[11px] text-gray-500">
           <div className="flex items-center gap-1.5">
             <span>الحجم</span>
-            <button onClick={() => save({ ...rs, size: Math.max(16, rs.size - 2) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أصغر"><Minus size={12} /></button>
+            <button onClick={() => save({ ...rs, size: Math.max(SIZE_RANGE.min, rs.size - SIZE_RANGE.step) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أصغر"><Minus size={12} /></button>
             <span className="w-6 text-center tabular-nums font-bold text-gray-700 dark:text-gray-200">{rs.size}</span>
-            <button onClick={() => save({ ...rs, size: Math.min(34, rs.size + 2) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أكبر"><Plus size={12} /></button>
+            <button onClick={() => save({ ...rs, size: Math.min(SIZE_RANGE.max, rs.size + SIZE_RANGE.step) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أكبر"><Plus size={12} /></button>
           </div>
           <div className="flex items-center gap-1.5">
             <span>التباعد</span>
-            <button onClick={() => save({ ...rs, lh: Math.max(1.8, Math.round((rs.lh - 0.2) * 10) / 10) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أقلّ"><Minus size={12} /></button>
+            <button onClick={() => save({ ...rs, lh: Math.max(LH_RANGE.min, Math.round((rs.lh - LH_RANGE.step) * 10) / 10) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أقلّ"><Minus size={12} /></button>
             <span className="w-7 text-center tabular-nums font-bold text-gray-700 dark:text-gray-200">{rs.lh.toFixed(1)}</span>
-            <button onClick={() => save({ ...rs, lh: Math.min(3.4, Math.round((rs.lh + 0.2) * 10) / 10) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أكثر"><Plus size={12} /></button>
+            <button onClick={() => save({ ...rs, lh: Math.min(LH_RANGE.max, Math.round((rs.lh + LH_RANGE.step) * 10) / 10) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أكثر"><Plus size={12} /></button>
           </div>
           <button onClick={() => setFocus(true)} className="inline-flex items-center gap-1 font-semibold text-quran bg-quran/10 rounded-lg px-2.5 py-1 press ms-auto">
             <Focus size={13} /> وضع التركيز
@@ -262,62 +242,20 @@ export function PageReader({
         </div>
       )}
 
-      {/* لوحُ الصفحة — إطارٌ ثابت يحاكي حدّ المصحف، ورقمُ الصفحة في قدمه.
-          الجانبُ المضيء (يمين/يسار) يذكّرك بموضع الصفحة في الوجه المفتوح. */}
-      <div
-        className={`relative rounded-2xl border-2 border-quran/20 bg-gradient-to-b from-quran/[0.05] to-transparent p-4 pb-8 ${
-          side === "يمنى" ? "border-r-4 border-r-quran/50" : "border-l-4 border-l-quran/50"
-        }`}
-      >
-        {!text ? (
-          <p className="text-sm text-gray-400 text-center py-10">…جارٍ تحميل المصحف</p>
-        ) : (
-          <p
-            className="font-quran text-justify font-bold text-gray-800 dark:text-gray-100"
-            dir="rtl"
-            style={{ fontSize: `${rs.size}px`, lineHeight: rs.lh }}
-          >
-            {ayat.map((v) => {
-              const startsSurah = surahStarts.get(v.id);
-              const veiled = isVeiled(v.id);
-              const isSel = sel === v.id;
-              return (
-                <span key={v.id}>
-                  {startsSurah && startsSurah !== 1 && startsSurah !== 9 && v.ayah === 1 && (
-                    <span className="block text-center text-[0.8em] text-quran font-bold my-3 pb-2 border-b border-quran/10">
-                      {SURAHS[startsSurah - 1].name}
-                      <span className="block">{text[1]}</span>
-                    </span>
-                  )}
-                  <span
-                    id={`q-page-ayah-${v.id}`}
-                    onClick={() => (veil !== "off" && veiled ? peek(v.id) : setSel(isSel ? null : v.id))}
-                    className={`cursor-pointer rounded px-0.5 transition-colors ${isSel ? "bg-quran/15" : "hover:bg-quran/[0.06]"}`}
-                  >
-                    {veiled ? (
-                      // سترٌ لا حذف: طولُ الأثر يتناسب مع طول الآية، فيبقى شكلُ
-                      // الصفحة (وهو نفسه ما تحفظه العين) قائماً تحت الستر.
-                      <span
-                        aria-label="آية مستورة"
-                        className="inline-block align-middle rounded bg-quran/15 select-none"
-                        style={{ width: `${Math.min(100, Math.max(8, v.text.length / 2.2))}%`, height: "0.62em" }}
-                      />
-                    ) : (
-                      v.text
-                    )}
-                    <span className="inline-flex items-center justify-center text-[0.6em] text-quran mx-1 align-middle">
-                      ﴿{v.ayah}﴾
-                    </span>
-                  </span>
-                </span>
-              );
-            })}
-          </p>
-        )}
-        <span className="absolute bottom-2 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
-          {page}
-        </span>
-      </div>
+      {/* لوحُ الصفحة — نفسه لوحُ الحفظ في قسم الحفظ (`MushafSheet`): إطارٌ يحاكي
+          حدّ المصحف، ورقمُ الصفحة في قدمه، والحافّة المضيئة تذكّرك بموضعها من
+          الوجه المفتوح. الترويسة مطفأةٌ هنا لأنّ شريط الموضع أعلاه يقولها. */}
+      <MushafSheet
+        text={text}
+        fromId={start}
+        toId={end}
+        header={false}
+        size={rs.size}
+        lh={rs.lh}
+        hidden={isVeiled}
+        selectedId={sel}
+        onAyahClick={(id) => (veil !== "off" && isVeiled(id) ? peek(id) : setSel(sel === id ? null : id))}
+      />
 
       {/* تنقّلٌ سفليّ بعرضٍ كامل — أسهل من أسهم الترويسة أثناء القراءة. */}
       {!focus && (
@@ -344,22 +282,6 @@ export function PageReader({
         onReflect={onReflect} onResume={onResume} onCopy={() => copyAyah(sel)}
         onFlash={flashMsg} veiled={isVeiled(sel)} onPeek={() => peek(sel)} veilOn={veil !== "off"} />}
     </div>
-  );
-}
-
-// رسمٌ صغير لوجهٍ مفتوح: صفحتان، والحالية مضاءة في جهتها. أوقع في الذهن من
-// كلمة «يمنى» وحدها، وهو بيت القصيد في حفظ موضع الصفحة.
-function SpreadGlyph({ side }: { side: "يمنى" | "يسرى" }) {
-  const on = "fill-quran/70 stroke-quran";
-  const off = "fill-transparent stroke-quran/30";
-  return (
-    <svg viewBox="0 0 34 22" className="w-9 h-6 shrink-0" aria-hidden>
-      <rect x="17.6" y="1" width="15" height="20" rx="2" strokeWidth="1.2"
-        className={side === "يسرى" ? on : off} />
-      <rect x="1.4" y="1" width="15" height="20" rx="2" strokeWidth="1.2"
-        className={side === "يمنى" ? on : off} />
-      <line x1="17" y1="1" x2="17" y2="21" strokeWidth="1.2" className="stroke-quran/40" />
-    </svg>
   );
 }
 
