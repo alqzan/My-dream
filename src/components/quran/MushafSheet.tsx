@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SURAHS, idToSurahAyah, idToJuz } from "@/lib/quran/meta";
 import { portionPages } from "@/lib/quran/portionPage";
+import { leafStack, edgeWidth } from "@/lib/quran/book";
+import type { PageSide } from "@/lib/quran/page";
 import { loadReadPrefs, DEFAULT_READ_PREFS } from "@/lib/quran/readPrefs";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 
@@ -50,6 +52,7 @@ export function MushafSheet({
   onAyahClick,
   size, lh,
   maxHeight,
+  stack = true,
   className = "",
 }: {
   text: string[] | null;
@@ -74,6 +77,8 @@ export function MushafSheet({
   lh?: number;
   /** ارتفاعٌ أقصى بالبكسل مع تمرير — للبطاقات داخل الصفحات. */
   maxHeight?: number;
+  /** سماكةُ الأوراق على الطرف الخارجيّ (تُطفأ في المساحات الضيّقة جداً). */
+  stack?: boolean;
   className?: string;
 }) {
   // التفضيلات تُقرأ بعد التركيب لا أثناء الرسم الأوّل: الموقع ثابتٌ مُصدَّر
@@ -125,13 +130,10 @@ export function MushafSheet({
               </div>
             )}
 
-            {/* لوحُ الوجه — إطارٌ يحاكي حدّ المصحف، ورقمُه في قدمه، وحرفُ الجهة
-                مضيءٌ على حافّته (يمنى ⇦ يمين اللوح). */}
-            <div
-              className={`relative rounded-2xl border-2 border-quran/20 bg-gradient-to-b from-quran/[0.05] to-transparent p-4 pb-7 ${
-                pg.side === "يمنى" ? "border-r-4 border-r-quran/50" : "border-l-4 border-l-quran/50"
-              }`}
-            >
+            {/* ورقةٌ في مجلَّد لا لوحٌ عائم: الكعب في الداخل بظلّه وزاويتُه
+                مربّعة، وحافّةُ الأوراق المتراكمة في الخارج بسماكةٍ تقول أين أنت
+                من المصحف. الشكل وحده يقول «يمنى» أو «يسرى» قبل الكلمة. */}
+            <Leaf page={pg.page} side={pg.side} stack={stack}>
               <p
                 className="font-quran text-justify font-bold text-gray-800 dark:text-gray-100"
                 dir="rtl"
@@ -161,10 +163,77 @@ export function MushafSheet({
               <span className="absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
                 {pg.page}
               </span>
-            </div>
+            </Leaf>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ===================== الورقة =====================
+// ثلاثة أشياء تجعل المستطيل ورقةً في مجلَّد: **الكعب** (حافّةٌ داخلية مربّعة
+// الزاوية عليها ظلُّ الطيّة)، و**الطرف الخارجيّ** المستدير الذي تُمسكه لتقلبها،
+// و**سماكةُ الأوراق** خلفه. والجهةُ تُقرأ من ترتيب هذه الثلاثة: الكعب يسارَ
+// اليُمنى ويمينَ اليُسرى — كما في المصحف بيدك تماماً.
+//
+// السماكة صادقة: على الطرف الخارجيّ لليُمنى تُرسم أوراقُ ما **قرأتَه** (وهي في
+// الكتاب العربيّ تتراكم يميناً)، وعلى طرف اليُسرى أوراقُ ما **بقي**. فسماكةٌ
+// رفيعة يميناً تعني أنّك في أوّل المصحف، بلا رقمٍ تقرأه. الحسابُ في
+// `@/lib/quran/book`.
+export function Leaf({
+  page, side, stack = true, className = "", children,
+}: {
+  page: number;
+  side: PageSide;
+  stack?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const spineOnLeft = side === "يمنى"; // الكعب في داخل الوجه المفتوح
+  const { beforePct, afterPct } = leafStack(page);
+  const edgePx = edgeWidth(spineOnLeft ? beforePct : afterPct);
+
+  return (
+    <div className={`relative ${className}`}>
+      <div
+        className={`relative border-2 border-quran/20 bg-gradient-to-b from-quran/[0.05] to-transparent p-4 pb-7 ${
+          spineOnLeft
+            ? "rounded-l-sm rounded-r-2xl border-l-quran/40 ms-0 me-0"
+            : "rounded-r-sm rounded-l-2xl border-r-quran/40"
+        }`}
+        style={stack ? (spineOnLeft ? { marginRight: edgePx } : { marginLeft: edgePx }) : undefined}
+      >
+        {children}
+
+        {/* ظلُّ الطيّة عند الكعب — يعمق تدريجاً كما ينحني الورق نحو الخياطة */}
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-0 w-7 ${
+            spineOnLeft
+              ? "left-0 bg-gradient-to-r from-black/[0.09] via-black/[0.03] to-transparent dark:from-black/40"
+              : "right-0 bg-gradient-to-l from-black/[0.09] via-black/[0.03] to-transparent dark:from-black/40"
+          }`}
+        />
+        {/* خيطُ الكعب نفسه */}
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-0 w-[2px] bg-quran/25 ${spineOnLeft ? "left-0" : "right-0"}`}
+        />
+      </div>
+
+      {/* حافّة الأوراق: خطوطٌ متقاربة كحوافّ الورق حين تنظر إلى المصحف من جنبه */}
+      {stack && (
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-2 rounded-sm ${spineOnLeft ? "right-0" : "left-0"}`}
+          style={{
+            width: edgePx,
+            backgroundImage:
+              "repeating-linear-gradient(to right, rgba(120,95,55,0.30) 0px, rgba(120,95,55,0.30) 1px, transparent 1px, transparent 3px)",
+          }}
+        />
+      )}
     </div>
   );
 }

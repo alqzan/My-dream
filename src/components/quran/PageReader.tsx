@@ -4,6 +4,7 @@ import {
   SURAHS, pageRange, idToSurahAyah, idToJuz, idToPage, TOTAL_PAGES,
 } from "@/lib/quran/meta";
 import { placeOf, pageSide, facingPage, clampPage } from "@/lib/quran/page";
+import { spreadOf, sameSpread, turnStep } from "@/lib/quran/book";
 import { loadReadPrefs, saveReadPrefs, DEFAULT_READ_PREFS, SIZE_RANGE, LH_RANGE } from "@/lib/quran/readPrefs";
 import { MushafSheet } from "@/components/quran/MushafSheet";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
@@ -54,12 +55,19 @@ export function PageReader({
   const side = pageSide(page);
   const facing = facingPage(page);
 
-  // تبديلُ الصفحة يبدأ حفظاً جديداً: نعيد الستر والتحديد إلى أوّله.
+  // الستر يجري على **الوجه المفتوح** لا على صفحةٍ منه: هكذا لا ينقطع كشفُك حين
+  // تنتقل بعينك إلى الصفحة المقابلة — وهو ما تفعله بالورق تماماً.
+  const spread = spreadOf(page);
+  const spreadStart = pageRange(spread.right).start;
+  const spreadEnd = pageRange(spread.left ?? spread.right).end;
+
+  // قلبُ الورقة يبدأ حفظاً جديداً؛ أمّا التنقّل داخل الوجه المفتوح فلا يُلغي
+  // ما كشفتَه (مفتاح الأثر هو الوجه لا الصفحة).
   useEffect(() => {
     setSel(null);
     setRevealed(0);
     setPeeked(new Set());
-  }, [page]);
+  }, [spread.right]);
 
   const save = (next: { size: number; lh: number }) => {
     setRs(next);
@@ -79,12 +87,12 @@ export function PageReader({
     return () => { try { lock?.release?.(); } catch { /* ignore */ } };
   }, []);
 
-  const ayatCount = end - start + 1;
+  const ayatCount = spreadEnd - spreadStart + 1;
 
   const isVeiled = (id: number): boolean => {
     if (veil === "off" || peeked.has(id)) return false;
     if (veil === "all") return true;
-    return id >= start + revealed; // step: كُشف ما قبل العدّاد
+    return id >= spreadStart + revealed; // step: كُشف ما قبل العدّاد
   };
   const allRevealed = veil === "step" && revealed >= ayatCount;
 
@@ -242,18 +250,17 @@ export function PageReader({
         </div>
       )}
 
-      {/* لوحُ الصفحة — نفسه لوحُ الحفظ في قسم الحفظ (`MushafSheet`): إطارٌ يحاكي
-          حدّ المصحف، ورقمُ الصفحة في قدمه، والحافّة المضيئة تذكّرك بموضعها من
-          الوجه المفتوح. الترويسة مطفأةٌ هنا لأنّ شريط الموضع أعلاه يقولها. */}
-      <MushafSheet
+      {/* الوجه المفتوح — الصفحتان المتقابلتان في مجلَّدٍ واحد. تنتقل بينهما
+          بالتمرير العَرْضيّ (أو تراهما معاً على شاشةٍ عريضة)، وتقلب الورقة
+          بالسحب من طرفها أو بلمس حافّتها. */}
+      <BookSpread
+        page={page}
         text={text}
-        fromId={start}
-        toId={end}
-        header={false}
-        size={rs.size}
-        lh={rs.lh}
-        hidden={isVeiled}
-        selectedId={sel}
+        rs={rs}
+        veilOn={veil !== "off"}
+        isVeiled={isVeiled}
+        sel={sel}
+        onPage={goto}
         onAyahClick={(id) => (veil !== "off" && isVeiled(id) ? peek(id) : setSel(sel === id ? null : id))}
       />
 
@@ -282,6 +289,191 @@ export function PageReader({
         onReflect={onReflect} onResume={onResume} onCopy={() => copyAyah(sel)}
         onFlash={flashMsg} veiled={isVeiled(sel)} onPeek={() => peek(sel)} veilOn={veil !== "off"} />}
     </div>
+  );
+}
+
+// ===================== الوجه المفتوح =====================
+// المصحف لا يُقرأ صفحةً معلّقةً في فراغ: صفحتان متقابلتان في مجلَّدٍ واحد،
+// وورقةٌ تُقلب من طرفها. هذا المكوّن يجمع الثلاثة:
+//   • **الصفحتان معاً** في مسارٍ واحد: على الشاشة العريضة تراهما جنباً إلى جنب
+//     كالمصحف المفتوح، وعلى الجوال تنتقل بينهما بالتمرير العَرْضيّ (مع بقاء طرف
+//     المقابلة ظاهراً، فتعرف أنّها هناك).
+//   • **قلبُ الورقة**: سحبٌ من طرف الوجه — يميناً تتقدّم ويساراً ترجع، وهي حركة
+//     الورقة نفسها في الكتاب العربيّ (الورقة الراقدة يساراً تدور على الكعب
+//     فتستقرّ يميناً). ولمسةٌ على الحافّة تكفي لمن لا يريد السحب.
+//   • **حدُّ الوجه**: التنقّل داخل الوجه المفتوح تصفّحٌ بالعين (تمريرٌ سلس)،
+//     وعبورُه قلبُ ورقةٍ له حركته. القرار في `sameSpread`.
+//
+// اتّجاه الحركة ليس ذوقاً: `book.ts` يشتقّه من بنية الكتاب العربيّ ويحرسه اختبار.
+function BookSpread({
+  page, text, rs, veilOn, isVeiled, sel, onPage, onAyahClick,
+}: {
+  page: number;
+  text: string[] | null;
+  rs: { size: number; lh: number };
+  veilOn: boolean;
+  isVeiled: (id: number) => boolean;
+  sel: number | null;
+  onPage: (p: number) => void;
+  onAyahClick: (id: number) => void;
+}) {
+  const spread = spreadOf(page);
+  // ترتيب DOM من اليسار لليمين (المسار نفسه ltr ليستقيم حساب التمرير في كلّ
+  // المتصفّحات؛ نصُّ الآيات يبقى rtl داخل اللوح).
+  const panes = [spread.left, spread.right].filter((p): p is number => p != null);
+
+  const scroller = useRef<HTMLDivElement>(null);
+  const paneEls = useRef(new Map<number, HTMLDivElement>());
+  const prevPage = useRef(page);
+  const settle = useRef<ReturnType<typeof setTimeout>>();
+  const dragFrom = useRef<{ x: number; edge: "left" | "right" } | null>(null);
+  const [dragDx, setDragDx] = useState(0);
+  const [turning, setTurning] = useState<0 | 1 | -1>(0);
+  const [calm, setCalm] = useState(false); // تفضيل تقليل الحركة
+
+  useEffect(() => {
+    setCalm(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+  }, []);
+
+  // أحضر الصفحة الحالية إلى المنظر: بسلاسةٍ داخل الوجه الواحد، وفوراً بعد قلب
+  // ورقةٍ (الوجه الجديد يبدأ من مكانه لا منزلقاً).
+  useEffect(() => {
+    const box = scroller.current;
+    const el = paneEls.current.get(page);
+    if (!box || !el) return;
+    const smooth = sameSpread(prevPage.current, page) && !calm;
+    prevPage.current = page;
+    box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.clientWidth) / 2, behavior: smooth ? "smooth" : "auto" });
+  }, [page, calm]);
+
+  // التمرير العَرْضيّ نفسه تنقّلٌ بين صفحتَي الوجه — نقرأ ما استقرّ عليه.
+  function onScroll() {
+    const box = scroller.current;
+    if (!box || box.scrollWidth <= box.clientWidth + 8) return; // الشاشة العريضة: لا تمرير
+    clearTimeout(settle.current);
+    settle.current = setTimeout(() => {
+      const center = box.scrollLeft + box.clientWidth / 2;
+      let best = page;
+      let bestD = Infinity;
+      paneEls.current.forEach((el, p) => {
+        const d = Math.abs(el.offsetLeft + el.clientWidth / 2 - center);
+        if (d < bestD) { bestD = d; best = p; }
+      });
+      if (best !== page) onPage(best);
+    }, 140);
+  }
+
+  function step(dir: 1 | -1) {
+    const target = clampPage(page + dir);
+    if (target === page) return;
+    if (sameSpread(target, page) || calm) { onPage(target); return; }
+    setTurning(dir);
+    setTimeout(() => { onPage(target); setTurning(0); }, 190);
+  }
+
+  const onDown = (e: React.PointerEvent, edge: "left" | "right") => {
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragFrom.current = { x: e.clientX, edge };
+  };
+  const onMove = (e: React.PointerEvent) => {
+    if (!dragFrom.current) return;
+    const dx = e.clientX - dragFrom.current.x;
+    setDragDx(Math.max(-170, Math.min(170, dx)));
+  };
+  const onUp = () => {
+    const from = dragFrom.current;
+    const dx = dragDx;
+    dragFrom.current = null;
+    setDragDx(0);
+    if (!from) return;
+    if (Math.abs(dx) < 6) { step(from.edge === "left" ? 1 : -1); return; } // لمسةٌ على الحافّة
+    const s = turnStep(dx);
+    if (s) step(s);
+  };
+
+  const shift = dragDx ? dragDx * 0.45 : turning ? turning * 70 : 0;
+
+  return (
+    <div className="relative">
+      <div
+        ref={scroller}
+        onScroll={onScroll}
+        dir="ltr"
+        className="flex gap-2 overflow-x-auto snap-x snap-mandatory scroll-smooth px-6 -mx-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {panes.map((p) => {
+          const r = pageRange(p);
+          return (
+            <div
+              key={p}
+              ref={(el) => { if (el) paneEls.current.set(p, el); else paneEls.current.delete(p); }}
+              className="snap-center shrink-0 basis-[93%] min-[900px]:basis-[calc(50%-0.25rem)]"
+              style={{
+                transform: shift ? `translateX(${shift}px)` : undefined,
+                opacity: turning ? 0.12 : 1,
+                // ظلٌّ يرتفع مع السحب: الورقة تُرفع عن أختها قبل أن تنقلب.
+                filter: dragDx ? `drop-shadow(0 6px 14px rgba(60,40,10,${Math.min(0.22, Math.abs(dragDx) / 700)}))` : undefined,
+                transition: dragDx ? "none" : "transform 190ms ease-out, opacity 190ms ease-out",
+              }}
+            >
+              <MushafSheet
+                text={text}
+                fromId={r.start}
+                toId={r.end}
+                header={false}
+                size={rs.size}
+                lh={rs.lh}
+                hidden={isVeiled}
+                selectedId={sel}
+                onAyahClick={onAyahClick}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* حافّتا الوجه: امسك الورقة من طرفها واسحب، أو المس الحافّة. اليمينُ نحو
+          ما قرأت واليسارُ نحو ما بقي — كما تُمسك المصحف. */}
+      <TurnEdge edge="right" label="الوجه السابق" disabled={page <= 1}
+        onPointerDown={(e) => onDown(e, "right")} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onKeyTurn={() => step(-1)} />
+      <TurnEdge edge="left" label="الوجه التالي" disabled={page >= TOTAL_PAGES}
+        onPointerDown={(e) => onDown(e, "left")} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onKeyTurn={() => step(1)} />
+
+      {!veilOn && (
+        <p className="text-[10px] text-gray-400 text-center mt-1.5">
+          اسحب الورقة من طرفها لتقلبها · وللانتقال بين صفحتَي الوجه مرِّر عَرْضاً
+        </p>
+      )}
+    </div>
+  );
+}
+
+// شريطُ حافّةٍ رفيع: هدفُ لمسٍ كامل الارتفاع (44px عرضاً مع الهامش) بلا أن يغطّي
+// النصّ — يعيش في هامش المسار لا فوق الورقة.
+function TurnEdge({
+  edge, label, disabled, onKeyTurn, ...handlers
+}: {
+  edge: "left" | "right";
+  label: string;
+  disabled: boolean;
+  /** لوحة المفاتيح لا تُصدر أحداث مؤشّر: النقرةُ المولَّدة منها (detail = 0) هي
+      سبيلُ من يتصفّح بالمفاتيح لقلب الورقة. */
+  onKeyTurn: () => void;
+} & Pick<React.ComponentProps<"button">, "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel">) {
+  return (
+    <button
+      {...handlers}
+      onClick={(e) => { if (e.detail === 0) onKeyTurn(); }}
+      disabled={disabled}
+      aria-label={label}
+      className={`absolute inset-y-6 w-7 rounded-lg touch-none select-none press disabled:opacity-0 flex items-center justify-center text-quran/30 hover:text-quran/70 hover:bg-quran/[0.06] ${
+        edge === "left" ? "left-0" : "right-0"
+      }`}
+    >
+      {edge === "left" ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+    </button>
   );
 }
 
