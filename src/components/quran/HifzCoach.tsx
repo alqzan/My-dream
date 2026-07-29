@@ -11,7 +11,8 @@ import { presetOf } from "@/lib/quran/intensity";
 import { nextDueDays } from "@/lib/quran/schedule";
 import { leadOnPage } from "@/lib/quran/portionPage";
 import { MutashabihatAlert } from "@/components/quran/MutashabihatAlert";
-import { MushafSheet, type SheetAyah } from "@/components/quran/MushafSheet";
+import { MushafSheet, AyahNumber, type SheetAyah, type SheetPart } from "@/components/quran/MushafSheet";
+import { tokenizeRun } from "@/lib/quran/mushafLayout";
 import { LeadPrompt } from "@/components/quran/LeadPrompt";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzMistake, type HifzRating } from "@/lib/types";
@@ -287,46 +288,48 @@ function MarkableSheet({
 }) {
   const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
 
-  const renderAyah = (a: SheetAyah) => {
+  // يُنادى لكلّ مقطعٍ من الآية على سطره من الوجه؛ وترتيبُ الكلمة يأتي من
+  // `tokenizeRun` فيبقى ترتيبَها في الآية كاملةً وإن انكسرت على سطرين.
+  const renderAyah = (a: SheetAyah, part: SheetPart) => {
     const marks = mistakesForAyah(h, a.id);
     const ayahMark = marks.get("all");
     const ayahNow = ayahMark != null && markedToday(ayahMark, todayStr);
-    const words = a.text.split(/\s+/).filter(Boolean);
     return (
       <span
         className={
           ayahMark
             ? ayahNow
-              ? "rounded-md bg-red-500/10 ring-1 ring-red-400/60 px-0.5 box-decoration-clone"
-              : "rounded-md bg-amber-400/10 ring-1 ring-amber-400/40 px-0.5 box-decoration-clone"
+              ? "rounded-md bg-red-500/10 ring-1 ring-red-400/60 box-decoration-clone"
+              : "rounded-md bg-amber-400/10 ring-1 ring-amber-400/40 box-decoration-clone"
             : undefined
         }
       >
-        {words.map((w, i) => {
+        {tokenizeRun(part.text, part.wordOffset).map((t, k) => {
+          if (t.index == null) return <span key={k}>{t.text}</span>;
+          const i = t.index;
           const mk = marks.get(i);
           const now = mk != null && markedToday(mk, todayStr);
           const repeats = mk ? mk.hits.length : 0;
           return (
-            <span key={i}>
-              <button
-                type="button"
-                onClick={() => onToggle(a.id, i, w)}
-                aria-pressed={now}
-                title={mk && !now ? "موضعٌ سابق لم يُغلق — اضغط إن تعثّرتَ فيه اليوم أيضاً" : undefined}
-                className={`press align-middle transition-colors ${
-                  mk
-                    ? now
-                      ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4"
-                      : "text-amber-700 dark:text-amber-400 underline decoration-amber-400/70 decoration-dotted decoration-2 underline-offset-4"
-                    : "hover:text-quran"
-                }`}
-              >
-                {w}
-                {repeats >= 2 && (
-                  <sup className={`text-[10px] font-sans font-bold mx-0.5 ${now ? "text-red-500" : "text-amber-600"}`}>{repeats}</sup>
-                )}
-              </button>{" "}
-            </span>
+            <button
+              key={k}
+              type="button"
+              onClick={() => onToggle(a.id, i, t.text)}
+              aria-pressed={now}
+              title={mk && !now ? "موضعٌ سابق لم يُغلق — اضغط إن تعثّرتَ فيه اليوم أيضاً" : undefined}
+              className={`press transition-colors ${
+                mk
+                  ? now
+                    ? "text-red-600 dark:text-red-400 underline decoration-red-400 decoration-2 underline-offset-4"
+                    : "text-amber-700 dark:text-amber-400 underline decoration-amber-400/70 decoration-dotted decoration-2 underline-offset-4"
+                  : "hover:text-quran"
+              }`}
+            >
+              {t.text}
+              {repeats >= 2 && (
+                <sup className={`text-[10px] font-sans font-bold ${now ? "text-red-500" : "text-amber-600"}`}>{repeats}</sup>
+              )}
+            </button>
           );
         })}
       </span>
@@ -342,11 +345,9 @@ function MarkableSheet({
         type="button"
         onClick={() => onToggle(a.id, null)}
         title="وسم الآية كاملةً كخطأ"
-        className={`inline-flex items-center justify-center text-[0.6em] mx-1 align-middle press ${
-          ayahMark ? (ayahNow ? "text-red-500" : "text-amber-600") : "text-quran"
-        }`}
+        className={`press ${ayahMark ? (ayahNow ? "text-red-500" : "text-amber-600") : "text-quran"}`}
       >
-        ﴿{a.ayah}﴾
+        <AyahNumber num={a.ayah} />
       </button>
     );
   };

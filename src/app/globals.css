@@ -485,3 +485,65 @@ body {
   .vessel-wave-anim { animation: none; }
   .vessel-water { transition: none; }
 }
+
+/* ===================== وجهُ المصحف بأسطره الحقيقية =====================
+   أسطرُ الوجه معلومةٌ مقيسة لا نتيجةَ عرضِ الشاشة (راجع
+   `src/lib/quran/mushafLayout.ts`): قِيست على سطرٍ عرضُه 270px بخطّ «أميري
+   قرآن» حجم 16px. فالمقاس هنا **نسبةٌ من عرض الوجه** لا رقمٌ ثابت:
+   `container-type: inline-size` يجعل عرض اللوح وحدةَ القياس، و`cqw` تترجم
+   النسبة إلى أيّ شاشة — فتنطبق الأسطر على عرضها في الجوال والحاسوب سواء.
+
+   كلّ سطرٍ `nowrap`: لا يتكسّر أبداً مهما ضاق، لأنّ انكساره معلومةٌ من المصحف
+   لا من المتصفّح. وما بقي من فرقٍ بعد التطويل المدسوس في النصّ يُكمله
+   `scaleX` من نقطة الأصل يميناً (مبدأ السطر العربيّ). */
+.mushaf-sheet {
+  container-type: inline-size;
+  margin-inline: auto;
+}
+.mushaf-page {
+  font-family: var(--font-amiri-mushaf), "Amiri Quran", "Amiri", serif;
+  /* عرضُ الوجه هو عرضُ السطر نفسه، فتستوي الأسطر على حافّتيه كالمطبوع.
+     والتمدّد المقيس يقارب العرض ولا يصيبه تماماً (مسحُ الأسطر التسعة آلاف:
+     بين 98.2% و102.5%)، فما زاد يسيرٌ يبتلعه حشوُ الورقة حوله. */
+  font-size: calc(100cqw * 16 / 270);
+  /* تباعدُ الأسطر ليس ذوقاً: المقاس الطبيعيّ للخطّ يفرّق الأسطر حتى يصير الوجه
+     عموداً طويلاً لا صفحةَ مصحف. عند 1.9 تقع الأسطر الخمسةَ عشر في وجهٍ نسبتُه
+     نحو 1.7 — كنسبة الوجه المطبوع — وتبقى علامات الضبط العالية بلا تلامس. */
+  line-height: 1.9;
+  direction: rtl;
+  font-weight: 400;
+}
+.mushaf-line {
+  white-space: nowrap;
+  text-align: right;
+  transform-origin: top right;
+}
+.mushaf-line--center {
+  text-align: center;
+}
+
+/* سترُ الآية: النصّ باقٍ في موضعه بعرضه تماماً وقد ذهب لونُه — سترٌ لا حذف،
+   فلا يتزحزح سطرٌ ولا تتغيّر صورةُ الوجه التي تحفظ عليها. */
+.mushaf-veil {
+  color: transparent;
+  background-color: rgba(27, 107, 76, 0.14);
+  border-radius: 3px;
+}
+.dark .mushaf-veil { background-color: rgba(218, 238, 227, 0.12); }
+.mushaf-trace {
+  color: transparent;
+  background-color: rgba(120, 113, 96, 0.12);
+  border-radius: 3px;
+}
+.dark .mushaf-trace { background-color: rgba(255, 255, 255, 0.07); }
+
+/* اسم السورة: شريطٌ مؤطّر في وسط السطر كما في المصحف. */
+.mushaf-sura {
+  display: inline-block;
+  padding: 0 1.6em;
+  border: 0.09em double currentColor;
+  border-radius: 0.5em;
+  font-size: 0.82em;
+  color: #1b6b4c;
+}
+.dark .mushaf-sura { color: #8fcbb0; }

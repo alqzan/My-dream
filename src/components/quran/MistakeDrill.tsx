@@ -8,6 +8,7 @@ import { MISTAKE_MASTERY } from "@/lib/quran/hifz";
 import { leadOnPage } from "@/lib/quran/portionPage";
 import { LeadPrompt } from "@/components/quran/LeadPrompt";
 import { MushafSheet } from "@/components/quran/MushafSheet";
+import { tokenizeRun } from "@/lib/quran/mushafLayout";
 import { Eye, Check, X, RotateCcw, ShieldCheck, Target } from "lucide-react";
 
 // ===================== اختبار موضع الخطأ =====================
@@ -82,18 +83,20 @@ export function MistakeDrill({
         spotlightId={ayahId}
         maxHeight={330}
         hidden={wholeAyah ? () => !revealed : undefined}
-        renderAyah={wholeAyah ? undefined : () => (
+        // الطمس يقع على الكلمة في **سطرها** من الوجه: تبقى بعرضها تماماً وقد
+        // ذهب حرفُها، فلا يتزحزح السطر ولا يفضح الفراغُ طولَ الكلمة.
+        renderAyah={wholeAyah ? undefined : (_a, part) => (
           <>
-            {words.map((w, i) => {
-              const blanked = !revealed && i === blankIdx;
-              const marked = revealed && i === blankIdx;
+            {tokenizeRun(part.text, part.wordOffset).map((t, k) => {
+              if (t.index !== blankIdx) return <span key={k}>{t.text}</span>;
               return (
-                <span key={i}>
-                  {blanked ? (
-                    <span className="text-gray-300 dark:text-gray-600 tracking-[0.2em]">▁▁▁▁</span>
-                  ) : (
-                    <span className={marked ? "text-red-600 dark:text-red-400 bg-red-500/10 rounded px-1" : undefined}>{w}</span>
-                  )}{" "}
+                <span
+                  key={k}
+                  className={revealed
+                    ? "text-red-600 dark:text-red-400 bg-red-500/10 rounded"
+                    : "text-transparent bg-gray-300/50 dark:bg-white/10 rounded"}
+                >
+                  {t.text}
                 </span>
               );
             })}

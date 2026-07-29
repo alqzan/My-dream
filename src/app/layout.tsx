@@ -28,6 +28,17 @@ const amiriQuran = localFont({
   variable: "--font-amiri-quran",
   display: "swap",
 });
+
+// خطّ وجه المصحف — نسخة «أميري قرآن» الكاملة التي **قِيس عليها** تخطيط الأسطر
+// (راجع `src/lib/quran/mushafLayout.ts`). ليست ترفاً ولا تكراراً: عرضُ السطر
+// المحفوظ في البيانات هو عرضُه بهذا الملفّ بالذات، فنسخةٌ أخرى من الخطّ نفسه
+// بمقاييس مختلفة تُخرج الأسطر عن حدّها. النسخة الأخرى (`amiri-quran.woff2`)
+// تبقى للنصّ المقتبس خارج الوجه.
+const amiriQuranMushaf = localFont({
+  src: [{ path: "../../public/fonts/AmiriQuranMushaf.woff2", weight: "400", style: "normal" }],
+  variable: "--font-amiri-mushaf",
+  display: "swap",
+});
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { ClientOnly } from "@/components/layout/ClientOnly";
@@ -84,7 +95,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl" className={`${thamaniah.variable} ${amiriQuran.variable}`}>
+    <html lang="ar" dir="rtl" className={`${thamaniah.variable} ${amiriQuran.variable} ${amiriQuranMushaf.variable}`}>
       <body>
         <ClientOnly>
           <SWRegister bp={bp} />

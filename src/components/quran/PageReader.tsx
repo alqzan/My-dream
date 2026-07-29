@@ -5,7 +5,7 @@ import {
 } from "@/lib/quran/meta";
 import { placeOf, pageSide, facingPage, clampPage } from "@/lib/quran/page";
 import { spreadOf, sameSpread, turnStep } from "@/lib/quran/book";
-import { loadReadPrefs, saveReadPrefs, DEFAULT_READ_PREFS, SIZE_RANGE, LH_RANGE } from "@/lib/quran/readPrefs";
+import { loadReadPrefs, saveReadPrefs, DEFAULT_READ_PREFS, ZOOM_RANGE, clampZoom } from "@/lib/quran/readPrefs";
 import { MushafSheet } from "@/components/quran/MushafSheet";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 import {
@@ -69,7 +69,8 @@ export function PageReader({
     setPeeked(new Set());
   }, [spread.right]);
 
-  const save = (next: { size: number; lh: number }) => {
+  const save = (zoom: number) => {
+    const next = { zoom: clampZoom(zoom) };
     setRs(next);
     saveReadPrefs(next);
   };
@@ -220,17 +221,13 @@ export function PageReader({
       {/* إعدادات قراءة خفيفة */}
       {showTools && !focus && (
         <div className="flex items-center gap-3 flex-wrap bg-white dark:bg-[#241c12] border border-gray-100 dark:border-transparent rounded-xl p-2.5 text-[11px] text-gray-500">
+          {/* تكبيرٌ لا «حجم خطّ»: أسطرُ الوجه مقيسةٌ من المصحف، فالخطّ يكبر معها
+              أو لا يكبر — ورفعُه وحده يكسر انطباق السطر على عرضه. */}
           <div className="flex items-center gap-1.5">
-            <span>الحجم</span>
-            <button onClick={() => save({ ...rs, size: Math.max(SIZE_RANGE.min, rs.size - SIZE_RANGE.step) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أصغر"><Minus size={12} /></button>
-            <span className="w-6 text-center tabular-nums font-bold text-gray-700 dark:text-gray-200">{rs.size}</span>
-            <button onClick={() => save({ ...rs, size: Math.min(SIZE_RANGE.max, rs.size + SIZE_RANGE.step) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أكبر"><Plus size={12} /></button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span>التباعد</span>
-            <button onClick={() => save({ ...rs, lh: Math.max(LH_RANGE.min, Math.round((rs.lh - LH_RANGE.step) * 10) / 10) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أقلّ"><Minus size={12} /></button>
-            <span className="w-7 text-center tabular-nums font-bold text-gray-700 dark:text-gray-200">{rs.lh.toFixed(1)}</span>
-            <button onClick={() => save({ ...rs, lh: Math.min(LH_RANGE.max, Math.round((rs.lh + LH_RANGE.step) * 10) / 10) })} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center" aria-label="أكثر"><Plus size={12} /></button>
+            <span>التكبير</span>
+            <button onClick={() => save(rs.zoom - ZOOM_RANGE.step)} disabled={rs.zoom <= ZOOM_RANGE.min} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center disabled:opacity-30" aria-label="أصغر"><Minus size={12} /></button>
+            <span className="w-9 text-center tabular-nums font-bold text-gray-700 dark:text-gray-200">{Math.round(rs.zoom * 100)}%</span>
+            <button onClick={() => save(rs.zoom + ZOOM_RANGE.step)} disabled={rs.zoom >= ZOOM_RANGE.max} className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center disabled:opacity-30" aria-label="أكبر"><Plus size={12} /></button>
           </div>
           <button onClick={() => setFocus(true)} className="inline-flex items-center gap-1 font-semibold text-quran bg-quran/10 rounded-lg px-2.5 py-1 press ms-auto">
             <Focus size={13} /> وضع التركيز
@@ -310,7 +307,7 @@ function BookSpread({
 }: {
   page: number;
   text: string[] | null;
-  rs: { size: number; lh: number };
+  rs: { zoom: number };
   veilOn: boolean;
   isVeiled: (id: number) => boolean;
   sel: number | null;
@@ -421,8 +418,7 @@ function BookSpread({
                 fromId={r.start}
                 toId={r.end}
                 header={false}
-                size={rs.size}
-                lh={rs.lh}
+                zoom={rs.zoom}
                 hidden={isVeiled}
                 selectedId={sel}
                 onAyahClick={onAyahClick}

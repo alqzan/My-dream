@@ -4,6 +4,10 @@ import { SURAHS, idToSurahAyah, idToJuz } from "@/lib/quran/meta";
 import { portionPages } from "@/lib/quran/portionPage";
 import { leafStack, edgeWidth } from "@/lib/quran/book";
 import type { PageSide } from "@/lib/quran/page";
+import {
+  loadPageLines, peekPageLines, linesOnPage, SURA_HEADER, BASMALA, CENTERED,
+  type MushafPageLines, type MushafRun,
+} from "@/lib/quran/mushafLayout";
 import { loadReadPrefs, DEFAULT_READ_PREFS } from "@/lib/quran/readPrefs";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 
@@ -17,10 +21,12 @@ import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 // مُبرَزٌ فيه. والستر (`hidden`) يُبقي أثر الآية في موضعها من الوجه — سترٌ لا
 // حذف — فتسترجع من ذاكرتك وشكلُ الوجه قائمٌ تحت يدك.
 //
-// **حدّ المعرفة، وقد قُصِد**: بيانات المستودع تعرف أوّل آيةٍ في كلّ وجه ولا تعرف
-// توزيع الأسطر داخله (راجع `src/lib/quran/page.ts`). فحدودُ الوجه ورقمُه وجهتُه
-// **قاطعة**، وأمّا مواضع الأسطر فتقريبٌ يرسمه النصّ المضبوط (`text-justify`) لا
-// نسخةٌ من مصحف المدينة. لا نَعِد المالك بما لا نملك.
+// **والأسطر الآن أسطرُ المصحف نفسها**: كان النصّ يتّصل فيتكسّر حيث شاء عرضُ
+// الشاشة، فتختلف صورةُ الوجه من جهازٍ لآخر — وهي عين ما يُعوَّل عليه في الحفظ.
+// صار الوجه خمسةَ عشر سطراً (وثمانيةً في وجهَي الفاتحة وأوّل البقرة) ينتهي كلٌّ
+// منها حيث ينتهي في المطبوع، ويستوي على عرضه بالتطويل المدسوس في النصّ ثمّ
+// بمعامل تمدّد السطر. التخطيط والبيانات في `@/lib/quran/mushafLayout` — لا
+// تُعِد حسابه هنا ولا ترسم آيةً خارج سطرها.
 //
 // القسمة على الأوجه في `@/lib/quran/portionPage` (نقيّة ومختبَرة) — لا تعريفَ
 // ثانياً هنا.
@@ -33,11 +39,17 @@ export interface SheetAyah {
   inPortion: boolean; // من المقطع المطلوب لا من سياقه
 }
 
+/** المقطع الواقع على سطرٍ واحد من آيةٍ قد تمتدّ على أسطر. */
+export interface SheetPart {
+  text: string;
+  /** ترتيب أوّل كلمةٍ منه بين كلمات الآية — فيبقى وسمُ الكلمة على كلمته. */
+  wordOffset: number;
+}
+
 // كيف تُعرض آياتُ الوجه خارج المقطع:
 //   text  — نصّاً خافتاً: صورةُ الوجه كاملة (الأصل في الحفظ والمراجعة).
 //   shape — أثراً بلا نصّ: يبقى شكل الوجه ولا يتسرّب ما لم يُطلب كشفُه.
-//   none  — المقطع وحده (بطاقاتٌ ضيّقة لا تحتمل وجهاً كاملاً).
-export type SheetContext = "text" | "shape" | "none";
+export type SheetContext = "text" | "shape";
 
 export function MushafSheet({
   text, fromId, toId,
@@ -50,7 +62,7 @@ export function MushafSheet({
   renderAyah,
   renderNumber,
   onAyahClick,
-  size, lh,
+  zoom,
   maxHeight,
   stack = true,
   className = "",
@@ -68,13 +80,14 @@ export function MushafSheet({
   selectedId?: number | null;
   /** ترويسة «صفحة N · يمنى» فوق اللوح (تُطفأ حين يعلوها شريطُ موضعٍ خاصّ). */
   header?: boolean;
-  /** بديلُ رسم نصّ الآية — لوسم الكلمات أو طمس موضعٍ منها. */
-  renderAyah?: (a: SheetAyah) => React.ReactNode;
+  /** بديلُ رسم نصّ الآية — لوسم الكلمات أو طمس موضعٍ منها. يُنادى **لكلّ مقطعٍ
+      من الآية على سطره**، ومعه ترتيبُ أوّل كلمةٍ فيه. */
+  renderAyah?: (a: SheetAyah, part: SheetPart) => React.ReactNode;
   /** بديلُ رسم رقم الآية — حين يكون زرّاً (وسم الآية كاملةً). */
   renderNumber?: (a: SheetAyah) => React.ReactNode;
   onAyahClick?: (id: number) => void;
-  size?: number;
-  lh?: number;
+  /** تكبيرُ الوجه (1 = ملء العرض). ما زاد عليه يُتصفَّح أفقياً. */
+  zoom?: number;
   /** ارتفاعٌ أقصى بالبكسل مع تمرير — للبطاقات داخل الصفحات. */
   maxHeight?: number;
   /** سماكةُ الأوراق على الطرف الخارجيّ (تُطفأ في المساحات الضيّقة جداً). */
@@ -85,8 +98,7 @@ export function MushafSheet({
   // مسبقاً، فقراءةُ localStorage في أوّل رسمٍ تُخالف ما صُدِّر.
   const [prefs, setPrefs] = useState(DEFAULT_READ_PREFS);
   useEffect(() => { setPrefs(loadReadPrefs()); }, []);
-  const fontSize = size ?? prefs.size;
-  const lineHeight = lh ?? prefs.lh;
+  const pageZoom = zoom ?? prefs.zoom;
 
   const pages = useMemo(() => portionPages(fromId, toId), [fromId, toId]);
 
@@ -109,65 +121,208 @@ export function MushafSheet({
       className={`space-y-3 ${maxHeight ? "overflow-y-auto" : ""} ${className}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
-      {pages.map((pg) => {
-        const first = context === "none" ? pg.fromId : pg.start;
-        const last = context === "none" ? pg.toId : pg.end;
-        const ayat: SheetAyah[] = [];
-        for (let id = first; id <= last; id++) {
-          const { surah, ayah } = idToSurahAyah(id);
-          ayat.push({ id, surah, ayah, text: text[id] ?? "", inPortion: id >= fromId && id <= toId });
-        }
+      {pages.map((pg) => (
+        <div key={pg.page}>
+          {header && (
+            <div className="flex items-center gap-2 mb-1.5 px-0.5">
+              <SpreadGlyph side={pg.side} className="w-7 h-5" />
+              <span className="text-[11px] font-bold text-quran">صفحة {pg.page} · {pg.side}</span>
+              <span className="text-[10px] text-gray-400 truncate">
+                {SURAHS[idToSurahAyah(pg.fromId).surah - 1].name} · جزء {idToJuz(pg.fromId)}
+              </span>
+            </div>
+          )}
 
-        return (
-          <div key={pg.page}>
-            {header && (
-              <div className="flex items-center gap-2 mb-1.5 px-0.5">
-                <SpreadGlyph side={pg.side} className="w-7 h-5" />
-                <span className="text-[11px] font-bold text-quran">صفحة {pg.page} · {pg.side}</span>
-                <span className="text-[10px] text-gray-400 truncate">
-                  {SURAHS[idToSurahAyah(pg.fromId).surah - 1].name} · جزء {idToJuz(pg.fromId)}
-                </span>
-              </div>
-            )}
+          {/* ورقةٌ في مجلَّد لا لوحٌ عائم: الكعب في الداخل بظلّه وزاويتُه
+              مربّعة، وحافّةُ الأوراق المتراكمة في الخارج بسماكةٍ تقول أين أنت
+              من المصحف. الشكل وحده يقول «يمنى» أو «يسرى» قبل الكلمة. */}
+          <Leaf page={pg.page} side={pg.side} stack={stack}>
+            <PageLines
+              page={pg.page}
+              zoom={pageZoom}
+              // إبرازُ المقطع إنّما يميّزه عن سياقه؛ فإن كان الوجه كلّه هو
+              // المقطع (قارئ الصفحات) فلا شيء يُميَّز عنه — وإبرازُ كلّ آية
+              // يجعل الوجه مخطّطاً بصناديق بدل صفحةٍ متّصلة.
+              highlight={!pg.whole}
+              inPortion={(id) => id >= fromId && id <= toId}
+              context={context}
+              leadId={leadId}
+              hidden={hidden}
+              spotlightId={spotlightId}
+              selectedId={selectedId}
+              onAyahClick={onAyahClick}
+              renderAyah={renderAyah}
+              renderNumber={renderNumber}
+              text={text}
+            />
+            <span className="absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
+              {pg.page}
+            </span>
+          </Leaf>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-            {/* ورقةٌ في مجلَّد لا لوحٌ عائم: الكعب في الداخل بظلّه وزاويتُه
-                مربّعة، وحافّةُ الأوراق المتراكمة في الخارج بسماكةٍ تقول أين أنت
-                من المصحف. الشكل وحده يقول «يمنى» أو «يسرى» قبل الكلمة. */}
-            <Leaf page={pg.page} side={pg.side} stack={stack}>
-              <p
-                className="font-quran text-justify font-bold text-gray-800 dark:text-gray-100"
-                dir="rtl"
-                style={{ fontSize: `${fontSize}px`, lineHeight }}
+// ===================== أسطر الوجه =====================
+// السطر هنا وحدةُ الرسم لا الآية: الآية تنكسر على أسطرٍ كما في المطبوع، ومقاطعُها
+// تحمل هويّتها فيبقى النقر والستر والإبراز على الآية كاملةً عابراً للأسطر.
+//
+// عرضُ السطر ثابتٌ نسبةً إلى الوجه (`.mushaf-page` في globals.css)، وما بقي من
+// فرقٍ بعد التطويل المدسوس يُكمله `scaleX` — لا `text-justify` يتصرّف بالكلمات
+// كيف شاء. وحدُ المعرفة انتهى هنا: مواضعُ الأسطر صارت مقيسةً لا مقدَّرة.
+function PageLines({
+  page, zoom, text, highlight, inPortion, context, leadId,
+  hidden, spotlightId, selectedId, onAyahClick, renderAyah, renderNumber,
+}: {
+  page: number;
+  zoom: number;
+  text: string[];
+  highlight: boolean;
+  inPortion: (id: number) => boolean;
+  context: SheetContext;
+  leadId: number | null;
+  hidden?: (id: number) => boolean;
+  spotlightId: number | null;
+  selectedId: number | null;
+  onAyahClick?: (id: number) => void;
+  renderAyah?: (a: SheetAyah, part: SheetPart) => React.ReactNode;
+  renderNumber?: (a: SheetAyah) => React.ReactNode;
+}) {
+  // حزمةُ الوجه قد تكون محمّلةً من وجهٍ سابق — فنرسم بها فوراً بلا وميض.
+  const [lines, setLines] = useState<MushafPageLines | null>(() => peekPageLines(page));
+  useEffect(() => {
+    let alive = true;
+    const ready = peekPageLines(page);
+    setLines(ready);
+    if (!ready) loadPageLines(page).then((l) => { if (alive) setLines(l); });
+    return () => { alive = false; };
+  }, [page]);
+
+  // ريثما تصل الحزمة: أسطرُ الوجه بعددها فارغة — يبقى للوجه ارتفاعُه فلا يقفز
+  // ما تحته حين يصل النصّ.
+  if (!lines) {
+    return (
+      <div className="mushaf-sheet" style={{ width: `${zoom * 100}%` }} aria-busy>
+        <div className="mushaf-page">
+          {Array.from({ length: linesOnPage(page) }, (_, i) => (
+            <div key={i} className="mushaf-line">
+              <span className="mushaf-trace">&nbsp;</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={zoom > 1 ? "overflow-x-auto" : undefined}
+      style={zoom > 1 ? { scrollbarWidth: "none" } : undefined}
+    >
+      <div className="mushaf-sheet" style={{ width: `${zoom * 100}%` }}>
+        <div className="mushaf-page">
+          {lines.map((line, i) => {
+            const centered = line.stretch === CENTERED;
+            return (
+              <div
+                key={i}
+                className={`mushaf-line ${centered ? "mushaf-line--center" : ""}`}
+                style={centered ? undefined : { transform: `scaleX(${line.stretch})` }}
               >
-                {ayat.map((v) => (
-                  <AyahSpan
-                    key={v.id}
-                    v={v}
-                    basmala={text[1] ?? ""}
-                    // إبرازُ المقطع إنّما يميّزه عن سياقه؛ فإن كان الوجه كلّه هو
-                    // المقطع (قارئ الصفحات) فلا شيء يُميَّز عنه — وإبرازُ كلّ آية
-                    // يجعل الوجه مخطّطاً بصناديق بدل صفحةٍ متّصلة.
-                    highlight={!pg.whole}
-                    veiled={v.inPortion ? !!hidden?.(v.id) : false}
-                    // السياق يُطمس شكلاً إلا آيةَ التلقين — وهي الآية التي قبل
-                    // المقطع في وجهه، مدخلُ الاسترجاع الطبيعيّ.
-                    traced={!v.inPortion && context === "shape" && v.id !== leadId}
-                    dimmed={!v.inPortion || (spotlightId != null && v.id !== spotlightId)}
-                    selected={selectedId === v.id}
-                    onClick={onAyahClick}
+                {line.runs.map((run, j) => (
+                  <RunSpan
+                    key={j}
+                    run={run}
+                    text={text}
+                    highlight={highlight}
+                    inPortion={inPortion}
+                    context={context}
+                    leadId={leadId}
+                    hidden={hidden}
+                    spotlightId={spotlightId}
+                    selectedId={selectedId}
+                    onAyahClick={onAyahClick}
                     renderAyah={renderAyah}
                     renderNumber={renderNumber}
                   />
                 ))}
-              </p>
-              <span className="absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
-                {pg.page}
-              </span>
-            </Leaf>
-          </div>
-        );
-      })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function RunSpan({
+  run, text, highlight, inPortion, context, leadId,
+  hidden, spotlightId, selectedId, onAyahClick, renderAyah, renderNumber,
+}: {
+  run: MushafRun;
+  text: string[];
+  highlight: boolean;
+  inPortion: (id: number) => boolean;
+  context: SheetContext;
+  leadId: number | null;
+  hidden?: (id: number) => boolean;
+  spotlightId: number | null;
+  selectedId: number | null;
+  onAyahClick?: (id: number) => void;
+  renderAyah?: (a: SheetAyah, part: SheetPart) => React.ReactNode;
+  renderNumber?: (a: SheetAyah) => React.ReactNode;
+}) {
+  if (run.id === SURA_HEADER) return <span className="mushaf-sura">{run.text}</span>;
+  if (run.id === BASMALA) return <span className="text-quran">{run.text}</span>;
+
+  const { surah, ayah } = idToSurahAyah(run.id);
+  const mine = inPortion(run.id);
+  const a: SheetAyah = { id: run.id, surah, ayah, text: text[run.id] ?? "", inPortion: mine };
+
+  const veiled = mine ? !!hidden?.(run.id) : false;
+  // السياق يُطمس شكلاً إلا آيةَ التلقين — وهي الآية التي قبل المقطع في وجهه،
+  // مدخلُ الاسترجاع الطبيعيّ.
+  const traced = !mine && context === "shape" && run.id !== leadId;
+  const dimmed = !mine || (spotlightId != null && run.id !== spotlightId);
+  const selected = selectedId === run.id;
+
+  // الستر والطمس يُبقيان النصّ بعرضه تماماً ويذهبان بلونه — فلا يتزحزح سطر.
+  const body = veiled || traced
+    ? <span className={veiled ? "mushaf-veil" : "mushaf-trace"}>{run.text}</span>
+    : renderAyah && mine
+    ? renderAyah(a, { text: run.text, wordOffset: run.wordOffset })
+    : run.text;
+
+  return (
+    <span
+      id={run.wordOffset === 0 ? `q-page-ayah-${run.id}` : undefined}
+      onClick={onAyahClick ? () => onAyahClick(run.id) : undefined}
+      className={`box-decoration-clone rounded-[3px] transition-colors ${onAyahClick ? "cursor-pointer" : ""} ${
+        selected
+          ? "bg-quran/15"
+          : highlight && mine && !veiled
+          ? "bg-quran/[0.07]" // المقطع المطلوب مُبرَزٌ داخل وجهه
+          : ""
+      } ${dimmed && !veiled && !traced ? "text-gray-400 dark:text-gray-500" : "text-gray-800 dark:text-gray-100"}`}
+    >
+      {body}
+      {run.num > 0 && (renderNumber && mine
+        ? renderNumber(a)
+        : <AyahNumber num={run.num} dimmed={dimmed} />)}
+    </span>
+  );
+}
+
+// رقمُ الآية: علامةُ نهاية الآية (U+06DD) يليها الرقم — والخطّ يركّبهما وردةً
+// مزخرفة كالمطبوع. لا نرسم `﴿رقم﴾` بحروفٍ عادية، فتلك زخرفةُ اقتباسٍ لا علامةُ
+// وقفٍ في المصحف، وعرضُها يخالف ما قِيس عليه السطر.
+export function AyahNumber({ num, dimmed = false }: { num: number; dimmed?: boolean }) {
+  return (
+    <span className={dimmed ? "text-quran/50" : "text-quran"} aria-label={`آية ${num}`}>
+      {`۝${num}`}
+    </span>
   );
 }
 
@@ -197,7 +352,7 @@ export function Leaf({
   return (
     <div className={`relative ${className}`}>
       <div
-        className={`relative border-2 border-quran/20 bg-gradient-to-b from-quran/[0.05] to-transparent p-4 pb-7 ${
+        className={`relative border-2 border-quran/20 bg-gradient-to-b from-quran/[0.05] to-transparent px-3 pt-3 pb-7 ${
           spineOnLeft
             ? "rounded-l-sm rounded-r-2xl border-l-quran/40 ms-0 me-0"
             : "rounded-r-sm rounded-l-2xl border-r-quran/40"
@@ -235,68 +390,5 @@ export function Leaf({
         />
       )}
     </div>
-  );
-}
-
-function AyahSpan({
-  v, basmala, highlight, veiled, traced, dimmed, selected, onClick, renderAyah, renderNumber,
-}: {
-  v: SheetAyah;
-  basmala: string;
-  highlight: boolean;
-  veiled: boolean;
-  traced: boolean;
-  dimmed: boolean;
-  selected: boolean;
-  onClick?: (id: number) => void;
-  renderAyah?: (a: SheetAyah) => React.ReactNode;
-  renderNumber?: (a: SheetAyah) => React.ReactNode;
-}) {
-  const startsSurah = v.ayah === 1 && v.surah !== 1 && v.surah !== 9;
-  const body = veiled || traced
-    ? <Trace len={v.text.length} tone={veiled ? "veil" : "context"} />
-    : renderAyah && v.inPortion
-    ? renderAyah(v)
-    : v.text;
-
-  return (
-    <span>
-      {startsSurah && (
-        <span className="block text-center text-[0.8em] text-quran font-bold my-3 pb-2 border-b border-quran/10">
-          {SURAHS[v.surah - 1].name}
-          <span className="block">{basmala}</span>
-        </span>
-      )}
-      <span
-        id={`q-page-ayah-${v.id}`}
-        onClick={onClick ? () => onClick(v.id) : undefined}
-        className={`rounded px-0.5 box-decoration-clone transition-colors ${onClick ? "cursor-pointer hover:bg-quran/[0.06]" : ""} ${
-          selected
-            ? "bg-quran/15"
-            : highlight && v.inPortion && !veiled
-            ? "bg-quran/[0.07]" // المقطع المطلوب مُبرَزٌ داخل وجهه
-            : ""
-        } ${dimmed && !veiled && !traced ? "text-gray-400 dark:text-gray-500" : ""}`}
-      >
-        {body}
-        {renderNumber && v.inPortion ? renderNumber(v) : (
-          <span className={`inline-flex items-center justify-center text-[0.6em] mx-1 align-middle ${dimmed ? "text-quran/40" : "text-quran"}`}>
-            ﴿{v.ayah}﴾
-          </span>
-        )}
-      </span>
-    </span>
-  );
-}
-
-// أثرُ آيةٍ مستورة: سترٌ لا حذف — طولُ الأثر يتناسب مع طول الآية، فيبقى شكلُ
-// الوجه (وهو نفسه ما تحفظه العين) قائماً تحت الستر.
-export function Trace({ len, tone }: { len: number; tone: "veil" | "context" }) {
-  return (
-    <span
-      aria-label="آية مستورة"
-      className={`inline-block align-middle rounded select-none ${tone === "veil" ? "bg-quran/15" : "bg-gray-400/15 dark:bg-white/[0.07]"}`}
-      style={{ width: `${Math.min(100, Math.max(8, len / 2.2))}%`, height: "0.62em" }}
-    />
   );
 }
