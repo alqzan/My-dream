@@ -30,12 +30,35 @@ export function ViewportWatcher() {
       root.style.setProperty("--kb", `${Math.round(kb)}px`);
     };
     const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
+
+    // إعادة قياسٍ متأخّرة. لوحة مفاتيح iOS لا تُطلق «resize» على المنفذ المرئي
+    // في كل إغلاق (الإخفاء من زرّ اللوحة، أو تبديل التطبيقات، أو الدوران)، فيبقى
+    // القياسُ منكمشاً بعد اختفائها ويظلّ ما يتبعه أقصرَ من الشاشة بلا سبب. هذه
+    // نبضاتٌ قليلة تلتقط القيمة بعد أن تستقرّ الحركة.
+    let early = 0, late = 0;
+    const settle = () => {
+      clearTimeout(early);
+      clearTimeout(late);
+      early = window.setTimeout(apply, 120);
+      late = window.setTimeout(apply, 400);
+    };
+
     apply();
     vv.addEventListener("resize", onChange);
     vv.addEventListener("scroll", onChange);
+    window.addEventListener("resize", settle);
+    window.addEventListener("orientationchange", settle);
+    window.addEventListener("focusout", settle);
+    window.addEventListener("pageshow", settle);
     return () => {
       vv.removeEventListener("resize", onChange);
       vv.removeEventListener("scroll", onChange);
+      window.removeEventListener("resize", settle);
+      window.removeEventListener("orientationchange", settle);
+      window.removeEventListener("focusout", settle);
+      window.removeEventListener("pageshow", settle);
+      clearTimeout(early);
+      clearTimeout(late);
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);

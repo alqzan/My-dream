@@ -316,13 +316,22 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    // محرّر بملء الشاشة (لا نافذة) — أكثر انغماساً للكتابة. عمود ثابت أعلى
-    // (رجوع/حفظ + «تم») ثم مساحة تمرّر داخلياً. يتبع المنفذ المرئي (‎--vvh/--vvo‎)
-    // حتى لا تخفي لوحة المفاتيح الحقلَ النشط أو الأزرار.
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-white [animation:fadeIn_0.2s_ease_both]"
-      style={{ top: "var(--vvo, 0px)", height: "var(--vvh, 100dvh)" }}
-    >
+    // محرّر بملء الشاشة (لا نافذة) — أكثر انغماساً للكتابة.
+    //
+    // طبقتان عمداً:
+    //   • الخارجية `inset-0` بخلفيةٍ معتمة تغطّي **الشاشة كاملةً** (منفذ التخطيط)،
+    //     فلا تظهر الصفحةُ التي خلفه أبداً.
+    //   • الداخلية تتبع **المنفذ المرئي** (‎--vvh/--vvo‎) فيبقى الحقلُ النشط
+    //     والأزرار فوق لوحة المفاتيح.
+    // كانت الطبقتان واحدةً فتقلّص المحرّر إلى المنفذ المرئي وانكشف تحته شريطٌ من
+    // صفحة المذكرات (بطاقة «في مثل هذا اليوم» وزرّ الإضافة) — يظهر كلما تركت
+    // لوحةُ المفاتيح أثراً في القياس: شريط لوحة الآيباد المصغّرة، أو قياسٌ لم
+    // يُحدَّث بعدُ على الجوال.
+    <div className="fixed inset-0 z-50 bg-white [animation:fadeIn_0.2s_ease_both]">
+      <div
+        className="absolute inset-x-0 flex flex-col bg-white"
+        style={{ top: "var(--vvo, 0px)", height: "var(--vvh, 100dvh)" }}
+      >
       {/* شريط علوي ثابت */}
       <header className="shrink-0 flex items-center justify-between gap-2 px-2 border-b border-gray-100 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
         <button
@@ -636,6 +645,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         />
       </Modal>
         </div>
+      </div>
       </div>
     </div>,
     document.body

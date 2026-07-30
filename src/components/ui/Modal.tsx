@@ -179,6 +179,12 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             {children}
           </div>
         </div>
+        {/* «ذيل» الورقة السفلية على الجوال: الغلاف يتبع المنفذ المرئي، فإن تركت
+            لوحةُ المفاتيح أثراً في القياس (شريط لوحة الآيباد المصغّرة، أو قياسٌ
+            لم يُحدَّث بعد) انفتح تحت الورقة شريطٌ يكشف الخلفية ويجعلها تطفو في
+            الهواء. هذا الامتداد يُبقيها ملتصقةً بحافة الشاشة دائماً، ولا يُرى
+            أصلاً حين تكون لوحة المفاتيح مفتوحةً فعلاً لأنها تغطّيه. */}
+        <div className="sm:hidden absolute inset-x-0 top-full h-screen bg-white" aria-hidden />
       </div>
     </div>,
     document.body
