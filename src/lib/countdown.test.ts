@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  daysUntil, isVisible, sortEvents, visibleEvents, describeDays, coarseDistance, progressTo,
+  daysUntil, isVisible, sortEvents, visibleEvents, describeDays, coarseDistance, progressTo, windowFor,
 } from "./countdown";
 import type { CountdownEvent } from "./types";
+import { parseDate } from "./utils";
 
 const ev = (id: string, date: string, title = id, extra: Partial<CountdownEvent> = {}): CountdownEvent =>
   ({ id, date, title, ...extra });
@@ -101,6 +102,33 @@ describe("progressTo", () => {
     expect(progressTo(90)).toBe(0);
     expect(progressTo(200)).toBe(0);
     expect(progressTo(45)).toBeCloseTo(0.5, 5);
+  });
+});
+
+// النافذة الثابتة (90 يوماً) تُبقي القوس فارغاً أشهراً لحدثٍ أبعد من ذلك —
+// windowFor تحسب النافذة الفعلية من لحظة الإضافة (`updatedAt`) بدلاً منها.
+describe("windowFor", () => {
+  it("بلا طابعٍ ترجع النافذة الثابتة", () => {
+    expect(windowFor("2026-12-01", undefined)).toBe(90);
+  });
+
+  it("تحسب المسافة الفعلية من لحظة الإضافة إلى الحدث", () => {
+    const createdAt = parseDate("2026-05-01").getTime();
+    const expected = daysUntil("2026-08-01", "2026-05-01"); // 92
+    expect(windowFor("2026-08-01", createdAt)).toBe(expected);
+  });
+
+  it("حدثٌ بعيدٌ (أكثر من 90 يوماً) لا يبقى صفراً بالمئة طوال الطريق", () => {
+    const createdAt = parseDate("2026-04-12").getTime(); // أُضيف يوم الإضافة
+    const days = daysUntil("2026-07-31", "2026-05-01"); // بعد أسابيع من الإضافة
+    const win = windowFor("2026-07-31", createdAt);
+    expect(progressTo(days, win)).toBeGreaterThan(0);
+  });
+
+  it("طابعٌ لا يعطي نافذةً موجبة (حدثٌ عُدِّل ليصبح تاريخه اليوم أو ماضياً وقت التعديل) يرجع للنافذة الثابتة", () => {
+    const updatedAt = parseDate("2026-08-01").getTime();
+    expect(windowFor("2026-08-01", updatedAt)).toBe(90);
+    expect(windowFor("2026-07-01", updatedAt)).toBe(90);
   });
 });
 

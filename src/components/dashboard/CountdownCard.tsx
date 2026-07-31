@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
-import { visibleEvents, daysUntil, describeDays, coarseDistance, progressTo } from "@/lib/countdown";
+import { visibleEvents, daysUntil, describeDays, coarseDistance, progressTo, windowFor } from "@/lib/countdown";
 import { today, formatDate, hijriDate } from "@/lib/utils";
 import { CalendarClock, ChevronLeft } from "lucide-react";
 
@@ -51,7 +51,14 @@ export function CountdownCard() {
       </div>
       <div className="space-y-2.5">
         {shown.map((e) => (
-          <EventRow key={e.id} title={e.title} emoji={e.emoji} date={e.date} todayStr={todayStr} />
+          <EventRow
+            key={e.id}
+            title={e.title}
+            emoji={e.emoji}
+            date={e.date}
+            todayStr={todayStr}
+            updatedAt={e.updatedAt}
+          />
         ))}
       </div>
     </div>
@@ -59,10 +66,10 @@ export function CountdownCard() {
 }
 
 function EventRow({
-  title, emoji, date, todayStr,
-}: { title: string; emoji?: string; date: string; todayStr: string }) {
+  title, emoji, date, todayStr, updatedAt,
+}: { title: string; emoji?: string; date: string; todayStr: string; updatedAt?: number }) {
   const days = daysUntil(date, todayStr);
-  const pct = Math.round(progressTo(days) * 100);
+  const pct = Math.round(progressTo(days, windowFor(date, updatedAt)) * 100);
   const coarse = coarseDistance(days);
   // اليومُ نفسه يستحقّ تمييزاً: هو الحدث لا العدّ إليه.
   const isToday = days === 0;

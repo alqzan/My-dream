@@ -5,7 +5,7 @@
 // `Date.now()` مباشرةً، وإلّا أزاح UTC اليومَ في الخليج فقال «باقي يومان»
 // ليلةَ الحدث.
 import type { CountdownEvent } from "./types";
-import { parseDate, today, isValidDateKey } from "./utils";
+import { parseDate, today, isValidDateKey, toDateStr } from "./utils";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -106,4 +106,18 @@ export function progressTo(days: number, windowDays = DEFAULT_WINDOW_DAYS): numb
   if (days <= 0) return 1;
   if (days >= windowDays) return 0;
   return 1 - days / windowDays;
+}
+
+// نافذة القوس الفعلية: كامل المسافة من لحظة إضافة الحدث إلى موعده، لا 90 يوماً
+// ثابتة — وإلا بقي القوسُ فارغاً أشهراً لكلّ حدثٍ أبعد من ذلك (اختبارٌ بعد 111
+// يوماً يظلّ صفراً بالمئة حتى يدخل النافذة الثابتة). `updatedAt` يُختم تلقائياً
+// عند إنشاء العنصر (غلاف `set` في store.ts) فهو أقرب تقريبٍ متاح لتاريخ
+// الإضافة؛ حدثٌ عُدِّل لاحقاً يأخذ نافذةً من لحظة التعديل — تقريبٌ مقبول إذ لا
+// حقل إنشاءٍ مستقل. بلا طابعٍ (نسخةٌ قديمة أو مستوردة)، أو حين لا يعطي طابعٌ
+// نافذةً موجبة (حدثٌ عُدِّل ليصبح تاريخه اليوم أو قبل لحظة الطابع)، نرجع
+// للنافذة الثابتة.
+export function windowFor(date: string, updatedAt: number | undefined): number {
+  if (!updatedAt) return DEFAULT_WINDOW_DAYS;
+  const span = daysUntil(date, toDateStr(new Date(updatedAt)));
+  return Number.isNaN(span) || span <= 0 ? DEFAULT_WINDOW_DAYS : span;
 }
