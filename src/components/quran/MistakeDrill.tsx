@@ -51,8 +51,8 @@ export function MistakeDrill({
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className="hifz-drill-card max-w-lg mx-auto space-y-4">
+      <div className="hifz-drill-heading flex items-center gap-2 flex-wrap">
         <Target size={16} className="text-amber-600" />
         <span className="text-base font-bold text-gray-800 dark:text-gray-100">اختبار موضع خطأ</span>
         <span className="text-[11px] text-quran font-semibold">{name} · آية {ayah}</span>
@@ -63,7 +63,7 @@ export function MistakeDrill({
         )}
       </div>
 
-      <p className="text-xs text-gray-500 leading-relaxed">
+      <p className="hifz-drill-hint text-xs text-gray-500 leading-relaxed">
         {wholeAyah
           ? "هذه الآية التي قبلها — أكمِل بعدها من حفظك ثمّ اكشف للتحقّق."
           : "أكمل الموضع المطموس من حفظك ثمّ اكشف للتحقّق."}
@@ -81,8 +81,11 @@ export function MistakeDrill({
         fromId={ayahId}
         toId={ayahId}
         spotlightId={ayahId}
+        context={wholeAyah && !revealed ? "shape" : "text"}
+        leadId={leadOnPage(ayahId)}
         maxHeight={330}
         hidden={wholeAyah ? () => !revealed : undefined}
+        className="hifz-mushaf-stage"
         // الطمس يقع على الكلمة في **سطرها** من الوجه: تبقى بعرضها تماماً وقد
         // ذهب حرفُها، فلا يتزحزح السطر ولا يفضح الفراغُ طولَ الكلمة.
         renderAyah={wholeAyah ? undefined : (_a, part) => (
@@ -152,14 +155,14 @@ export function MistakeDrillModal({
   const [result, setResult] = useState<{ ok: boolean; closed: boolean } | null>(null);
 
   return (
-    <div className="fixed inset-0 z-[70] bg-[#f4eee2] dark:bg-[#171009] flex flex-col" dir="rtl">
-      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-[#3a2e1e]">
+    <div className="hifz-drill-modal fixed inset-0 z-[70] bg-[#f4eee2] dark:bg-[#171009] flex flex-col" dir="rtl">
+      <div className="hifz-drill-header flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-[#3a2e1e]">
         <div className="text-sm font-bold text-gray-800 dark:text-gray-100">اختبار موضع خطأ</div>
         <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 press" aria-label="إغلاق">
           <X size={20} />
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
+      <div className="hifz-drill-body flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
         {result ? (
           <div className="text-center space-y-4 pt-6">
             <div className="w-16 h-16 mx-auto rounded-full bg-quran/10 flex items-center justify-center">

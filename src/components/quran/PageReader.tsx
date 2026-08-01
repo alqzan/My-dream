@@ -130,70 +130,79 @@ export function PageReader({
   const goto = (p: number) => onPage(clampPage(p));
 
   return (
-    <div className="space-y-3">
-      {/* ترويسة: الصفحة، السورة والجزء، والتنقّل. اتجاه الأسهم على المصحف
-          الورقيّ: «التالية» تتقدّم يساراً، و«السابقة» يميناً. */}
-      <div className={`flex items-center justify-between ${focus ? "hidden" : ""}`}>
-        <button onClick={onBack} className="flex items-center gap-1 text-xs text-quran font-semibold press">
-          <ChevronRight size={15} /> الفهرس
-        </button>
-        <div className="text-center">
-          <div className="text-base font-bold text-gray-800 dark:text-gray-100">صفحة {page}</div>
-          <div className="text-[11px] text-gray-400">{surahLabel} · جزء {idToJuz(start)}</div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => goto(page - 1)}
-            disabled={page <= 1}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-quran hover:bg-quran/10 press disabled:opacity-30"
-            aria-label="الصفحة السابقة"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            onClick={() => goto(page + 1)}
-            disabled={page >= TOTAL_PAGES}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-quran hover:bg-quran/10 press disabled:opacity-30"
-            aria-label="الصفحة التالية"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <button
-            onClick={() => setShowTools((v) => !v)}
-            className={`p-1.5 rounded-lg press ${showTools ? "text-quran bg-quran/10" : "text-gray-400 hover:text-quran hover:bg-quran/10"}`}
-            aria-label="إعدادات القراءة"
-          >
-            <Settings2 size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* شريطُ الموضع: أين هذه الصفحة من المصحف المفتوح — المعلومة التي يتعلّق
-          بها التذكّر. مرسومةٌ لا مكتوبةً وحسب: وجهٌ مفتوح صفحتُه الحالية مضاءة. */}
+    <div className="mushaf-reader space-y-4">
+      {/* ترويسة هادئة: المصحف هو البطل، والمعلومات تبقى قريبة بلا أن تزاحم
+          الصفحة. هذا هو الفرق بين «قارئ» و«لوحة تحكّم». */}
       {!focus && (
-        <div className="flex items-center gap-3 rounded-xl border border-quran/15 bg-quran/[0.04] px-3 py-2">
-          <SpreadGlyph side={side} />
-          <div className="flex-1 min-w-0 text-[11px] leading-relaxed">
-            <span className="font-bold text-quran">الصفحة {side}</span>
-            <span className="text-gray-500 dark:text-gray-400">
-              {" "}في الوجه المفتوح{facing ? ` · تقابلها صفحة ${facing}` : ""}
-            </span>
+        <>
+          <div className="mushaf-reader-topbar">
+            <button onClick={onBack} className="mushaf-reader-back press">
+              <ChevronRight size={15} /> الفهرس
+            </button>
+            <div className="mushaf-reader-title">
+              <span>المصحف الشريف</span>
+              <strong>{surahLabel}</strong>
+              <small>جزء {idToJuz(start)} · صفحة {page} من {TOTAL_PAGES}</small>
+            </div>
+            <div className="mushaf-reader-actions">
+              <button
+                onClick={() => goto(page - 1)}
+                disabled={page <= 1}
+                className="mushaf-icon-button press disabled:opacity-30"
+                aria-label="الصفحة السابقة"
+              >
+                <ChevronRight size={17} />
+              </button>
+              <button
+                onClick={() => goto(page + 1)}
+                disabled={page >= TOTAL_PAGES}
+                className="mushaf-icon-button press disabled:opacity-30"
+                aria-label="الصفحة التالية"
+              >
+                <ChevronLeft size={17} />
+              </button>
+              <button
+                onClick={() => setShowTools((v) => !v)}
+                className={`mushaf-icon-button press ${showTools ? "is-active" : ""}`}
+                aria-label="إعدادات القراءة"
+              >
+                <Settings2 size={17} />
+              </button>
+            </div>
+          </div>
+          <div className="mushaf-reader-progress" aria-label={`التقدم في المصحف: صفحة ${page} من ${TOTAL_PAGES}`}>
+            <span style={{ width: `${(page / TOTAL_PAGES) * 100}%` }} />
+          </div>
+        </>
+      )}
+
+      {/* موضع الصفحة ووضع الحفظ في شريط واحد، حتى لا تتكرر البطاقات حول النص. */}
+      {!focus && (
+        <div className="mushaf-reader-context">
+          <div className="flex items-center gap-2 min-w-0">
+            <SpreadGlyph side={side} className="w-8 h-5" />
+            <div className="min-w-0 text-[11px] leading-relaxed">
+              <span className="font-bold text-quran">الصفحة {side}</span>
+              <span className="text-gray-500 dark:text-gray-400">
+                {facing ? ` · تقابلها صفحة ${facing}` : " · بداية الوجه"}
+              </span>
+            </div>
           </div>
           <button
             onClick={toggleVeil}
-            className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-bold rounded-lg px-2.5 py-1.5 press ${
-              veil === "off" ? "text-quran bg-quran/10" : "text-white bg-quran"
+            className={`mushaf-reader-mode shrink-0 inline-flex items-center gap-1 text-[11px] font-bold rounded-lg px-2.5 py-1.5 press ${
+              veil === "off" ? "is-idle" : "is-on"
             }`}
           >
             {veil === "off" ? <EyeOff size={13} /> : <Eye size={13} />}
-            {veil === "off" ? "احفظ" : veil === "step" ? "تتابع" : "سترٌ كامل"}
+            {veil === "off" ? "وضع الحفظ" : veil === "step" ? "كشف متتابع" : "ستر كامل"}
           </button>
         </div>
       )}
 
       {/* شريط الحفظ: كشفٌ متتابع مع عدّاد. يظهر فقط في وضع التتابع. */}
       {veil === "step" && (
-        <div className="flex items-center gap-2 rounded-xl border border-quran/20 bg-white dark:bg-[#241c12] px-3 py-2">
+        <div className="mushaf-recall-bar flex items-center gap-2 rounded-xl border border-quran/20 bg-white dark:bg-[#241c12] px-3 py-2">
           <Layers size={14} className="text-quran shrink-0" />
           <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
             {revealed} / {ayatCount}
@@ -223,7 +232,7 @@ export function PageReader({
 
       {/* إعدادات قراءة خفيفة */}
       {showTools && !focus && (
-        <div className="flex items-center gap-3 flex-wrap bg-white dark:bg-[#241c12] border border-gray-100 dark:border-transparent rounded-xl p-2.5 text-[11px] text-gray-500">
+        <div className="mushaf-reader-settings flex items-center gap-3 flex-wrap bg-white dark:bg-[#241c12] border border-gray-100 dark:border-transparent rounded-xl p-2.5 text-[11px] text-gray-500">
           {/* تكبيرٌ لا «حجم خطّ»: أسطرُ الوجه مقيسةٌ من المصحف، فالخطّ يكبر معها
               أو لا يكبر — ورفعُه وحده يكسر انطباق السطر على عرضه. */}
           <div className="flex items-center gap-1.5">
@@ -266,18 +275,18 @@ export function PageReader({
 
       {/* تنقّلٌ سفليّ بعرضٍ كامل — أسهل من أسهم الترويسة أثناء القراءة. */}
       {!focus && (
-        <div className="flex items-center gap-2">
+        <div className="mushaf-reader-nav flex items-center gap-2">
           <button
             onClick={() => goto(page - 1)}
             disabled={page <= 1}
-            className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold text-quran bg-quran/10 rounded-xl py-2.5 press disabled:opacity-30"
+            className="mushaf-nav-button mushaf-nav-button--quiet flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold rounded-xl py-2.5 press disabled:opacity-30"
           >
             <ChevronRight size={15} /> السابقة
           </button>
           <button
             onClick={() => goto(page + 1)}
             disabled={page >= TOTAL_PAGES}
-            className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold text-white bg-quran rounded-xl py-2.5 press disabled:opacity-40"
+            className="mushaf-nav-button mushaf-nav-button--primary flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold rounded-xl py-2.5 press disabled:opacity-40"
           >
             التالية <ChevronLeft size={15} />
           </button>
@@ -418,7 +427,7 @@ function BookSpread({
         ref={scroller}
         onScroll={onScroll}
         dir="ltr"
-        className="flex gap-2 overflow-x-auto snap-x snap-mandatory scroll-smooth px-6 -mx-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mushaf-spread-scroll flex gap-2 overflow-x-auto snap-x snap-mandatory scroll-smooth px-6 -mx-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {panes.map((p) => {
           const r = pageRange(p);
@@ -486,7 +495,7 @@ function TurnEdge({
       onClick={(e) => { if (e.detail === 0) onKeyTurn(); }}
       disabled={disabled}
       aria-label={label}
-      className={`absolute inset-y-6 w-7 rounded-lg touch-none select-none press disabled:opacity-0 flex items-center justify-center text-quran/30 hover:text-quran/70 hover:bg-quran/[0.06] ${
+      className={`mushaf-turn-edge absolute inset-y-6 w-7 rounded-lg touch-none select-none press disabled:opacity-0 flex items-center justify-center text-quran/30 hover:text-quran/70 hover:bg-quran/[0.06] ${
         edge === "left" ? "left-0" : "right-0"
       }`}
     >
@@ -508,7 +517,7 @@ function AyahSheet({
   const place = placeOf(id);
 
   return (
-    <div className="fixed inset-x-0 bottom-16 z-40 px-4 pb-[env(safe-area-inset-bottom)] [animation:sheetUp_0.25s_cubic-bezier(0.16,1,0.3,1)_both]">
+    <div className="ayah-action-sheet fixed inset-x-0 bottom-16 z-40 px-4 pb-[env(safe-area-inset-bottom)] [animation:sheetUp_0.25s_cubic-bezier(0.16,1,0.3,1)_both]">
       <div className="max-w-2xl mx-auto bg-white dark:bg-[#241c12] rounded-2xl shadow-2xl border border-gray-100 dark:border-transparent p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-bold text-quran">{SURAHS[surah - 1].name} · آية {ayah}</span>

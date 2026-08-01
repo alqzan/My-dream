@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
-import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { HifzSection } from "@/components/quran/HifzSection";
 import { TadabburSection } from "@/components/quran/TadabburSection";
 import { MushafBrowser } from "@/components/quran/MushafBrowser";
@@ -49,9 +48,11 @@ export default function QuranPage() {
         <p className="page-subtitle">التدبّر، الحفظ، والمصحف</p>
       </div>
 
-      <div className="animate-fade-up stagger-1">
-        <QuranBanner />
-      </div>
+      {tab !== "mushaf" && (
+        <div className="animate-fade-up stagger-1">
+          <QuranBanner />
+        </div>
+      )}
 
       {/* مبدّل الأعمدة */}
       <div className="flex gap-1.5 p-1 rounded-2xl bg-quran/10 animate-fade-up stagger-1">
@@ -72,7 +73,6 @@ export default function QuranPage() {
       )}
       {tab === "mushaf" && (
         <div className="animate-fade-up stagger-2 space-y-4">
-          <KhatmaOrbit />
           <MushafBrowser initialSurah={mushafSurah} onReflect={requestReflect} />
         </div>
       )}

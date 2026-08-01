@@ -155,7 +155,7 @@ export function MushafSheet({
               renderNumber={renderNumber}
               text={text}
             />
-            <span className="absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
+            <span className="mushaf-page-number absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
               {pg.page}
             </span>
           </Leaf>
@@ -375,13 +375,9 @@ export function Leaf({
   const edgePx = edgeWidth(spineOnLeft ? beforePct : afterPct);
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`mushaf-leaf relative ${className}`}>
       <div
-        className={`relative border-2 border-quran/20 bg-gradient-to-b from-quran/[0.05] to-transparent px-3 pt-3 pb-7 ${
-          spineOnLeft
-            ? "rounded-l-sm rounded-r-2xl border-l-quran/40 ms-0 me-0"
-            : "rounded-r-sm rounded-l-2xl border-r-quran/40"
-        }`}
+        className={`mushaf-leaf-page relative px-3 pt-3 pb-7 ${spineOnLeft ? "rounded-l-sm rounded-r-2xl" : "rounded-r-sm rounded-l-2xl"}`}
         style={stack ? (spineOnLeft ? { marginRight: edgePx } : { marginLeft: edgePx }) : undefined}
       >
         {children}

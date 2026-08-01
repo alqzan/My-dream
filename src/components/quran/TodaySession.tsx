@@ -5,6 +5,7 @@ import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
 import { describeRange } from "@/lib/quran/meta";
 import { today } from "@/lib/utils";
 import { countPages, type Portion } from "@/lib/quran/hifz";
+import { leadOnPage } from "@/lib/quran/portionPage";
 import {
   buildTodayPlan, loadSession, saveSession, clearSession, drillOverflow,
   STEP_LABEL, type SessionStep, type SessionTally,
@@ -126,8 +127,8 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
   }
 
   return (
-    <div className="fixed inset-0 z-[65] bg-[#f4eee2] dark:bg-[#171009] flex flex-col" dir="rtl">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-quran/15 bg-[#f4eee2]/90 dark:bg-[#171009]/90 backdrop-blur">
+    <div className="hifz-session-shell fixed inset-0 z-[65] bg-[#f4eee2] dark:bg-[#171009] flex flex-col" dir="rtl">
+      <div className="hifz-session-header flex items-center gap-2 px-4 py-3 border-b border-quran/15 bg-[#f4eee2]/90 dark:bg-[#171009]/90 backdrop-blur">
         <Sparkles size={17} className="text-quran" />
         <span className="text-sm font-bold text-gray-800 dark:text-gray-100">جلسة اليوم</span>
         {!done && total > 0 && (
@@ -139,12 +140,12 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
       </div>
 
       {total > 0 && (
-        <div className="h-1 bg-quran/10">
+        <div className="hifz-session-progress h-1 bg-quran/10">
           <div className="h-full bg-quran transition-all" style={{ width: `${(Math.min(idx, total) / total) * 100}%` }} />
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 py-5">
+      <div className="hifz-session-body flex-1 overflow-y-auto px-4 py-5">
         {done ? (
           <ResultScreen tally={tally} onClose={finish} />
         ) : (
@@ -234,8 +235,8 @@ function StepView({
     isMemorize ? onMemorize(portion, r) : step.kind === "test" ? onTest(portion, r) : onReview(portion, r);
 
   return (
-    <div className="max-w-lg mx-auto space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className="hifz-step-card max-w-lg mx-auto space-y-4">
+      <div className="hifz-step-heading flex items-center gap-2 flex-wrap">
         {icon}
         <span className="text-base font-bold text-gray-800 dark:text-gray-100">{meta.title}</span>
         <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
@@ -248,7 +249,7 @@ function StepView({
           <span className="text-[10px] font-bold text-quran bg-quran/10 rounded-full px-2 py-0.5">لم يُراجَع بعد</span>
         )}
       </div>
-      <p className="text-xs text-gray-500 leading-relaxed">{meta.hint}</p>
+      <p className="hifz-step-hint text-xs text-gray-500 leading-relaxed">{meta.hint}</p>
 
       {/* في التسميع لا يُكشف النصّ — لكنّ الوجه يُعرض والمقطع مستورٌ في موضعه
           منه: ترى **أين** مراجعة اليوم من المصحف قبل أن تسمّع، وهو نصفُ
@@ -256,25 +257,34 @@ function StepView({
       {isMemorize ? (
         <PortionBlock text={text} portion={portion} />
       ) : (
-        <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} hidden={() => true} maxHeight={280} />
+        <MushafSheet
+          text={text}
+          fromId={portion.fromId}
+          toId={portion.toId}
+          context="shape"
+          leadId={leadOnPage(portion.fromId)}
+          hidden={() => true}
+          maxHeight={280}
+          className="hifz-mushaf-stage"
+        />
       )}
       <MutashabihatAlert portion={portion} />
 
       <button
         onClick={() => onGuided(portion, isMemorize ? "memorize" : "recall", meta.coachTitle, record)}
-        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold press shadow-sm ${isMemorize ? "bg-quran text-white" : "bg-quran text-white"}`}
+        className="hifz-step-primary w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold press shadow-sm bg-quran text-white"
       >
         {isMemorize ? <><GraduationCap size={17} /> احفظ بطريقة موجّهة</> : <><Headphones size={16} /> ابدأ التسميع</>}
       </button>
 
       {isMemorize && (
-        <div>
+        <div className="hifz-direct-rating">
           <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو سجّل مباشرةً — قيّم حفظك:</div>
           <RatingRow onRate={(r) => onMemorize(portion, r)} />
         </div>
       )}
 
-      <button onClick={onSkip} className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 py-2 press">
+      <button onClick={onSkip} className="hifz-step-skip w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 py-2 press">
         تخطَّ هذه الخطوة <ChevronLeft size={14} />
       </button>
     </div>
@@ -315,7 +325,7 @@ function ResultStat({ label, value }: { label: string; value: number }) {
 // ورد اليوم يُعرض في وجهه من المصحف لا مقتطعاً في صندوق: تراه حيث ستراه في
 // المصحف الورقيّ، فتبدأ الذاكرة التصويرية عملها من أوّل نظرة.
 function PortionBlock({ text, portion }: { text: string[]; portion: Portion }) {
-  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={320} />;
+  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={320} className="hifz-mushaf-stage" />;
 }
 
 function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {

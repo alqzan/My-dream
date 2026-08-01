@@ -60,6 +60,7 @@ export function HifzCoach({
 
   const cur = ayat[idx];
   const isLast = idx >= ayat.length - 1;
+  const recallLeadId = leadOnPage(portion.fromId);
 
   // مواضع المقطع المفتوحة، ومنها ما وُسم اليوم — مقروءةً من الحالة المحفوظة لا
   // من لقطةٍ في الذاكرة، فما تراه على النصّ هو نفسه ما يُشتقّ منه التقييم.
@@ -77,14 +78,29 @@ export function HifzCoach({
   if (mode === "recall") {
     return (
       <Shell title={recallTitle} subtitle={describeRange(portion.fromId, portion.toId)} onClose={onClose}>
+        <div className="hifz-mode-intro">
+          <span className="hifz-mode-intro-mark"><EyeOff size={13} /></span>
+          <div>
+            <strong>استرجاع من الذاكرة</strong>
+            <span>سمّع أولًا، ثم اكشف وعلّم مواضع التعثّر.</span>
+          </div>
+        </div>
         {/* التلقين المرسوم يغني عن بطاقته: الآية السابقة ظاهرةٌ في موضعها من
             الوجه. فإن بدأ المقطعُ الوجهَ فلا سابقةَ على الورقة — فتُعرض. */}
-        {leadOnPage(portion.fromId) == null && <LeadPrompt text={text} targetId={portion.fromId} />}
+        {recallLeadId == null && <LeadPrompt text={text} targetId={portion.fromId} />}
         {!revealed ? (
           <>
             {/* المقطع مستورٌ **في وجهه**: أثرُ كلّ آيةٍ في موضعها، والسياق حولها
                 — تسترجع والصورةُ التي حفظتَ عليها قائمةٌ أمامك. */}
-            <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} hidden={() => true} />
+            <MushafSheet
+              text={text}
+              fromId={portion.fromId}
+              toId={portion.toId}
+              context="shape"
+              leadId={recallLeadId}
+              hidden={() => true}
+              className="hifz-mushaf-stage"
+            />
             <p className="text-[11px] text-gray-400 text-center mt-2 flex items-center justify-center gap-1">
               <EyeOff size={12} /> سمّع المقطع من حفظك…
             </p>
@@ -119,9 +135,9 @@ export function HifzCoach({
     >
       {phase === "link" ? (
         <>
-          <div className="text-center text-[11px] font-semibold text-quran mb-2 flex items-center justify-center gap-1"><Link2 size={13} /> اربط المقطع كاملاً</div>
+          <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-2 flex items-center justify-center gap-1"><Link2 size={13} /> اربط المقطع كاملاً</div>
           <p className="text-[11px] text-gray-400 text-center mb-3">اقرأ المقطع كله مرّةً موصولاً لتثبيت الربط بين الآيات.</p>
-          <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} />
+          <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" />
           <div className="mt-4">
             <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف تقيّم حفظك للورد؟</div>
             <RatingRow onRate={(r) => onDone(r)} />
@@ -130,10 +146,10 @@ export function HifzCoach({
         </>
       ) : phase === "repeat" ? (
         <>
-          <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
+          <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
           {/* الآية مُبرَزةٌ في وجهها والباقي خافت: تحفظها وأنت ترى أين تقع من
               الوجه — لا مقتطعةً في صندوق. */}
-          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} maxHeight={330} />
+          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} maxHeight={330} className="hifz-mushaf-stage" />
           <div className="mt-3"><MutashabihatAlert portion={{ fromId: cur.id, toId: cur.id }} compact /></div>
           <RepsDots reps={reps} target={repTarget} />
           <button
@@ -157,7 +173,7 @@ export function HifzCoach({
         </>
       ) : (
         <>
-          <div className="text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><CornerDownLeft size={13} /> سمّع الآية التالية من حفظك</div>
+          <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><CornerDownLeft size={13} /> سمّع الآية التالية من حفظك</div>
           {leadOnPage(cur.id) == null && <LeadPrompt text={text} targetId={cur.id} />}
           {/* مستورةٌ في موضعها من الوجه — لا صندوقٌ فارغ خارج المصحف. */}
           <MushafSheet
@@ -165,8 +181,11 @@ export function HifzCoach({
             fromId={cur.id}
             toId={cur.id}
             spotlightId={cur.id}
+            context={revealed ? "text" : "shape"}
+            leadId={leadOnPage(cur.id)}
             hidden={() => !revealed}
             maxHeight={330}
+            className="hifz-mushaf-stage"
           />
           <div className="flex gap-2 mt-4">
             <button onClick={() => setRevealed((v) => !v)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran/10 text-quran font-semibold press">
@@ -188,21 +207,21 @@ function Shell({
   title: string; subtitle?: string; onClose: () => void; progress?: number; children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[70] bg-[#f4eee2] dark:bg-[#171009] flex flex-col">
-      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-[#3a2e1e]">
+    <div className="hifz-coach-shell fixed inset-0 z-[70] bg-[#f4eee2] dark:bg-[#171009] flex flex-col" dir="rtl">
+      <div className="hifz-coach-header flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-[#3a2e1e]">
         <div>
-          <div className="text-sm font-bold text-gray-800">{title}</div>
+          <div className="text-sm font-bold text-gray-800 dark:text-gray-100">{title}</div>
           {subtitle && <div className="text-[11px] text-quran font-semibold mt-0.5">{subtitle}</div>}
         </div>
         <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 press" aria-label="إغلاق"><X size={20} /></button>
       </div>
       {progress != null && (
-        <div className="h-1 bg-gray-100 dark:bg-[#2c2318]">
+        <div className="hifz-coach-progress h-1 bg-gray-100 dark:bg-[#2c2318]">
           <div className="h-full bg-quran transition-all duration-500" style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
         </div>
       )}
-      <div className="flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
-        <div>{children}</div>
+      <div className="hifz-coach-body flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
+        <div className="hifz-coach-content">{children}</div>
       </div>
     </div>
   );

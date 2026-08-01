@@ -547,3 +547,462 @@ body {
   color: #1b6b4c;
 }
 .dark .mushaf-sura { color: #8fcbb0; }
+
+/* ===================== قارئ المصحف — قراءة أولاً =====================
+   القارئ يستعير هدوء تطبيقات المصحف المتخصصة: أدوات قليلة حول الصفحة،
+   ومساحة الورق هي العنصر الأوضح. تبقى معلومات الحفظ والتقدّم موجودة، لكن
+   في شرائط صغيرة لا تنافس الآيات. */
+.mushaf-reader {
+  --reader-paper: #fffdf7;
+  --reader-paper-deep: #f8f0e1;
+  --reader-line: rgba(126, 98, 54, 0.18);
+  --reader-shadow: rgba(76, 54, 26, 0.12);
+}
+
+.mushaf-reader-topbar {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 1fr) auto minmax(5.5rem, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(126, 98, 54, 0.16);
+  border-radius: 1.15rem;
+  background: rgba(255, 253, 247, 0.76);
+  box-shadow: 0 8px 22px rgba(76, 54, 26, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.mushaf-reader-back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #1b6b4c;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mushaf-reader-title {
+  min-width: 8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.3;
+  text-align: center;
+}
+.mushaf-reader-title span {
+  color: #a69272;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+.mushaf-reader-title strong {
+  max-width: 16rem;
+  overflow: hidden;
+  color: #3a3023;
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mushaf-reader-title small {
+  color: #95866f;
+  font-size: 0.64rem;
+}
+
+.mushaf-reader-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.mushaf-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.65rem;
+  color: #a18f72;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+.mushaf-icon-button:hover,
+.mushaf-icon-button.is-active {
+  color: #1b6b4c;
+  background: rgba(27, 107, 76, 0.09);
+}
+.mushaf-icon-button:active { transform: scale(0.94); }
+
+.mushaf-reader-progress {
+  height: 0.18rem;
+  margin: -0.35rem 1.5rem 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(126, 98, 54, 0.11);
+}
+.mushaf-reader-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c9852a, #1b6b4c);
+  transition: width 220ms ease;
+}
+
+.mushaf-reader-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(27, 107, 76, 0.14);
+  border-radius: 0.95rem;
+  background: rgba(27, 107, 76, 0.035);
+}
+.mushaf-reader-mode {
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.mushaf-reader-mode.is-idle {
+  color: #1b6b4c;
+  background: rgba(27, 107, 76, 0.09);
+}
+.mushaf-reader-mode.is-on {
+  color: #fff;
+  background: #1b6b4c;
+  box-shadow: 0 5px 12px rgba(27, 107, 76, 0.18);
+}
+
+.mushaf-recall-bar {
+  box-shadow: 0 5px 16px rgba(76, 54, 26, 0.06);
+}
+.mushaf-reader-settings {
+  box-shadow: 0 5px 16px rgba(76, 54, 26, 0.05);
+}
+
+.mushaf-spread-scroll {
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+.mushaf-spread-scroll::-webkit-scrollbar { display: none; }
+
+.mushaf-leaf-page {
+  overflow: hidden;
+  border: 1px solid var(--reader-line, rgba(126, 98, 54, 0.18));
+  color: #3c3326;
+  background:
+    linear-gradient(90deg, rgba(112, 83, 42, 0.06), transparent 5%, transparent 95%, rgba(112, 83, 42, 0.04)),
+    linear-gradient(180deg, var(--reader-paper, #fffdf7), var(--reader-paper-deep, #f8f0e1));
+  box-shadow:
+    0 16px 30px var(--reader-shadow, rgba(76, 54, 26, 0.12)),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.54),
+    inset 0 0 28px rgba(126, 98, 54, 0.045);
+}
+.mushaf-page-number {
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+.mushaf-turn-edge {
+  z-index: 4;
+  background: rgba(255, 253, 247, 0.72);
+  box-shadow: 0 4px 12px rgba(76, 54, 26, 0.05);
+}
+
+.mushaf-reader-nav { padding-top: 0.15rem; }
+.mushaf-nav-button {
+  min-height: 2.75rem;
+  transition: transform 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+.mushaf-nav-button:active { transform: scale(0.985); }
+.mushaf-nav-button--quiet {
+  color: #1b6b4c;
+  background: rgba(27, 107, 76, 0.09);
+}
+.mushaf-nav-button--quiet:hover { background: rgba(27, 107, 76, 0.14); }
+.mushaf-nav-button--primary {
+  color: #fff;
+  background: #1b6b4c;
+  box-shadow: 0 8px 18px rgba(27, 107, 76, 0.18);
+}
+.mushaf-nav-button--primary:hover { background: #15583e; }
+
+.ayah-action-sheet > div {
+  box-shadow: 0 18px 45px rgba(47, 34, 17, 0.22);
+}
+
+/* فهرس المصحف: نفس الهوية الهادئة، لكن بإشارة واضحة أن هذه شاشة اختيار لا
+   شاشة قراءة. */
+.mushaf-index-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(126, 98, 54, 0.16);
+  border-radius: 1.15rem;
+  background: linear-gradient(135deg, rgba(255, 253, 247, 0.86), rgba(218, 238, 227, 0.5));
+  box-shadow: 0 8px 22px rgba(76, 54, 26, 0.045);
+}
+.mushaf-index-eyebrow {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: #1b6b4c;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+.mushaf-index-title {
+  color: #3a3023;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.mushaf-index-copy {
+  margin-top: 0.18rem;
+  color: #8d806c;
+  font-size: 0.72rem;
+}
+.mushaf-index-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.55rem;
+  height: 3.55rem;
+  border: 1px solid rgba(201, 133, 42, 0.24);
+  border-radius: 1rem;
+  color: #1b6b4c;
+  background: rgba(255, 253, 247, 0.75);
+}
+.mushaf-index-count strong { font-size: 1.2rem; line-height: 1; }
+.mushaf-index-count span { margin-top: 0.15rem; color: #a69272; font-size: 0.62rem; }
+.mushaf-index-tabs {
+  border: 1px solid rgba(27, 107, 76, 0.1);
+}
+
+.dark .mushaf-reader-topbar {
+  border-color: rgba(224, 190, 126, 0.14);
+  background: rgba(36, 28, 18, 0.82);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+.dark .mushaf-reader-title strong,
+.dark .mushaf-index-title { color: #efe6d5; }
+.dark .mushaf-reader-title span,
+.dark .mushaf-reader-title small,
+.dark .mushaf-index-copy { color: #a2947a; }
+.dark .mushaf-reader-progress { background: rgba(224, 190, 126, 0.13); }
+.dark .mushaf-reader-context { background: rgba(27, 107, 76, 0.1); }
+.dark .mushaf-leaf-page {
+  --reader-paper: #2c2419;
+  --reader-paper-deep: #241c12;
+  --reader-line: rgba(224, 190, 126, 0.22);
+  --reader-shadow: rgba(0, 0, 0, 0.28);
+  color: #eee4d2;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.16), transparent 5%, transparent 95%, rgba(0, 0, 0, 0.1)),
+    linear-gradient(180deg, var(--reader-paper), var(--reader-paper-deep));
+  box-shadow:
+    0 16px 30px var(--reader-shadow),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    inset 0 0 28px rgba(0, 0, 0, 0.08);
+}
+.dark .mushaf-page-number { text-shadow: none; }
+.dark .mushaf-turn-edge { background: rgba(36, 28, 18, 0.8); }
+.dark .mushaf-index-intro {
+  border-color: rgba(224, 190, 126, 0.15);
+  background: linear-gradient(135deg, rgba(36, 28, 18, 0.92), rgba(27, 74, 57, 0.32));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+.dark .mushaf-index-count { background: rgba(36, 28, 18, 0.72); }
+
+/* ===================== الحفظ والمراجعة — جلسة مركّزة =====================
+   شاشة الحفظ ليست بطاقةً عادية داخل الصفحة: هي لحظة تسميع، لذلك نخفف الخلفية
+   ونُبقي المصحف في مركز الانتباه. نفس الغلاف يخدم المدرّب، جلسة اليوم، واختبار
+   مواضع الخطأ حتى لا يشعر المستخدم أنه انتقل إلى أدوات متفرقة. */
+.hifz-coach-shell,
+.hifz-session-shell,
+.hifz-drill-modal {
+  --reader-paper: #fffdf7;
+  --reader-paper-deep: #f8f0e1;
+  --reader-line: rgba(126, 98, 54, 0.18);
+  --reader-shadow: rgba(76, 54, 26, 0.12);
+  background:
+    radial-gradient(circle at 50% -12%, rgba(27, 107, 76, 0.11), transparent 34rem),
+    #f4eee2;
+}
+.hifz-coach-header,
+.hifz-session-header,
+.hifz-drill-header {
+  position: relative;
+  z-index: 2;
+  background: rgba(255, 253, 247, 0.78);
+  box-shadow: 0 8px 22px rgba(76, 54, 26, 0.05);
+  backdrop-filter: blur(12px);
+}
+.hifz-coach-progress,
+.hifz-session-progress {
+  overflow: hidden;
+  box-shadow: inset 0 -1px rgba(126, 98, 54, 0.08);
+}
+.hifz-coach-body,
+.hifz-session-body,
+.hifz-drill-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(27, 107, 76, 0.28) transparent;
+}
+.hifz-coach-content,
+.hifz-step-card,
+.hifz-drill-card {
+  position: relative;
+}
+.hifz-mode-intro {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(27, 107, 76, 0.14);
+  border-radius: 1rem;
+  background: rgba(27, 107, 76, 0.055);
+}
+.hifz-mode-intro-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.65rem;
+  color: #1b6b4c;
+  background: rgba(27, 107, 76, 0.1);
+}
+.hifz-mode-intro strong,
+.hifz-mode-intro span {
+  display: block;
+}
+.hifz-mode-intro strong {
+  color: #3a3023;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.hifz-mode-intro div span {
+  margin-top: 0.13rem;
+  color: #8d806c;
+  font-size: 0.66rem;
+}
+.hifz-phase-label {
+  letter-spacing: 0.01em;
+}
+.hifz-mushaf-stage {
+  margin-inline: -0.1rem;
+}
+.hifz-coach-shell .mushaf-leaf-page,
+.hifz-session-shell .mushaf-leaf-page,
+.hifz-drill-modal .mushaf-leaf-page {
+  border-radius: 1rem;
+  box-shadow:
+    0 18px 34px rgba(76, 54, 26, 0.13),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+    inset 0 0 28px rgba(126, 98, 54, 0.045);
+}
+.hifz-step-card {
+  padding: 1rem;
+  border: 1px solid rgba(126, 98, 54, 0.14);
+  border-radius: 1.25rem;
+  background: rgba(255, 253, 247, 0.62);
+  box-shadow: 0 10px 24px rgba(76, 54, 26, 0.05);
+}
+.hifz-step-heading,
+.hifz-drill-heading {
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid rgba(126, 98, 54, 0.11);
+}
+.hifz-step-hint,
+.hifz-drill-hint {
+  padding-inline: 0.15rem;
+}
+.hifz-step-primary {
+  box-shadow: 0 8px 18px rgba(27, 107, 76, 0.18);
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.hifz-step-primary:hover {
+  background: #15583e;
+  box-shadow: 0 10px 22px rgba(27, 107, 76, 0.22);
+}
+.hifz-step-primary:active { transform: scale(0.99); }
+.hifz-step-skip { opacity: 0.82; }
+.hifz-direct-rating {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(126, 98, 54, 0.1);
+}
+.hifz-drill-card {
+  padding: 1rem;
+  border: 1px solid rgba(201, 133, 42, 0.18);
+  border-radius: 1.25rem;
+  background: rgba(255, 253, 247, 0.62);
+  box-shadow: 0 10px 24px rgba(76, 54, 26, 0.05);
+}
+.hifz-result-screen {
+  padding: 1.25rem;
+  border: 1px solid rgba(27, 107, 76, 0.14);
+  border-radius: 1.25rem;
+  background: rgba(255, 253, 247, 0.62);
+  box-shadow: 0 10px 24px rgba(76, 54, 26, 0.05);
+}
+.dark .hifz-coach-shell,
+.dark .hifz-session-shell,
+.dark .hifz-drill-modal {
+  --reader-paper: #2c2419;
+  --reader-paper-deep: #241c12;
+  --reader-line: rgba(224, 190, 126, 0.22);
+  --reader-shadow: rgba(0, 0, 0, 0.28);
+  background:
+    radial-gradient(circle at 50% -12%, rgba(27, 107, 76, 0.2), transparent 34rem),
+    #171009;
+}
+.dark .hifz-coach-header,
+.dark .hifz-session-header,
+.dark .hifz-drill-header {
+  background: rgba(36, 28, 18, 0.82);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+.dark .hifz-mode-intro {
+  border-color: rgba(143, 203, 176, 0.16);
+  background: rgba(27, 107, 76, 0.12);
+}
+.dark .hifz-mode-intro strong { color: #efe6d5; }
+.dark .hifz-mode-intro div span { color: #a2947a; }
+.dark .hifz-step-card,
+.dark .hifz-drill-card,
+.dark .hifz-result-screen {
+  border-color: rgba(224, 190, 126, 0.15);
+  background: rgba(36, 28, 18, 0.72);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.dark .hifz-step-heading,
+.dark .hifz-drill-heading,
+.dark .hifz-direct-rating { border-color: rgba(224, 190, 126, 0.12); }
+.dark .hifz-coach-shell .mushaf-leaf-page,
+.dark .hifz-session-shell .mushaf-leaf-page,
+.dark .hifz-drill-modal .mushaf-leaf-page {
+  box-shadow:
+    0 18px 34px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    inset 0 0 28px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 520px) {
+  .mushaf-reader-topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.4rem;
+    padding-inline: 0.5rem;
+  }
+  .mushaf-reader-back { font-size: 0.65rem; }
+  .mushaf-reader-title strong { max-width: 8rem; font-size: 0.88rem; }
+  .mushaf-reader-title small { font-size: 0.58rem; }
+  .mushaf-icon-button { width: 1.8rem; height: 1.8rem; }
+  .mushaf-reader-progress { margin-inline: 1rem; }
+  .mushaf-index-intro { padding: 0.85rem; }
+  .mushaf-index-copy { font-size: 0.66rem; }
+  .hifz-coach-body,
+  .hifz-session-body,
+  .hifz-drill-body { padding-inline: 0.75rem; }
+  .hifz-step-card,
+  .hifz-drill-card { padding: 0.8rem; }
+}
