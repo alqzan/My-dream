@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SURAHS, juzRange, pageRange, idToSurahAyah, surahAyahToId, idToPage, idToJuz, TOTAL_JUZ, TOTAL_PAGES } from "@/lib/quran/meta";
 import { clampPage } from "@/lib/quran/page";
 import { PageReader } from "./PageReader";
+import { KhatmaOrbit } from "./KhatmaOrbit";
 import { loadAyahText } from "@/lib/quran/text";
 import { normalizeArabic } from "@/lib/utils";
 import { Search, ChevronLeft, BookmarkCheck } from "lucide-react";
@@ -121,7 +122,19 @@ export function MushafBrowser({ initialSurah, onReflect }: { initialSurah?: numb
   }
 
   return (
-    <div className="space-y-3">
+    <div className="mushaf-index space-y-4">
+      <div className="mushaf-index-intro">
+        <div className="min-w-0">
+          <span className="mushaf-index-eyebrow">المصحف الشريف</span>
+          <h2 className="mushaf-index-title">استعراض المصحف</h2>
+          <p className="mushaf-index-copy">اقرأ بهدوء، وتابع من آخر موضع وقفت عنده.</p>
+        </div>
+        <div className="mushaf-index-count" aria-label="عدد صفحات المصحف">
+          <strong>604</strong>
+          <span>وجهًا</span>
+        </div>
+      </div>
+
       {/* تابع من حيث توقفت — السورة والآية (والصفحة) */}
       {last && (
         <button
@@ -137,8 +150,10 @@ export function MushafBrowser({ initialSurah, onReflect }: { initialSurah?: numb
         </button>
       )}
 
+      <KhatmaOrbit />
+
       {/* مبدّل طريقة التصفّح */}
-      <div className="flex gap-1 p-1 rounded-xl bg-quran/[0.07]">
+      <div className="mushaf-index-tabs flex gap-1 p-1 rounded-xl bg-quran/[0.07]">
         {([["surah", "السور"], ["juz", "الأجزاء"], ["search", "بحث الآيات"]] as [ListMode, string][]).map(([m, label]) => (
           <button
             key={m}
