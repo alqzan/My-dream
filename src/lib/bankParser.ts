@@ -1,4 +1,5 @@
 import type { FinanceCategoryDef } from "./types";
+import { isValidDateKey, parseDate, today } from "./utils";
 
 // ========== Smart Categorization ==========
 // Maps to the seeded default category ids (src/lib/types.ts). If the user
@@ -239,13 +240,16 @@ export function parseBankSms(smsText: string, date: string): SmsParseResult | nu
     amount,
     category: keywordCategory(text + " " + merchant),
     note: merchant || body.replace(/\s+/g, " ").trim().slice(0, 60),
-    date: extractSmsDate(text) ?? date,
+    date: extractSmsDate(text, date) ?? date,
   };
 }
 
 // Pull a Gregorian date out of a message if present (dd/mm/yyyy, yyyy-mm-dd,
 // dd-mm-yyyy). Hijri/unknown formats fall back to the caller's default.
-function extractSmsDate(text: string): string | null {
+// `reference` is the caller's own default date (today, or the date the user
+// picked for a manual paste) — used only to disambiguate the 2-digit-year
+// case below.
+function extractSmsDate(text: string, reference: string): string | null {
   const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const dmy = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
@@ -253,14 +257,35 @@ function extractSmsDate(text: string): string | null {
     const [, d, m, y] = dmy;
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
-  // dd/mm/yy (or dd-mm-yy): a 2-digit year, as mada alerts send ("16/7/26").
-  // Interpret yy as 20yy (26 → 2026). The trailing (?!\d) guard keeps this from
-  // biting off the first two digits of a 4-digit year (that case already
-  // returned above).
+  // A date with a 2-digit year is ambiguous: mada alerts send dd-mm-yy
+  // ("16/7/26" → 2026-07-16), but credit-card POS alerts (e.g. the Apple Pay
+  // "... في 15:12 26-07-30 ..." template) send yy-mm-dd for the SAME shape
+  // ("26-07-30" → 2026-07-30, NOT day 26 of month 07, year 2030). Reading it
+  // as always dd-mm-yy silently misfiles that second template a decade into
+  // the future. Try both orderings — yy as 20yy — and when both land on a
+  // real calendar day, keep whichever is closer to `reference`: a bank SMS is
+  // always about a transaction from around now, never years away. The
+  // trailing (?!\d) guard keeps this from biting off the first two digits of
+  // a 4-digit year (that case already returned above).
   const dmy2 = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?!\d)/);
   if (dmy2) {
-    const [, d, m, y] = dmy2;
-    return `20${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const [, a, m, b] = dmy2;
+    const month = m.padStart(2, "0");
+    const na = Number(a);
+    const nb = Number(b);
+    const candidates: string[] = [];
+    if (na >= 1 && na <= 31) candidates.push(`20${b}-${month}-${a.padStart(2, "0")}`); // dd-mm-yy
+    if (nb >= 1 && nb <= 31) candidates.push(`20${a}-${month}-${b.padStart(2, "0")}`); // yy-mm-dd
+    const valid = candidates.filter(isValidDateKey);
+    if (valid.length === 0) return null;
+    if (valid.length === 1) return valid[0];
+    const refDate = parseDate(isValidDateKey(reference) ? reference : today());
+    return valid.reduce((closest, c) =>
+      Math.abs(parseDate(c).getTime() - refDate.getTime()) <
+      Math.abs(parseDate(closest).getTime() - refDate.getTime())
+        ? c
+        : closest
+    );
   }
   return null;
 }
