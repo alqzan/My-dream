@@ -333,6 +333,7 @@ function seedKnownMedia(main: CloudMediaMeta): void {
 // of entries is small), and only shards whose contents changed are rewritten.
 const JOURNAL_SUB = "journal";
 const SHARD_WARN_BYTES = 850 * 1024; // warn before a single shard nears 1MB
+const SHARD_WRITE_CONCURRENCY = 4;
 
 function splitJournalShards(entries: CloudEntry[]): Map<string, CloudEntry[]> {
   const m = new Map<string, CloudEntry[]>();
@@ -348,7 +349,36 @@ function splitJournalShards(entries: CloudEntry[]): Map<string, CloudEntry[]> {
 // Signature of what each shard last held (read or written), so a save rewrites
 // only the shards that actually changed — not all of them on every edit.
 let shardSignatures = new Map<string, string>();
-const shardSig = (entries: unknown[]): string => JSON.stringify(entries);
+
+// **التوقيع قانونيّ عمداً** (مفاتيح مرتّبة، ومذكرات مرتّبة بالمعرّف، وبلا
+// `undefined`). التوقيع الساذج `JSON.stringify(entries)` كان يقارن نصّين لا
+// يتطابقان أبداً ولو كان المحتوى نفسه: Firestore يعيد مفاتيح المستند مرتّبةً
+// أبجدياً بينما نكتبها بترتيب الإنشاء، والدمج يعيد ترتيب مصفوفة المذكرات، و
+// `ignoreUndefinedProperties` يُسقط الحقول غير المعرَّفة عند الكتابة فتغيب عند
+// القراءة. فكانت **كلّ** شهورِ المذكرات تُعاد كتابتها في كلّ حفظ — وهذا وحده
+// عشراتُ الكتابات الشبكية على تعديلٍ لا يمسّ المذكرات أصلاً. الترتيب داخل
+// المصفوفات (الصور والمراجع) يبقى كما هو لأنّه ذو معنى.
+function canonicalize(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonicalize);
+  if (v && typeof v === "object") {
+    const src = v as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(src).sort()) {
+      if (src[k] === undefined) continue; // Firestore يُسقطها عند الكتابة
+      out[k] = canonicalize(src[k]);
+    }
+    return out;
+  }
+  return v;
+}
+const shardSig = (entries: unknown[]): string => {
+  const idOf = (e: unknown) => (e as { id?: string })?.id ?? "";
+  return JSON.stringify(
+    [...entries]
+      .sort((a, b) => (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0))
+      .map(canonicalize)
+  );
+};
 
 // True when the last shard read completed without an error. When false, the
 // snapshot we handed back may be missing a month we couldn't fetch — so the UI
@@ -398,16 +428,23 @@ async function loadJournalShards(
 // another month) are removed. Updates shardSignatures to match.
 async function writeJournalShards(uid: string, entries: CloudEntry[]): Promise<void> {
   if (!db) return;
+  const database = db; // التضييق يضيع داخل ردّ نداء المجمّع المتوازي أدناه
   const shards = splitJournalShards(entries);
   const nextSigs = new Map<string, string>();
+  const changed: Array<[string, CloudEntry[]]> = [];
   for (const [sid, es] of shards) {
     const sig = shardSig(es);
     nextSigs.set(sid, sig);
     if (shardSignatures.get(sid) === sig) continue; // unchanged → skip write
     const bytes = new Blob([sig]).size;
     if (bytes >= SHARD_WARN_BYTES) warnShardNearLimit(sid, bytes);
-    await setDoc(doc(db, COLLECTION, uid, JOURNAL_SUB, sid), { entries: es }, { merge: false });
+    changed.push([sid, es]);
   }
+  // الشهور المتغيّرة تُكتب على التوازي بحدٍّ صغير بدل انتظار كلٍّ منها على حدة:
+  // استيرادٌ يمسّ عشرين شهراً كان عشرين رحلةَ شبكةٍ **متسلسلة**.
+  await mapWithConcurrency(changed, SHARD_WRITE_CONCURRENCY, async ([sid, es]) => {
+    await setDoc(doc(database, COLLECTION, uid, JOURNAL_SUB, sid), { entries: es }, { merge: false });
+  });
   // Delete shards we knew about that hold nothing now — BUT never when the whole
   // journal is empty. An empty journal at save time almost always means the
   // store isn't hydrated yet (a fresh tab, a failed load), not that the user
@@ -438,7 +475,9 @@ function warnShardNearLimit(sid: string, bytes: number): void {
 // new (`data:`) media to upload and the full set of referenced hashes (for the
 // manifest and to know what is confirmed in R2).
 async function prepareForCloud(
-  data: AppData
+  data: AppData,
+  knownPhotos: Set<string>,
+  knownAudios: Set<string>
 ): Promise<{
   // The main doc holds everything EXCEPT the journal (which is sharded).
   main: Omit<AppData, "journalEntries"> & CloudMediaMeta;
@@ -462,6 +501,7 @@ async function prepareForCloud(
     items: string[],
     newMap: Map<string, string>,
     allRefs: Set<string>,
+    known: Set<string>,
     isDeleted: (hash: string) => boolean
   ): Promise<string[]> => {
     const refs: string[] = [];
@@ -476,14 +516,21 @@ async function prepareForCloud(
       if (isStorageUrl(it)) {
         if (isR2StorageUrl(it) || isWorkerDownloadUrl(it)) {
           cacheMediaUrl(h, it); // already in the cloud (R2 presigned or Worker link)
-        } else {
+        } else if (!known.has(h)) {
           // A legacy Firebase URL still contains retrievable bytes. Queue it
           // for the R2 migration; if it has expired, verification reports the
           // hash as broken rather than falsely adding it to the R2 manifest.
           newMap.set(h, it);
         }
-      } else {
-        newMap.set(h, it); // a local data: URL to upload
+      } else if (!known.has(h)) {
+        // بايتاتٌ محلّية (data:) **لم نتأكّد بعد أنّها في R2** → ترفع.
+        // الشرط `!known.has(h)` هو بيت القصيد: بعد الترطيب تصير كلّ صورةٍ في
+        // المتجر `data:`، فبلا هذا الحارس كان كلُّ حفظ يعيد رفع **كامل** وسائط
+        // الجهاز إلى R2 — ميغابايتاتٌ على كل تعديل نصّي، وهي السبب الأول لبطء
+        // المزامنة. المانيفست (`photoManifest`) هو ما يثبت وجودها، ويُقرأ من
+        // المستند الرئيس في كلّ جلسة؛ ولإجبار رفعٍ كامل ثمّة `reuploadAllMedia`
+        // (تُفرّغ المجموعتين أولاً) للإصلاح عند شكٍّ في ضياع ملف.
+        newMap.set(h, it);
         void localMediaPut(h, it); // keep our own bytes locally → never re-fetch
       }
       refs.push(h); allRefs.add(h);
@@ -515,13 +562,13 @@ async function prepareForCloud(
               photoRefs: _pr, audioRefs: _aur, photoOrder: _po, audioOrder: _ao, ...rest } = src;
       const out: CloudEntry = rest;
       if (imgs.length || survivingPhotoRefs.length) {
-        const refs = await attach(imgs, newPhotos, photoRefs, photoDeleted);
+        const refs = await attach(imgs, newPhotos, photoRefs, knownPhotos, photoDeleted);
         mergeSurviving(refs, survivingPhotoRefs, photoRefs);
         // Restore the original order so a survivor lands back in its slot.
         if (refs.length) out.photoRefs = orderRefs(refs, src.photoOrder);
       }
       if (auds.length || survivingAudioRefs.length) {
-        const refs = await attach(auds, newAudios, audioRefs, audioDeleted);
+        const refs = await attach(auds, newAudios, audioRefs, knownAudios, audioDeleted);
         mergeSurviving(refs, survivingAudioRefs, audioRefs);
         if (refs.length) out.audioRefs = orderRefs(refs, src.audioOrder);
       }
@@ -545,10 +592,47 @@ async function prepareForCloud(
   };
 }
 
-// Main doc + journal shards (no photo bytes — entries still carry photoRefs,
-// resolved later by hydrateCloudPhotos). Seeds the known-hash cache from the
-// manifest and the shard-signature cache so a subsequent save diffs correctly.
-export async function loadUserMain(uid: string): Promise<(AppData & CloudMediaMeta) | null> {
+// ===================== القراءة على مرحلتين (المستند الرئيس ثمّ الshards) ====
+// كلّ ما تحتاجه أسئلةُ «هل تحرّكت السحابة؟» (`lastUpdated` و`revision`
+// و`photoManifest`) يعيش في **المستند الرئيس وحده**. أمّا الshards فهي كلّ
+// المذكرات — ميغابايتات عند مكتبة Day One كبيرة.
+//
+// كان كلُّ حفظ وكلُّ إشعارٍ من المستمع الحيّ ينزّل **المجموعة كاملة** قبل أن
+// يسأل السؤال أصلاً: تعديلٌ واحد على مصروف = تنزيلُ كامل المذكرات مرّتين أو
+// ثلاثاً (قراءةُ ما قبل الحفظ، ثمّ صدى كتابتنا نحن في المستمع). وهذا — مع
+// إعادة رفع الوسائط وإعادة كتابة كلّ الshards — هو ثالوث بطء المزامنة.
+//
+// الآن: `readCloudMain` تقرأ مستنداً واحداً، و`full()` تنزّل الshards **عند
+// الحاجة فقط** (أي حين يثبت أنّ السحابة تحرّكت فعلاً فسندمج). `full()` مُذكَّرة
+// فلا تنزّل مرّتين للإشعار الواحد.
+export interface CloudRead {
+  /** المستند الرئيس كما هو — **بلا** مذكرات الshards (قد يحمل مذكراتٍ قديمة مضمّنة). */
+  main: AppData & CloudMediaMeta;
+  /** اللقطة الكاملة: المستند الرئيس + كلّ shards المذكرات (رحلةُ شبكةٍ إضافية). */
+  full: () => Promise<AppData & CloudMediaMeta>;
+}
+
+function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
+  seedKnownMedia(main);
+  let pending: Promise<AppData & CloudMediaMeta> | null = null;
+  return {
+    main,
+    full: () => {
+      // Journal lives in shards now; fold them (and any legacy inline entries)
+      // back into journalEntries so the rest of the app sees one flat list.
+      pending ??= loadJournalShards(uid, main).then((journalEntries) => ({
+        ...main,
+        journalEntries: journalEntries as unknown as JournalEntry[],
+      }));
+      return pending;
+    },
+  };
+}
+
+// The main doc alone — one document read, no journal shards. Seeds the
+// known-hash cache from the manifest so a save that follows doesn't re-upload
+// media that's already in R2.
+export async function readCloudMain(uid: string): Promise<CloudRead | null> {
   if (!db) return null;
   const snap = await getDoc(doc(db, COLLECTION, uid));
   if (!snap.exists()) {
@@ -557,34 +641,35 @@ export async function loadUserMain(uid: string): Promise<(AppData & CloudMediaMe
     shardSignatures = new Map();
     return null;
   }
-  const main = snap.data() as AppData & CloudMediaMeta;
-  seedKnownMedia(main);
-  // Journal lives in shards now; fold them (and any legacy inline entries) back
-  // into journalEntries so the rest of the app sees one flat list as before.
-  const journalEntries = await loadJournalShards(uid, main);
-  return { ...main, journalEntries: journalEntries as unknown as JournalEntry[] };
+  return cloudRead(uid, snap.data() as AppData & CloudMediaMeta);
+}
+
+// Main doc + journal shards (no photo bytes — entries still carry photoRefs,
+// resolved later by hydrateCloudPhotos). Seeds the known-hash cache from the
+// manifest and the shard-signature cache so a subsequent save diffs correctly.
+export async function loadUserMain(uid: string): Promise<(AppData & CloudMediaMeta) | null> {
+  const read = await readCloudMain(uid);
+  return read ? read.full() : null;
 }
 
 // Live-subscribe to the shared main doc so edits made on another device show
-// up here automatically. Fires with the lightweight main data (entries still
-// carry photoRefs) — the caller decides whether it's newer and, if so, calls
-// hydrateCloudPhotos to resolve the images. Returns an unsubscribe function.
+// up here automatically. Fires with the main doc only (a two-stage read: see
+// CloudRead) — the caller decides from `lastUpdated`/`revision` whether this is
+// a change worth adopting and, only then, awaits `full()` to pull the journal
+// shards and hydrate. Returns an unsubscribe function.
 export function subscribeUserMain(
   uid: string,
-  cb: (main: (AppData & CloudMediaMeta) | null) => void
+  cb: (read: CloudRead | null) => void
 ): () => void {
   if (!db) return () => {};
-  // Subscribe to the main doc. Every save writes the main doc (its lastUpdated
-  // bumps on any edit, journal included), so this fires on any remote change;
-  // we then re-read the journal shards to hand back a complete snapshot.
+  // Every save writes the main doc (its lastUpdated bumps on any edit, journal
+  // included), so this fires on any remote change — **and on the echo of our
+  // own write**, which is precisely the case that must stay cheap.
   return onSnapshot(
     doc(db, COLLECTION, uid),
-    async (snap) => {
+    (snap) => {
       if (!snap.exists()) return cb(null);
-      const main = snap.data() as AppData & CloudMediaMeta;
-      seedKnownMedia(main);
-      const journalEntries = await loadJournalShards(uid, main);
-      cb({ ...main, journalEntries: journalEntries as unknown as JournalEntry[] });
+      cb(cloudRead(uid, snap.data() as AppData & CloudMediaMeta));
     },
     () => cb(null)
   );
@@ -893,7 +978,9 @@ async function syncMediaToR2(
   known: Set<string>
 ): Promise<{ uploaded: Set<string>; error?: string }> {
   const uploaded = new Set(known);
-  const queue = [...toUpload];
+  // حارسٌ ثانٍ بجانب حارس `prepareForCloud`: لا نرفع أبداً هاشاً يثبت المانيفست
+  // وجودَه في R2. (المحتوى معنونٌ بالهاش، فالوجود يعني التطابق.)
+  const queue = [...toUpload].filter(([hash]) => !known.has(hash));
   let next = 0;
   let firstError: unknown;
   // A small pool makes a 2000-photo Day One migration practical without
@@ -951,7 +1038,8 @@ export async function saveUserData(
 ): Promise<SaveResult> {
   if (!db) return { mediaComplete: true, revision: 0 };
   const database = db;
-  const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } = await prepareForCloud(data);
+  const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } =
+    await prepareForCloud(data, knownCloudHashes, knownCloudAudioHashes);
 
   // 1) Upload new media to R2 first. Text-only edits have none, so this is
   //    a no-op and stays fast.

@@ -9,6 +9,7 @@ import {
 import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import {
   loadUserMain,
+  readCloudMain,
   hydrateCloudPhotos,
   saveUserData,
   mergeLocalPhotos,
@@ -247,24 +248,35 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // retry — bounded, so a persistent conflict can't spin forever.
       const pushLocal = async (): Promise<boolean> => {
         for (let attempt = 0; attempt < 4; attempt++) {
-          const cloudMain = await loadUserMain(space);
+          // **قراءةٌ رخيصة أولاً**: مستندٌ واحد يحمل `lastUpdated`/`revision`.
+          // كان الحفظ ينزّل كلّ shards المذكرات ليجيب سؤالاً لا علاقة له بها —
+          // فتعديلُ مصروفٍ واحد يجرّ كامل المكتبة عبر الشبكة. لا ننزّلها إلا حين
+          // يثبت أنّ السحابة تحرّكت (فسندمج) أو أنّ قراءةً سابقة لها فشلت
+          // (فتواقيعُ الshards ناقصة ويجب تصحيحها).
+          const read = await readCloudMain(space);
+          const moved =
+            !!read &&
+            ((read.main.lastUpdated ?? "") > lastCloudUpdatedRef.current ||
+              (read.main.revision ?? 0) > lastRevisionRef.current ||
+              !lastShardLoadOk());
           // اللقطة **بعد** قراءة السحابة لا قبلها: القراءة رحلةُ شبكةٍ كاملة،
           // وما سُجّل أثناءها يجب أن يركب هذه الكتابة لا التي بعدها.
           let toSave = snapshot();
-          if (
-            cloudMain &&
-            hasData(cloudMain) &&
-            ((cloudMain.lastUpdated ?? "") > lastCloudUpdatedRef.current ||
-              (cloudMain.revision ?? 0) > lastRevisionRef.current)
-          ) {
-            // كما في الدمج الأوّل: الدمج على المراجع، والترطيب بعده للعرض —
-            // وبالحارس نفسه، فتعديلٌ يقع أثناء تنزيل الصور هنا لا يمحوه `hydrate`.
-            const { display, save } = await adoptCloudSnapshot({
-              snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
-            });
-            applyDisplay(display);
-            toSave = save; // الغنيّ بالمراجع هو ما يُحفظ
-            lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
+          if (moved) {
+            // `hasData` يُسأل على اللقطة **الكاملة** لا على المستند الرئيس وحده:
+            // مساحةٌ سحابية لا تحمل إلا مذكرات تبدو «فارغة» بلا الshards، فنكتب
+            // فوقها لقطةَ الجهاز — ضياعُ بياناتٍ صامت.
+            const cloudMain = await read!.full();
+            if (hasData(cloudMain)) {
+              // كما في الدمج الأوّل: الدمج على المراجع، والترطيب بعده للعرض —
+              // وبالحارس نفسه، فتعديلٌ يقع أثناء تنزيل الصور هنا لا يمحوه `hydrate`.
+              const { display, save } = await adoptCloudSnapshot({
+                snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
+              });
+              applyDisplay(display);
+              toSave = save; // الغنيّ بالمراجع هو ما يُحفظ
+              lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
+            }
           }
           const stamp = new Date().toISOString();
           toSave = { ...toSave, lastUpdated: stamp };
@@ -338,8 +350,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       };
 
       // 2) Live updates coming from the owner's other devices.
-      unsubSnap = subscribeUserMain(space, (cloudMain) => {
-        if (!cloudMain) return;
+      unsubSnap = subscribeUserMain(space, (read) => {
+        if (!read) return;
         // Receiving a snapshot at all means we're connected — clear any
         // lingering "offline" state even when there's nothing new to apply.
         markSynced();
@@ -348,15 +360,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         // (كتابةٌ حقيقية من جهازٍ آخر لا تعتمد على ساعته — وهذا ما كان يُسقِط
         // *تعديل عنصرٍ قائم* من جهازٍ ساعته متأخّرة)، أو فيها محتوى لم نره.
         // القرار نفسه في `decideAdoptCloud` (مختبَر وحدةً).
+        //
+        // **القرار على المستند الرئيس وحده** (`read.main`) — بلا تنزيل الshards.
+        // كلُّ إشعارٍ كان ينزّل كامل المذكرات **قبل** أن يُسأل هذا الشرط، بما فيه
+        // صدى كتابتنا نحن، فكان كلُّ حفظٍ يجرّ تنزيلاً كاملاً يُرمى فوراً. ومذكرةٌ
+        // كُتبت على جهازٍ آخر لا تفوتنا: كلّ حفظٍ يمرّ بمعاملةٍ ترفع `revision`،
+        // فشرطُ المراجعة يلتقطها ولو تأخّر ختمُ ساعة ذلك الجهاز.
         if (!shouldAdoptCloud({
-          cloudLastUpdated: cloudMain.lastUpdated,
+          cloudLastUpdated: read.main.lastUpdated,
           localLastUpdated: state.lastUpdated,
-          cloudRevision: cloudMain.revision,
+          cloudRevision: read.main.revision,
           lastRevision: lastRevisionRef.current,
-          hasUnseen: cloudHasUnseen(cloudMain, state),
+          hasUnseen: cloudHasUnseen(read.main, state),
         })) return;
         (async () => {
           try {
+            const cloudMain = await read.full();
             const local = snapshot();
             // Does THIS device hold changes the incoming cloud snapshot lacks?
             // (reverse of cloudHasUnseen). If so, the merge below will contain
