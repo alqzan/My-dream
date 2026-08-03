@@ -46,7 +46,12 @@ export function MobileNav() {
                 // min-h-[44px]: a comfortable touch target (WCAG 2.2 target-size).
                 "flex-1 min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-xl transition-all press",
                 // لون القسم نفسه الذي يستعمله الشريط الجانبي — المصدر `nav.ts`.
-                active ? item.color : "text-gray-400"
+                // والخامل `gray-600` لا `gray-400`: الأخير يقرأ **2.2:1** على
+                // خلفية الشريط (المطلوب 4.5) — أي أنّ مسمّيات التنقّل الأساسيّ
+                // كانت دون حدّ AA في كلّ شاشة. الهرميّة لا تُفقد بذلك: النشِط
+                // يفرزه لونُ قسمه وحبّتُه المظلَّلة ومؤشّرُه المنزلق، لا خفوتُ
+                // جيرانه إلى حدّ تعذّر القراءة.
+                active ? item.color : "text-gray-600"
               )}
             >
               <span className={cn(

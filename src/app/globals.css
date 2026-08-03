@@ -216,8 +216,10 @@ body {
   .page-title {
     @apply text-2xl font-bold text-gray-900;
   }
+  /* `gray-600` لا `gray-500`: الأخير يقرأ 4.18:1 على الكريميّ — تحت حدّ AA
+     (4.5) بفارقٍ يسير، وهذا سطرُ وصفِ كلّ صفحةٍ في التطبيق. */
   .page-subtitle {
-    @apply text-sm text-gray-500 mt-0.5;
+    @apply text-sm text-gray-600 mt-0.5;
   }
 }
 

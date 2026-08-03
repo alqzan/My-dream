@@ -72,7 +72,9 @@ export function MobileHeader() {
             aria-hidden={!past}
           >
             <span className="text-gray-300 dark:text-gray-500">/</span>
-            <span className="text-sm font-semibold text-gray-500 truncate">{section.label}</span>
+            {/* `gray-600` لا `gray-500`: الأخير 4.18:1 على خلفية الترويسة —
+                تحت حدّ AA بفارقٍ يسير، وهذا اسمُ القسم الذي يخبرك أين أنت. */}
+            <span className="text-sm font-semibold text-gray-600 truncate">{section.label}</span>
           </span>
         )}
       </div>
