@@ -582,8 +582,14 @@ export function DailyHabits() {
           </div>
         )}
 
+        {/* أطرافُ التدرّج (`from-`/`to-`) تكتب `--tw-gradient-*` ولا تمسّ
+            `background-color`، وإعادةُ التعيين الليلية في globals.css تلتقط
+            `bg-*` وحدها — فلا تصل إلى هذا الشريط. (و`emerald` ليست في تلك
+            القائمة أصلاً.) لذلك يحمل صيغته الليلية بنفسه صراحةً، وإلا ظهر
+            مستطيلاً أبيض ساطعاً على الرقّ الداكن. القاعدة: أيّ تدرّجٍ باهتٍ
+            جديد يكتب `dark:` لطرفيه هنا، لا في globals.css. */}
         {allDone && (
-          <div className="text-center py-2 text-sm font-bold rounded-xl animate-pop-in bg-gradient-to-l from-green-50 to-emerald-50 text-green-700 border border-green-100">
+          <div className="text-center py-2 text-sm font-bold rounded-xl animate-pop-in bg-gradient-to-l from-green-50 to-emerald-50 text-green-700 border border-green-100 dark:from-green-500/15 dark:to-emerald-500/15 dark:text-green-300 dark:border-green-500/25">
             🌟 أكملت كل عاداتك اليوم — استمر!
           </div>
         )}
