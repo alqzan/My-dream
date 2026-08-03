@@ -15,7 +15,7 @@ import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudget
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
-import { idbStorage } from "./idbStorage";
+import { persistedIdbStorage } from "./idbStorage";
 import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, suggestPlanLink } from "./installments";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
@@ -1862,7 +1862,10 @@ export const useAppStore = create<AppStore>()(
     {
       name: "my-dream-store",
       version: 15,
-      storage: createJSONStorage(() => idbStorage),
+      // التخزين المؤجَّل لا الخام: كلّ تعديلٍ كان يُسلسل المتجر كاملاً ويكتبه
+      // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
+      // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.
+      storage: createJSONStorage(() => persistedIdbStorage),
       migrate: (persisted: unknown, version: number) => {
         let state = (persisted ?? {}) as Record<string, unknown>;
         const todayStr = today();
