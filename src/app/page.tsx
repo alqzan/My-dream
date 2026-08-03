@@ -150,7 +150,7 @@ export default function Dashboard() {
   const yearPct = yearProgress();
 
   return (
-    <div className="page-shell">
+    <div className="page-shell page-shell--wide">
       {celebrate && <Confetti />}
 
       <div className="flex items-center justify-between gap-4 animate-fade-up">
@@ -180,59 +180,69 @@ export default function Dashboard() {
 
       <PendingBankBanner />
 
-      {!isFirstRun && (
-        <div className="animate-fade-up stagger-1 space-y-3">
-          <HifzReminder />
-          <DayDigestCard />
+      {/* عمودان على الشاشات الكبيرة، وعمودٌ واحد على الجوّال بلا أيّ تغيّر.
+          التوزيع مقصود لا آليّ: **اليمين** (أوّل عمودٍ في RTL) لِما يخصّ اليوم
+          نفسه ويُلمَس يومياً — الوِرد وخلاصة اليوم والصلوات والعادات؛
+          و**اليسار** لِما يُراجَع لا يُنفَّذ: الحكمة والبوصلة وحصيلة الأسبوع
+          والسلسلة والروابط. الشبكةُ الآلية كانت ستوزّعها صفّاً صفّاً فتتفاوت
+          الأطوال وتفتح فجواتٍ بين البطاقات. */}
+      <div className="page-grid">
+        <div className="space-y-5">
+          {!isFirstRun && (
+            <div className="animate-fade-up stagger-1 space-y-3">
+              <HifzReminder />
+              <DayDigestCard />
+            </div>
+          )}
+
+          <div className="animate-fade-up stagger-1">
+            <RamadanCard />
+          </div>
+
+          {/* العدّ التنازلي للأحداث المهمّة — يختفي كلياً حين لا حدثَ معروضاً. */}
+          <div className="animate-fade-up stagger-1">
+            <CountdownCard />
+          </div>
+
+          <Card className="animate-fade-up stagger-1">
+            <PrayerOrbit />
+          </Card>
+
+          <div id="daily-habits" className="animate-fade-up stagger-2">
+            <DailyHabits />
+          </div>
         </div>
-      )}
 
-      <div className="animate-fade-up stagger-1">
-        <RamadanCard />
-      </div>
+        <div className="space-y-5">
+          <div className="animate-fade-up stagger-2">
+            <HikmaCard />
+          </div>
 
-      {/* العدّ التنازلي للأحداث المهمّة — يختفي كلياً حين لا حدثَ معروضاً. */}
-      <div className="animate-fade-up stagger-1">
-        <CountdownCard />
-      </div>
+          <div className="animate-fade-up stagger-3">
+            <SmartInsights />
+          </div>
 
-      <Card className="animate-fade-up stagger-1">
-        <PrayerOrbit />
-      </Card>
+          <div className="animate-fade-up stagger-4">
+            <WeeklyWrap
+              transactions={transactions}
+              journalEntries={journalEntries}
+              readingLogs={readingLogs}
+              books={books}
+              quranHifz={quranHifz}
+            />
+          </div>
 
-      <div className="animate-fade-up stagger-2">
-        <HikmaCard />
-      </div>
+          <Card className="animate-fade-up stagger-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">
+                {ritualLabels.length ? `سلسلة يومية — ${ritualLabels.join(" + ")}` : "سلسلة يومية"}
+              </span>
+              <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
+            </div>
+            <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />
+          </Card>
 
-      <div id="daily-habits" className="animate-fade-up stagger-2">
-        <DailyHabits />
-      </div>
-
-      <div className="animate-fade-up stagger-3">
-        <SmartInsights />
-      </div>
-
-      <div className="animate-fade-up stagger-4">
-        <WeeklyWrap
-          transactions={transactions}
-          journalEntries={journalEntries}
-          readingLogs={readingLogs}
-          books={books}
-          quranHifz={quranHifz}
-        />
-      </div>
-
-      <Card className="animate-fade-up stagger-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-gray-700">
-            {ritualLabels.length ? `سلسلة يومية — ${ritualLabels.join(" + ")}` : "سلسلة يومية"}
-          </span>
-          <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
-        </div>
-        <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3 animate-fade-up stagger-6">
+          <div className="grid grid-cols-2 gap-3 animate-fade-up stagger-6">
         <Link href="/finance/insights" className="block">
           <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine h-full">
             <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
@@ -252,10 +262,12 @@ export default function Dashboard() {
             <p className="text-[11px] opacity-80 mt-0.5">خريطة سنتك ومزاجك</p>
             <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
           </div>
-        </Link>
-      </div>
+            </Link>
+          </div>
 
-      <InstallHint />
+          <InstallHint />
+        </div>
+      </div>
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
 
