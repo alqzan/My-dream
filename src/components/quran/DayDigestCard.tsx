@@ -5,6 +5,7 @@ import { buildDayDigest } from "@/lib/assistantContext";
 import { today, formatDate, formatAmount } from "@/lib/utils";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { Wallet, BookMarked, BookOpen, Sprout, Star, Check, Minus } from "lucide-react";
+import { SECTION } from "@/lib/palette";
 
 // «خلاصة اليوم» — بطاقةٌ موجزة تجمع الصرف والصلوات والعادات والوِرد والمذكرة
 // والقراءة، مشتقّةً من منطق assistantContext.ts (buildDayDigest). تُشترك في
@@ -50,7 +51,7 @@ export function DayDigestCard() {
         {/* الصرف */}
         <Stat
           icon={<Wallet size={15} />}
-          color="#3d9640"
+          color={SECTION.finance}
           label="صرف اليوم"
           value={`${formatAmount(d.spentToday)} ر.س`}
           sub={
@@ -63,28 +64,28 @@ export function DayDigestCard() {
         {/* الصلوات */}
         <Stat
           icon={<MosqueIcon size={15} />}
-          color="#1f7a6c"
+          color={SECTION.prayer}
           label="الصلوات"
           value={`${d.prayed}/5`}
           sub={d.mosque > 0 ? `${d.mosque} بالمسجد` : undefined}
         />
         {/* الوِرد — يختفي متى جُمِّد */}
         {!d.wirdFrozen && (
-          <BoolStat icon={<Sprout size={15} />} color="#1b6b4c" label="وِرد اليوم" done={d.wirdDone} />
+          <BoolStat icon={<Sprout size={15} />} color={SECTION.quran} label="وِرد اليوم" done={d.wirdDone} />
         )}
         {/* المذكرة — تختفي متى جُمِّدت */}
         {!d.journalFrozen && (
-          <BoolStat icon={<BookMarked size={15} />} color="#8a6fb0" label="المذكرة" done={d.journalWritten} />
+          <BoolStat icon={<BookMarked size={15} />} color={SECTION.journal} label="المذكرة" done={d.journalWritten} />
         )}
         {/* القراءة — تختفي متى جُمِّدت */}
         {!d.readingFrozen && (
-          <BoolStat icon={<BookOpen size={15} />} color="#c1663f" label="القراءة" done={d.readingDone} />
+          <BoolStat icon={<BookOpen size={15} />} color={SECTION.reading} label="القراءة" done={d.readingDone} />
         )}
         {/* العادات أو الختمة */}
         {d.habitsTotal > 0 ? (
-          <Stat icon={<Star size={15} />} color="#c9852a" label="العادات" value={`${d.habitsDone}/${d.habitsTotal}`} />
+          <Stat icon={<Star size={15} />} color={SECTION.brand} label="العادات" value={`${d.habitsDone}/${d.habitsTotal}`} />
         ) : (
-          <Stat icon={<Sprout size={15} />} color="#1b6b4c" label="الختمة" value={`${d.khatmaJuz}/30`} />
+          <Stat icon={<Sprout size={15} />} color={SECTION.quran} label="الختمة" value={`${d.khatmaJuz}/30`} />
         )}
       </div>
     </div>

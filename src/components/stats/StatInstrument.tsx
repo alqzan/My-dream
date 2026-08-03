@@ -2,6 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { formatAmount } from "@/lib/utils";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 // بطاقة رقمٍ في هيئة «أداة» صغيرة — سطح كريمي كأخوات لوحة القيادة (الإسطرلاب،
 // مدار الانضباط، سباق المدارين): حدٌّ ذهبي رفيع، ونجمُ القسم لونًا للعدد
@@ -113,8 +114,8 @@ function InstrumentRing({ color, frac }: { color: string; frac?: number }) {
       {/* مقياسٌ حقيقيّ: مسارٌ باهت + قوسٌ ذهبي يمتلئ إلى النسبة بطرفٍ مداريّ */}
       <defs>
         <linearGradient id="heroGaugeGold" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#e8b15a" />
-          <stop offset="100%" stopColor="#c9852a" />
+          <stop offset="0%" stopColor={GOLD_LIGHT} />
+          <stop offset="100%" stopColor={SECTION.brand} />
         </linearGradient>
       </defs>
       <circle cx={C} cy={C} r={R} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth={3} />
@@ -125,7 +126,7 @@ function InstrumentRing({ color, frac }: { color: string; frac?: number }) {
           strokeDasharray={`${dash} ${circ}`} style={dashTrans}
         />
       </g>
-      <circle cx={tipX} cy={tipY} r={2.6} fill="#e8b15a" stroke="#fff" strokeWidth={1.1} className="dark:stroke-[#241c12]" style={tipTrans} />
+      <circle cx={tipX} cy={tipY} r={2.6} fill={GOLD_LIGHT} stroke="#fff" strokeWidth={1.1} className="dark:stroke-[#241c12]" style={tipTrans} />
     </svg>
   );
 }

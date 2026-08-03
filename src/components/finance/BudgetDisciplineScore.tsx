@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Transaction, Budget, DailyBudget, FinanceCategoryDef } from "@/lib/types";
 import { computeDailyBudgetStatus, toDateStr, getMainCategory, budgetLimit, budgetSpend, cashOut } from "@/lib/utils";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 interface BudgetDisciplineScoreProps {
   transactions: Transaction[]; // all-time, for trend + daily budget calc
@@ -77,7 +78,7 @@ export function BudgetDisciplineScore({ transactions, monthTransactions, budgets
   const subs = [
     { key: "budget", label: "ضمن الميزانية", color: "#2f7a33", frac: budgetScore / 40,
       value: budgets.length ? `${Math.round((budgetScore / 40) * 100)}%` : "—" },
-    { key: "daily", label: "من المتاح مصروف", color: "#3d9640", frac: dailyScore / 30,
+    { key: "daily", label: "من المتاح مصروف", color: SECTION.finance, frac: dailyScore / 30,
       value: dailyRatioLabel },
     { key: "trend", label: "مقابل الأسبوع الماضي", color: "#64b767", frac: trendScore / 30,
       value: lastWeek > 0 ? `${thisWeek <= lastWeek ? "↓" : "↑"} ${Math.round(Math.abs((thisWeek - lastWeek) / lastWeek) * 100)}%` : "—" },
@@ -155,8 +156,8 @@ function ScoreOrbit({
       <svg viewBox={`0 0 ${VB} ${VB}`} width={132} height={132}>
         <defs>
           <linearGradient id="disciplineGold" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e8b15a" />
-            <stop offset="100%" stopColor="#c1663f" />
+            <stop offset="0%" stopColor={GOLD_LIGHT} />
+            <stop offset="100%" stopColor={SECTION.reading} />
           </linearGradient>
         </defs>
         <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
@@ -187,7 +188,7 @@ function ScoreOrbit({
         </g>
         {/* orbiting tip on the main arc */}
         <circle
-          cx={tipX} cy={tipY} r={3.4} fill="#e8b15a" stroke="#fff" strokeWidth={1.4}
+          cx={tipX} cy={tipY} r={3.4} fill={GOLD_LIGHT} stroke="#fff" strokeWidth={1.4}
           style={reduce ? undefined : { transition: "cx 1.2s cubic-bezier(0.16,1,0.3,1), cy 1.2s cubic-bezier(0.16,1,0.3,1)" }}
         />
       </svg>
@@ -200,7 +201,7 @@ function ScoreOrbit({
 }
 
 function getInfo(score: number) {
-  if (score >= 80) return { label: "ممتاز 🌟", color: "#3d9640", bg: "bg-green-50", advice: "انضباط رائع في مصاريفك، استمر!" };
+  if (score >= 80) return { label: "ممتاز 🌟", color: SECTION.finance, bg: "bg-green-50", advice: "انضباط رائع في مصاريفك، استمر!" };
   if (score >= 65) return { label: "جيد جداً", color: "#4a9fbd", bg: "bg-blue-50", advice: "أداء جيد، حافظ على وتيرتك." };
   if (score >= 50) return { label: "متوسط", color: "#d4a017", bg: "bg-yellow-50", advice: "راقب مصاريف الكماليات أكثر شوي." };
   if (score >= 35) return { label: "يحتاج تحسين", color: "#e07b39", bg: "bg-orange-50", advice: "مصاريفك تتسارع، راجع التصنيفات الكبيرة." };

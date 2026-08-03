@@ -13,6 +13,7 @@ import { downloadPlainBackup } from "@/lib/backupFile";
 import {
   MapPin, Gauge, Flame, Pencil, RotateCcw, Headphones, BookOpen, X, CheckCircle2, RefreshCw, TriangleAlert, Sprout, Download,
 } from "lucide-react";
+import { SECTION } from "@/lib/palette";
 
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
 const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
@@ -25,7 +26,7 @@ const MAP_UNITS: { key: MapUnit; label: string; word: string }[] = [
 const COLS: Record<MapUnit, string> = { juz: "grid-cols-6", hizb: "grid-cols-10", page: "grid-cols-[repeat(auto-fill,minmax(13px,1fr))]" };
 
 const STATE: Record<JuzState, { fill: string; text: string; label: string; dot: string }> = {
-  fresh:   { fill: "#1b6b4c", text: "#fff",     label: "متقن",         dot: "#1b6b4c" },
+  fresh:   { fill: SECTION.quran, text: "#fff",     label: "متقن",         dot: SECTION.quran },
   due:     { fill: "#d99a2b", text: "#fff",     label: "محتاج مراجعة", dot: "#d99a2b" },
   weak:    { fill: "#d9534f", text: "#fff",     label: "يحتاج إتقان",  dot: "#d9534f" },
   partial: { fill: "#59b98f", text: "#1f2937",  label: "جارٍ حفظه",    dot: "#59b98f" },
@@ -75,8 +76,8 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
       )}
 
       <div className="grid grid-cols-4 gap-2">
-        <StatTile icon={<BookOpen size={14} />} color="#1b6b4c" value={`${prog.pct}%`} label={`${prog.spanPages} وجه`} />
-        <StatTile icon={<CheckCircle2 size={14} />} color="#1b6b4c" value={String(counts.fresh)} label="متقن" />
+        <StatTile icon={<BookOpen size={14} />} color={SECTION.quran} value={`${prog.pct}%`} label={`${prog.spanPages} وجه`} />
+        <StatTile icon={<CheckCircle2 size={14} />} color={SECTION.quran} value={String(counts.fresh)} label="متقن" />
         <StatTile icon={<RefreshCw size={14} />} color="#d99a2b" value={String(counts.due)} label="للمراجعة" />
         <StatTile icon={<TriangleAlert size={14} />} color="#d9534f" value={String(counts.weak)} label="ضعف" />
       </div>

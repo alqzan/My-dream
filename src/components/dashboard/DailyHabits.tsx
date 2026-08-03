@@ -8,9 +8,10 @@ import {
 } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Plus, Check, Settings2, X, Flame, ChevronLeft, Snowflake, Play } from "lucide-react";
+import { SECTION } from "@/lib/palette";
 
 const ICONS = ["⭐", "💪", "🧠", "🙏", "🏃", "📖", "💧", "🥗", "🎯", "😴", "🕌", "✍️", "🚶", "☀️", "🧘"];
-const COLORS = ["#c9852a", "#3d9640", "#8a6fb0", "#c1663f", "#4a9fbd", "#c94f6d"];
+const COLORS = [SECTION.brand, SECTION.finance, SECTION.journal, SECTION.reading, "#4a9fbd", "#c94f6d"];
 
 // First full emoji (grapheme cluster) of a string — so a composed emoji is
 // kept whole instead of split into surrogate halves.
@@ -258,13 +259,13 @@ export function DailyHabits() {
   const core = [
     {
       key: "core:journal",
-      href: "/journal", icon: "📓", name: "مذكرة اليوم", color: "#8a6fb0",
+      href: "/journal", icon: "📓", name: "مذكرة اليوم", color: SECTION.journal,
       done: journalDates.has(todayStr), weekKept: journalDates,
       statusLine: journalStreak > 0 ? `${journalStreak} يوم متواصل` : "اكتب اليوم",
     },
     {
       key: "core:reading",
-      href: "/reading", icon: "📚", name: currentBook ? currentBook.title : "القراءة", color: "#c1663f",
+      href: "/reading", icon: "📚", name: currentBook ? currentBook.title : "القراءة", color: SECTION.reading,
       done: readingDates.has(todayStr), weekKept: readingDates,
       statusLine: readingStreak > 0 ? `${readingStreak} يوم متواصل` : "اقرأ اليوم",
     },
@@ -297,8 +298,8 @@ export function DailyHabits() {
   // قائمة البطاقات المجمّدة (أساسية + وِرد + مخصّصة) لعرضها في قسم الاستئناف.
   const frozenList = [
     ...core.filter((c) => isFrozen(c.key)).map((c) => ({ key: c.key, icon: c.icon, name: c.name, color: c.color })),
-    ...(wirdFrozen ? [{ key: "core:wird", icon: "🌿", name: "وِرد اليوم", color: "#1b6b4c" }] : []),
-    ...habits.filter((h) => isFrozen(h.id)).map((h) => ({ key: h.id, icon: h.icon, name: h.name, color: h.color || "#c9852a" })),
+    ...(wirdFrozen ? [{ key: "core:wird", icon: "🌿", name: "وِرد اليوم", color: SECTION.quran }] : []),
+    ...habits.filter((h) => isFrozen(h.id)).map((h) => ({ key: h.id, icon: h.icon, name: h.name, color: h.color || SECTION.brand })),
   ];
 
   function resetForm() {
@@ -497,7 +498,7 @@ export function DailyHabits() {
                 <TileBody
                   icon="🌿"
                   name="وِرد اليوم"
-                  color="#1b6b4c"
+                  color={SECTION.quran}
                   done={wirdDone}
                   weekKept={wirdDates}
                   statusLine={wirdStreak > 0 ? `${wirdStreak} يوم متواصل` : "اقرأ وردك"}
@@ -524,7 +525,7 @@ export function DailyHabits() {
           {activeHabits.map((habit) => {
             const done = habit.logs.includes(todayStr);
             const streak = calcStreak(habit.logs);
-            const color = habit.color || "#c9852a";
+            const color = habit.color || SECTION.brand;
             return (
               <button
                 key={habit.id}

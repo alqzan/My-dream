@@ -6,6 +6,7 @@ import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { daysUntilSalary, projectedCycleSurplus } from "@/lib/financeOverview";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Settings2, PiggyBank } from "lucide-react";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 type Mode = "fixed" | "income";
 
@@ -37,7 +38,7 @@ function BudgetVessel({ frac, over }: { frac: number; over: boolean }) {
           <stop offset="100%" stopColor="#2f7a33" />
         </linearGradient>
         <linearGradient id="vgLow" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#e8b15a" />
+          <stop offset="0%" stopColor={GOLD_LIGHT} />
           <stop offset="100%" stopColor="#d76a2e" />
         </linearGradient>
         <clipPath id="vClip">
@@ -70,9 +71,9 @@ function BudgetVessel({ frac, over }: { frac: number; over: boolean }) {
       {/* حدّ الإناء الذهبي الرفيع */}
       <path
         d="M22,20 C22,14 78,14 78,20 L78,96 C78,112 62,118 50,118 C38,118 22,112 22,96 Z"
-        fill="none" stroke={over ? "#d98a3a" : "#c9852a"} strokeWidth="2" strokeLinejoin="round"
+        fill="none" stroke={over ? "#d98a3a" : SECTION.brand} strokeWidth="2" strokeLinejoin="round"
       />
-      <ellipse cx="50" cy="20" rx="28" ry="5.5" fill="none" stroke="#c9852a" strokeWidth="2" />
+      <ellipse cx="50" cy="20" rx="28" ry="5.5" fill="none" stroke={SECTION.brand} strokeWidth="2" />
     </svg>
   );
 }
@@ -129,7 +130,7 @@ export function DailyBudgetCard() {
       id: uid(),
       name: SURPLUS_FUND_NAME,
       icon: "✨",
-      color: "#c9852a",
+      color: SECTION.brand,
       deposits: [],
       createdAt: today(),
     };

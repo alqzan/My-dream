@@ -6,6 +6,7 @@ import {
   computePrayerTimes, getCachedCoords, formatClock, buzz,
 } from "@/lib/utils";
 import { PRAYERS, PRAYER_META, prayerStatusMeta, type PrayerName } from "@/lib/types";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 // A stylised dawn-to-night sky arc — each of the five daily prayers sits at
 // its rough place along the day, echoing the app's orbit motif (مدار).
@@ -94,7 +95,7 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
         <svg viewBox={`0 0 100 ${VB_H}`} className="absolute inset-0 w-full h-full overflow-visible">
           <defs>
             <linearGradient id="prayerSky" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#c9852a" />
+              <stop offset="0%" stopColor={SECTION.brand} />
               <stop offset="28%" stopColor="#e8c15a" />
               <stop offset="50%" stopColor="#4a9fbd" />
               <stop offset="72%" stopColor="#e0793d" />
@@ -111,7 +112,7 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
             strokeDasharray={`${(prayed / 5) * ARC_LENGTH} 999`}
           />
           {nowPoint && (
-            <circle cx={nowPoint.x} cy={nowPoint.y} r="1.4" fill="#e8b15a">
+            <circle cx={nowPoint.x} cy={nowPoint.y} r="1.4" fill={GOLD_LIGHT}>
               <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite" />
             </circle>
           )}

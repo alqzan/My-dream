@@ -33,6 +33,7 @@ import Link from "next/link";
 import { ChevronLeft, BarChart3, TrendingDown, Plus, Wallet, BookMarked, BookOpen } from "lucide-react";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BrandMark } from "@/components/layout/BrandMark";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 // Dashboard layout, top to bottom — one card per idea, nothing repeated:
 //   1. التحية والتاريخ (هجري + ميلادي) + مدار السنة
@@ -239,7 +240,7 @@ export default function Dashboard() {
               </span>
               <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
             </div>
-            <StreakCalendar markedDates={completionDates} color="#c9852a" onDayClick={setSelectedDay} />
+            <StreakCalendar markedDates={completionDates} color={SECTION.brand} onDayClick={setSelectedDay} />
           </Card>
 
           <div className="grid grid-cols-2 gap-3 animate-fade-up stagger-6">
@@ -380,12 +381,12 @@ function YearOrbit({
   // أقمار اليوم موزّعة بالتساوي على المدار — تُضاف الحفظ (متى وُجدت خطة) بلونها
   // الأخضر القرآني إلى جانب بقية الممارسات. زاويةُ كلٍّ تُحسب بالتساوي حسب العدد.
   const base = [
-    { key: "prayer", label: "الصلاة", color: "#1f7a6c", done: prayer, href: "/prayers" as string | null },
-    ...(wirdFrozen ? [] : [{ key: "wird", label: "الورد", color: "#1b6b4c", done: wird, href: "/quran" as string | null }]),
-    ...(hifz != null ? [{ key: "hifz", label: "الحفظ", color: "#1b6b4c", done: hifz, href: "/quran?tab=hifz" as string | null }] : []),
-    ...(journalFrozen ? [] : [{ key: "journal", label: "المذكرة", color: "#8a6fb0", done: journal, href: "/journal" as string | null }]),
-    ...(readingFrozen ? [] : [{ key: "reading", label: "القراءة", color: "#c1663f", done: reading, href: "/reading" as string | null }]),
-    ...(habitsShown ? [{ key: "habits", label: "العادات", color: "#c9852a", done: habits, href: null as string | null }] : []),
+    { key: "prayer", label: "الصلاة", color: SECTION.prayer, done: prayer, href: "/prayers" as string | null },
+    ...(wirdFrozen ? [] : [{ key: "wird", label: "الورد", color: SECTION.quran, done: wird, href: "/quran" as string | null }]),
+    ...(hifz != null ? [{ key: "hifz", label: "الحفظ", color: SECTION.quran, done: hifz, href: "/quran?tab=hifz" as string | null }] : []),
+    ...(journalFrozen ? [] : [{ key: "journal", label: "المذكرة", color: SECTION.journal, done: journal, href: "/journal" as string | null }]),
+    ...(readingFrozen ? [] : [{ key: "reading", label: "القراءة", color: SECTION.reading, done: reading, href: "/reading" as string | null }]),
+    ...(habitsShown ? [{ key: "habits", label: "العادات", color: SECTION.brand, done: habits, href: null as string | null }] : []),
   ];
   const moons = base.map((m, i) => ({ ...m, angle: -90 + (i * 360) / base.length })).map((m) => ({
     ...m,
@@ -407,8 +408,8 @@ function YearOrbit({
       <svg width={size} height={size}>
         <defs>
           <linearGradient id="orbitGold" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e8b15a" />
-            <stop offset="100%" stopColor="#c1663f" />
+            <stop offset="0%" stopColor={GOLD_LIGHT} />
+            <stop offset="100%" stopColor={SECTION.reading} />
           </linearGradient>
         </defs>
         <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
@@ -425,7 +426,7 @@ function YearOrbit({
           />
         </g>
         <circle
-          cx={dotX} cy={dotY} r={4.5} fill="#e8b15a"
+          cx={dotX} cy={dotY} r={4.5} fill={GOLD_LIGHT}
           stroke="#fff" strokeWidth={1.5}
           style={{ transition: "cx 1.4s cubic-bezier(0.16,1,0.3,1), cy 1.4s cubic-bezier(0.16,1,0.3,1)" }}
         />

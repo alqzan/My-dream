@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Button } from "@/components/ui/Button";
 import { Target, Pencil, Check } from "lucide-react";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 // هدف قراءة سنوي: عدد الكتب المُنهاة هذا العام مقابل هدف اخترته، مع مؤشر
 // «هل أنت على الوتيرة؟» يقارن نسبة الإنجاز بنسبة العام المنقضية.
@@ -135,7 +136,7 @@ export function ReadingGoalCard() {
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 text-gray-500 min-w-0">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: "#c9852a" }} />
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: SECTION.brand }} />
                 <span className="truncate">مضى من العام</span>
               </span>
               <span className="font-bold text-gray-800 tabular-nums shrink-0">{yearPct}%</span>
@@ -204,12 +205,12 @@ function GoalRace({
       <svg viewBox={`0 0 ${VB} ${VB}`} width={116} height={116}>
         <defs>
           <linearGradient id="goalYearGold" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e8b15a" />
-            <stop offset="100%" stopColor="#c9852a" />
+            <stop offset="0%" stopColor={GOLD_LIGHT} />
+            <stop offset="100%" stopColor={SECTION.brand} />
           </linearGradient>
           <linearGradient id="goalReadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#e8b15a" />
-            <stop offset="100%" stopColor="#c1663f" />
+            <stop offset="0%" stopColor={GOLD_LIGHT} />
+            <stop offset="100%" stopColor={SECTION.reading} />
           </linearGradient>
         </defs>
         <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
@@ -229,8 +230,8 @@ function GoalRace({
           />
         </g>
         {/* مؤشّرا الطرفين */}
-        <circle cx={yearTip.x} cy={yearTip.y} r={2.6} fill="#c9852a" stroke="#fff" strokeWidth={1.2} style={tipTrans} />
-        <circle cx={goalTip.x} cy={goalTip.y} r={3.4} fill="#c1663f" stroke="#fff" strokeWidth={1.4} style={tipTrans} />
+        <circle cx={yearTip.x} cy={yearTip.y} r={2.6} fill={SECTION.brand} stroke="#fff" strokeWidth={1.2} style={tipTrans} />
+        <circle cx={goalTip.x} cy={goalTip.y} r={3.4} fill={SECTION.reading} stroke="#fff" strokeWidth={1.4} style={tipTrans} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-black text-reading tabular-nums leading-none">{finished}</span>

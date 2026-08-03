@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Play, Square } from "lucide-react";
 import { buzz } from "@/lib/utils";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 const START_KEY = "madar-reading-start";
 
@@ -89,8 +90,8 @@ export function ReadingTimer({ onFinish }: { onFinish: (minutes: number) => void
           <svg viewBox="0 0 100 100" width={84} height={84} className="overflow-visible">
             <defs>
               <linearGradient id="timerSand" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#e8b15a" />
-                <stop offset="100%" stopColor="#c1663f" />
+                <stop offset="0%" stopColor={GOLD_LIGHT} />
+                <stop offset="100%" stopColor={SECTION.reading} />
               </linearGradient>
             </defs>
             <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
@@ -102,7 +103,7 @@ export function ReadingTimer({ onFinish }: { onFinish: (minutes: number) => void
               />
             </g>
             {!reduce && (
-              <circle cx={tipX} cy={tipY} r={3} fill="#e8b15a" stroke="#fff" strokeWidth={1.2}>
+              <circle cx={tipX} cy={tipY} r={3} fill={GOLD_LIGHT} stroke="#fff" strokeWidth={1.2}>
                 <animate attributeName="opacity" values="0.4;1;0.4" dur="1.6s" repeatCount="indefinite" />
               </circle>
             )}

@@ -28,6 +28,7 @@ const MonthlyBars = dynamic(
   { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-gray-100 rounded-xl" /> }
 );
 import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck } from "lucide-react";
+import { SECTION } from "@/lib/palette";
 
 export default function StatsPage() {
   const {
@@ -86,7 +87,7 @@ export default function StatsPage() {
     {
       label: "السلسلة الكاملة",
       icon: <CalendarCheck size={16} />,
-      color: "#c9852a",
+      color: SECTION.brand,
       current: calcStreak(completionDates),
       best: longestStreak(completionDates),
     },
@@ -100,14 +101,14 @@ export default function StatsPage() {
     ...(journalActive ? [{
       label: "المذكرات",
       icon: <BookMarked size={16} />,
-      color: "#8a6fb0",
+      color: SECTION.journal,
       current: getJournalStreak(journalEntries),
       best: longestStreak(journalEntries.map((e) => e.date)),
     }] : []),
     ...(readingActive ? [{
       label: "القراءة",
       icon: <BookOpen size={16} />,
-      color: "#c1663f",
+      color: SECTION.reading,
       current: getReadingStreak(readingLogs),
       best: longestStreak(readingLogs.map((l) => l.date)),
     }] : []),
@@ -166,26 +167,26 @@ export default function StatsPage() {
         <StatInstrument
           value={entriesThisYear}
           label="مذكرة هذا العام"
-          color="#8a6fb0"
+          color={SECTION.journal}
           icon={<BookMarked size={15} />}
         />
         <StatInstrument
           value={pagesThisYear}
           label="صفحة قرأتها"
-          color="#c1663f"
+          color={SECTION.reading}
           icon={<BookOpen size={15} />}
         />
         <StatInstrument
           value={booksFinished}
           label="كتاب أنهيته"
-          color="#c9852a"
+          color={SECTION.brand}
           icon={<BookCheck size={15} />}
           goal={readingGoal ?? undefined}
         />
         <StatInstrument
           value={spentThisYear}
           label="ر.س مصاريف العام"
-          color="#3d9640"
+          color={SECTION.finance}
           icon={<Wallet size={15} />}
         />
       </div>
@@ -241,7 +242,7 @@ export default function StatsPage() {
             <MonthlyBars
               data={financeMonthly}
               dataKey="مصاريف"
-              color="#3d9640"
+              color={SECTION.finance}
               cursorFill="rgba(61,150,64,0.08)"
               yWidth={44}
               format={(v) => `${formatAmount(v)} ر.س`}
@@ -261,7 +262,7 @@ export default function StatsPage() {
             <MonthlyBars
               data={readingMonthly}
               dataKey="صفحات"
-              color="#c1663f"
+              color={SECTION.reading}
               cursorFill="rgba(193,102,63,0.06)"
               yWidth={36}
               format={(v) => `${formatAmount(v)} صفحة`}
@@ -305,7 +306,7 @@ function RecordTrack({ current, best, color }: { current: number; best: number; 
       {/* base track line — thin faint gold */}
       <div
         className="absolute top-[64%] -translate-y-1/2 h-[2px] rounded-full"
-        style={{ left: `${REC_START}%`, right: `${100 - REC_END}%`, backgroundColor: "#c9852a", opacity: 0.28 }}
+        style={{ left: `${REC_START}%`, right: `${100 - REC_END}%`, backgroundColor: SECTION.brand, opacity: 0.28 }}
       />
       {/* progress line — section colour, from the start (left) to the flame */}
       <div
@@ -316,9 +317,9 @@ function RecordTrack({ current, best, color }: { current: number; best: number; 
       {/* Trophy at the record end + best value above it */}
       <div
         className="absolute top-[64%] -translate-y-1/2 -translate-x-1/2 flex items-center justify-center rounded-full"
-        style={{ left: `${REC_END}%`, width: 18, height: 18, backgroundColor: atRecord ? "#c9852a" : "#fff7e6", boxShadow: `0 0 0 1.4px ${atRecord ? "#c9852a" : "rgba(201,133,42,0.55)"}` }}
+        style={{ left: `${REC_END}%`, width: 18, height: 18, backgroundColor: atRecord ? SECTION.brand : "#fff7e6", boxShadow: `0 0 0 1.4px ${atRecord ? SECTION.brand : "rgba(201,133,42,0.55)"}` }}
       >
-        <Trophy size={10} style={{ color: atRecord ? "#fff" : "#c9852a" }} />
+        <Trophy size={10} style={{ color: atRecord ? "#fff" : SECTION.brand }} />
       </div>
       <span className="absolute top-0 -translate-x-1/2 text-[11px] font-bold tabular-nums text-brand-600" style={{ left: `${REC_END}%` }}>{best}</span>
 

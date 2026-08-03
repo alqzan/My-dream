@@ -6,6 +6,7 @@ import { today, formatDateShort } from "@/lib/utils";
 import { hifzSeries, memorizedInWindow, paceCompare, hifzReport } from "@/lib/quran/hifz";
 import { showToast } from "@/components/ui/UndoToast";
 import { TrendingUp, TrendingDown, Copy } from "lucide-react";
+import { SECTION } from "@/lib/palette";
 
 // رسم تقدّم الحفظ عبر الزمن — منحنى تراكمي (بالأوجه) منذ بداية الخطة، مع ملخّص
 // «اليوم/الأسبوع/الشهر». مرسومٌ بـSVG بلغة أدوات التطبيق (تدرّج أخضر، طرفٌ لامع).
@@ -99,17 +100,17 @@ function Curve({ series }: { series: { date: string; cumAyat: number }[] }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full block overflow-visible">
         <defs>
           <linearGradient id="hifzArea" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#1b6b4c" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#1b6b4c" stopOpacity="0" />
+            <stop offset="0%" stopColor={SECTION.quran} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={SECTION.quran} stopOpacity="0" />
           </linearGradient>
           <linearGradient id="hifzLine" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#2f9c73" />
-            <stop offset="100%" stopColor="#1b6b4c" />
+            <stop offset="100%" stopColor={SECTION.quran} />
           </linearGradient>
         </defs>
         <path d={area} fill="url(#hifzArea)" />
         <path d={line} fill="none" stroke="url(#hifzLine)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={tip.x} cy={tip.y} r="3" fill="#1b6b4c" stroke="#fff" strokeWidth="1.5" />
+        <circle cx={tip.x} cy={tip.y} r="3" fill={SECTION.quran} stroke="#fff" strokeWidth="1.5" />
       </svg>
       <div className="flex items-center justify-between text-[9px] text-gray-400 mt-1">
         <span>{formatDateShort(series[0].date)}</span>

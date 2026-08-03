@@ -2,6 +2,7 @@
 import type { Book, ReadingLog } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { Route } from "lucide-react";
+import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 // قافلة القراءة: كل كتاب جارٍ مسافرٌ على خطٍّ ذهبي رفيع من البداية (يميناً) نحو
 // الختام (يساراً). موضع علامته المصمتة = currentPage/totalPages، وعلامةٌ باهتة
@@ -73,7 +74,7 @@ function JourneyLane({
 }) {
   const p = Math.max(0, Math.min(1, book.currentPage / book.totalPages));
   const curX = X_START - p * SPAN;
-  const color = book.coverColor ?? "#c1663f";
+  const color = book.coverColor ?? SECTION.reading;
   const pct = Math.round(p * 100);
   const gid = `road-${book.id}`;
 
@@ -92,19 +93,19 @@ function JourneyLane({
       <svg viewBox={`0 0 ${VBW} ${VBH}`} className="block w-full overflow-visible" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id={gid} x1="100%" y1="0" x2="0%" y2="0">
-            <stop offset="0%" stopColor="#e8b15a" />
-            <stop offset="100%" stopColor="#c1663f" />
+            <stop offset="0%" stopColor={GOLD_LIGHT} />
+            <stop offset="100%" stopColor={SECTION.reading} />
           </linearGradient>
         </defs>
         {/* الطريق أمامك (باهت متقطّع) نحو الختام */}
-        <line x1={curX} y1={CY} x2={X_FIN} y2={CY} stroke="#c1663f" strokeOpacity={0.28} strokeWidth={1.4} strokeLinecap="round" strokeDasharray="1.5 4" />
+        <line x1={curX} y1={CY} x2={X_FIN} y2={CY} stroke={SECTION.reading} strokeOpacity={0.28} strokeWidth={1.4} strokeLinecap="round" strokeDasharray="1.5 4" />
         {/* الطريق المقطوع (ذهبي→طوبيّ) */}
         <line x1={X_START} y1={CY} x2={curX} y2={CY} stroke={`url(#${gid})`} strokeWidth={2.4} strokeLinecap="round" />
         {/* نقطة الانطلاق */}
-        <circle cx={X_START} cy={CY} r={2} fill="#e8b15a" />
+        <circle cx={X_START} cy={CY} r={2} fill={GOLD_LIGHT} />
         {/* الوصول المتوقّع — علامة باهتة عند الختام */}
-        <circle cx={X_FIN} cy={CY} r={4.5} fill="none" stroke="#c1663f" strokeOpacity={0.45} strokeWidth={1.5} />
-        <circle cx={X_FIN} cy={CY} r={1.5} fill="#c1663f" fillOpacity={0.45} />
+        <circle cx={X_FIN} cy={CY} r={4.5} fill="none" stroke={SECTION.reading} strokeOpacity={0.45} strokeWidth={1.5} />
+        <circle cx={X_FIN} cy={CY} r={1.5} fill={SECTION.reading} fillOpacity={0.45} />
         {/* موضعك الآن */}
         <circle cx={curX} cy={CY} r={5.5} fill={color} stroke="#fff" strokeWidth={1.6} />
       </svg>
