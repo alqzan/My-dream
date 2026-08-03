@@ -25,12 +25,26 @@ const TONE_SOFT: Record<InsightTone, string> = {
 const SNOOZE_LABEL: Record<SnoozeOption, string> = { today: "اليوم", tomorrow: "غداً", week: "أسبوع" };
 
 export function SmartInsights() {
-  const {
-    transactions, journalEntries, readingLogs, books, habits,
-    budgets, categories, reserves, prayerLogs, dailyBudget, monthlyIncome, futureLetters,
-    installmentPlans, quranHifz, quranKhatma,
-    budgetWindow, lastSalaryConfirm, salaryDay,
-  } = useAppStore();
+  // منتقٍ لكلّ شريحة بدل الاشتراك بالحالة كلّها (الأخيرة تُعيد الرسم مع أيّ
+  // تعديلٍ في المتجر مهما بَعُد عن هذه البطاقة).
+  const transactions = useAppStore((s) => s.transactions);
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const books = useAppStore((s) => s.books);
+  const habits = useAppStore((s) => s.habits);
+  const budgets = useAppStore((s) => s.budgets);
+  const categories = useAppStore((s) => s.categories);
+  const reserves = useAppStore((s) => s.reserves);
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const futureLetters = useAppStore((s) => s.futureLetters);
+  const installmentPlans = useAppStore((s) => s.installmentPlans);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
+  const budgetWindow = useAppStore((s) => s.budgetWindow);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
+  const salaryDay = useAppStore((s) => s.salaryDay);
   const [prefs, setPrefs] = useState<InsightPrefs>({});
   useEffect(() => { setPrefs(loadPrefs()); }, []);
 

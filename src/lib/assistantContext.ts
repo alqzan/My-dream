@@ -34,7 +34,19 @@ export interface DayDigest {
   readingFrozen: boolean;
 }
 
-export function buildDayDigest(d: AppData): DayDigest {
+// المدخل **الشرائح التي تُقرأ فعلاً** لا `AppData` كاملة. السبب عمليّ: مستهلكها
+// (`DayDigestCard`) ينتقي من المتجر شريحةً شريحة حتى لا يُعاد رسمُه مع كلّ
+// تعديل، فلو بقي المدخل `AppData` لاحتاج تمريرَ كائنٍ ناقصٍ بـ`as AppData` —
+// وحينها إضافةُ حقلٍ جديدٍ هنا تمرّ بلا خطأ نوعٍ وتنكسر صامتةً وقت التشغيل.
+// بهذا الشكل يكسر المترجمُ البناءَ ويطالب المستهلك بالشريحة الناقصة.
+export type DayDigestInput = Pick<
+  AppData,
+  | "transactions" | "dailyBudget" | "prayerLogs" | "habits" | "frozenHabits"
+  | "journalEntries" | "readingLogs" | "quranWird" | "quranHifz"
+  | "quranReflections" | "quranKhatma"
+>;
+
+export function buildDayDigest(d: DayDigestInput): DayDigest {
   const todayStr = today();
   const spentToday = d.transactions
     .filter((t) => t.date === todayStr)

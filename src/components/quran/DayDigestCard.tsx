@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { buildDayDigest } from "@/lib/assistantContext";
 import { today, formatDate, formatAmount } from "@/lib/utils";
@@ -9,9 +10,32 @@ import { Wallet, BookMarked, BookOpen, Sprout, Star, Check, Minus } from "lucide
 // والقراءة، مشتقّةً من منطق assistantContext.ts (buildDayDigest). تُشترك في
 // عرضٍ واحد حالة اليوم عبر الأقسام لتذكيرٍ لطيفٍ داخل قسم قرآن.
 export function DayDigestCard() {
-  // اشتراكٌ بكامل المتجر (بطاقةٌ خفيفة) — AppStore يمدّ AppData الذي يقرؤه البانّي.
-  const store = useAppStore();
-  const d = buildDayDigest(store);
+  // منتقٍ لكلّ شريحة يقرؤها `buildDayDigest` بدل الاشتراك بالمتجر كلّه. البطاقة
+  // خفيفةٌ في رسمها، لكنّ البانّي يمرّ على المعاملات والمذكرات والسجلّات
+  // والنشاط القرآني — فالاشتراك الكامل كان يُعيد هذا كلّه مع أيّ تعديلٍ مهما بَعُد.
+  const transactions = useAppStore((s) => s.transactions);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const habits = useAppStore((s) => s.habits);
+  const frozenHabits = useAppStore((s) => s.frozenHabits);
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const quranWird = useAppStore((s) => s.quranWird);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const quranReflections = useAppStore((s) => s.quranReflections);
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
+
+  const d = useMemo(
+    () =>
+      buildDayDigest({
+        transactions, dailyBudget, prayerLogs, habits, frozenHabits,
+        journalEntries, readingLogs, quranWird, quranHifz, quranReflections, quranKhatma,
+      }),
+    [
+      transactions, dailyBudget, prayerLogs, habits, frozenHabits,
+      journalEntries, readingLogs, quranWird, quranHifz, quranReflections, quranKhatma,
+    ]
+  );
 
   const overBudget = d.budgetBalance != null && d.budgetBalance < 0;
 

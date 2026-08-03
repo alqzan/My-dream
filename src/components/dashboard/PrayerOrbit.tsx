@@ -45,7 +45,11 @@ const LARGE_ANGLES: Partial<Record<PrayerName, number>> = {
 
 export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
   const large = size === "large";
-  const { prayerLogs, cyclePrayerStatus } = useAppStore();
+  // منتقٍ لكلّ شريحة، لا `useAppStore()` مجرّدة. المجرّدة تشترك بالحالة كلّها،
+  // فتُعيد رسمَ هذه البطاقة مع **أيّ** تعديلٍ في المتجر — مصروفٌ يُسجَّل، مذكّرةٌ
+  // تُحفظ تلقائياً أثناء الكتابة… ولا شأن لأيٍّ منها بالصلوات.
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const cyclePrayerStatus = useAppStore((s) => s.cyclePrayerStatus);
   const todayStr = today();
   const log = getPrayerLog(prayerLogs, todayStr);
   const { prayed, mosque } = countDayPrayers(log);

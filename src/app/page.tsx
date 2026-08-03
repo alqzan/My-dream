@@ -43,7 +43,20 @@ import { BrandMark } from "@/components/layout/BrandMark";
 //   6. تقويم السلسلة
 //   7. روابط: متابعة الصرف + الإحصائيات الكاملة
 export default function Dashboard() {
-  const { journalEntries, readingLogs, transactions, books, prayerLogs, habits, quranWird, quranHifz, quranReflections, quranKhatma, frozenHabits } = useAppStore();
+  // منتقٍ لكلّ شريحة بدل `useAppStore()` المجرّدة: تلك تشترك بالحالة كلّها،
+  // فتُعاد رسمُ الصفحة (وشجرتها) مع **أيّ** تعديلٍ في المتجر — ولو كان تعديلاً
+  // لا يظهر على هذه الشاشة أصلاً.
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const transactions = useAppStore((s) => s.transactions);
+  const books = useAppStore((s) => s.books);
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const habits = useAppStore((s) => s.habits);
+  const quranWird = useAppStore((s) => s.quranWird);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const quranReflections = useAppStore((s) => s.quranReflections);
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
+  const frozenHabits = useAppStore((s) => s.frozenHabits);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);

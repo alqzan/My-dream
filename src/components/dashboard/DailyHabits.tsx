@@ -201,11 +201,23 @@ function HabitArc({ done, total }: { done: number; total: number }) {
 // their page; custom tiles toggle done. Replaces the separate streak card,
 // prayer orbit, and habit tracker so the day lives in one nice place.
 export function DailyHabits() {
-  const {
-    habits, journalEntries, readingLogs, books, quranWird, quranHifz,
-    quranReflections, quranKhatma, frozenHabits,
-    toggleHabitLog, addHabit, updateHabit, deleteHabit, toggleWird, toggleFreezeHabit,
-  } = useAppStore();
+  // منتقٍ لكلّ شريحة بدل الاشتراك بالحالة كلّها. الأفعال مراجعُها ثابتة فلا
+  // تُسبّب إعادة رسمٍ بذاتها.
+  const habits = useAppStore((s) => s.habits);
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const books = useAppStore((s) => s.books);
+  const quranWird = useAppStore((s) => s.quranWird);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const quranReflections = useAppStore((s) => s.quranReflections);
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
+  const frozenHabits = useAppStore((s) => s.frozenHabits);
+  const toggleHabitLog = useAppStore((s) => s.toggleHabitLog);
+  const addHabit = useAppStore((s) => s.addHabit);
+  const updateHabit = useAppStore((s) => s.updateHabit);
+  const deleteHabit = useAppStore((s) => s.deleteHabit);
+  const toggleWird = useAppStore((s) => s.toggleWird);
+  const toggleFreezeHabit = useAppStore((s) => s.toggleFreezeHabit);
   const [showAdd, setShowAdd] = useState(false);
   const [manage, setManage] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);

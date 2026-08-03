@@ -30,10 +30,17 @@ interface Metric {
 // sync settles, so opening the app on a device that already has a long streak
 // doesn't retro-fire a celebration.
 export function MilestoneWatcher() {
-  const {
-    journalEntries, readingLogs, prayerLogs, books,
-    quranHifz, quranWird, quranReflections, quranKhatma, frozenHabits,
-  } = useAppStore();
+  // منتقٍ لكلّ شريحة: هذا المكوّن مركَّبٌ في الغلاف فيعيش على **كلّ** صفحة،
+  // فاشتراكُه بالحالة كلّها كان يجعله يستيقظ مع أيّ تعديلٍ في التطبيق.
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const books = useAppStore((s) => s.books);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const quranWird = useAppStore((s) => s.quranWird);
+  const quranReflections = useAppStore((s) => s.quranReflections);
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
+  const frozenHabits = useAppStore((s) => s.frozenHabits);
   const [ready, setReady] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
 
