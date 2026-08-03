@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { getMonthDates, arabicMonthName, getPrayerLog, hijriMonthLabel, hijriDay, today, parseDate } from "@/lib/utils";
-import { PRAYERS, PRAYER_STATUS_META, type PrayerLog } from "@/lib/types";
+import { PRAYERS, PRAYER_STATUS_META, prayerStatusMeta, type PrayerLog } from "@/lib/types";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
 interface PrayerCalendarProps {
@@ -49,7 +49,7 @@ function MiniOrbit({ log, isFuture }: { log: PrayerLog | undefined; isFuture: bo
       />
       {PRAYERS.map((p, i) => {
         const status = log?.prayers[p] ?? "لم";
-        const color = isFuture ? "#e6dcc6" : PRAYER_STATUS_META[status].color;
+        const color = isFuture ? "#e6dcc6" : prayerStatusMeta(status).color;
         const { x, y } = moPoint(MO_ANGLES[i]);
         return <circle key={p} cx={x} cy={y} r="1.7" fill={color} />;
       })}

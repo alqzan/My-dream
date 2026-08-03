@@ -1,7 +1,7 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { aggregateDay } from "@/lib/dayAggregator";
-import { PRAYERS, PRAYER_META, PRAYER_STATUS_META, EMPTY_HIFZ } from "@/lib/types";
+import { PRAYERS, PRAYER_META, prayerStatusMeta, EMPTY_HIFZ } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, entryPhotos, entryAudios } from "@/lib/utils";
 import { describeRange } from "@/lib/quran/meta";
 import { renderMarkdown } from "@/lib/markdown";
@@ -89,7 +89,7 @@ export function DayView({ date, onClose }: DayViewProps) {
             <div className="flex gap-2 flex-wrap">
               {PRAYERS.map((p) => {
                 const status = day.prayerLog!.prayers[p] ?? "لم";
-                const meta = PRAYER_STATUS_META[status];
+                const meta = prayerStatusMeta(status);
                 return (
                   <span
                     key={p}

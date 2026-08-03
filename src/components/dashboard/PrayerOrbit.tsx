@@ -5,7 +5,7 @@ import {
   today, getPrayerLog, countDayPrayers, getPrayerStreak, getMosqueStreak,
   computePrayerTimes, getCachedCoords, formatClock, buzz,
 } from "@/lib/utils";
-import { PRAYERS, PRAYER_META, PRAYER_STATUS_META, type PrayerName } from "@/lib/types";
+import { PRAYERS, PRAYER_META, prayerStatusMeta, type PrayerName } from "@/lib/types";
 
 // A stylised dawn-to-night sky arc — each of the five daily prayers sits at
 // its rough place along the day, echoing the app's orbit motif (مدار).
@@ -117,7 +117,7 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
           const meta = PRAYER_META[prayer];
           const { x, y } = point(large ? LARGE_ANGLES[prayer] ?? meta.angle : meta.angle);
           const status = log?.prayers[prayer] ?? "لم";
-          const statusMeta = PRAYER_STATUS_META[status];
+          const statusMeta = prayerStatusMeta(status);
           const isNext = prayer === nextPrayer;
           // Compact dashboard only: المغرب (36°) sits just up-left of العشاء (8°),
           // and the tail of المغرب's time slips under العشاء's circle on narrow

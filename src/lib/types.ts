@@ -207,6 +207,20 @@ export const PRAYER_STATUS_META: Record<PrayerStatus, { label: string; short: st
   جماعة: { label: "صليت بالمسجد", short: "بالمسجد", color: "#1f7a6c" },
 };
 
+// **البوابة الوحيدة** لقراءة وصفِ حالة الصلاة — لا تفهرس `PRAYER_STATUS_META`
+// مباشرةً في مكوّن.
+//
+// الفهرسة المباشرة تُرجع `undefined` لأيّ قيمةٍ خارج الثلاث، وقراءةُ `.color`
+// منها ترمي — فتسقط **كلّ صفحات التطبيق** لا بطاقةُ الصلاة وحدها، لأنّ الشريط
+// الجانبي والترويسة والصفحة في شجرةٍ واحدة تحرسها حدودُ خطأٍ واحدة. وقيمةٌ
+// خارج الثلاث ليست فرضاً نظرياً: البيانات تدخل من نسخةٍ احتياطية، ومن دمجِ
+// السحابة مع جهازٍ بإصدارٍ أقدم — وكلاهما خارج سيطرة كُتّاب التطبيق.
+//
+// نفس مبدأ `UNKNOWN_CATEGORY` أعلاه: اعرِض بديلاً محايداً ولا تنهر.
+export function prayerStatusMeta(status: PrayerStatus | string | undefined) {
+  return PRAYER_STATUS_META[status as PrayerStatus] ?? PRAYER_STATUS_META["لم"];
+}
+
 // Base repeat unit — "every" multiplies it, so (unit: شهري, every: 6) is a
 // semi-annual expense, (every: 12) is annual, (every: 18) every year and a
 // half, and so on — arbitrary spacing instead of a fixed monthly/yearly pair.

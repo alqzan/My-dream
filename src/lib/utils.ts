@@ -631,20 +631,32 @@ export function computeDailyBudgetStatus(
   transactions: Transaction[]
 ): DailyBudgetStatus {
   const todayStr = today();
+  // `startDate` غائبةً أو مشوّهةً تُسقط التطبيق كلّه لا هذه البطاقة وحدها:
+  // `parseDate(undefined)` ترمي، والبطاقة في نفس شجرة الشريط الجانبي والترويسة.
+  // والقيمة تصل من نسخةٍ احتياطية أو من دمجِ السحابة مع جهازٍ أقدم — لا من
+  // كُتّاب التطبيق. البديل المحافظ: اعتبر الدورة بدأت اليوم، فتكون البدلات
+  // بدلَ يومٍ واحد ولا يُخترع رصيدٌ تراكميّ من تاريخٍ لا معنى له.
+  // (تُحرَس هنا لا داخل `parseDate` — صرامةُ مفاتيح التاريخ مقصودة، انظر
+  // تعليقها أعلاه، و`isValidDateKey` هي البوابة المخصّصة لهذا.)
+  const startDate = isValidDateKey(dailyBudget.startDate ?? "") ? dailyBudget.startDate : todayStr;
   // startDate in the future (legacy cycles reset to tomorrow) → zero days,
   // zero allowance. Newer sweeps start today and use carryAdjust instead so
   // same-day-after expenses still count (see the sweep actions in store.ts).
   const days = Math.max(
     0,
-    Math.round((parseDate(todayStr).getTime() - parseDate(dailyBudget.startDate).getTime()) / (24 * 3600 * 1000)) + 1
+    Math.round((parseDate(todayStr).getTime() - parseDate(startDate).getTime()) / (24 * 3600 * 1000)) + 1
   );
-  const carryAdjust = dailyBudget.carryAdjust ?? 0;
+  const carryAdjust = Number.isFinite(dailyBudget.carryAdjust) ? dailyBudget.carryAdjust! : 0;
+  // `amount` من المصدر غير الموثوق نفسه: قيمةٌ غير رقمية تجعل كلّ ما بعدها
+  // `NaN` فيُعرض «NaN ر.س» — وهو أسوأ من الانهيار لأنّه يمرّ صامتاً في كلّ
+  // البطاقات والإحصائيات.
+  const amount = Number.isFinite(dailyBudget.amount) ? dailyBudget.amount : 0;
   // Fold carryAdjust into the effective allowance so the whole app (balance,
   // display, discipline ratio) stays internally consistent.
-  const allowance = round2(dailyBudget.amount * days - carryAdjust);
+  const allowance = round2(amount * days - carryAdjust);
   const spent = round2(
     transactions
-      .filter((t) => t.date >= dailyBudget.startDate && t.date <= todayStr)
+      .filter((t) => t.date >= startDate && t.date <= todayStr)
       .reduce((s, t) => s + dailyShare(t), 0)
   );
   return { days, allowance, spent, carryAdjust, balance: round2(allowance - spent) };

@@ -1,6 +1,6 @@
 "use client";
 import type { PrayerName, PrayerStatus } from "@/lib/types";
-import { PRAYER_META, PRAYER_STATUS_META } from "@/lib/types";
+import { PRAYER_META, PRAYER_STATUS_META, prayerStatusMeta } from "@/lib/types";
 import { buzz } from "@/lib/utils";
 
 interface PrayerRowProps {
@@ -13,7 +13,7 @@ const OPTIONS: PrayerStatus[] = ["لم", "منفردة", "جماعة"];
 
 export function PrayerRow({ prayer, status, onChange }: PrayerRowProps) {
   const meta = PRAYER_META[prayer];
-  const active = PRAYER_STATUS_META[status];
+  const active = prayerStatusMeta(status);
 
   return (
     <div className="flex items-center gap-3 py-2.5 px-3 rounded-xl bg-gray-50">
