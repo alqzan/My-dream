@@ -74,7 +74,10 @@ export function StreakCalendar({ markedDates, color = "#7c6fcd", onDayClick }: S
               }
             >
               <span>{parseDate(date).getDate()}</span>
-              <span className={`text-[8px] mt-0.5 ${isMarked ? "text-white/70" : "text-gray-400"}`}>
+              {/* أبيضُ كامل لا `/70` على الحبّة المعلَّمة: الشفافيةُ تُنزل
+                  التباين تحت الحدّ مهما عُتّمت الحبّة. الخفوتُ يأتي من المقاس
+                  (8px مقابل رقم اليوم) لا من الشفافية. */}
+              <span className={`text-[8px] mt-0.5 ${isMarked ? "text-white" : "text-gray-400"}`}>
                 {hijriDay(date)}
               </span>
             </button>

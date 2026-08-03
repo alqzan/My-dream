@@ -138,7 +138,7 @@ export function YearHeatmap({ scores }: YearHeatmapProps) {
       <div className="relative mx-auto w-full max-w-[360px]" style={{ aspectRatio: "1 / 1" }}>
         <svg
           viewBox={`0 0 ${VB} ${VB}`}
-          className="w-full h-full overflow-visible text-[#b07a2e] dark:text-[#e8c98a]"
+          className="w-full h-full overflow-visible text-[#8a6428] dark:text-[#e8c98a]"
         >
           {/* current-month wedge */}
           <path d={wedge} fill="currentColor" opacity={0.07} />
@@ -240,7 +240,7 @@ export function YearHeatmap({ scores }: YearHeatmapProps) {
             {completedDays}
           </span>
           <span className="text-[10px] text-gray-400 mt-1">يوم مكتمل</span>
-          <span className="text-[11px] font-semibold text-[#b07a2e] dark:text-[#e8c98a] mt-2 tabular-nums">
+          <span className="text-[11px] font-semibold text-[#8a6428] dark:text-[#e8c98a] mt-2 tabular-nums">
             {year}
           </span>
         </div>

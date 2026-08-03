@@ -35,7 +35,7 @@ import Link from "next/link";
 import { ChevronLeft, BarChart3, TrendingDown, Plus, Wallet, BookMarked, BookOpen, History } from "lucide-react";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BrandMark } from "@/components/layout/BrandMark";
-import { SECTION, GOLD_LIGHT } from "@/lib/palette";
+import { SECTION, GOLD_LIGHT, SECTION_DEEP } from "@/lib/palette";
 
 // تخطيط الرئيسية — **طبقتان** لا قائمةٌ واحدة. كانت اثنتي عشرة كتلةً متساوية
 // الوزن البصريّ بلا شيءٍ يقول «هذا الأهمّ»، وما يخصّ اليوم مختلطٌ بما يُراجَع
@@ -305,7 +305,7 @@ export default function Dashboard() {
                 </span>
                 <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
               </div>
-              <StreakCalendar markedDates={completionDates} color={SECTION.brand} onDayClick={setSelectedDay} />
+              <StreakCalendar markedDates={completionDates} color={SECTION_DEEP.brand} onDayClick={setSelectedDay} />
             </Card>
 
             <InstallHint />

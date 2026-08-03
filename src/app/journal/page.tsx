@@ -29,6 +29,7 @@ import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3 } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
 import { AppImage } from "@/components/ui/AppImage";
+import { SECTION_DEEP } from "@/lib/palette";
 
 export default function JournalPage() {
   const { journalEntries, deleteJournalEntry, addJournalEntry, updateJournalEntry } = useAppStore();
@@ -384,7 +385,7 @@ export default function JournalPage() {
       )}
 
       <Card className="animate-fade-up stagger-3">
-        <StreakCalendar markedDates={markedDates} color="#7c6fcd" onDayClick={setSelectedDay} />
+        <StreakCalendar markedDates={markedDates} color={SECTION_DEEP.journal} onDayClick={setSelectedDay} />
       </Card>
 
       {/* حصيلة الشهر — ملخّصٌ لطيفٌ لمذكرات الشهر الحالي */}

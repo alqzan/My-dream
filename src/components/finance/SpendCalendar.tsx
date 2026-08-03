@@ -85,10 +85,10 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
                   title={`${formatAmount(spent)} ر.س`}
                 />
               )}
-              <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-300" : "text-gray-600"}`}>
+              <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-400" : "text-gray-600"}`}>
                 {parseDate(date).getDate()}
               </span>
-              <span className={`text-[7px] leading-none ${isFuture ? "text-gray-200" : "text-gray-400"}`}>
+              <span className={`text-[7px] leading-none ${isFuture ? "text-gray-400" : "text-gray-500"}`}>
                 {hijriDay(date)}
               </span>
             </button>

@@ -122,10 +122,10 @@ export function PrayerCalendar({ prayerLogs, onDayClick, year: yearProp, month: 
                 isToday ? "ring-1 ring-prayer" : "hover:bg-gray-50"
               }`}
             >
-              <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-300" : "text-gray-600"}`}>
+              <span className={`text-[10px] font-medium leading-none ${isFuture ? "text-gray-400" : "text-gray-600"}`}>
                 {parseDate(date).getDate()}
               </span>
-              <span className={`text-[7px] leading-none ${isFuture ? "text-gray-200" : "text-gray-400"}`}>
+              <span className={`text-[7px] leading-none ${isFuture ? "text-gray-400" : "text-gray-500"}`}>
                 {hijriDay(date)}
               </span>
               <MiniOrbit log={log} isFuture={isFuture} />

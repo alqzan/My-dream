@@ -17,6 +17,7 @@ import { SectionSignet } from "@/components/layout/SectionSignet";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import type { Book, ReadingLog } from "@/lib/types";
 import { Plus, BookOpen, Flame, Pencil, Trash2 } from "lucide-react";
+import { SECTION_DEEP } from "@/lib/palette";
 
 type FilterStatus = "الكل" | "أقرأ" | "أنهيت" | "أريد_قراءة";
 
@@ -120,7 +121,7 @@ export default function ReadingPage() {
       </div>
 
       <Card className="animate-fade-up stagger-2">
-        <StreakCalendar markedDates={logDates} color="#e07b39" />
+        <StreakCalendar markedDates={logDates} color={SECTION_DEEP.reading} />
       </Card>
 
       <div className="animate-fade-up stagger-2">

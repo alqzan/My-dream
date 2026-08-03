@@ -84,7 +84,9 @@ function Sundial({ fajr, isha, now }: { fajr: Date; isha: Date; now: Date }) {
         <circle cx={sun.x} cy={sun.y} r="3" fill="url(#sundialSun)" />
         <circle cx={sun.x} cy={sun.y} r="1.5" fill="#f0b84e" stroke="#fff7e6" strokeWidth="0.5" />
       </svg>
-      <div className="relative mt-0.5 text-[8px] font-medium text-brand-500/70 dark:text-brand-300/60">
+      {/* كان `brand-500/70` عند 1.94:1 — الشفافيةُ فوق لونٍ ذهبيٍّ فاتحٍ على
+          كريميّ تُذيب النصّ. `brand-700` مصمتاً يقرأ، والخفوتُ باقٍ بالمقاس. */}
+      <div className="relative mt-0.5 text-[8px] font-medium text-brand-700 dark:text-brand-300/60">
         <span className="absolute left-0 tabular-nums">الفجر {formatClock(fajr)}</span>
         <span className="absolute right-0 tabular-nums">العشاء {formatClock(isha)}</span>
         <span className="block h-3" />

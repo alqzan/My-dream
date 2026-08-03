@@ -27,7 +27,7 @@ const tooltipStyle = {
 
 // Thin gold line-work (gridlines · axis ticks) — the instruments' idiom.
 const GRID_GOLD = "#c9852a";
-const TICK_GOLD = "#a9814a";
+const TICK_GOLD = "#8a6428"; // كان #a9814a — 3.54:1 على الأبيض، تحت حدّ AA لنصّ المحاور
 const tickStyle = { fontSize: 11, fill: TICK_GOLD, fontFamily: "var(--font-thamaniah), serif" };
 
 interface MonthlyBarsProps {
