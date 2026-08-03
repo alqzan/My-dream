@@ -158,7 +158,7 @@ export function MushafBrowser({ initialSurah, onReflect }: { initialSurah?: numb
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 text-xs font-bold py-1.5 rounded-lg press transition-colors ${mode === m ? "bg-quran text-white shadow-sm" : "text-quran/80 hover:bg-quran/10"}`}
+            className={`flex-1 text-xs font-bold py-1.5 rounded-lg press transition-colors ${mode === m ? "bg-quran text-white shadow-sm" : "text-quran hover:bg-quran/10"}`}
           >
             {label}
           </button>

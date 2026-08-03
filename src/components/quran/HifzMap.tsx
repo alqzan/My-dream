@@ -136,7 +136,7 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
 
       {editPlan && (
         <div className="bg-gray-50 dark:bg-[#2c2318] rounded-xl p-3 space-y-2.5">
-          <div className="text-[11px] font-semibold text-gray-500">عدّل الورد اليومي</div>
+          <div className="text-[11px] font-semibold text-gray-600">عدّل الورد اليومي</div>
           <div className="flex gap-1.5 flex-wrap">
             {UNITS.map((u) => (
               <button key={u} onClick={() => store.updateHifzPlan({ unit: u })}
@@ -146,10 +146,10 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-400">كل يوم</span>
+            <span className="text-[11px] text-gray-600">كل يوم</span>
             <NumberInput value={String(plan.amount)} onChange={(v) => store.updateHifzPlan({ amount: parseInt(v) || 1 })} inputMode="numeric"
               className="w-16 text-sm text-center border border-gray-200 rounded-lg px-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-quran/40" />
-            <span className="text-[11px] text-gray-400">{UNIT_LABEL[plan.unit]}</span>
+            <span className="text-[11px] text-gray-600">{UNIT_LABEL[plan.unit]}</span>
           </div>
           <div className="flex items-center justify-between pt-1">
             <button onClick={() => setEditPos((v) => !v)} className="text-[11px] text-gray-500 hover:text-quran press flex items-center gap-1"><MapPin size={12} /> تعديل موضعي</button>
@@ -248,13 +248,13 @@ function PositionEditor({ current, onSave, onCancel }: { current: number; onSave
   const a = Math.min(Math.max(parseInt(ayah) || 1, 1), maxAyah);
   return (
     <div className="rounded-xl bg-white dark:bg-[#241c12] border border-gray-100 p-3 space-y-2.5">
-      <div className="text-[11px] font-semibold text-gray-500 flex items-center gap-1"><Sprout size={12} className="text-quran" /> حدّد آخر آية حفظتها</div>
+      <div className="text-[11px] font-semibold text-gray-600 flex items-center gap-1"><Sprout size={12} className="text-quran" /> حدّد آخر آية حفظتها</div>
       <div className="flex gap-2 items-center">
         <select value={surah} onChange={(e) => setSurah(Number(e.target.value))}
           className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white dark:bg-[#241c12] focus:outline-none focus:ring-2 focus:ring-quran/40">
           {SURAHS.map((s) => <option key={s.num} value={s.num}>{s.num}. {s.name}</option>)}
         </select>
-        <span className="text-[11px] text-gray-400">آية</span>
+        <span className="text-[11px] text-gray-600">آية</span>
         <NumberInput value={ayah} onChange={setAyah} inputMode="numeric"
           className="w-16 text-sm text-center border border-gray-200 rounded-lg px-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-quran/40" />
       </div>

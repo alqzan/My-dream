@@ -22,7 +22,7 @@ export function QuranBanner() {
           <p className="font-quran text-center text-[17px] font-bold text-gray-800 dark:text-gray-100 leading-[2.1]">
             {verse.text}
           </p>
-          <p className="text-center text-[11px] text-quran/80 font-semibold mt-2">﴿ {verseRef(verse)} ﴾</p>
+          <p className="text-center text-[11px] text-quran font-semibold mt-2">﴿ {verseRef(verse)} ﴾</p>
         </div>
       )}
     </div>

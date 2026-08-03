@@ -61,12 +61,12 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
         <Target size={17} className="text-quran" />
         <span className="text-sm font-bold text-gray-800">ارسم خطة حفظك</span>
       </div>
-      <p className="text-xs text-gray-500 leading-relaxed">
+      <p className="text-xs text-gray-600 leading-relaxed">
         الحفظ متتابع: تبدأ من نقطة وتُكمل منها يوماً بيوم بلا قفز. اختر البداية ومقدار وردك اليومي — وكله مرن، تعدّله وقتما شئت.
       </p>
 
       <div>
-        <div className="text-[11px] font-semibold text-gray-500 mb-1.5">نقطة البداية</div>
+        <div className="text-[11px] font-semibold text-gray-600 mb-1.5">نقطة البداية</div>
         <div className="flex gap-1.5 flex-wrap mb-2">
           {presets.map((p) => (
             <button
@@ -88,7 +88,7 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-gray-500 mb-1.5">الورد اليومي</div>
+        <div className="text-[11px] font-semibold text-gray-600 mb-1.5">الورد اليومي</div>
         <div className="flex gap-1.5 flex-wrap mb-2">
           {UNITS.map((u) => (
             <button
@@ -101,14 +101,14 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-gray-400">كل يوم</span>
+          <span className="text-[11px] text-gray-600">كل يوم</span>
           <NumberInput
             value={amount}
             onChange={setAmount}
             inputMode="numeric"
             className="w-16 text-sm text-center border border-gray-200 rounded-lg px-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-quran/40"
           />
-          <span className="text-[11px] text-gray-400">{UNIT_LABEL[unit]}{Number(amount) > 1 ? " (أو أكثر)" : ""}</span>
+          <span className="text-[11px] text-gray-600">{UNIT_LABEL[unit]}{Number(amount) > 1 ? " (أو أكثر)" : ""}</span>
         </div>
       </div>
 
@@ -180,7 +180,7 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center space-y-2.5">
           <p className="text-sm font-bold text-quran">🌿 أتممت قرآن اليوم — تقبّل الله</p>
           {prog.at && <p className="text-xs text-gray-500">تقدّمت إلى {prog.at.surahName} {prog.at.ayah} · صفحة {prog.page}</p>}
-          <p className="text-[11px] text-gray-400">لا مستحقَّ عليك اليوم. وإن أردت الزيادة فبطلبك:</p>
+          <p className="text-[11px] text-gray-600">لا مستحقَّ عليك اليوم. وإن أردت الزيادة فبطلبك:</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             {portion && text && (
               <button onClick={() => setShowMore(true)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-full px-4 py-2 press">
@@ -307,7 +307,7 @@ function IntensityCard() {
       {open && (
         <div className="space-y-4 pt-1">
           <div>
-            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">مقدار وردك اليومي</div>
+            <div className="text-[11px] font-semibold text-gray-600 mb-1.5">مقدار وردك اليومي</div>
             <div className="flex items-center justify-center gap-2 text-[11px] text-gray-500">
               <Target size={13} className="text-quran" />
               <button
@@ -328,7 +328,7 @@ function IntensityCard() {
           </div>
 
           <div>
-            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">شدّة التمرين</div>
+            <div className="text-[11px] font-semibold text-gray-600 mb-1.5">شدّة التمرين</div>
             <div className="flex gap-1.5">
               {INTENSITIES.map((v) => (
                 <button
@@ -342,7 +342,7 @@ function IntensityCard() {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-gray-400 leading-relaxed mt-2">{INTENSITY_LABEL[cur].hint}</p>
+            <p className="text-[11px] text-gray-600 leading-relaxed mt-2">{INTENSITY_LABEL[cur].hint}</p>
             <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
               يضبط عدد التكرار في الحفظ الموجّه · حجم المراجعة القريبة · كم وجهاً تراجع يومياً · تباعد المراجعات.
             </p>

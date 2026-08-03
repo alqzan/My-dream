@@ -89,7 +89,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold press transition-colors ${
-        active ? "bg-quran text-white shadow-sm" : "text-quran/80 hover:bg-quran/10"
+        active ? "bg-quran text-white shadow-sm" : "text-quran hover:bg-quran/10"
       }`}
     >
       {icon}
