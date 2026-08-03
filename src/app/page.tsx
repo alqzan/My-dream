@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { completedDayDates, activeRitualLabels } from "@/lib/dayAggregator";
 import {
@@ -53,15 +53,24 @@ export default function Dashboard() {
   // العادات المجمّدة تختفي من التطبيق كلّه: لا تظهر أقمارها على مدار السنة ولا
   // تُحتسب. القراءة/المذكرة/الوِرد المجمّدة تُخفى قمرُها، والعادات المخصّصة
   // المجمّدة تُستثنى من قمر «العادات» الجامع.
-  const frozen = new Set(frozenHabits ?? []);
+  const frozen = useMemo(() => new Set(frozenHabits ?? []), [frozenHabits]);
 
   // السلسلة والتقويم والاحتفال — كلّها من تعريف «اليوم المكتمل» المركزي
   // (مذكرة · قراءة · وِرد، ويُستثنى المجمّد)، فلا يختلف يومٌ مكتملٌ بين شاشتين.
-  const quranDates = quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma });
-  const completionDates = completedDayDates({
-    journalEntries, readingLogs, quranActivity: quranDates, frozenHabits,
-  });
-  const ritualLabels = activeRitualLabels(frozenHabits);
+  //
+  // **لماذا `useMemo` هنا تحديداً؟** الاثنتان تمرّان على المذكرات وسجلّات
+  // القراءة والنشاط القرآنيّ **كلّها**. وبلا تذكّرٍ كانتا تُعادان في كلّ رسمة —
+  // وهذه الصفحة تُعاد رسمُها مع أيّ تعديلٍ في المتجر مهما بَعُد عن هذه الحسبة.
+  // بسنواتٍ من البيانات صار ذلك ملموساً على جوّالٍ متوسّط.
+  const quranDates = useMemo(
+    () => quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }),
+    [quranWird, quranHifz, quranReflections, quranKhatma]
+  );
+  const completionDates = useMemo(
+    () => completedDayDates({ journalEntries, readingLogs, quranActivity: quranDates, frozenHabits }),
+    [journalEntries, readingLogs, quranDates, frozenHabits]
+  );
+  const ritualLabels = useMemo(() => activeRitualLabels(frozenHabits), [frozenHabits]);
 
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);

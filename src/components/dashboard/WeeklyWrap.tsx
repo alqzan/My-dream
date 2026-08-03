@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Transaction, JournalEntry, ReadingLog, Book, HifzState } from "@/lib/types";
 import { formatAmount, toDateStr, parseDate, formatDateShort, cashOut } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
@@ -203,35 +203,52 @@ export function WeeklyWrap({ transactions, journalEntries, readingLogs, quranHif
     );
   }, []);
 
+  // أسبوعُ اليوم يُحسب في كلّ رسمة (سبعةُ تواريخ — بلا ثمن)، لكنّ **الترشيح
+  // عليه يمرّ على المعاملات والمذكرات والسجلّات كلّها**. وهذه البطاقة على
+  // الرئيسية فتُعاد رسمُها مع أيّ تعديلٍ في المتجر، فيُذكَّر الترشيح ومشتقّاته.
+  // `weekKey` هو تبعيّة الأسبوع: يتغيّر عند انقلاب اليوم فتُعاد الحسبة، ولا
+  // يُجمّد الأسبوع على قيمةٍ قديمة كما لو وُضع `getThisWeekDates()` داخل الذاكرة.
   const week = getThisWeekDates();
-  const weekSet = new Set(week);
+  const weekKey = week.join();
 
-  const weekTx = transactions.filter((t) => weekSet.has(t.date));
-  const weekJournal = journalEntries.filter((e) => weekSet.has(e.date));
-  const weekLogs = readingLogs.filter((l) => weekSet.has(l.date));
+  const {
+    spent, pagesRead, journalDays, readingDays, quranSessions, dayInfo,
+    weekJournal, weekHifz, weekReviews,
+  } = useMemo(() => {
+    const weekSet = new Set(week);
+    const weekTx = transactions.filter((t) => weekSet.has(t.date));
+    const weekJournal = journalEntries.filter((e) => weekSet.has(e.date));
+    const weekLogs = readingLogs.filter((l) => weekSet.has(l.date));
 
-  const spent = weekTx.reduce((s, t) => s + cashOut(t), 0);
-  const pagesRead = weekLogs.reduce((s, l) => s + l.pagesRead, 0);
-  const journalDays = weekJournal.length;
-  const readingDays = new Set(weekLogs.map((l) => l.date)).size;
+    // حصيلة قرآنية موجزة للأسبوع: جلسات حفظٍ ومراجعات ضمن الأسبوع.
+    const weekHifz = (quranHifz?.sessions ?? []).filter((x) => weekSet.has(x.date));
+    const weekReviews = (quranHifz?.reviews ?? []).filter((x) => weekSet.has(x.date));
 
-  // حصيلة قرآنية موجزة للأسبوع: جلسات حفظٍ ومراجعات ضمن الأسبوع.
-  const weekHifz = (quranHifz?.sessions ?? []).filter((x) => weekSet.has(x.date));
-  const weekReviews = (quranHifz?.reviews ?? []).filter((x) => weekSet.has(x.date));
-  const quranSessions = weekHifz.length + weekReviews.length;
+    // Per-day breakdown — one star each. Activity level (0..3) combines the
+    // signals this card already tracks: مذكرة + قراءة + حركة صرف that day.
+    const info = week.map((d) => {
+      const journaled = weekJournal.some((e) => e.date === d);
+      const read = weekLogs.some((l) => l.date === d);
+      const dayTx = weekTx.filter((t) => t.date === d);
+      const daySpent = dayTx.reduce((s, t) => s + cashOut(t), 0);
+      const dayPages = weekLogs.filter((l) => l.date === d).reduce((s, l) => s + l.pagesRead, 0);
+      const quran = weekHifz.some((x) => x.date === d) || weekReviews.some((x) => x.date === d);
+      const level = (journaled ? 1 : 0) + (read ? 1 : 0) + (dayTx.length ? 1 : 0) + (quran ? 1 : 0);
+      return { date: d, journaled, read, hasTx: dayTx.length > 0, daySpent, dayPages, quran, level: Math.min(level, 3) };
+    });
 
-  // Per-day breakdown — one star each. Activity level (0..3) combines the
-  // signals this card already tracks: مذكرة + قراءة + حركة صرف that day.
-  const dayInfo = week.map((d) => {
-    const journaled = weekJournal.some((e) => e.date === d);
-    const read = weekLogs.some((l) => l.date === d);
-    const dayTx = weekTx.filter((t) => t.date === d);
-    const daySpent = dayTx.reduce((s, t) => s + cashOut(t), 0);
-    const dayPages = weekLogs.filter((l) => l.date === d).reduce((s, l) => s + l.pagesRead, 0);
-    const quran = weekHifz.some((x) => x.date === d) || weekReviews.some((x) => x.date === d);
-    const level = (journaled ? 1 : 0) + (read ? 1 : 0) + (dayTx.length ? 1 : 0) + (quran ? 1 : 0);
-    return { date: d, journaled, read, hasTx: dayTx.length > 0, daySpent, dayPages, quran, level: Math.min(level, 3) };
-  });
+    return {
+      spent: weekTx.reduce((s, t) => s + cashOut(t), 0),
+      pagesRead: weekLogs.reduce((s, l) => s + l.pagesRead, 0),
+      journalDays: weekJournal.length,
+      readingDays: new Set(weekLogs.map((l) => l.date)).size,
+      quranSessions: weekHifz.length + weekReviews.length,
+      dayInfo: info,
+      // يحتاجها العرضُ ومشاركةُ الصورة أدناه — تُمرَّر من هنا بدل إعادة ترشيحها.
+      weekJournal, weekHifz, weekReviews,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekKey, transactions, journalEntries, readingLogs, quranHifz]);
   const openInfo = openDay ? dayInfo.find((x) => x.date === openDay) ?? null : null;
 
   async function onShare() {

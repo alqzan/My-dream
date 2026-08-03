@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   today, calcStreak, uid, cn, toDateStr, buzz,
@@ -216,12 +216,16 @@ export function DailyHabits() {
 
   // العادات المجمّدة: بطاقةٌ مفتاحها هنا تُخرَج من قائمة اليوم فلا تُحتسب ولا
   // تكسر السلسلة، وتظهر في قسم «مجمّدة مؤقتاً» بزرّ استئناف يعيدها متى شئت.
-  const frozen = new Set(frozenHabits ?? []);
+  const frozen = useMemo(() => new Set(frozenHabits ?? []), [frozenHabits]);
   const isFrozen = (key: string) => frozen.has(key);
 
   // Core rituals as tiles (dates each was "kept", today's done, streak).
-  const journalDates = new Set(journalEntries.map((e) => e.date));
-  const readingDates = new Set(readingLogs.map((l) => l.date));
+  // مُذكَّرةٌ لأنّها تمرّ على السجلّات كلّها: هذه البطاقة على الرئيسية، فتُعاد
+  // رسمُها مع أيّ تعديلٍ في المتجر مهما بَعُد عن المذكرات والقراءة.
+  const journalDates = useMemo(() => new Set(journalEntries.map((e) => e.date)), [journalEntries]);
+  const readingDates = useMemo(() => new Set(readingLogs.map((l) => l.date)), [readingLogs]);
+  const journalStreak = useMemo(() => getJournalStreak(journalEntries), [journalEntries]);
+  const readingStreak = useMemo(() => getReadingStreak(readingLogs), [readingLogs]);
   const currentBook = books.find((b) => b.status === "أقرأ");
 
   // السلسلة الكاملة تُبنى من الطقوس الأساسية غير المجمّدة (مذكرة + قراءة): يومٌ
@@ -244,13 +248,13 @@ export function DailyHabits() {
       key: "core:journal",
       href: "/journal", icon: "📓", name: "مذكرة اليوم", color: "#8a6fb0",
       done: journalDates.has(todayStr), weekKept: journalDates,
-      statusLine: (() => { const s = getJournalStreak(journalEntries); return s > 0 ? `${s} يوم متواصل` : "اكتب اليوم"; })(),
+      statusLine: journalStreak > 0 ? `${journalStreak} يوم متواصل` : "اكتب اليوم",
     },
     {
       key: "core:reading",
       href: "/reading", icon: "📚", name: currentBook ? currentBook.title : "القراءة", color: "#c1663f",
       done: readingDates.has(todayStr), weekKept: readingDates,
-      statusLine: (() => { const s = getReadingStreak(readingLogs); return s > 0 ? `${s} يوم متواصل` : "اقرأ اليوم"; })(),
+      statusLine: readingStreak > 0 ? `${readingStreak} يوم متواصل` : "اقرأ اليوم",
     },
   ];
 
@@ -258,9 +262,12 @@ export function DailyHabits() {
   // القرآني. تُحتسب «تمّت» بأيّ نشاطٍ قرآني اليوم (حفظ/مراجعة/تدبّر/ختمة) لا
   // بنقرة الوِرد وحدها، وسلسلتها من مجموع تلك التواريخ. نقرةُ البطاقة تظلّ تسجّل
   // وِرداً يدوياً لأيام لم يُسجَّل فيها شيءٌ آخر.
-  const wirdDates = quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma });
+  const wirdDates = useMemo(
+    () => quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }),
+    [quranWird, quranHifz, quranReflections, quranKhatma]
+  );
   const wirdDone = wirdDates.has(todayStr);
-  const wirdStreak = calcStreak([...wirdDates]);
+  const wirdStreak = useMemo(() => calcStreak([...wirdDates]), [wirdDates]);
   const wirdFrozen = isFrozen("core:wird");
 
   // البطاقات النشطة (غير المجمّدة) هي وحدها ما يُعرض ويُحتسب في تقدّم اليوم.
