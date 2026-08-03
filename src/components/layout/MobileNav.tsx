@@ -20,10 +20,15 @@ export function MobileNav() {
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f4eee2]/85 dark:bg-[#171009]/85 backdrop-blur-lg border-t border-gray-100/70 pb-safe">
       <div className="relative flex items-stretch py-2 px-0.5">
         {/* المؤشر المنزلق — يتحرك خلف التبويب النشط بحركة ناعمة. RTL: التبويب
-            الأول على اليمين، فنحسب الإزاحة من اليمين. */}
+            الأول على اليمين، فنحسب الإزاحة من اليمين. يأخذ لون القسم النشط عبر
+            `bg-current` (صنفُ اللون نصّيّ في `nav.ts`)، فينزلق اللونُ مع
+            المؤشّر بدل ذهبيٍّ ثابتٍ يخالف الأيقونة تحته. */}
         <span
           aria-hidden
-          className="pointer-events-none absolute top-0 h-[3px] rounded-full bg-brand-500 transition-all duration-300 ease-out"
+          className={cn(
+            "pointer-events-none absolute top-0 h-[3px] rounded-full bg-current transition-all duration-300 ease-out",
+            activeIndex < 0 ? "text-brand-500" : NAV_ITEMS[activeIndex].color
+          )}
           style={{
             width: `calc(${slot}% - 26px)`,
             right: `calc(${(activeIndex < 0 ? 0 : activeIndex) * slot}% + 13px)`,
@@ -40,12 +45,13 @@ export function MobileNav() {
               className={cn(
                 // min-h-[44px]: a comfortable touch target (WCAG 2.2 target-size).
                 "flex-1 min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-xl transition-all press",
-                active ? "text-brand-600" : "text-gray-400"
+                // لون القسم نفسه الذي يستعمله الشريط الجانبي — المصدر `nav.ts`.
+                active ? item.color : "text-gray-400"
               )}
             >
               <span className={cn(
                 "flex items-center justify-center rounded-full px-2.5 py-0.5 transition-all duration-300",
-                active ? "bg-brand-100/70 scale-105" : "scale-100"
+                active ? `${item.tint} scale-105` : "scale-100"
               )}>
                 <item.icon size={20} />
               </span>

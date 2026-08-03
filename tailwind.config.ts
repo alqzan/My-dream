@@ -6,6 +6,11 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    // `src/lib` يحمل أصنافاً حقيقية لا أنواعاً فقط: `nav.ts` مصدرُ ألوان
+    // التنقّل (`color`/`tint`). كانت خارج المسح، فلم تكن أصناف مثل
+    // `text-quran` تُولَّد إلا **مصادفةً** لأنّ مكوّناً آخر يستعملها — فحذفُ آخر
+    // استعمالٍ في المكوّنات كان يُطفئ لون أيقونة القسم بلا أن يكسر شيئاً ظاهراً.
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
