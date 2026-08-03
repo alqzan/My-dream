@@ -12,6 +12,8 @@ import {
   countDayPrayers,
   quranActivityDates,
 } from "@/lib/utils";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
+import { GroupLabel } from "@/components/ui/GroupLabel";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { InstallHint } from "@/components/layout/InstallHint";
 import { DailyHabits } from "@/components/dashboard/DailyHabits";
@@ -30,19 +32,23 @@ import { Confetti } from "@/components/ui/Confetti";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import Link from "next/link";
-import { ChevronLeft, BarChart3, TrendingDown, Plus, Wallet, BookMarked, BookOpen } from "lucide-react";
+import { ChevronLeft, BarChart3, TrendingDown, Plus, Wallet, BookMarked, BookOpen, History } from "lucide-react";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
-// Dashboard layout, top to bottom — one card per idea, nothing repeated:
-//   1. التحية والتاريخ (هجري + ميلادي) + مدار السنة
-//   2. العدّ التنازلي للأحداث المهمّة (إن وُجدت) ثم صلوات اليوم
-//   3. بطاقة اليوم الموحّدة (السلسلة + المهام الثلاث بروابطها)
-//   4. عاداتي
-//   5. حصيلة الأسبوع
-//   6. تقويم السلسلة
-//   7. روابط: متابعة الصرف + الإحصائيات الكاملة
+// تخطيط الرئيسية — **طبقتان** لا قائمةٌ واحدة. كانت اثنتي عشرة كتلةً متساوية
+// الوزن البصريّ بلا شيءٍ يقول «هذا الأهمّ»، وما يخصّ اليوم مختلطٌ بما يُراجَع
+// مرّةً في الأسبوع:
+//
+//   الترويسة   — التحية والتاريخ (هجري + ميلادي) ومدار السنة بأقماره.
+//   «يومك»     — خلاصة اليوم · الصلوات · العادات | رمضان · العدّ التنازلي ·
+//                زاد اليوم · بوصلة مدار.  (كلّه ظاهرٌ دائماً.)
+//   «مراجعة»   — حصيلة الأسبوع · تقويم السلسلة · الروابط.  **مطويّ افتراضياً**:
+//                يُقرأ مرّةً في الأسبوع لا عشرين مرّةً في اليوم، وفيه أطولُ
+//                بطاقتين. لا شيء حُذف — نقرةٌ واحدة تفتحه.
+//
+// و«بوصلة مدار» تبقى خارج الطيّ عمداً: توصياتها تُنفَّذ الآن لا تُقرأ لاحقاً.
 export default function Dashboard() {
   // منتقٍ لكلّ شريحة بدل `useAppStore()` المجرّدة: تلك تشترك بالحالة كلّها،
   // فتُعاد رسمُ الصفحة (وشجرتها) مع **أيّ** تعديلٍ في المتجر — ولو كان تعديلاً
@@ -61,6 +67,9 @@ export default function Dashboard() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [quickExpense, setQuickExpense] = useState(false);
+  // قسم «مراجعة» مطويٌّ افتراضياً. الحالة محليّة عمداً — لا مفتاحَ تخزينٍ جديد
+  // لتفضيلٍ ثانويّ (كلّ مفتاحٍ جديد يجب أن يُسجَّل في docs/APP-STORE-PLAN.md).
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const todayStr = today();
 
@@ -85,6 +94,12 @@ export default function Dashboard() {
     [journalEntries, readingLogs, quranDates, frozenHabits]
   );
   const ritualLabels = useMemo(() => activeRitualLabels(frozenHabits), [frozenHabits]);
+
+  // ملخّصُ رأس «مراجعة» **وصفٌ لا رقم**، عمداً: بطاقةُ العادات فوقه تعرض
+  // «١٤ يوم متواصل» بتعريفها هي (مذكرة + قراءة)، وسلسلةُ هذا القسم تعريفُها
+  // آخر (يضاف الوِرد) — فرقمان مختلفان تحت العنوان نفسه على شاشةٍ واحدة
+  // يقرآن تناقضاً لا معلومة. الوصفُ يقول ما تحت الطيّ بلا أن يزاحم.
+  const reviewSummary = "حصيلة أسبوعك وتقويم سلسلتك";
 
   const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
   const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
@@ -181,12 +196,18 @@ export default function Dashboard() {
 
       <PendingBankBanner />
 
-      {/* عمودان على الشاشات الكبيرة، وعمودٌ واحد على الجوّال بلا أيّ تغيّر.
-          التوزيع مقصود لا آليّ: **اليمين** (أوّل عمودٍ في RTL) لِما يخصّ اليوم
-          نفسه ويُلمَس يومياً — الوِرد وخلاصة اليوم والصلوات والعادات؛
-          و**اليسار** لِما يُراجَع لا يُنفَّذ: الحكمة والبوصلة وحصيلة الأسبوع
-          والسلسلة والروابط. الشبكةُ الآلية كانت ستوزّعها صفّاً صفّاً فتتفاوت
+      {/* ===== 1 — يومك =====
+          كلُّ ما يخصّ **اليوم نفسه** ويُلمَس فيه. كانت الرئيسية اثنتي عشرة
+          كتلةً متساوية الوزن البصريّ بلا شيءٍ يقول «هذا الأهمّ» — فطولها
+          3033px على الجوّال، وما يخصّ اليوم مختلطٌ بما يُراجَع مرّةً في الأسبوع.
+          الآن طبقتان مفصولتان بعنوانٍ خفيف (نفس إيقاع صفحة الأموال).
+
+          وعمودان على الشاشات الكبيرة بتوزيعٍ مقصودٍ لا آليّ: **اليمين** (أوّل
+          عمودٍ في RTL) للوِرد وخلاصة اليوم والصلوات والعادات، و**اليسار** لِما
+          يُقرأ لا يُنفَّذ. الشبكةُ الآلية كانت ستوزّعها صفّاً صفّاً فتتفاوت
           الأطوال وتفتح فجواتٍ بين البطاقات. */}
+      <GroupLabel>يومك</GroupLabel>
+
       <div className="page-grid">
         <div className="space-y-5">
           {!isFirstRun && (
@@ -195,15 +216,6 @@ export default function Dashboard() {
               <DayDigestCard />
             </div>
           )}
-
-          <div className="animate-fade-up stagger-1">
-            <RamadanCard />
-          </div>
-
-          {/* العدّ التنازلي للأحداث المهمّة — يختفي كلياً حين لا حدثَ معروضاً. */}
-          <div className="animate-fade-up stagger-1">
-            <CountdownCard />
-          </div>
 
           <Card className="animate-fade-up stagger-1">
             <PrayerOrbit />
@@ -215,15 +227,44 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-5">
+          <div className="animate-fade-up stagger-1">
+            <RamadanCard />
+          </div>
+
+          {/* العدّ التنازلي للأحداث المهمّة — يختفي كلياً حين لا حدثَ معروضاً. */}
+          <div className="animate-fade-up stagger-1">
+            <CountdownCard />
+          </div>
+
           <div className="animate-fade-up stagger-2">
             <HikmaCard />
           </div>
 
+          {/* «بوصلة مدار» تبقى **خارج** الطيّ عمداً: توصياتها قابلةٌ للتنفيذ
+              الآن (خذ نسخةً احتياطية، انتبه لسقفٍ يوشك) — وطيُّها يدفن تنبيهاً
+              يُفترض أن يُرى. المطويُّ هو ما يُقرأ للمراجعة لا ما يُطلب فعلاً. */}
           <div className="animate-fade-up stagger-3">
             <SmartInsights />
           </div>
+        </div>
+      </div>
 
-          <div className="animate-fade-up stagger-4">
+      {/* ===== 2 — مراجعة =====
+          حصيلةُ الأسبوع وتقويمُ السلسلة والروابط: تُقرأ مرّةً في الأسبوع لا
+          عشرين مرّةً في اليوم، وهما أطولُ بطاقتين في الصفحة. مطويّةٌ افتراضياً
+          فتختصر ذيل الرئيسية، ونقرةٌ واحدة تفتحها — ولا شيء حُذف.
+          (نفس نمط أقسام صفحة الأموال، ونفس المكوّن.) */}
+      <CollapsibleSection
+        id="review"
+        title="مراجعة"
+        tone="brand"
+        icon={<History size={16} />}
+        summary={reviewSummary}
+        open={reviewOpen}
+        onToggle={() => setReviewOpen((v) => !v)}
+      >
+        <div className="page-grid pt-1">
+          <div className="space-y-5">
             <WeeklyWrap
               transactions={transactions}
               journalEntries={journalEntries}
@@ -231,44 +272,46 @@ export default function Dashboard() {
               books={books}
               quranHifz={quranHifz}
             />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Link href="/finance/insights" className="block">
+                <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine h-full">
+                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
+                    <TrendingDown size={18} />
+                  </div>
+                  <p className="text-sm font-bold">متابعة الصرف</p>
+                  <p className="text-[11px] opacity-80 mt-0.5">أسبوعي · شهري · سنوي</p>
+                  <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
+                </div>
+              </Link>
+              <Link href="/stats" className="block">
+                <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#5c3d21] to-[#8a5a24] card-shadow press shine h-full">
+                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
+                    <BarChart3 size={18} />
+                  </div>
+                  <p className="text-sm font-bold">إحصائياتك الكاملة</p>
+                  <p className="text-[11px] opacity-80 mt-0.5">خريطة سنتك ومزاجك</p>
+                  <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
+                </div>
+              </Link>
+            </div>
           </div>
 
-          <Card className="animate-fade-up stagger-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-gray-700">
-                {ritualLabels.length ? `سلسلة يومية — ${ritualLabels.join(" + ")}` : "سلسلة يومية"}
-              </span>
-              <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
-            </div>
-            <StreakCalendar markedDates={completionDates} color={SECTION.brand} onDayClick={setSelectedDay} />
-          </Card>
+          <div className="space-y-5">
+            <Card>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-gray-700">
+                  {ritualLabels.length ? `سلسلة يومية — ${ritualLabels.join(" + ")}` : "سلسلة يومية"}
+                </span>
+                <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
+              </div>
+              <StreakCalendar markedDates={completionDates} color={SECTION.brand} onDayClick={setSelectedDay} />
+            </Card>
 
-          <div className="grid grid-cols-2 gap-3 animate-fade-up stagger-6">
-        <Link href="/finance/insights" className="block">
-          <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine h-full">
-            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
-              <TrendingDown size={18} />
-            </div>
-            <p className="text-sm font-bold">متابعة الصرف</p>
-            <p className="text-[11px] opacity-80 mt-0.5">أسبوعي · شهري · سنوي</p>
-            <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
+            <InstallHint />
           </div>
-        </Link>
-        <Link href="/stats" className="block">
-          <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#5c3d21] to-[#8a5a24] card-shadow press shine h-full">
-            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
-              <BarChart3 size={18} />
-            </div>
-            <p className="text-sm font-bold">إحصائياتك الكاملة</p>
-            <p className="text-[11px] opacity-80 mt-0.5">خريطة سنتك ومزاجك</p>
-            <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
-          </div>
-            </Link>
-          </div>
-
-          <InstallHint />
         </div>
-      </div>
+      </CollapsibleSection>
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
 

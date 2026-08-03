@@ -2,11 +2,14 @@
 import { useId } from "react";
 import { ChevronDown } from "lucide-react";
 
-// قسمٌ قابل للطيّ لصفحة الأموال: رأسٌ بعنوانٍ وملخّصٍ صغيرٍ وشارة تحذيرٍ اختيارية
-// (تبقى ظاهرةً حتى وهو مطويّ، فلا تُدفَن تحذيرات)، وجسمٌ يُخفى بـhidden فيبقى
-// مركّباً (كما كانت الصفحة) وتصحّ إشارة aria-controls. هدف اللمس ≥44px.
+// قسمٌ قابل للطيّ: رأسٌ بعنوانٍ وملخّصٍ صغيرٍ وشارة تحذيرٍ اختيارية (تبقى ظاهرةً
+// حتى وهو مطويّ، فلا تُدفَن تحذيرات)، وجسمٌ يُخفى بـhidden فيبقى مركّباً وتصحّ
+// إشارة aria-controls. هدف اللمس ≥44px.
+//
+// كان خاصّاً بصفحة الأموال ثمّ صار مشتركاً معها الرئيسية — `tone` وحدها ما
+// يفرّق: لونُ أيقونة الرأس. الافتراض `finance` فلا تتغيّر صفحة الأموال.
 export function CollapsibleSection({
-  id, title, icon, summary, badge, open, onToggle, children,
+  id, title, icon, summary, badge, open, onToggle, tone = "finance", children,
 }: {
   id?: string;
   title: string;
@@ -15,6 +18,7 @@ export function CollapsibleSection({
   badge?: React.ReactNode;
   open: boolean;
   onToggle: () => void;
+  tone?: "finance" | "brand";
   children: React.ReactNode;
 }) {
   const panelId = useId();
@@ -27,7 +31,7 @@ export function CollapsibleSection({
         onClick={onToggle}
         className="w-full min-h-[44px] flex items-center gap-2 bg-white rounded-2xl border border-gray-100 card-shadow px-4 py-3 press text-right"
       >
-        {icon && <span className="text-finance shrink-0">{icon}</span>}
+        {icon && <span className={`${tone === "brand" ? "text-brand-600" : "text-finance"} shrink-0`}>{icon}</span>}
         <div className="flex-1 min-w-0 flex items-baseline gap-2">
           <span className="text-sm font-bold text-gray-800 shrink-0">{title}</span>
           {summary && <span className="text-xs text-gray-400 truncate">{summary}</span>}

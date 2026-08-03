@@ -15,7 +15,8 @@ import { Assets } from "@/components/finance/Assets";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceGlance } from "@/components/finance/FinanceGlance";
-import { CollapsibleSection } from "@/components/finance/CollapsibleSection";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
+import { GroupLabel } from "@/components/ui/GroupLabel";
 import Link from "next/link";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
@@ -33,17 +34,6 @@ import {
 import { assetsOverview } from "@/lib/assets";
 import { spendWindow } from "@/lib/budgetCycle";
 import { showUndo } from "@/components/ui/UndoToast";
-
-// عنوانٌ خفيفٌ يجمّع البطاقات بصريًّا — مسمّى مكتوم صغير (ثمانية، عالميّ) مع خيطٍ
-// ذهبيٍّ باهتٍ يمتدّ جانبًا. ليس شريطًا ثقيلًا؛ فقط يقسّم الصفحة فصولًا للعين.
-function GroupLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2.5 pt-2 -mb-1">
-      <h2 className="shrink-0 text-xs font-semibold tracking-wide text-gray-400">{children}</h2>
-      <span className="h-px flex-1 bg-brand-500/25" aria-hidden />
-    </div>
-  );
-}
 
 // شارة تحذيرٍ حمراء صغيرة لرأس قسمٍ مطويّ (تبقى ظاهرةً دون فتحه).
 function AlertBadge({ children }: { children: ReactNode }) {
