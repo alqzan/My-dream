@@ -11,7 +11,7 @@ import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from 
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf } from "./utils";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
@@ -218,6 +218,9 @@ interface AppStore extends AppData {
   confirmSalary: () => number; // ينقل الفائض لصندوق الفوائض ويصفّر العداد؛ يرجع المبلغ
   // نقل مبلغ من فائض الميزانية اليومية إلى احتياطي محدد (ويصفّر عداد اليومية)
   sweepToReserve: (fundId: string, amount: number, note?: string) => void;
+  // الاتجاه المعاكس: سحب مبلغ من احتياطي (صندوق الفوائض عادةً) وإضافته لرصيد
+  // الميزانية اليومية. يرجع المبلغ المُضاف فعلاً (مقصوصاً على رصيد الصندوق).
+  pullFromReserve: (fundId: string, amount: number, note?: string) => number;
 
   // رسائل لنفسك المستقبلية
   // الأحداث المهمّة (العدّ التنازلي) — إضافة/تعديل/حذف كبقيّة العناصر
@@ -1318,6 +1321,41 @@ export const useAppStore = create<AppStore>()(
             dailyBudget,
           };
         }),
+
+      // عكس `sweepToReserve` بالضبط: يخرج المبلغ من الصندوق (سحبٌ بقيمة سالبة،
+      // نفس نموذج السحب اليدوي في بطاقة الاحتياطي) ويدخل رصيد الميزانية اليومية.
+      // الإضافة تتمّ بخفض `carryAdjust` بمقدار المبلغ لا بتحريك `startDate`: المتاح
+      // = amount × days − carryAdjust، فخفضُها يرفع الرصيد بالمقدار نفسه تماماً
+      // دون المساس بالدورة الجارية ولا بحساب ما صُرف فيها. قيمةٌ سالبة لـ
+      // carryAdjust مقصودة هنا (فوائض مضافة) ويقرؤها `computeDailyBudgetStatus`
+      // كما هي. لا تُنشأ معاملةٌ: هذا تحريك رصيدٍ بين وعاءين لا صرفٌ نقديّ.
+      pullFromReserve: (fundId, amount, note) => {
+        let added = 0;
+        set((s) => {
+          const fund = s.reserves.find((f) => f.id === fundId);
+          // بلا ميزانية يومية لا وعاء يستقبل المبلغ — لا نسحب من الصندوق عبثاً.
+          if (!fund || !s.dailyBudget || !Number.isFinite(amount) || amount <= 0) return {};
+          // لا يخرج من الصندوق أكثر مما فيه (نفس حارس السحب اليدوي).
+          const balance = reserveBalance(fund, s.transactions);
+          if (balance <= 0) return {};
+          added = round2(Math.min(amount, balance));
+          if (added <= 0) return {};
+          const deposit: ReserveDeposit = {
+            id: uid(),
+            date: today(),
+            amount: -added,
+            note: note ?? "إلى الميزانية اليومية",
+          };
+          const carryAdjust = Number.isFinite(s.dailyBudget.carryAdjust) ? s.dailyBudget.carryAdjust! : 0;
+          return {
+            reserves: s.reserves.map((f) =>
+              f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
+            ),
+            dailyBudget: { ...s.dailyBudget, carryAdjust: round2(carryAdjust - added) },
+          };
+        });
+        return added;
+      },
 
       addCountdownEvent: (event) =>
         set((s) => ({ countdownEvents: [event, ...(s.countdownEvents ?? [])] })),

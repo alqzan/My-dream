@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
+import { computeDailyBudgetStatus, formatAmount, cn, uid, today, reserveBalance } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { daysUntilSalary, projectedCycleSurplus } from "@/lib/financeOverview";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { Settings2, PiggyBank } from "lucide-react";
+import { Settings2, PiggyBank, Sparkles } from "lucide-react";
 import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 type Mode = "fixed" | "income";
@@ -86,13 +86,16 @@ export function DailyBudgetCard() {
   const {
     dailyBudget, transactions, monthlyIncome, reserves, salaryDay,
     setDailyBudget, removeDailyBudget, setMonthlyIncome, setSalaryDay,
-    sweepToReserve, addReserve,
+    sweepToReserve, addReserve, pullFromReserve,
   } = useAppStore();
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<Mode>(dailyBudget?.incomePct ? "income" : "fixed");
   const [amount, setAmount] = useState(dailyBudget?.amount?.toString() ?? "");
   const [salaryDayInput, setSalaryDayInput] = useState(String(salaryDay ?? 27));
   const [sweeping, setSweeping] = useState(false);
+  // سحب الفوائض إلى اليومية: الاتجاه المعاكس للـsweep أعلاه.
+  const [pulling, setPulling] = useState(false);
+  const [pullAmount, setPullAmount] = useState("");
   // The monthly income is shared app-wide (budgets by % use it too).
   const [income, setIncome] = useState((dailyBudget?.monthlyIncome ?? monthlyIncome)?.toString() ?? "");
   const [pct, setPct] = useState(dailyBudget?.incomePct?.toString() ?? "30");
@@ -136,6 +139,15 @@ export function DailyBudgetCard() {
     };
     addReserve(fund);
     handleSweep(fund.id, balance);
+  }
+
+  // الاتجاه المعاكس: إضافة جزء من صندوق الفوائض إلى رصيد اليومية.
+  function handlePull(fundId: string, available: number) {
+    const parsed = parseFloat(pullAmount);
+    const value = !parsed || parsed <= 0 ? available : Math.min(parsed, available);
+    pullFromReserve(fundId, value);
+    setPullAmount("");
+    setPulling(false);
   }
 
   if (!dailyBudget || editing) {
@@ -267,6 +279,10 @@ export function DailyBudgetCard() {
       : over
       ? 0
       : 1;
+  // صندوق الفوائض هو مصدر الزرّ المعاكس («أضف الفوائض للميزانية اليومية»):
+  // ما رُحّل إليه عند نزول الراتب يعود لليومية بضغطة حين تحتاجه.
+  const surplusFund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+  const surplusBalance = surplusFund ? reserveBalance(surplusFund, transactions) : 0;
 
   return (
     <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-finance/5"}`}>
@@ -297,6 +313,12 @@ export function DailyBudgetCard() {
         // صيغة «المبلغ × الأيام». نعرض المتاح والمصروف مباشرةً.
         <p className="text-xs text-gray-500 text-center leading-relaxed">
           🌱 دورة جديدة بعد الترحيل بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً — متاح {formatAmount(status.allowance)} ر.س، صرفت {formatAmount(status.spent)} ر.س
+        </p>
+      ) : status.carryAdjust < 0 ? (
+        // فوائض أُضيفت لليومية: المخصّص الفعّال أكبر من «المبلغ × الأيام»
+        // بمقدار ما أُضيف، فصيغة الضرب تكذب هنا أيضاً — نعرض المتاح مباشرةً.
+        <p className="text-xs text-gray-500 text-center leading-relaxed">
+          ✨ مضاف إليها {formatAmount(-status.carryAdjust)} ر.س من {SURPLUS_FUND_NAME} — متاح {formatAmount(status.allowance)} ر.س، صرفت {formatAmount(status.spent)} ر.س
         </p>
       ) : (
         <p className="text-xs text-gray-500 text-center leading-relaxed">
@@ -362,6 +384,46 @@ export function DailyBudgetCard() {
           >
             <PiggyBank size={15} />
             أضف الفائض ({formatAmount(status.balance)} ر.س) للاحتياطي
+          </button>
+        )
+      )}
+
+      {/* الاتجاه المعاكس: رصيد صندوق الفوائض يعود لليومية — كلّه أو جزءٌ منه */}
+      {surplusFund && surplusBalance > 0 && (
+        pulling ? (
+          <div className="bg-white/70 dark:bg-white/5 rounded-xl p-2.5 space-y-1.5 animate-fade-up">
+            <p className="text-[11px] font-bold text-gray-600 text-center">
+              كم تضيف من {SURPLUS_FUND_NAME}؟ (المتوفّر {formatAmount(surplusBalance)} ر.س)
+            </p>
+            <div className="flex gap-1.5">
+              <NumberInput
+                value={pullAmount} onChange={setPullAmount}
+                placeholder={`الكل — ${formatAmount(surplusBalance)}`} inputMode="decimal"
+                max={surplusBalance}
+                className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
+                aria-label={`المبلغ المضاف من ${SURPLUS_FUND_NAME}`}
+              />
+              <button
+                onClick={() => handlePull(surplusFund.id, surplusBalance)}
+                className="bg-finance text-white text-sm px-4 py-2 rounded-lg hover:bg-finance/90 shrink-0 press"
+              >
+                أضف
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 text-center">
+              اتركه فارغاً لإضافة الرصيد كاملاً — يخرج من الصندوق ويدخل رصيدك المتراكم
+            </p>
+            <button onClick={() => { setPullAmount(""); setPulling(false); }} className="w-full text-[11px] text-gray-400 py-1">
+              إلغاء
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setPulling(true)}
+            className="w-full flex items-center justify-center gap-2 text-sm font-bold text-finance bg-white/70 dark:bg-white/5 border border-finance/25 hover:border-finance/50 rounded-xl py-2.5 transition-colors press"
+          >
+            <Sparkles size={15} />
+            أضف {SURPLUS_FUND_NAME} ({formatAmount(surplusBalance)} ر.س) للميزانية اليومية
           </button>
         )
       )}
