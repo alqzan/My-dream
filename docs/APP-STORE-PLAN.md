@@ -113,6 +113,11 @@
 1. التحقّق أن `pickMimeType()` يغطّي `audio/mp4`.
 2. **ضمان أن المقاطع القديمة (webm من الويب) تبقى قابلة للتشغيل** — بيانات
    موجودة، لا تُكسر.
+3. المقطع يصل **ساعة** (حتى 10 مقاطع للمذكرة) ويُقرأ في الذاكرة كـdata URL
+   (~11MB للساعة عند 24 kbps). على الغلاف الأصليّ فضّل الكتابة إلى ملفٍّ
+   (`@capacitor/filesystem`) ثمّ الرفع منه بدل حمل البايتات كلّها في الذاكرة.
+4. `rec.pause()`/`resume()` مستعملان — مدعومان في WKWebView الحديث، والفشل
+   ملتقَطٌ بهدوء (يستمرّ التسجيل) فلا ينكسر شيء إن غابا.
 
 ### ⬜ 3.8 الصور و`heic2any`
 
@@ -147,7 +152,7 @@ JPEG مباشرةً من النظام، فيسقط `heic2any` من مسار iOS 
 
 | المفتاح | السبب في الكود |
 |---|---|
-| `NSMicrophoneUsageDescription` | `AudioRecorder.tsx:68` |
+| `NSMicrophoneUsageDescription` | `AudioRecorder.tsx:95` |
 | `NSLocationWhenInUseUsageDescription` | `ThemeToggle.tsx:45` |
 | `NSPhotoLibraryUsageDescription` | رفع صور المذكرة |
 | `NSCameraUsageDescription` | التقاط صورة مباشرة |

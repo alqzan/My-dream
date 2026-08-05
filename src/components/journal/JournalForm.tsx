@@ -4,10 +4,10 @@ import { createPortal } from "react-dom";
 import { useAppStore } from "@/lib/store";
 import type { JournalEntry } from "@/lib/types";
 import { MOODS } from "@/lib/types";
-import { uid, today, parseDate } from "@/lib/utils";
+import { uid, today, parseDate, entryAudios } from "@/lib/utils";
 import { compressImage } from "@/lib/imageUtils";
 import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
-import { AudioRecorder } from "./AudioRecorder";
+import { AudioRecorder, MAX_AUDIO_NOTES } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown } from "lucide-react";
@@ -66,7 +66,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
-  const [audio, setAudio] = useState<string | undefined>(initial?.audio);
+  const [audios, setAudios] = useState<string[]>(initial ? entryAudios(initial) : []);
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [mood, setMood] = useState<JournalEntry["mood"]>(initial?.mood);
@@ -75,7 +75,10 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   // «إضافات» — صور/صوت/وسوم/شعور مطويّة لإبقاء سطح الكتابة صافياً، وتُفتح تلقائياً
   // عند تعديل مذكرةٍ فيها إضافات أصلاً.
   const [showExtras, setShowExtras] = useState(
-    Boolean(initial?.photos?.length || initial?.photo || initial?.audio || initial?.tags?.length || initial?.mood)
+    Boolean(
+      initial?.photos?.length || initial?.photo || initial?.audios?.length || initial?.audio ||
+      initial?.tags?.length || initial?.mood
+    )
   );
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -169,7 +172,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     }
   }, [initial, date, title, content, question, answering]);
 
-  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audio || tags.length);
+  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audios.length || tags.length);
 
   // إضافة وسم: تشذيب، بلا تكرار، وحد أقصى معقول للعدد والطول.
   function addTag(raw: string) {
@@ -194,7 +197,8 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         question: answering ? question : "",
         photos,
         photo: photos[0] ?? "",
-        audio: audio ?? "",
+        audios,
+        audio: audios[0] ?? "",
         tags,
         mood,
       });
@@ -207,7 +211,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         content: content.trim(),
         ...(answering ? { question } : {}),
         ...(photos.length ? { photos, photo: photos[0] } : {}),
-        ...(audio ? { audio } : {}),
+        ...(audios.length ? { audios, audio: audios[0] } : {}),
         ...(tags.length ? { tags } : {}),
         ...(mood ? { mood } : {}),
         time: nowHHMM(),
@@ -228,7 +232,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     saveTimer.current = setTimeout(persist, 700);
     return () => clearTimeout(saveTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, title, content, question, answering, photos, audio, tags, mood]);
+  }, [date, title, content, question, answering, photos, audios, tags, mood]);
 
   // "تم" — flush any pending save immediately and close. If the entry was
   // emptied out, treat it as a cancel: delete the auto-created row (or revert
@@ -256,6 +260,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         question: initial.question ?? "",
         photos: initial.photos ?? (initial.photo ? [initial.photo] : []),
         photo: initial.photo ?? "",
+        audios: entryAudios(initial),
         audio: initial.audio ?? "",
         tags: initial.tags ?? [],
       });
@@ -484,7 +489,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           <Paperclip size={14} className="text-journal" />
           إضافات
           {(() => {
-            const n = photos.length + (audio ? 1 : 0) + tags.length + (mood ? 1 : 0);
+            const n = photos.length + audios.length + tags.length + (mood ? 1 : 0);
             return n > 0 ? <span className="text-[10px] bg-journal/10 text-journal rounded-full px-2 py-0.5">{n}</span> : null;
           })()}
           <span className="text-gray-300 font-normal">صور · صوت · وسوم · شعور</span>
@@ -555,8 +560,13 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
 
       {/* ملاحظة صوتية */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">ملاحظة صوتية</label>
-        <AudioRecorder value={audio} onChange={setAudio} />
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+          ملاحظات صوتية
+          {audios.length > 0 && (
+            <span className="text-gray-300 font-normal"> — {audios.length}/{MAX_AUDIO_NOTES}</span>
+          )}
+        </label>
+        <AudioRecorder values={audios} onChange={setAudios} />
       </div>
 
       {/* وسوم — للتصنيف والفلترة لاحقاً */}
