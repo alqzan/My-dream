@@ -5,7 +5,7 @@ import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent
 import type { ReserveFund, Transaction } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, X } from "lucide-react";
+import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X } from "lucide-react";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -250,7 +250,7 @@ function FundDial({
 // ————————————————————————————————————————————————————————————————
 // تفاصيل الهدف المفتوح — نفس نموذج التعبئة/السحب والحذف القديم بالحرف.
 function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void }) {
-  const { transactions, deleteReserve, addReserveDeposit } = useAppStore();
+  const { transactions, deleteReserve, addReserveDeposit, dailyBudget, pullFromReserve } = useAppStore();
   const [amount, setAmount] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -279,6 +279,15 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
       note: dir === 1 ? "تعبئة" : "سحب يدوي",
     });
     setAmount("");
+  }
+
+  // وجهةٌ ثالثة للمبلغ: رصيد الميزانية اليومية بدل الجيب. المبلغ المكتوب
+  // أعلاه، أو الرصيد كاملاً حين يُترك الحقل فارغاً. `pullFromReserve` يقصّه
+  // على رصيد الصندوق ولا يُنشئ معاملة صرف (تحريك رصيدٍ بين وعاءين).
+  const pending = parseFloat(amount);
+  const toDailyAmount = !pending || pending <= 0 ? balance : Math.min(pending, balance);
+  function toDaily() {
+    if (pullFromReserve(fund.id, toDailyAmount) > 0) setAmount("");
   }
 
   return (
@@ -357,6 +366,17 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
           <ArrowUpFromLine size={12} /> سحب
         </button>
       </div>
+
+      {/* الوجهة الثالثة: رصيدك اليومي — نفس المبلغ أعلاه أو الرصيد كاملاً */}
+      {dailyBudget && balance > 0 && (
+        <button
+          onClick={toDaily}
+          className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-finance bg-finance/10 hover:bg-finance/15 rounded-lg py-1.5 press"
+        >
+          <Wallet size={12} />
+          أضف {formatAmount(toDailyAmount)} ر.س للميزانية اليومية
+        </button>
+      )}
 
       <div className="flex justify-between text-[10px] text-gray-400">
         <span>الإيداعات: {formatAmount(deposited)} ر.س</span>

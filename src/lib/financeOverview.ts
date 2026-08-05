@@ -7,6 +7,7 @@ import type {
   InstallmentPlan,
 } from "./types";
 import { computeDailyBudgetStatus, reserveBalance, nextDueDate, parseDate, toDateStr, cashOut } from "./utils";
+import { SURPLUS_FUND_NAME } from "./types";
 import { installmentsOverview, type InstallmentsOverview } from "./installments";
 import { budgetStatuses } from "./budgetStatus";
 
@@ -212,4 +213,20 @@ export function projectedCycleSurplus(
   const projected = Math.round((status.balance + (dailyAmount - avgSpend) * left) * 100) / 100;
   const optimistic = Math.round((status.balance + dailyAmount * left) * 100) / 100;
   return { avgSpend, projected, optimistic, daysLeft: left };
+}
+
+// ===================== الفوائض ← الميزانية اليومية =====================
+// شرط ظهور زرّ «أضف الفوائض للميزانية اليومية» في بطاقة الميزانية، منطقاً نقياً
+// لا داخل المكوّن: صندوقٌ اسمه «الفوائض» برصيدٍ موجب **وميزانيةٌ يومية قائمة**
+// (بلا ميزانية لا وعاء يستقبل المبلغ). يرجع `null` حين لا مصدر — فيختفي الزرّ.
+export function surplusPullSource(
+  reserves: ReserveFund[],
+  transactions: Transaction[],
+  hasDailyBudget: boolean
+): { fundId: string; balance: number } | null {
+  if (!hasDailyBudget) return null;
+  const fund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+  if (!fund) return null;
+  const balance = reserveBalance(fund, transactions);
+  return balance > 0 ? { fundId: fund.id, balance } : null;
 }

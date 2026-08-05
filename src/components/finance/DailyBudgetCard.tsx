@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { computeDailyBudgetStatus, formatAmount, cn, uid, today, reserveBalance } from "@/lib/utils";
+import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
-import { daysUntilSalary, projectedCycleSurplus } from "@/lib/financeOverview";
+import { daysUntilSalary, projectedCycleSurplus, surplusPullSource } from "@/lib/financeOverview";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Settings2, PiggyBank, Sparkles } from "lucide-react";
 import { SECTION, GOLD_LIGHT } from "@/lib/palette";
@@ -280,9 +280,9 @@ export function DailyBudgetCard() {
       ? 0
       : 1;
   // صندوق الفوائض هو مصدر الزرّ المعاكس («أضف الفوائض للميزانية اليومية»):
-  // ما رُحّل إليه عند نزول الراتب يعود لليومية بضغطة حين تحتاجه.
-  const surplusFund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
-  const surplusBalance = surplusFund ? reserveBalance(surplusFund, transactions) : 0;
+  // ما رُحّل إليه عند نزول الراتب يعود لليومية بضغطة حين تحتاجه. شرط الظهور
+  // نفسه منطقٌ نقيّ في `financeOverview.ts` (مختبَر) لا في المكوّن.
+  const surplus = surplusPullSource(reserves, transactions, true);
 
   return (
     <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-finance/5"}`}>
@@ -389,22 +389,22 @@ export function DailyBudgetCard() {
       )}
 
       {/* الاتجاه المعاكس: رصيد صندوق الفوائض يعود لليومية — كلّه أو جزءٌ منه */}
-      {surplusFund && surplusBalance > 0 && (
+      {surplus && (
         pulling ? (
           <div className="bg-white/70 dark:bg-white/5 rounded-xl p-2.5 space-y-1.5 animate-fade-up">
             <p className="text-[11px] font-bold text-gray-600 text-center">
-              كم تضيف من {SURPLUS_FUND_NAME}؟ (المتوفّر {formatAmount(surplusBalance)} ر.س)
+              كم تضيف من {SURPLUS_FUND_NAME}؟ (المتوفّر {formatAmount(surplus.balance)} ر.س)
             </p>
             <div className="flex gap-1.5">
               <NumberInput
                 value={pullAmount} onChange={setPullAmount}
-                placeholder={`الكل — ${formatAmount(surplusBalance)}`} inputMode="decimal"
-                max={surplusBalance}
+                placeholder={`الكل — ${formatAmount(surplus.balance)}`} inputMode="decimal"
+                max={surplus.balance}
                 className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
                 aria-label={`المبلغ المضاف من ${SURPLUS_FUND_NAME}`}
               />
               <button
-                onClick={() => handlePull(surplusFund.id, surplusBalance)}
+                onClick={() => handlePull(surplus.fundId, surplus.balance)}
                 className="bg-finance text-white text-sm px-4 py-2 rounded-lg hover:bg-finance/90 shrink-0 press"
               >
                 أضف
@@ -423,7 +423,7 @@ export function DailyBudgetCard() {
             className="w-full flex items-center justify-center gap-2 text-sm font-bold text-finance bg-white/70 dark:bg-white/5 border border-finance/25 hover:border-finance/50 rounded-xl py-2.5 transition-colors press"
           >
             <Sparkles size={15} />
-            أضف {SURPLUS_FUND_NAME} ({formatAmount(surplusBalance)} ر.س) للميزانية اليومية
+            أضف {SURPLUS_FUND_NAME} ({formatAmount(surplus.balance)} ر.س) للميزانية اليومية
           </button>
         )
       )}

@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   buildFinanceOverview, daysUntilSalary, nearestCommitment, budgetAlerts, defaultPlanOpen,
-  planSectionFromHash, historySlice, PLAN_SECTIONS,
+  planSectionFromHash, historySlice, PLAN_SECTIONS, surplusPullSource,
 } from "./financeOverview";
 import { today } from "./utils";
 import type { RecurringTransaction, Transaction, FinanceCategoryDef, Budget, ReserveFund, DailyBudget, InstallmentPlan } from "./types";
+import { SURPLUS_FUND_NAME } from "./types";
 
 const tx = (over: Partial<Transaction>): Transaction => ({ id: "t", date: "2026-06-01", amount: 10, category: "", note: "", ...over });
 const rec = (over: Partial<RecurringTransaction>): RecurringTransaction => ({
@@ -229,5 +230,35 @@ describe("defaultPlanOpen — قسطٌ فائت يفتح «الأقساط»", ()
     const d = defaultPlanOpen({ budgetAttention: true, negativeBalance: false, installmentOverdue: true });
     expect(d.installments).toBe(true);
     expect(d.budgets).toBe(false);
+  });
+});
+
+// شرط ظهور زرّ «أضف الفوائض للميزانية اليومية». البقّ المُبلَّغ كان أنّ المالك
+// يقف عند صندوق الفوائض فلا يجد طريقاً لإعادته — فالشرط يُختبر هنا صراحةً.
+describe("surplusPullSource — مصدر إعادة الفوائض لليومية", () => {
+  const fund = (over: Partial<ReserveFund>): ReserveFund => ({
+    id: "f1", name: SURPLUS_FUND_NAME, icon: "✨", color: "#c9852a",
+    deposits: [{ id: "d1", date: "2026-01-01", amount: 642.39 }], createdAt: "2026-01-01", ...over,
+  });
+
+  it("يرجع الصندوق ورصيده حين تتوفّر الشروط", () => {
+    expect(surplusPullSource([fund({})], [], true)).toEqual({ fundId: "f1", balance: 642.39 });
+  });
+
+  it("لا مصدر بلا ميزانيةٍ يومية (لا وعاء يستقبل المبلغ)", () => {
+    expect(surplusPullSource([fund({})], [], false)).toBeNull();
+  });
+
+  it("لا مصدر بصندوقٍ فارغ أو بلا صندوق فوائض", () => {
+    expect(surplusPullSource([fund({ deposits: [] })], [], true)).toBeNull();
+    expect(surplusPullSource([fund({ name: "عام" })], [], true)).toBeNull();
+    expect(surplusPullSource([], [], true)).toBeNull();
+  });
+
+  it("يطرح ما صُرف من الصندوق قبل عرض الرصيد", () => {
+    const spend = tx({ id: "t1", amount: 142.39, reserveSplits: [{ fundId: "f1", pct: 100 }] });
+    expect(surplusPullSource([fund({})], [spend], true)).toEqual({ fundId: "f1", balance: 500 });
+    const drain = tx({ id: "t2", amount: 642.39, reserveSplits: [{ fundId: "f1", pct: 100 }] });
+    expect(surplusPullSource([fund({})], [drain], true)).toBeNull();
   });
 });
