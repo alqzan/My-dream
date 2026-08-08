@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 // Resolve the same "@/..." alias the app uses (tsconfig paths) so unit tests can
@@ -11,5 +11,12 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
+  },
+  test: {
+    // firebase-tests/ needs the Firestore/Storage emulators running (Java +
+    // firebase-tools) and is excluded from the default `npm test` run so the
+    // main gate stays fast and dependency-free. Run it explicitly via
+    // `npm run test:rules` (wraps it in `firebase emulators:exec`).
+    exclude: [...configDefaults.exclude, "firebase-tests/**"],
   },
 });

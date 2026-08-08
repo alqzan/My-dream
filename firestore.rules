@@ -3,17 +3,107 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Login-free personal sync: every device reads/writes one shared space
     // whose id is a secret the owner holds (see src/lib/firebase.ts's
-    // getSyncSpace), plus everything nested under it (the photos subcollection
-    // lives at userData/{space}/photos/{hash}). The {document=**} wildcard
-    // extends the rule down into that subcollection. Only that exact space is
-    // reachable, so knowing the project id alone is not enough.
+    // getSyncSpace). Only that exact space is reachable, so knowing the
+    // project id alone is not enough.
     //
     // The placeholder below is intentionally not the real space id — these
     // rules are informational only. The rules actually enforced in production
     // are edited and published from the Firebase Console directly, never from
-    // this repo, so the real secret never touches version control.
-    match /userData/{space}/{document=**} {
-      allow read, write: if space == "REPLACED_IN_FIREBASE_CONSOLE";
+    // this repo, so the real secret never touches version control. See
+    // docs/FIREBASE-RULES-CANDIDATE.md for what to verify/publish and why this
+    // file cannot be confirmed to already match production.
+    //
+    // Design notes for this revision (candidate, not yet verified live):
+    //  - Every path under the space is enumerated explicitly instead of one
+    //    recursive `{document=**}` wildcard, so a payload aimed at a path we
+    //    didn't anticipate is denied by default rather than inheriting a
+    //    blanket allow.
+    //  - `list` is explicitly denied on the top-level `userData` collection —
+    //    nothing in the app ever queries it, and denying it blocks any attempt
+    //    to enumerate space ids by listing documents. `list` IS granted on the
+    //    subcollections below because the app legitimately queries them
+    //    (`getDocs`/`onSnapshot`) — but only once `space` in the path is
+    //    already known, so this does not weaken enumeration protection.
+    //  - The bank-SMS inbox (userData/{space}/inbox) is the one path that
+    //    receives payloads from outside the app (an iOS Automation posts to it
+    //    directly over the REST API, unauthenticated beyond knowing `space`),
+    //    so it gets real schema validation: an explicit field allow-list,
+    //    types, and a size cap on `text` (a real byte-size check — `string.
+    //    size()` IS supported, unlike whole-document size; see the note on
+    //    the main-doc match below) — an unexpected field or an oversized
+    //    "text" is rejected before it is ever stored, not just when the app
+    //    later reads it back.
+    //  - `photos`/`audios` subcollections are pre-R2-migration legacy: media
+    //    now lives in Cloudflare R2, and the app only ever *reads* these paths
+    //    as a fallback for entries that predate the migration. Client writes
+    //    to them are denied — nothing in the current app writes there, so
+    //    this only removes an unused surface.
+    function isSpace(space) {
+      return space == "REPLACED_IN_FIREBASE_CONSOLE";
+    }
+
+    // Main record: one document per space holding every non-sharded field
+    // (transactions, journal metadata, prayers, habits, settings, media
+    // manifests, `revision`, …). Journal entries live in the `journal`
+    // subcollection instead (see below) to stay under the 1MiB document cap.
+    match /userData/{space} {
+      allow get: if isSpace(space);
+      allow list: if false; // never enumerate space ids
+      // Firestore's own 1MiB-per-document cap already applies natively to
+      // every write below, ahead of and independent from these rules — the
+      // rules language has no function that reports a document's true byte
+      // size (`.size()` on a map/list counts entries, not bytes; there is no
+      // rules-level equivalent of Firestore's own limit), so this is not
+      // duplicated here. See docs/FIREBASE-RULES-CANDIDATE.md.
+      allow create, update: if isSpace(space);
+      allow delete: if false; // the client never deletes the whole record
+
+      // Monthly journal shards: userData/{space}/journal/{YYYY-MM}.
+      match /journal/{shardId} {
+        allow get, list: if isSpace(space);
+        allow create, update: if isSpace(space);
+        allow delete: if isSpace(space);
+      }
+
+      // Automatic bank-SMS inbox: userData/{space}/inbox/{itemId}. An iOS
+      // Automation creates items directly (no app involved); the app drains
+      // (reads + deletes) them. Never updated in place — a message is either
+      // still pending review or gone, so `update` is denied outright.
+      match /inbox/{itemId} {
+        allow get, list: if isSpace(space);
+        allow create: if isSpace(space) && isValidInboxItem();
+        allow update: if false;
+        allow delete: if isSpace(space);
+      }
+
+      // Legacy pre-R2 media, inlined as base64 Firestore documents. Read-only
+      // fallback for entries saved before the Cloudflare R2 migration; nothing
+      // in the current app writes here anymore.
+      match /photos/{hash} {
+        allow get: if isSpace(space);
+        allow list: if false;
+        allow write: if false;
+      }
+      match /audios/{hash} {
+        allow get: if isSpace(space);
+        allow list: if false;
+        allow write: if false;
+      }
+    }
+
+    // Schema for one inbox item: exactly the fields decodeInboxText() in
+    // src/lib/sync.ts understands, nothing else, with hard size caps. `text`
+    // may be base64/url-encoded by the Automation (see `enc`), so the cap is
+    // generous enough to cover that inflation for a realistic multi-part SMS
+    // while still rejecting an arbitrarily large payload.
+    function isValidInboxItem() {
+      let d = request.resource.data;
+      let keys = d.keys();
+      return keys.hasAll(['text'])
+        && keys.hasOnly(['text', 'enc', 'ts'])
+        && d.text is string && d.text.size() > 0 && d.text.size() <= 6000
+        && (!('enc' in d) || (d.enc is string && d.enc in ['b64', 'url']))
+        && (!('ts' in d) || (d.ts is string && d.ts.size() <= 40));
     }
   }
 }

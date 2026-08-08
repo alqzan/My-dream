@@ -1,22 +1,25 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Login-free personal sync — same shared secret space id as Firestore.
-    // Media lives at userData/{space}/photos/{hash} and .../audios/{hash}.
-    // Only that exact space is reachable, so knowing the project alone is not
-    // enough. Uploads are capped and must be an image or audio; deletes
-    // (request.resource == null) are allowed within the space.
+    // Firebase Storage is no longer used by the app. Media (photos/voice
+    // notes) now lives in Cloudflare R2 behind the madar-r2-gateway Worker
+    // (see cloudflare-worker/src/index.ts); the app has no `firebase/storage`
+    // import anywhere in src/ or the Worker, and the last code path that ever
+    // touched this bucket (fetching a legacy `firebasestorage.googleapis.com`
+    // download URL) doesn't exist anymore — the media-hydration fallback in
+    // src/lib/sync.ts's fetchInlineMedia() only ever tries R2, then a legacy
+    // Firestore document (userData/{space}/photos|audios/{hash}, base64), and
+    // stops there. Any pre-R2-migration files still sitting in this bucket
+    // are unreachable from the app either way.
     //
-    // The placeholder below is intentionally not the real space id — these
-    // rules are informational only. The rules actually enforced in production
-    // are edited and published from the Firebase Console directly, never from
-    // this repo, so the real secret never touches version control.
-    match /userData/{space}/{allPaths=**} {
-      allow read: if space == "REPLACED_IN_FIREBASE_CONSOLE";
-      allow write: if space == "REPLACED_IN_FIREBASE_CONSOLE"
-        && (request.resource == null
-            || (request.resource.size < 25 * 1024 * 1024
-                && request.resource.contentType.matches('(image|audio)/.*')));
+    // Candidate hardening: deny everything. This closes a currently-live
+    // surface (a shared secret that doubles as write access to a 25MB-per-file
+    // bucket) that today serves no function in the app. If the owner still
+    // relies on this bucket some other way outside this repo, confirm that
+    // before publishing — see docs/FIREBASE-RULES-CANDIDATE.md. Do not
+    // reintroduce a scoped allow rule here without a concrete reason.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

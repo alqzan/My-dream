@@ -6,3 +6,8 @@ out/
 .env*.local
 .firebase/
 tsconfig.tsbuildinfo
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
+storage-debug.log
+pglite-debug.log

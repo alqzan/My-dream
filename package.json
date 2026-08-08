@@ -1,13 +1,14 @@
 {
   "name": "my-dream-app",
-  "version": "0.1.335",
+  "version": "0.1.336",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/check-version.mjs && next build && node scripts/gen-precache.mjs",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "test": "vitest run",
+    "test:rules": "firebase emulators:exec --project demo-madar-rules-test --only firestore,storage \"vitest run --config vitest.rules.config.ts\"",
     "bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
@@ -26,12 +27,14 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "^15.5.20",
+    "firebase-tools": "^15.26.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",

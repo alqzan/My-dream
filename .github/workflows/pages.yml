@@ -41,6 +41,26 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Firestore/Storage rules tests (firebase-tests/rules.test.ts) run
+      # against the real rules engine via the emulators — but the emulators
+      # need Java, which isn't guaranteed on every runner. This step is
+      # informational, not a gate: `continue-on-error` means an emulator/Java
+      # unavailability never blocks the deploy (the candidate rules aren't
+      # what's live in production anyway — see
+      # docs/FIREBASE-RULES-CANDIDATE.md), but a genuine rules regression
+      # still shows up as a failed, clearly-labeled step in the run summary.
+      - uses: actions/setup-java@v4
+        continue-on-error: true
+        id: setup-java
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Firebase rules tests (informational — does not block deploy)
+        if: steps.setup-java.outcome == 'success'
+        continue-on-error: true
+        run: npm run test:rules
+
       - name: Worker typecheck
         working-directory: cloudflare-worker
         run: |
