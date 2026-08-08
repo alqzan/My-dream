@@ -1,18 +1,44 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
+import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
 import { SyncStatus } from "@/components/sync/SyncStatus";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { SettingsButton } from "@/components/layout/SettingsButton";
 import { BrandMark } from "@/components/layout/BrandMark";
 
-// trailingSlash export → usePathname() is "/journal/" but hrefs are "/journal".
+// trailingSlash export → usePathname() is "/journal/" while hrefs are "/journal".
 const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
+
+function NavLink({ item, active }: { item: (typeof NAV_ITEMS)[number]; active: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors min-h-[44px]",
+        active
+          ? "bg-gray-100 text-gray-900 font-semibold"
+          : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+      )}
+    >
+      <item.icon size={18} className={active ? item.color : ""} />
+      <span className="text-sm">{item.label}</span>
+    </Link>
+  );
+}
 
 export function Sidebar() {
   const pathname = normPath(usePathname());
+  // Read once on mount — a saved preference change reloads the page (same
+  // pattern as SyncKeyCard), so this never needs to react live.
+  const [prefs] = useState(() => loadNavPrefs());
+  const { primary, overflow } = resolveNav(NAV_ITEMS, prefs);
+  const onOverflowPage = overflow.some((item) => normPath(item.href) === pathname);
+  const [moreOpen, setMoreOpen] = useState(onOverflowPage);
 
   return (
     // ارتفاعٌ **بالضبط** بمقدار المساحة المرئية، لا `min-h-screen`: العنصر `fixed`
@@ -45,24 +71,32 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
-        {NAV_ITEMS.map((item) => {
-          const active = normPath(item.href) === pathname;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors",
-                active
-                  ? "bg-gray-100 text-gray-900 font-semibold"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-              )}
+        {primary.map((item) => (
+          <NavLink key={item.href} item={item} active={normPath(item.href) === pathname} />
+        ))}
+
+        {/* «المزيد» — تظهر فقط بعد تخصيصٍ فعليّ (إعدادات → تخصيص التنقّل)؛
+            جهازٌ لم يخصّص شيئاً يرى كل الأقسام في القائمة مباشرةً كما كانت. */}
+        {overflow.length > 0 && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setMoreOpen((v) => !v)}
+              aria-expanded={moreOpen}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl min-h-[44px] text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
             >
-              <item.icon size={18} className={active ? item.color : ""} />
-              <span className="text-sm">{item.label}</span>
-            </Link>
-          );
-        })}
+              <MoreHorizontal size={18} />
+              <span className="text-sm">المزيد</span>
+            </button>
+            {moreOpen && (
+              <div className="space-y-1 mt-0.5">
+                {overflow.map((item) => (
+                  <NavLink key={item.href} item={item} active={normPath(item.href) === pathname} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
       {/* حشوٌ سفليّ بمنطقة الأمان وحدها: القائمة تنتهي فوق مؤشّر الهوم لا تحته. */}
       <div className="shrink-0 pb-[env(safe-area-inset-bottom,0px)]" />

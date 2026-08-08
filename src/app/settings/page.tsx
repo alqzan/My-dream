@@ -3,6 +3,7 @@ import { BackupCard } from "@/components/settings/BackupCard";
 import { BudgetWindowCard } from "@/components/settings/BudgetWindowCard";
 import { EventsCard } from "@/components/settings/EventsCard";
 import { DataHealthCard } from "@/components/settings/DataHealthCard";
+import { NavCustomizeCard } from "@/components/settings/NavCustomizeCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
 import { BrandMark } from "@/components/layout/BrandMark";
@@ -33,6 +34,9 @@ export default function SettingsPage() {
       </div>
       <div className="animate-fade-up stagger-2">
         <DataHealthCard />
+      </div>
+      <div className="animate-fade-up stagger-2">
+        <NavCustomizeCard />
       </div>
       <div className="animate-fade-up stagger-3">
         <LockCard />

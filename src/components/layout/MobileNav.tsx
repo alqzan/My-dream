@@ -1,8 +1,12 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
+import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
+import { Modal } from "@/components/ui/Modal";
 
 // Static export uses trailingSlash, so usePathname() returns "/journal/" while
 // the nav hrefs are "/journal" — strip a trailing slash before comparing, or
@@ -12,8 +16,23 @@ const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
 
 export function MobileNav() {
   const pathname = normPath(usePathname());
-  const count = NAV_ITEMS.length;
-  const activeIndex = NAV_ITEMS.findIndex((item) => normPath(item.href) === pathname);
+  // Read once on mount (a saved preference change reloads the page — same
+  // pattern as SyncKeyCard — so this never needs to react live).
+  const [prefs] = useState(() => loadNavPrefs());
+  const { primary, overflow } = resolveNav(NAV_ITEMS, prefs);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // "المزيد" only exists once the owner has actually customized the bar
+  // (overflow.length > 0) — an untouched device keeps every section directly
+  // in the bar exactly as before (resolveNav's documented default).
+  const tabs = overflow.length ? [...primary, { more: true as const }] : primary;
+  const count = tabs.length;
+  const activeIndex = primary.findIndex((item) => normPath(item.href) === pathname);
+  // Overflow counts as "active" too (so the slider/tint don't just vanish
+  // while on a page reached through "المزيد") but the sliding indicator only
+  // makes sense for a direct tab — hide it when the current page lives behind
+  // "المزيد" instead of pointing at the wrong slot.
+  const onOverflowPage = overflow.some((item) => normPath(item.href) === pathname);
   const slot = 100 / count;
 
   return (
@@ -27,15 +46,15 @@ export function MobileNav() {
           aria-hidden
           className={cn(
             "pointer-events-none absolute top-0 h-[3px] rounded-full bg-current transition-all duration-300 ease-out",
-            activeIndex < 0 ? "text-brand-500" : NAV_ITEMS[activeIndex].color
+            activeIndex < 0 ? "text-brand-500" : primary[activeIndex].color
           )}
           style={{
             width: `calc(${slot}% - 26px)`,
             right: `calc(${(activeIndex < 0 ? 0 : activeIndex) * slot}% + 13px)`,
-            opacity: activeIndex < 0 ? 0 : 1,
+            opacity: activeIndex < 0 || onOverflowPage ? 0 : 1,
           }}
         />
-        {NAV_ITEMS.map((item) => {
+        {primary.map((item) => {
           const active = normPath(item.href) === pathname;
           return (
             <Link
@@ -64,7 +83,46 @@ export function MobileNav() {
             </Link>
           );
         })}
+        {overflow.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-label="المزيد من الأقسام"
+            className={cn(
+              "flex-1 min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-xl transition-all press",
+              onOverflowPage ? "text-brand-600" : "text-gray-600"
+            )}
+          >
+            <span className={cn(
+              "flex items-center justify-center rounded-full px-2.5 py-0.5 transition-all duration-300",
+              onOverflowPage ? "bg-brand-500/15 scale-105" : "scale-100"
+            )}>
+              <MoreHorizontal size={20} />
+            </span>
+            <span className="text-[10.5px] leading-none font-medium whitespace-nowrap">المزيد</span>
+          </button>
+        )}
       </div>
+
+      {overflow.length > 0 && (
+        <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="بقية الأقسام">
+          <div className="grid grid-cols-3 gap-3 pb-1">
+            {overflow.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMoreOpen(false)}
+                className="min-h-[44px] flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-gray-50 dark:bg-white/5 press"
+              >
+                <span className={cn("flex items-center justify-center rounded-full p-2", item.tint)}>
+                  <item.icon size={20} className={item.color} />
+                </span>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </Modal>
+      )}
     </nav>
   );
 }
