@@ -5,6 +5,7 @@ import { PendingImport } from "@/components/finance/PendingImport";
 import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
 import { subscribeInbox, deleteInboxItem, type InboxItem } from "@/lib/sync";
 import { parseBankSmsBulk, isNoiseMessage } from "@/lib/bankParser";
+import { dedupeInboxItems } from "@/lib/inboxDedupe";
 import { today } from "@/lib/utils";
 import { usePending } from "@/lib/pending";
 
@@ -34,6 +35,17 @@ export function PendingInboxWatcher() {
     if (!inbox.length) return;
     busyRef.current = true;
     try {
+      // Idempotency: an Automation retry (flaky network reply, relaunch) can
+      // post the SAME message twice as two separate Firestore docs with
+      // random ids. Collapse exact-text repeats to the first copy BEFORE
+      // classification — silently deleting the redundant doc(s), exactly
+      // like confirmed noise — so two never-yet-reviewed copies can never
+      // both land in the review sheet and get double-recorded as one
+      // expense each. See src/lib/inboxDedupe.ts.
+      const { unique, duplicateIds } = dedupeInboxItems(inbox);
+      if (duplicateIds.length) {
+        await Promise.all(duplicateIds.map((id) => deleteInboxItem(id).catch(() => {})));
+      }
       // Classify each message so nothing an expense could hide in is dropped
       // unseen. Only confirmed noise (OTP, balance-only alert, decline,
       // statement, incoming credit) is deleted silently; an unreadable-but-not-
@@ -42,7 +54,7 @@ export function PendingInboxWatcher() {
       const unreadable: InboxItem[] = [];
       const noise: InboxItem[] = [];
       let count = 0;
-      for (const it of inbox) {
+      for (const it of unique) {
         const n = parseBankSmsBulk(it.text, today()).transactions.length;
         if (n > 0) { readable.push(it); count += n; }
         else if (isNoiseMessage(it.text)) noise.push(it);
