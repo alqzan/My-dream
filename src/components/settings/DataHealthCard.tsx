@@ -177,7 +177,10 @@ export function DataHealthCard() {
   const kb = Math.round(worstBytes / 1024);
   const mainKb = Math.round(info.mainBytes / 1024);
   const shardKb = Math.round(info.shardBytes / 1024);
-  const barColor = pct >= 80 ? "bg-red-500" : pct >= 65 ? "bg-amber-500" : "bg-finance";
+  // Two-stage warning, not a single near-the-cliff one: 65% is an early,
+  // calm notice ("keep an eye on this"); 75% is urgent ("act before it fails
+  // outright" — Firestore just rejects the write past 1MB, no partial save).
+  const barColor = pct >= 75 ? "bg-red-500" : pct >= 65 ? "bg-amber-500" : "bg-finance";
 
   const backupAgeDays = info.lastBackup
     ? Math.floor((Date.now() - new Date(info.lastBackup + "T00:00:00").getTime()) / 86400000)
@@ -199,7 +202,15 @@ export function DataHealthCard() {
           <span className="flex items-center gap-1.5 text-gray-500">
             <HardDrive size={13} /> أكبر مستند مزامنة
           </span>
-          <span className={pct >= 65 ? "font-semibold text-amber-600" : "text-gray-400"}>
+          <span
+            className={
+              pct >= 75
+                ? "font-semibold text-red-600"
+                : pct >= 65
+                ? "font-semibold text-amber-600"
+                : "text-gray-400"
+            }
+          >
             {kb}KB / 1MB · {pct}%
           </span>
         </div>
@@ -210,11 +221,17 @@ export function DataHealthCard() {
           <span>المستند الرئيسي: {mainKb}KB</span>
           <span>{info.shardId ? `أكبر شهر (${info.shardId}): ${shardKb}KB` : "لا مذكرات بعد"}</span>
         </div>
-        {pct >= 65 && (
+        {pct >= 75 ? (
+          <p className="text-[11px] text-red-600 font-semibold mt-1.5 leading-relaxed">
+            ⚠️ اقترب أحد المستندات من الحدّ فعلاً ({pct}%) — لا تنتظر: صدّر نسخة احتياطية الآن،
+            وإن استمرّ الارتفاع تحتاج مراجعة ما يكبر (العمليات المالية غالباً — راجع «العمليات» أدناه).
+            تجاوز 1MB يمنع الحفظ كاملاً، لا جزئياً.
+          </p>
+        ) : pct >= 65 ? (
           <p className="text-[11px] text-amber-600 mt-1.5 leading-relaxed">
             قارب أحد المستندات الحد الأقصى — الصور محفوظة منفصلة، واليوميات موزّعة على مستند لكل شهر، لكن مستنداً واحداً كثُرت نصوصه قد يتوقف عند 1MB.
           </p>
-        )}
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
