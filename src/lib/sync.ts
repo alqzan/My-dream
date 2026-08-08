@@ -681,12 +681,22 @@ export function subscribeUserMain(
 // Resolve one hash to permanent inline bytes: local copy first, else fetch the
 // bytes ONCE from R2 (or the legacy Firestore doc) and keep them forever. Returns
 // a `data:` URL so rendering never again depends on a live URL, expiry, or CORS.
-async function fetchInlineMedia(uid: string, sub: MediaKind, h: string): Promise<string | null> {
+// `mediaKey` authenticates to the R2 gateway; `uid` is still the Firestore
+// path segment for the legacy fallback below. They default to the same value
+// (today's behavior on every device — see src/lib/keyDerivation.ts) but a
+// caller that has opted into separated data/media keys passes its own
+// derived media subkey here instead.
+async function fetchInlineMedia(
+  uid: string,
+  sub: MediaKind,
+  h: string,
+  mediaKey: string = uid
+): Promise<string | null> {
   const local = await localMediaGet(h);
   if (local) return local;
   try {
     const signed = await mediaGateway<{ url: string; expiresAt: number }>(
-      uid,
+      mediaKey,
       "/v1/media/download-url",
       { kind: sub, hash: h }
     );
@@ -713,7 +723,11 @@ async function fetchInlineMedia(uid: string, sub: MediaKind, h: string): Promise
 // once). This fixes the case where a merge kept a device's entry whose photo was
 // a stale/broken cloud URL — the bytes exist (same content hash), so we swap the
 // link for the real image and it renders offline forever after.
-export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string, data: T): Promise<T> {
+export async function inlineCachedMedia<T extends Partial<AppData>>(
+  uid: string,
+  data: T,
+  mediaKey: string = uid
+): Promise<T> {
   if (!data.journalEntries) return data;
   // A photo the user deleted can be filled back onto an entry by a merge (from a
   // copy that still has it). Drop such media here — the final pass before the
@@ -728,7 +742,7 @@ export async function inlineCachedMedia<T extends Partial<AppData>>(uid: string,
     if (u.startsWith("data:") || !isStorageUrl(u)) return u;
     const h = hashFromStorageUrl(u);
     if (!h) return u;
-    return (await fetchInlineMedia(uid, sub, h)) ?? u;
+    return (await fetchInlineMedia(uid, sub, h, mediaKey)) ?? u;
   };
   const inlineList = async (list: string[], sub: MediaKind, entryId: string) =>
     (await Promise.all(list.map((u) => inlineOne(u, sub, entryId)))).filter(Boolean) as string[];
@@ -789,7 +803,11 @@ function orderRefs(refs: string[], order?: string[]): string[] {
     .map((x) => x.h);
 }
 
-export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<AppData> {
+export async function hydrateCloudPhotos(
+  uid: string,
+  main: AppData,
+  mediaKey: string = uid
+): Promise<AppData> {
   if (!db) return main;
 
   // 1) Collect every (kind, hash) referenced across ALL entries and resolve the
@@ -805,7 +823,7 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
   const resolved = new Map<string, string>(); // `${kind}:${hash}` → data: URL
   await mapWithConcurrency([...jobs.entries()], HYDRATE_CONCURRENCY, async ([key, kind]) => {
     const hash = key.slice(kind.length + 1);
-    const url = await fetchInlineMedia(uid, kind, hash);
+    const url = await fetchInlineMedia(uid, kind, hash, mediaKey);
     if (url) resolved.set(key, url);
   });
 
@@ -863,10 +881,10 @@ export async function hydrateCloudPhotos(uid: string, main: AppData): Promise<Ap
 }
 
 // Back-compat: load everything in one call (used where photos are wanted).
-export async function loadUserData(uid: string): Promise<AppData | null> {
+export async function loadUserData(uid: string, mediaKey: string = uid): Promise<AppData | null> {
   const main = await loadUserMain(uid);
   if (!main) return null;
-  return hydrateCloudPhotos(uid, main);
+  return hydrateCloudPhotos(uid, main, mediaKey);
 }
 
 // Re-attach media kept on this device onto cloud entries that arrived without
@@ -975,7 +993,8 @@ async function syncMediaToR2(
   uid: string,
   sub: MediaKind,
   toUpload: Map<string, string>,
-  known: Set<string>
+  known: Set<string>,
+  mediaKey: string = uid
 ): Promise<{ uploaded: Set<string>; error?: string }> {
   const uploaded = new Set(known);
   // حارسٌ ثانٍ بجانب حارس `prepareForCloud`: لا نرفع أبداً هاشاً يثبت المانيفست
@@ -990,7 +1009,7 @@ async function syncMediaToR2(
       const index = next++;
       const [hash, dataUrl] = queue[index];
       try {
-        await uploadMediaToR2(uid, sub, hash, dataUrl);
+        await uploadMediaToR2(mediaKey, sub, hash, dataUrl);
         uploaded.add(hash);
         urlCache.delete(hash);
       } catch (err) {
@@ -1034,7 +1053,8 @@ export class RevisionConflictError extends Error {
 export async function saveUserData(
   uid: string,
   data: AppData,
-  expectedRevision?: number
+  expectedRevision?: number,
+  mediaKey: string = uid
 ): Promise<SaveResult> {
   if (!db) return { mediaComplete: true, revision: 0 };
   const database = db;
@@ -1043,8 +1063,8 @@ export async function saveUserData(
 
   // 1) Upload new media to R2 first. Text-only edits have none, so this is
   //    a no-op and stays fast.
-  const photoUpload = await syncMediaToR2(uid, "photos", newPhotos, knownCloudHashes);
-  const audioUpload = await syncMediaToR2(uid, "audios", newAudios, knownCloudAudioHashes);
+  const photoUpload = await syncMediaToR2(uid, "photos", newPhotos, knownCloudHashes, mediaKey);
+  const audioUpload = await syncMediaToR2(uid, "audios", newAudios, knownCloudAudioHashes, mediaKey);
   knownCloudHashes = photoUpload.uploaded;
   knownCloudAudioHashes = audioUpload.uploaded;
   const uploadError = photoUpload.error ?? audioUpload.error;
@@ -1121,11 +1141,15 @@ export function primeUrlCache(entries: JournalEntry[]): void {
 // Force a full media migration/re-upload from this device, then verify the R2
 // inventory. Existing R2 objects are detected by the Worker and not transferred
 // again. Only actual local data URLs can repair a missing object.
-export async function reuploadAllMedia(uid: string, data: AppData): Promise<MediaInventory> {
+export async function reuploadAllMedia(
+  uid: string,
+  data: AppData,
+  mediaKey: string = uid
+): Promise<MediaInventory> {
   knownCloudHashes = new Set();
   knownCloudAudioHashes = new Set();
-  const result = await saveUserData(uid, data);
-  const inventory = await inventoryMedia(uid, data);
+  const result = await saveUserData(uid, data, undefined, mediaKey);
+  const inventory = await inventoryMedia(uid, data, mediaKey);
   // Carry the concrete upload failure reason (if any) to the UI, so a failed
   // re-upload names its cause instead of a generic "check your connection".
   return { ...inventory, uploadError: result.uploadError };
@@ -1178,11 +1202,12 @@ async function referencedHashes(
 
 async function listCloudHashes(
   uid: string,
-  sub: MediaKind
+  sub: MediaKind,
+  mediaKey: string = uid
 ): Promise<{ hashes: Set<string>; ok: boolean; error?: MediaAccessError }> {
   try {
     const res = await mediaGateway<{ hashes: string[] }>(
-      uid,
+      mediaKey,
       "/v1/media/inventory",
       { kind: sub }
     );
@@ -1218,7 +1243,11 @@ function addPendingRefs(refs: Map<string, "local" | "cloud">, pending: Set<strin
   for (const h of pending) if (!refs.has(h)) refs.set(h, "cloud");
 }
 
-export async function inventoryMedia(uid: string, data: AppData): Promise<MediaInventory> {
+export async function inventoryMedia(
+  uid: string,
+  data: AppData,
+  mediaKey: string = uid
+): Promise<MediaInventory> {
   const photoItems: string[] = [];
   const audioItems: string[] = [];
   const pendingPhotoRefs = new Set<string>();
@@ -1233,8 +1262,8 @@ export async function inventoryMedia(uid: string, data: AppData): Promise<MediaI
   const [photoRefs, audioRefs, cloudPhotos, cloudAudios] = await Promise.all([
     referencedHashes(photoItems),
     referencedHashes(audioItems),
-    listCloudHashes(uid, "photos"),
-    listCloudHashes(uid, "audios"),
+    listCloudHashes(uid, "photos", mediaKey),
+    listCloudHashes(uid, "audios", mediaKey),
   ]);
   addPendingRefs(photoRefs, pendingPhotoRefs);
   addPendingRefs(audioRefs, pendingAudioRefs);

@@ -59,13 +59,15 @@
 
 ### ⬜ 3.2 `localStorage` → `@capacitor/preferences`
 
-66 استخداماً في 24 ملفاً. يعمل في WKWebView لكن **النظام يمسحه تحت ضغط التخزين**.
+66 استخداماً في 24 ملفاً (+2 مفتاحان جديدان أدناه). يعمل في WKWebView لكن
+**النظام يمسحه تحت ضغط التخزين**.
 
 الأولوية بالخطورة لا بالعدد:
 
 | الملف | ما يضيع لو مُسح |
 |---|---|
 | **`src/lib/firebase.ts:29`** (`madar-sync-space`) | **المزامنة تتوقّف بصمت. الأخطر.** |
+| `src/lib/firebase.ts` (`madar-sync-media-key`، `madar-sync-key-version`) | فصل مفتاح البيانات/الوسائط (`docs/KEY-SEPARATION.md`) — غيابهما يرجع الجهاز لسلوك v1 تلقائياً (آمن)، لا انهيار |
 | `src/lib/lock.ts` (`madar-lock-pin`) | القفل يسقط ← الخصوصية |
 | `src/lib/quran/session.ts` · `readPrefs.ts` | موضع القراءة والتفضيلات |
 | `src/lib/insightPrefs.ts` | تفضيلات البصائر |

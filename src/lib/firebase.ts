@@ -31,6 +31,52 @@ export function getSyncSpace(): string | null {
   }
 }
 
+// ===================== Data/media key separation (opt-in) =====================
+// See src/lib/keyDerivation.ts and docs/KEY-SEPARATION.md for the full design.
+// By default (and for every device today — this is v1, the only version any
+// device has ever used) `getSyncSpace()`'s return value is used directly BOTH
+// as the Firestore path segment AND, unchanged, as the R2 media-gateway Bearer
+// token — nothing below changes that unless a device has explicitly opted
+// into v2 by writing SYNC_MEDIA_KEY_STORAGE_KEY (there is no UI wired to do
+// so yet; see docs/KEY-SEPARATION.md for why and what's left).
+//
+// When a device HAS opted in, SYNC_SPACE_STORAGE_KEY holds the *derived*
+// Firestore-space subkey (so getSyncSpace() above needs no change at all —
+// every existing call site keeps working, now transparently reading the
+// derived value) and this key holds the *derived* media subkey.
+export const SYNC_MEDIA_KEY_STORAGE_KEY = "madar-sync-media-key";
+export const SYNC_KEY_VERSION_STORAGE_KEY = "madar-sync-key-version";
+
+export type SyncKeyVersion = 1 | 2;
+
+/** 1 (legacy, default) until a device explicitly opts into 2 (separated
+ *  data/media subkeys). Never inferred — an absent/unrecognized marker is
+ *  always 1, so a device that has never touched this feature is unaffected. */
+export function getSyncKeyVersion(): SyncKeyVersion {
+  if (typeof window === "undefined") return 1;
+  try {
+    return localStorage.getItem(SYNC_KEY_VERSION_STORAGE_KEY) === "2" ? 2 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+// The Bearer token for the R2 media gateway. v1 (default): identical to
+// getSyncSpace() — the exact behavior every device has today, unchanged. v2:
+// the derived media subkey, which is NOT usable as a Firestore path segment
+// (see keyDerivation.test.ts) — call sites that talk to the R2 gateway
+// (cloudflare-worker/src/index.ts) should use this instead of getSyncSpace().
+export function getMediaAuthKey(): string | null {
+  if (typeof window === "undefined") return getSyncSpace();
+  try {
+    const derived = localStorage.getItem(SYNC_MEDIA_KEY_STORAGE_KEY);
+    if (derived) return derived;
+  } catch {
+    /* fall through to the v1 default below */
+  }
+  return getSyncSpace();
+}
+
 // Firebase is "enabled" only when the essential config is present.
 // Without it, the app keeps working fully on localStorage.
 export const isFirebaseEnabled = Boolean(

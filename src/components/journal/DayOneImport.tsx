@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { parseDayOneJson, streamDayOneZipImport, type BatchImportProgress } from "@/lib/dayOneParser";
 import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
+import { isFirebaseEnabled, getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import { reuploadAllMedia } from "@/lib/sync";
 
 interface ImportStats {
@@ -46,7 +46,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
     if (!syncSpace) return;
     setReupload("working");
     try {
-      await reuploadAllMedia(syncSpace, snapshot());
+      await reuploadAllMedia(syncSpace, snapshot(), getMediaAuthKey() ?? syncSpace);
       setReupload("done");
     } catch {
       setReupload("error");

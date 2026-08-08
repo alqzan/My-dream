@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
 import { inventoryMedia, reuploadAllMedia, describeUploadError, type MediaInventory, type MediaAccessError } from "@/lib/sync";
 import { journalShardId } from "@/lib/merge";
-import { getSyncSpace } from "@/lib/firebase";
+import { getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import { entryPhotos } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
@@ -75,7 +75,7 @@ export function DataHealthCard() {
     if (!space) { showToast("المزامنة غير مفعّلة على هذا الجهاز", "warning"); return; }
     setScanning(true);
     try {
-      setScan(await inventoryMedia(space, snapshot()));
+      setScan(await inventoryMedia(space, snapshot(), getMediaAuthKey() ?? space));
     } catch {
       showToast("تعذّر فحص الصور — تحقق من الاتصال", "warning");
     } finally {
@@ -89,7 +89,7 @@ export function DataHealthCard() {
     setReuploading(true);
     setReuploadError(null);
     try {
-      const report = await reuploadAllMedia(space, snapshot());
+      const report = await reuploadAllMedia(space, snapshot(), getMediaAuthKey() ?? space);
       setScan(report);
       const pending = report.photos.pendingUpload + report.audios.pendingUpload;
       const broken = report.photos.broken + report.audios.broken;

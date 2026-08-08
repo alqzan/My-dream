@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { isFirebaseEnabled, getSyncSpace } from "@/lib/firebase";
+import { isFirebaseEnabled, getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import {
   loadUserMain,
   readCloudMain,
@@ -91,6 +91,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const space = getSyncSpace();
     if (!isFirebaseEnabled || !space) return;
+    // Separate media-gateway auth from the Firestore space (see
+    // src/lib/keyDerivation.ts). Identical to `space` unless this device has
+    // opted into separated data/media keys — inert today, every device is v1.
+    const mediaKey = getMediaAuthKey() ?? space;
 
     let cancelled = false;
     let unsubStore: () => void = () => {};
@@ -146,8 +150,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
       // نسخةُ العرض من الاتحاد: الترطيب **بعد** الدمج دائماً (قاعدة المستودع).
       const toDisplay = (merged: AppData, local: AppData) =>
-        hydrateCloudPhotos(space, merged).then((shown) =>
-          inlineCachedMedia(space, mergeLocalPhotos(shown, local))
+        hydrateCloudPhotos(space, merged, mediaKey).then((shown) =>
+          inlineCachedMedia(space, mergeLocalPhotos(shown, local), mediaKey)
         );
 
       // تطبيقُ ناتج التبنّي على المتجر — محروساً كي لا يراه الاشتراك تعديلاً محلّياً.
@@ -195,7 +199,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // **الناتج الغنيّ بالمراجع** (`save`) لا نسخةَ العرض، فيبقى الاستكمال
           // الجزئي: مرجعٌ لم يُنزَّل هذه الجلسة يعود كما هو بدل أن يُسقَط.
           const merged = save;
-          const r = await saveUserData(space, merged, cloudMain.revision ?? 0);
+          const r = await saveUserData(space, merged, cloudMain.revision ?? 0, mediaKey);
           mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
           lastCloudUpdatedRef.current = merged.lastUpdated ?? cloudMain.lastUpdated ?? "";
@@ -209,8 +213,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // الشواهد **قبل** الترطيب: صورةٌ محذوفة يُسقط مرجعَها التنقيةُ، فلا
           // تُنزَّل بايتاتها أصلاً (كنّا ننزّلها ثمّ نرميها).
           const mark = editSeqRef.current;
-          const full = await hydrateCloudPhotos(space, applyTombstones(cloudMain));
-          const shown = await inlineCachedMedia(space, mergeLocalPhotos(full, local));
+          const full = await hydrateCloudPhotos(space, applyTombstones(cloudMain), mediaKey);
+          const shown = await inlineCachedMedia(space, mergeLocalPhotos(full, local), mediaKey);
           // الجهاز كان فارغاً حين قرأنا، لكنّ التنزيل يستغرق — وقد يكتب المالك
           // مذكرةً أثناءه. عندها فقط نطوي أحدثَ لقطةٍ فوق نسخة السحابة (وهي
           // الأحدث ختماً فتفوز بعناصرها)، فلا يُمحى ما كُتب. بلا تعديلٍ عارض
@@ -224,7 +228,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // Only this device has data → seed the cloud from it. لقطةٌ طازجة لا
           // `local` القديمة: قراءةُ السحابة استغرقت، وما كُتب أثناءها يُرفع معها.
           const seed = snapshot();
-          const r = await saveUserData(space, seed, cloudMain?.revision ?? 0);
+          const r = await saveUserData(space, seed, cloudMain?.revision ?? 0, mediaKey);
           mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
           lastCloudUpdatedRef.current = seed.lastUpdated ?? "";
@@ -286,7 +290,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           useAppStore.setState({ lastUpdated: stamp });
           applyingRemoteRef.current = false;
           try {
-            const res = await saveUserData(space, toSave, lastRevisionRef.current);
+            const res = await saveUserData(space, toSave, lastRevisionRef.current, mediaKey);
             lastCloudUpdatedRef.current = stamp;
             lastRevisionRef.current = res.revision;
             return res.mediaComplete;
