@@ -75,17 +75,16 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
   }
 
   // ينسخ إعدادات الاتصال بمستورد الذكريات (macOS) للحافظة — عنوان الـWorker
-  // ومساحة المزامنة ومفتاح الوسائط، كي يلصقها المالك في التطبيق مباشرةً بدل
-  // كتابتها يدوياً. مفتاح الوسائط **لا يظهر في الواجهة ولا في أي سجلّ** هنا —
-  // يُبنى ويُنسخ مباشرةً، وتُفرَّغ الحافظة تلقائياً بعد قليل.
+  // ومفتاح الوسائط، كي يلصقها المالك في التطبيق مباشرةً بدل كتابتها يدوياً.
+  // الصيغة {version, workerURL, mediaKey} مطابقةٌ حرفياً لِما يقرأه
+  // MadarGatewayClient.swift عبر JSONDecoder — بلا syncSpace (مستورد الذكريات
+  // لا يلمس Firestore، فلا حاجة له لمعرّف المساحة، فقط مفتاح بوابة R2).
+  // مفتاح الوسائط **لا يظهر في الواجهة ولا في أي سجلّ** هنا — يُبنى ويُنسخ
+  // مباشرةً، وتُفرَّغ الحافظة تلقائياً بعد قليل.
   async function handleCopyConnection() {
     if (!syncSpace) return;
     setConnectCopying(true);
-    const payload = buildMemoryImporterConnection(
-      getR2WorkerUrl(),
-      syncSpace,
-      getMediaAuthKey() ?? syncSpace
-    );
+    const payload = buildMemoryImporterConnection(getR2WorkerUrl(), getMediaAuthKey() ?? syncSpace);
     const text = JSON.stringify(payload);
     try {
       await navigator.clipboard.writeText(text);
@@ -152,6 +151,10 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
 
     total.files++;
     total.failed += parsed.failed;
+    // وسائط صنّفها مستورد الذكريات نفسه missing/failed (أو مرجعٌ يتيم) — غير
+    // قاتلة (خلاف هاشٍ ناقص في R2 أعلاه، الذي أوقف الاستيراد لتوّه). نفس عدّاد
+    // "تعذّر قراءة ملف وسائط" المستخدَم لمسار ZIP، لأنه يصف نفس الحالة فعلياً.
+    total.mediaMissing += parsed.manifestMissingMedia;
     const batches = chunkEntries(parsed.entries);
     let done = 0;
     for (const batch of batches) {

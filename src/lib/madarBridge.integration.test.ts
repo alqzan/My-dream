@@ -1,12 +1,15 @@
 // تكامل جسر «مستورد الذكريات» مع بقية مدار: يتحقّق أنّ ما يُنتجه
 // parseMadarImportFile يمرّ بلا كودٍ إضافي عبر آليتَي عدم التكرار والدمج
-// القائمتين أصلاً لـDay One (store.ts#importDayOneEntries وmerge.ts#mergeAppData)
-// — راجع التعليق أعلى madarBridge.ts لسبب هذا القرار المعماري.
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { zipSync, strToU8 } from "fflate";
+// القائمتين أصلاً لـDay One (store.ts#importDayOneEntries وmerge.ts#mergeAppData)،
+// وأنّ بوابة sync.ts#verifyMediaHashesPresent توقف الاستيراد كاملاً قبل إضافة
+// أي مذكرة حين ينقص هاشٌ واحد في R2. البنية JSON مطابقةٌ حرفياً لِما يُصدره
+// MadarManifest.swift — راجع التعليق أعلى madarBridge.ts.
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 
 // المتجر المحفوظ يمرّ بـidb-keyval — نزيّفه كي يُقلَع في Node صرفاً (كما في
-// dayOneImport.store.test.ts).
+// dayOneImport.store.test.ts). sync.ts يحتاج تزييف Firebase/idb-keyval معاً
+// (كما في sync.photos.test.ts) لأنّ verifyMediaHashesPresent يستدعيه أحد
+// اختبارات هذا الملف.
 const idb = new Map<string, unknown>();
 vi.mock("idb-keyval", () => ({
   get: async (k: string) => idb.get(k),
@@ -14,35 +17,80 @@ vi.mock("idb-keyval", () => ({
   del: async (k: string) => { idb.delete(k); },
 }));
 
+vi.mock("firebase/firestore", () => ({
+  doc: (...args: unknown[]) => ({ __doc: args }),
+  collection: (...args: unknown[]) => ({ __col: args }),
+  getDoc: vi.fn(async () => ({ exists: () => false })),
+  setDoc: vi.fn(async () => {}),
+  getDocs: vi.fn(async () => ({ docs: [], forEach: () => {} })),
+  onSnapshot: vi.fn(),
+  deleteDoc: vi.fn(async () => {}),
+  runTransaction: async (_db: unknown, fn: (txn: unknown) => Promise<unknown>) =>
+    fn({ get: vi.fn(async () => ({ exists: () => false })), set: vi.fn() }),
+}));
+vi.mock("./firebase", () => ({ db: { __db: true }, getSyncSpace: () => "space" }));
+vi.mock("@/components/ui/UndoToast", () => ({ showToast: vi.fn() }));
+
 import { useAppStore } from "./store";
 import { mergeAppData } from "./merge";
 import {
   parseMadarImportFile,
-  checksumOfEntries,
-  MADAR_IMPORT_MAGIC,
-  MADAR_IMPORT_FORMAT_VERSION,
-  type MadarImportEntry,
+  buildMemoryImporterConnection,
+  type MadarBridgeRecord,
+  type MadarBridgeMedia,
+  type MadarBridgeSummary,
+  type MadarBridgeManifest,
 } from "./madarBridge";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type { AppData, JournalEntry } from "./types";
 
-const HASH_A = "a".repeat(32);
+let sync: typeof import("./sync");
+beforeAll(async () => {
+  process.env.NEXT_PUBLIC_R2_WORKER_URL = "https://worker.example";
+  sync = await import("./sync");
+});
 
-async function madarFile(entries: MadarImportEntry[]): Promise<Blob> {
-  const manifest = {
-    magic: MADAR_IMPORT_MAGIC,
-    formatVersion: MADAR_IMPORT_FORMAT_VERSION,
-    summary: {
-      entryCount: entries.length,
-      photoCount: entries.reduce((n, e) => n + (e.photoRefs?.length ?? 0), 0),
-      audioCount: entries.reduce((n, e) => n + (e.audioRefs?.length ?? 0), 0),
-      videoCount: 0,
-      pdfCount: 0,
-    },
-    entriesChecksum: await checksumOfEntries(entries),
-    entries,
+const HASH_A = "a".repeat(32);
+const HASH_B = "b".repeat(32);
+
+function record(o: Partial<MadarBridgeRecord> & { id: string; dayOneUUID: string }): MadarBridgeRecord {
+  return { createdAt: "2026-01-01T09:00:00Z", text: "نص", tags: [], starred: false, mediaIDs: [], ...o };
+}
+function media(o: Partial<MadarBridgeMedia> & { id: string; recordID: string }): MadarBridgeMedia {
+  return { kind: "photo", status: "uploaded", ...o };
+}
+function summaryOf(records: MadarBridgeRecord[], media_: MadarBridgeMedia[]): MadarBridgeSummary {
+  const recordIds = new Set(records.map((r) => r.id));
+  const referenced = media_.filter((m) => recordIds.has(m.recordID)).length;
+  const tally = (s: MadarBridgeMedia["status"]) => media_.filter((m) => m.status === s).length;
+  return {
+    recordCount: records.length,
+    referencedMediaCount: referenced,
+    uploadedMediaCount: tally("uploaded"),
+    metadataOnlyCount: tally("metadataOnly"),
+    missingMediaCount: tally("missing"),
+    failedMediaCount: tally("failed"),
+    originalByteCount: 0,
+    uploadedByteCount: 0,
+    sourceReferencedMediaCount: media_.length,
+    skippedByPolicyCount: 0,
   };
-  return new Blob([zipSync({ "manifest.json": strToU8(JSON.stringify(manifest)) })]);
+}
+function manifestOf(records: MadarBridgeRecord[], media_: MadarBridgeMedia[]): MadarBridgeManifest {
+  return {
+    schemaVersion: 1,
+    importID: "imp-1",
+    createdAt: "2026-01-01T00:00:00Z",
+    sourceFingerprint: "fp-1",
+    sourceArchiveName: "Day One.zip",
+    policy: "balanced",
+    records,
+    media: media_,
+    summary: summaryOf(records, media_),
+  };
+}
+function madarFile(records: MadarBridgeRecord[], media_: MadarBridgeMedia[] = []): Blob {
+  return new Blob([JSON.stringify(manifestOf(records, media_))], { type: "application/json" });
 }
 
 beforeEach(() => {
@@ -51,9 +99,10 @@ beforeEach(() => {
 
 describe("استيراد .madarimport مرتين — بلا تكرار UUIDs", () => {
   it("الاستيراد الثاني لنفس الملف لا يضيف شيئاً", async () => {
-    const file = await madarFile([
-      { uuid: "M1", date: "2026-01-01", content: "ذكرى", photoRefs: [HASH_A] },
-    ]);
+    const records = [record({ id: "r1", dayOneUUID: "M1", text: "ذكرى", mediaIDs: ["p1"] })];
+    const mediaItems = [media({ id: "p1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" })];
+    const file = madarFile(records, mediaItems);
+
     const first = await parseMadarImportFile(file);
     const r1 = useAppStore.getState().importDayOneEntries(first.entries);
     expect(r1.added).toBe(1);
@@ -66,8 +115,8 @@ describe("استيراد .madarimport مرتين — بلا تكرار UUIDs", (
 });
 
 describe("عدم الكتابة فوق نص عدّله المستخدم", () => {
-  it("إعادة استيراد نفس uuid بنصٍّ مختلف لا يمسّ تعديل المستخدم المحلي", async () => {
-    const file = await madarFile([{ uuid: "M2", date: "2026-01-01", content: "النص الأصلي من مستورد الذكريات" }]);
+  it("إعادة استيراد نفس dayOneUUID بنصٍّ مختلف لا يمسّ تعديل المستخدم المحلي", async () => {
+    const file = madarFile([record({ id: "r1", dayOneUUID: "M2", text: "النص الأصلي من مستورد الذكريات" })]);
     const first = await parseMadarImportFile(file);
     useAppStore.getState().importDayOneEntries(first.entries);
     expect(useAppStore.getState().journalEntries[0].id).toBe("do-M2");
@@ -81,6 +130,51 @@ describe("عدم الكتابة فوق نص عدّله المستخدم", () => 
     const r = useAppStore.getState().importDayOneEntries(second.entries);
     expect(r.added).toBe(0);
     expect(useAppStore.getState().journalEntries[0].content).toBe("عدّلته أنا بنفسي");
+  });
+});
+
+describe("hash ناقص في R2 يوقف الاستيراد كاملاً قبل إضافة أي مذكرة", () => {
+  it("لا تُضاف أي مذكرة إن كان أحد الهاشات المرجعية غائباً عن R2", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "M4", mediaIDs: ["p1"] })];
+    const mediaItems = [media({ id: "p1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" })];
+    const file = madarFile(records, mediaItems);
+    const parsed = await parseMadarImportFile(file);
+    expect(parsed.photoHashes).toEqual([HASH_A]);
+
+    // R2 لا يملك HASH_A فعلياً (قائمة فارغة).
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ hashes: [] }) })) as unknown as typeof fetch;
+    const check = await sync.verifyMediaHashesPresent("media-key", parsed.photoHashes, parsed.audioHashes);
+    expect(check.ok).toBe(false);
+    expect(check.missingPhotos).toEqual([HASH_A]);
+
+    // البوابة كما تُستخدَم فعلياً في DayOneImport.tsx: لا نستدعي
+    // importDayOneEntries إطلاقاً إن لم تنجح verifyMediaHashesPresent.
+    if (check.ok) useAppStore.getState().importDayOneEntries(parsed.entries);
+    expect(useAppStore.getState().journalEntries).toHaveLength(0);
+  });
+
+  it("حين تكون كل الهاشات موجودة، الاستيراد يمرّ ويضيف المذكرة", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "M5", mediaIDs: ["p1"] })];
+    const mediaItems = [media({ id: "p1", recordID: "r1", cloudHash: HASH_B, cloudKind: "photos" })];
+    const file = madarFile(records, mediaItems);
+    const parsed = await parseMadarImportFile(file);
+
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ hashes: [HASH_B] }) })) as unknown as typeof fetch;
+    const check = await sync.verifyMediaHashesPresent("media-key", parsed.photoHashes, parsed.audioHashes);
+    expect(check.ok).toBe(true);
+
+    if (check.ok) useAppStore.getState().importDayOneEntries(parsed.entries);
+    expect(useAppStore.getState().journalEntries).toHaveLength(1);
+  });
+});
+
+describe("إعداد الاتصال المنسوخ من مدار — يقرأه تطبيق الماك", () => {
+  it("الحمولة قابلة لإعادة التفكيك بنفس المفاتيح الثلاثة التي يتوقّعها JSONDecoder", () => {
+    const payload = buildMemoryImporterConnection("https://worker.example", "media-secret");
+    const roundtrip = JSON.parse(JSON.stringify(payload)) as { version: number; workerURL: string; mediaKey: string };
+    expect(roundtrip.version).toBe(1);
+    expect(roundtrip.workerURL).toBe("https://worker.example");
+    expect(roundtrip.mediaKey).toBe("media-secret");
   });
 });
 
@@ -118,21 +212,18 @@ function baseAppData(journalEntries: JournalEntry[]): AppData {
 
 describe("دمج metadata لمذكرة مستوردة من جهازين", () => {
   it("يوحّد photoRefs/audioRefs بلا فقد، ويحتفظ بحقول مستورد الذكريات الجديدة", async () => {
-    const HASH_B = "b".repeat(32);
-    const file = await madarFile([
-      {
-        uuid: "M3",
-        date: "2026-02-10",
-        content: "نصٌّ من الجهاز أ",
-        photoRefs: [HASH_A],
-        location: { lat: 24.1, lng: 46.2, place: "الرياض" },
-        timeZone: "Asia/Riyadh",
-      },
-    ]);
-    const parsed = await parseMadarImportFile(file);
+    const records = [
+      record({
+        id: "r1", dayOneUUID: "M3", text: "نصٌّ من الجهاز أ", mediaIDs: ["p1"],
+        timeZoneIdentifier: "Asia/Riyadh",
+        location: { latitude: 24.1, longitude: 46.2, placeName: "الرياض" },
+      }),
+    ];
+    const mediaItems = [media({ id: "p1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" })];
+    const parsed = await parseMadarImportFile(madarFile(records, mediaItems));
     const deviceA: JournalEntry = { ...parsed.entries[0], updatedAt: 1000 };
-    // الجهاز ب استورد نفس المذكرة لاحقاً (نفس uuid) لكن برقم مرجع صوتٍ إضافي
-    // اكتشفه مستورد الذكريات على ذلك الجهاز، ونصٍّ أحدث زمنياً.
+    // الجهاز ب استورد نفس المذكرة لاحقاً (نفس dayOneUUID) لكن بمرجع صوتٍ
+    // إضافي اكتشفه مستورد الذكريات على ذلك الجهاز، ونصٍّ أحدث زمنياً.
     const deviceB: JournalEntry = {
       ...parsed.entries[0],
       content: "نصٌّ حرّره المالك على الجهاز ب",
