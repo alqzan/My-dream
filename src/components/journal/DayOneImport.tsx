@@ -2,10 +2,18 @@
 import { useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { parseDayOneJson, streamDayOneZipImport, type BatchImportProgress } from "@/lib/dayOneParser";
-import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud, X } from "lucide-react";
+import {
+  MADAR_IMPORT_EXTENSION,
+  parseMadarImportFile,
+  MadarImportError,
+  chunkEntries,
+  buildMemoryImporterConnection,
+} from "@/lib/madarBridge";
+import { Upload, CheckCircle, AlertCircle, Loader2, Trash2, UploadCloud, X, Copy, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { isFirebaseEnabled, getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
-import { reuploadAllMedia } from "@/lib/sync";
+import { reuploadAllMedia, verifyMediaHashesPresent, getR2WorkerUrl } from "@/lib/sync";
+import { showToast } from "@/components/ui/UndoToast";
 
 interface ImportStats {
   files: number;
@@ -18,15 +26,27 @@ interface ImportStats {
   // How many photo/audio files the export referenced but couldn't be decoded —
   // surfaced so a partial import isn't shown as a clean success.
   mediaMissing: number;
+  // مدخلاتٌ داخل ملف .madarimport تعذّر التحقّق منها فردياً (تاريخ/uuid غير
+  // صالح) فاستُبعدت — لا علاقة لها بـmediaMissing (ذاك عن الملفات، هذا عن بنية
+  // المدخلة نفسها).
+  failed: number;
   // True when the owner cancelled mid-import — re-running resumes (dedupes).
   cancelled: boolean;
 }
+
+// الحافظة تُفرَّغ تلقائياً بعد هذه المدة من نسخ إعدادات اتصال مستورد الذكريات —
+// لا سبيل لمعرفة متى "قرأها" التطبيق الخارجي فعلاً من صفحة ويب، فهذا أفضل تقريبٍ
+// عمليّ لتضييق نافذة تعرّض مفتاح الوسائط في الحافظة.
+const CONNECTION_CLIPBOARD_CLEAR_MS = 30_000;
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
   const { importDayOneEntries, deleteDayOneImports, journalEntries, snapshot } = useAppStore();
   const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [stats, setStats] = useState<ImportStats | null>(null);
+  // ملفات .madarimport فشلت كاملةً (هويّة/بنية/hash R2 ناقص) ضمن دفعة رفعٍ فيها
+  // ملفات أخرى نجحت — تُعرض كتحذيرٍ جانب لوحة النجاح بدل إخفائها.
+  const [fileErrors, setFileErrors] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletedCount, setDeletedCount] = useState<number | null>(null);
@@ -37,6 +57,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
   // Default ON: keep just one photo per memory. For a large archive this keeps
   // the sync doc small and the app light while still giving each day a picture.
   const [onePhotoPerEntry, setOnePhotoPerEntry] = useState(true);
+  const [connectCopying, setConnectCopying] = useState(false);
 
   const dayOneCount = journalEntries.filter((e) => e.source === "dayOne").length;
   const photoCount = journalEntries.filter((e) => e.photos?.length || e.photo).length;
@@ -53,10 +74,100 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // ينسخ إعدادات الاتصال بمستورد الذكريات (macOS) للحافظة — عنوان الـWorker
+  // ومساحة المزامنة ومفتاح الوسائط، كي يلصقها المالك في التطبيق مباشرةً بدل
+  // كتابتها يدوياً. مفتاح الوسائط **لا يظهر في الواجهة ولا في أي سجلّ** هنا —
+  // يُبنى ويُنسخ مباشرةً، وتُفرَّغ الحافظة تلقائياً بعد قليل.
+  async function handleCopyConnection() {
+    if (!syncSpace) return;
+    setConnectCopying(true);
+    const payload = buildMemoryImporterConnection(
+      getR2WorkerUrl(),
+      syncSpace,
+      getMediaAuthKey() ?? syncSpace
+    );
+    const text = JSON.stringify(payload);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(
+        `نُسخت إعدادات الاتصال — الصقها في مستورد الذكريات الآن. ستُمسح من الحافظة تلقائياً خلال ${CONNECTION_CLIPBOARD_CLEAR_MS / 1000} ثانية.`,
+        "success"
+      );
+      setTimeout(() => {
+        // نمسح فقط إن كانت الحافظة ما تزال تحمل ما نسخناه — لا نستبدل شيئاً
+        // نسخه المالك بعدنا. القراءة قد تفشل بلا صلاحية؛ نتجاهل بصمت حينها.
+        navigator.clipboard
+          .readText()
+          .then((current) => {
+            if (current === text) return navigator.clipboard.writeText("");
+          })
+          .catch(() => { /* لا صلاحية قراءة الحافظة — تجاهل، لا نُظهر مفتاحاً أبداً */ });
+      }, CONNECTION_CLIPBOARD_CLEAR_MS);
+    } catch {
+      showToast("تعذّر النسخ للحافظة — تحقق من صلاحيات المتصفح", "warning");
+    } finally {
+      setConnectCopying(false);
+    }
+  }
+
   function handleDeleteImports() {
     const n = deleteDayOneImports();
     setConfirmDelete(false);
     setDeletedCount(n);
+  }
+
+  // يعالج ملف .madarimport واحداً: يحلّله (madarBridge)، يتحقّق أنّ **كل** هاشات
+  // وسائطه موجودة فعلاً في R2 (sync.ts) قبل أن يُنشئ أي مذكرة، ثم يستورد
+  // النتائج على دفعات صغيرة (قابلة للإلغاء بينها). يُعيد رسالة خطأ إن رُفض
+  // الملف كاملاً (بلا أي مذكرة مضافة منه)، أو null عند النجاح.
+  async function importMadarFile(file: File, total: ImportStats): Promise<string | null> {
+    let parsed: Awaited<ReturnType<typeof parseMadarImportFile>>;
+    try {
+      parsed = await parseMadarImportFile(file);
+    } catch (err) {
+      if (err instanceof MadarImportError) return err.message;
+      return err instanceof Error ? err.message : "تعذّر قراءة الملف";
+    }
+
+    if (!isFirebaseEnabled || !syncSpace) {
+      return (
+        "المزامنة غير مُفعّلة على هذا الجهاز — لا يمكن التحقق من وجود الوسائط " +
+        "في R2 قبل الاستيراد. فعّل مفتاح المزامنة من الإعدادات أولاً."
+      );
+    }
+    const mediaKey = getMediaAuthKey() ?? syncSpace;
+    const check = await verifyMediaHashesPresent(mediaKey, parsed.photoHashes, parsed.audioHashes);
+    if (!check.reachable) {
+      return "تعذّر الاتصال بمخزن الوسائط (R2) للتحقّق — لم تُضف أي مذكرة. تأكد من الاتصال وحاول مجدداً.";
+    }
+    if (!check.ok) {
+      const missing = check.missingPhotos.length + check.missingAudios.length;
+      return (
+        `${missing} من ملفات الوسائط المرجعية غير موجودة في R2 ` +
+        `(${check.missingPhotos.length} صورة، ${check.missingAudios.length} صوت) — ` +
+        `أُوقف استيراد «${file.name}» كاملاً ولم تُضف منه أي مذكرة. ` +
+        `ارفع الوسائط الناقصة من مستورد الذكريات ثم أعد المحاولة.`
+      );
+    }
+
+    total.files++;
+    total.failed += parsed.failed;
+    const batches = chunkEntries(parsed.entries);
+    let done = 0;
+    for (const batch of batches) {
+      if (cancelRef.current) { total.cancelled = true; break; }
+      const r = importDayOneEntries(batch);
+      total.added += r.added;
+      total.completed += r.completed;
+      total.duplicates += batch.length - r.added - r.completed;
+      total.photos += r.photos;
+      total.audio += r.audio;
+      done += batch.length;
+      setProgress({ entriesDone: done, entriesTotal: parsed.entries.length, mediaDone: 0, mediaTotal: 0 });
+      // نفَسٌ بين الدفعات — يُبقي زر الإلغاء مستجيباً حتى مع آلاف المذكرات.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return null;
   }
 
   async function handleFiles(files: File[]) {
@@ -65,20 +176,31 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       f.type === "application/zip" ||
       f.type === "application/x-zip-compressed";
     const isJson = (f: File) => f.name.toLowerCase().endsWith(".json") || f.type === "application/json";
+    const isMadar = (f: File) => f.name.toLowerCase().endsWith(MADAR_IMPORT_EXTENSION);
 
-    const chosen = files.filter((f) => isJson(f) || isZip(f));
+    const chosen = files.filter((f) => isJson(f) || isZip(f) || isMadar(f));
     if (!chosen.length) {
       setStatus("error");
-      setMessage("اختر ملف Day One بصيغة ZIP أو JSON.");
+      setMessage(`اختر ملف Day One بصيغة ZIP أو JSON، أو ملف ${MADAR_IMPORT_EXTENSION} من مستورد الذكريات.`);
       return;
     }
     setStatus("working");
     cancelRef.current = false;
     setProgress(null);
-    const total: ImportStats = { files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0, photos: 0, audio: 0, mediaMissing: 0, cancelled: false };
+    setFileErrors([]);
+    const total: ImportStats = {
+      files: 0, added: 0, completed: 0, duplicates: 0, skippedEmpty: 0,
+      photos: 0, audio: 0, mediaMissing: 0, failed: 0, cancelled: false,
+    };
+    const errors: string[] = [];
     try {
       for (const file of chosen) {
         if (cancelRef.current) { total.cancelled = true; break; }
+        if (isMadar(file)) {
+          const err = await importMadarFile(file, total);
+          if (err) errors.push(err);
+          continue;
+        }
         if (isZip(file)) {
           // Big archives stream in BATCHES so peak memory stays near one batch,
           // not the whole library — each batch is persisted before the next.
@@ -115,8 +237,17 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           total.audio += r.audio;
         }
       }
-      setStats(total);
-      setStatus("success");
+      setFileErrors(errors);
+      if (total.added || total.completed || total.files) {
+        setStats(total);
+        setStatus("success");
+      } else if (errors.length) {
+        setStatus("error");
+        setMessage(errors.join(" — "));
+      } else {
+        setStats(total);
+        setStatus("success");
+      }
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "خطأ في قراءة الملف");
@@ -139,10 +270,32 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
         افتح Day One ← File ← Export ← JSON ← احفظ الملف.
         <br />
         <span className="text-xs opacity-80">
-          ارفع ملف <strong>ZIP</strong> كما هو لاستيراد الصور والصوت أيضاً، أو ملف JSON للنصوص فقط.
+          ارفع ملف <strong>ZIP</strong> كما هو لاستيراد الصور والصوت أيضاً، أو ملف JSON للنصوص فقط،
+          أو ملف <strong>{MADAR_IMPORT_EXTENSION}</strong> الناتج من تطبيق «مستورد الذكريات» (macOS) للأرشيفات الضخمة.
           نستخرج العنوان والوقت والوسوم تلقائياً، وننظف النص، ولا نكرر المستورد سابقاً — وتقدر ترفع عدة ملفات.
         </span>
       </div>
+
+      {isFirebaseEnabled && syncSpace && status === "idle" && (
+        <div className="flex items-start gap-2.5 rounded-xl bg-gray-50 dark:bg-white/5 p-3">
+          <Link2 size={16} className="text-brand-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+              تطبيق مستورد الذكريات (macOS)
+            </p>
+            <p className="text-[11px] text-gray-400 leading-relaxed mt-0.5">
+              انسخ إعدادات الاتصال والصقها في التطبيق — يشمل مفتاحاً سرياً فلا نعرضه هنا، وتُفرَّغ الحافظة تلقائياً بعد النسخ.
+            </p>
+            <button
+              onClick={handleCopyConnection}
+              disabled={connectCopying}
+              className="flex items-center gap-1.5 text-xs font-medium text-brand-600 mt-1.5 press disabled:opacity-60"
+            >
+              <Copy size={13} /> نسخ إعدادات الاتصال
+            </button>
+          </div>
+        </div>
+      )}
 
       {status === "idle" && (
         <>
@@ -155,9 +308,9 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
             />
             <span className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
               <strong>صورة واحدة لكل مذكرة</strong> — يأخذ أول صورة من كل يوم ويتجاهل الباقي.
-              موصى به بشدّة للأرشيفات الكبيرة: يُبقي مدار خفيفاً والمزامنة سليمة.
+              موصى به بشدّة للأرشيفات الكبيرة (ZIP): يُبقي مدار خفيفاً والمزامنة سليمة.
               <span className="block text-[11px] text-gray-400 mt-0.5">
-                أزِل العلامة لاستيراد كل صور كل مذكرة (مناسب للأرشيفات الصغيرة فقط).
+                أزِل العلامة لاستيراد كل صور كل مذكرة (مناسب للأرشيفات الصغيرة فقط). لا يؤثر على ملفات {MADAR_IMPORT_EXTENSION}.
               </span>
             </span>
           </label>
@@ -170,11 +323,11 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
             }`}
           >
             <Upload size={28} className="mx-auto text-gray-400 mb-3" />
-            <p className="text-sm font-medium text-gray-700">اسحب ملفات ZIP أو JSON هنا</p>
+            <p className="text-sm font-medium text-gray-700">اسحب ملفات ZIP أو JSON أو {MADAR_IMPORT_EXTENSION} هنا</p>
             <p className="text-xs text-gray-400 mt-1">أو اضغط للاختيار — يمكن اختيار عدة ملفات</p>
             <input
               type="file"
-              accept=".json,.zip,application/zip,application/json"
+              accept={`.json,.zip,${MADAR_IMPORT_EXTENSION},application/zip,application/json`}
               multiple
               className="hidden"
               onChange={(e) => { if (e.target.files?.length) handleFiles([...e.target.files]); }}
@@ -235,11 +388,12 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
           )}
           <div className="text-xs text-green-700/80 space-y-0.5 pr-7">
             {stats.files > 1 && <p>• من {stats.files} ملفات</p>}
-            {stats.completed > 0 && <p>• أكملنا وسائط {stats.completed} مذكرة موجودة</p>}
+            {stats.completed > 0 && <p>• أكملنا وسائط {stats.completed} مذكرة موجودة (duplicates)</p>}
+            {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (duplicates، بلا تكرار)</p>}
             {stats.photos > 0 && <p>• مع {stats.photos} مذكرة فيها صور</p>}
             {stats.audio > 0 && <p>• مع {stats.audio} مذكرة فيها صوت</p>}
-            {stats.duplicates > 0 && <p>• تخطينا {stats.duplicates} مذكرة مستوردة سابقاً (بلا تكرار)</p>}
             {stats.skippedEmpty > 0 && <p>• تجاهلنا {stats.skippedEmpty} مدخلة فارغة</p>}
+            {stats.failed > 0 && <p>• تعذّر التحقّق من {stats.failed} مدخلة داخل ملف الاستيراد (failed، تُجوهلت)</p>}
           </div>
           {stats.mediaMissing > 0 && (
             <div className="flex items-start gap-2 text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-1">
@@ -248,6 +402,15 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
                 تعذّر قراءة {stats.mediaMissing} ملف وسائط (صورة/صوت) من التصدير — غالباً صيغة لم يستطع
                 المتصفح فكّها. أعد الاستيراد من نفس الملف لاحقاً؛ سنُكمل الناقص دون تكرار.
               </p>
+            </div>
+          )}
+          {fileErrors.length > 0 && (
+            <div className="flex items-start gap-2 text-red-700 bg-red-50 rounded-lg p-2.5 mt-1">
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+              <div className="text-xs leading-relaxed space-y-1">
+                <p className="font-semibold">رُفضت ملفات ولم يُضف منها شيء (missing/غير صالحة):</p>
+                {fileErrors.map((e, i) => <p key={i}>• {e}</p>)}
+              </div>
             </div>
           )}
         </div>
@@ -329,7 +492,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
 
       <div className="flex gap-2">
         {(status === "success" || status === "error") && (
-          <Button variant="secondary" onClick={() => { setStatus("idle"); setStats(null); }} className="flex-1">
+          <Button variant="secondary" onClick={() => { setStatus("idle"); setStats(null); setFileErrors([]); }} className="flex-1">
             استيراد مرة أخرى
           </Button>
         )}

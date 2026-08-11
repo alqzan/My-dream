@@ -1277,3 +1277,50 @@ export async function inventoryMedia(
     storageError: cloudPhotos.error ?? cloudAudios.error,
   };
 }
+
+// ===================== تكامل «مستورد الذكريات» (.madarimport) =====================
+// جسر src/lib/madarBridge.ts يحلّل الملف ويستخرج كل هاشات الوسائط التي
+// تدّعي مذكراته أنها رفعتها لـR2 مسبقاً — لكنه لا يلمس R2 نفسه (بلا Firebase
+// عمداً هناك). هذه الدالة هي البوابة الوحيدة التي تتحقق فعلياً: تسأل الـWorker
+// عمّا هو موجودٌ حقاً تحت kind=photos/audios، ولا تسمح بإنشاء **أي** مذكرة ما
+// لم يثبت أن كل هاشٍ مرجعيّ موجودٌ فعلاً — نقصُ هاشٍ واحد يوقف العملية كاملة
+// (DayOneImport.tsx يستدعيها قبل أي importDayOneEntries، لا بعده).
+export interface MediaHashVerification {
+  ok: boolean;
+  // R2 قابلٌ للوصول والهاشات كلها موجودة.
+  missingPhotos: string[];
+  missingAudios: string[];
+  // false إن تعذّر سؤال R2 أصلاً (شبكة/مفتاح خطأ) — عندها القوائم أعلاه فارغة
+  // بالضرورة، لكن ذلك لا يعني «كل شيء موجود»؛ يعني أننا لا نعرف، فنرفض المتابعة.
+  reachable: boolean;
+  error?: MediaAccessError;
+}
+
+export async function verifyMediaHashesPresent(
+  mediaKey: string,
+  photoHashes: string[],
+  audioHashes: string[]
+): Promise<MediaHashVerification> {
+  const [cloudPhotos, cloudAudios] = await Promise.all([
+    listCloudHashes(mediaKey, "photos", mediaKey),
+    listCloudHashes(mediaKey, "audios", mediaKey),
+  ]);
+  const reachable = cloudPhotos.ok && cloudAudios.ok;
+  const missingPhotos = reachable ? photoHashes.filter((h) => !cloudPhotos.hashes.has(h)) : [...photoHashes];
+  const missingAudios = reachable ? audioHashes.filter((h) => !cloudAudios.hashes.has(h)) : [...audioHashes];
+  return {
+    ok: reachable && missingPhotos.length === 0 && missingAudios.length === 0,
+    missingPhotos,
+    missingAudios,
+    reachable,
+    error: cloudPhotos.error ?? cloudAudios.error,
+  };
+}
+
+// عنوان الـWorker العام — يُقرأ من نفس متغيّر البيئة الذي تبني منه هذه الوحدة
+// R2_WORKER_URL، ليضمّه زر «نسخ إعدادات الاتصال» في DayOneImport.tsx إلى
+// الحمولة التي يرسلها مستورد الذكريات مباشرةً بلا حاجةٍ لتخمينه يدوياً. ليس
+// سرّاً (Public Worker endpoint فقط، كما في تعليق R2_WORKER_URL أعلاه).
+export function getR2WorkerUrl(): string {
+  return R2_WORKER_URL;
+}
