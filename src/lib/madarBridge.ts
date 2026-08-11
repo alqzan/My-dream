@@ -271,18 +271,45 @@ function assertSummary(manifest: MadarBridgeManifest): void {
 // استبعاد ذلك المرجع فقط. بعد نجاح هذا التحقّق، buildEntries تثق أنّ كل
 // mediaID في أي record يُحلّ فعلياً وبلا تعارض recordID.
 function assertMediaIntegrity(manifest: MadarBridgeManifest): void {
-  const recordIds = new Set(
-    manifest.records.map((r) => r?.id).filter((x): x is string => typeof x === "string")
-  );
-  const mediaById = new Map(
-    manifest.media.filter((m) => m && typeof m.id === "string").map((m) => [m.id, m])
-  );
+  // معرّفات السجلّات — id مكرّر يُرفض بدل السماح بالتباس هويةٍ يُحسم لاحقاً
+  // بصمت (أيّ سجلٍّ "يفوز" في Map بلا إشعار). سجلٌّ فاسدٌ بنيوياً (بلا id
+  // نصّي) يُستبعد لاحقاً في buildEntries (failed) لا هنا.
+  const recordIds = new Set<string>();
+  const recordMediaIDs = new Map<string, string[]>(); // record.id -> mediaIDs
+  manifest.records.forEach((r, i) => {
+    if (!r || typeof r.id !== "string") return;
+    if (recordIds.has(r.id)) {
+      throw new MadarImportError("media", `record[${i}] بمعرّفٍ مكرّر (id=${r.id})`);
+    }
+    recordIds.add(r.id);
+    if (Array.isArray(r.mediaIDs)) recordMediaIDs.set(r.id, r.mediaIDs);
+  });
+
+  // معرّفات الوسائط — لنفس سبب id السجلّات أعلاه.
+  const mediaById = new Map<string, MadarBridgeMedia>();
+  manifest.media.forEach((m, i) => {
+    if (!m || typeof m.id !== "string") return;
+    if (mediaById.has(m.id)) {
+      throw new MadarImportError("media", `media[${i}] بمعرّفٍ مكرّر (id=${m.id})`);
+    }
+    mediaById.set(m.id, m);
+  });
 
   manifest.media.forEach((m, i) => {
     if (!m || typeof m.recordID !== "string" || !recordIds.has(m.recordID)) {
       throw new MadarImportError(
         "media",
         `media[${i}] مرتبطٌ بسجلٍّ غير موجود (recordID=${m?.recordID ?? "؟"})`
+      );
+    }
+    // اكتمال الربط في الاتجاه الآخر أيضاً: لا يكفي أن يشير الوسيط لسجلٍّ
+    // موجود — يجب أن يُدرجه ذلك السجلّ فعلياً في mediaIDs، وإلا فوسيطٌ
+    // "معلّق" يدّعي انتماءً لا يعترف به السجلّ نفسه.
+    const owner = recordMediaIDs.get(m.recordID);
+    if (!owner || !owner.includes(m.id)) {
+      throw new MadarImportError(
+        "media",
+        `media[${i}] (${m.id}) غير مذكورٍ في mediaIDs الخاصة بسجله (recordID=${m.recordID})`
       );
     }
     if (m.status === "uploaded") {
@@ -302,7 +329,12 @@ function assertMediaIntegrity(manifest: MadarBridgeManifest): void {
 
   manifest.records.forEach((r) => {
     if (!r || !Array.isArray(r.mediaIDs)) return; // سجلٌّ فاسدٌ يُستبعد لاحقاً في buildEntries (failed)
+    const seen = new Set<string>();
     for (const mid of r.mediaIDs) {
+      if (seen.has(mid)) {
+        throw new MadarImportError("media", `record ${r.id ?? "؟"} يكرّر mediaID نفسه (${mid})`);
+      }
+      seen.add(mid);
       const m = mediaById.get(mid);
       if (!m || m.recordID !== r.id) {
         throw new MadarImportError(
@@ -349,9 +381,9 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
 
     const photoRefs: string[] = [];
     const audioRefs: string[] = [];
-    const videoRefs: { type?: string; duration?: number; posterHash?: string }[] = [];
-    const attachmentRefs: { kind: "pdf"; filename?: string; previewHash?: string; status: string }[] = [];
-    const audioMetadataRefs: { type?: string; duration?: number; filename?: string; status: string }[] = [];
+    const videoRefs: { type?: string; duration?: number; posterHash?: string; sourceMediaID?: string }[] = [];
+    const attachmentRefs: { kind: "pdf"; filename?: string; previewHash?: string; status: string; sourceMediaID?: string }[] = [];
+    const audioMetadataRefs: { type?: string; duration?: number; filename?: string; status: string; sourceMediaID?: string }[] = [];
 
     for (const mid of r.mediaIDs ?? []) {
       // assertMediaIntegrity ضَمِنت أن كل mediaID يُحلّ فعلياً وrecordID مطابق —
@@ -380,9 +412,14 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
           photoRefs.push(posterHash);
         }
         videoRefs.push({
-          ...(m.contentType ?? m.originalContentType ? { type: m.contentType ?? m.originalContentType } : {}),
+          // النوع الدلاليّ هو نوع **الفيديو نفسه**، لا نوع الملف المرفوع فعلياً
+          // (البايتات المرفوعة لقطة غلافٍ jpeg، فـcontentType يصف تلك اللقطة
+          // لا الفيديو) — originalContentType (نوع المصدر المحلي) أولاً، ثم
+          // contentType كاحتياطٍ إن غاب originalContentType فقط.
+          ...(m.originalContentType ?? m.contentType ? { type: m.originalContentType ?? m.contentType } : {}),
           ...(typeof m.durationSeconds === "number" ? { duration: m.durationSeconds } : {}),
           ...(posterHash ? { posterHash } : {}),
+          sourceMediaID: m.id, // هويّة الدمج الثابتة — راجع mergeRefList في utils.ts
         });
       } else if (m.kind === "pdf") {
         const previewHash = inPhotosBucket && hash ? hash : undefined;
@@ -395,16 +432,20 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
           ...(m.originalFilename ? { filename: m.originalFilename } : {}),
           ...(previewHash ? { previewHash } : {}),
           status: m.status,
+          sourceMediaID: m.id,
         });
       } else if (m.kind === "audio") {
         if (inAudiosBucket && hash) { audioRefs.push(hash); audioHashes.add(hash); }
         // بيانات وصفية دائماً — حتى بلا cloudHash (status=metadataOnly مثلاً)،
-        // فتبقى المعرفة بوجود ملاحظةٍ صوتية حتى قبل رفع بايتاتها.
+        // فتبقى المعرفة بوجود ملاحظةٍ صوتية حتى قبل رفع بايتاتها. البايتات
+        // المرفوعة هنا (إن وُجدت) هي الصوت نفسه لا معاينةً لشيءٍ آخر، فالترتيب
+        // contentType ثم originalContentType يبقى صحيحاً (خلاف الفيديو أعلاه).
         audioMetadataRefs.push({
           ...(m.contentType ?? m.originalContentType ? { type: m.contentType ?? m.originalContentType } : {}),
           ...(typeof m.durationSeconds === "number" ? { duration: m.durationSeconds } : {}),
           ...(m.originalFilename ? { filename: m.originalFilename } : {}),
           status: m.status,
+          sourceMediaID: m.id,
         });
       }
       // kind === "unknown": لا إشارة على المذكرة — الحساب في manifestMissingMedia أعلاه فقط.

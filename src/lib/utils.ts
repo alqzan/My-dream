@@ -425,13 +425,21 @@ export function unionRefs(a?: string[], b?: string[]): string[] | undefined {
 
 // دمج مصفوفةٍ من إشاراتٍ وصفية (فيديو/مرفقات/بيانات صوت — بلا ملفّ) بحيث لا
 // يضيع عنصرٌ من أيّ جهاز، وبحيث لا تتضاعف نفس الوسيلة حين تختلف درجة اكتمالها
-// بين الجهازين. الهويّة **لا تعتمد على الهاش أبداً** (posterHash/previewHash
-// غائبٌ تماماً على نسخةٍ metadataOnly لم تُرفع بعد) — بل على حقولٍ وصفية
-// مستقرّة (`identityKeys`، مثل type+duration للفيديو) تبقى نفسها بصرف النظر
-// عن اكتمال الرفع. عنصرا الجهازين بنفس الهويّة يتّحدان حقلاً‑حقلاً (أيّ حقلٍ
-// معرَّفٍ في إحدى النسختين يبقى)، فحين يرفع جهازٌ معاينةً كان الجهاز الآخر
-// يعرف فقط أنها موجودة، ينتج عنصرٌ واحدٌ أغنى لا عنصران مكرّران.
-function mergeRefList<T extends Record<string, unknown>>(
+// بين الجهازين، ولا تندمج وسيلتان مختلفتان فعلاً بالخطأ لمجرّد تطابق حقولهما
+// الوصفية.
+//
+// الهويّة: `sourceMediaID` (=media.id من مانيفست .madarimport، راجع
+// madarBridge.ts) حين يحمله العنصر — ثابتةٌ ومستقلّة عن الهاش (posterHash/
+// previewHash غائبٌ تماماً على نسخةٍ metadataOnly)، فتوحّد نسخة metadataOnly
+// مع نسخة uploaded اللاحقة لنفس الوسيط رغم اختلاف حقولهما، وتُبقي وسيطين
+// مختلفين فعلاً منفصلين حتى لو تصادف تطابق type/duration/filename بينهما.
+// عنصرٌ بلا sourceMediaID (مرجعٌ أقدم من هذا الحقل، أو مصدرٌ غير مستورد
+// الذكريات) يقع على `identityKeys` الوصفية كـfallback — توافقٌ خلفيّ محض،
+// لا يُخلط مع عناصر sourceMediaID (فضاء هويّةٍ منفصل عمداً؛ الأسلم عند غياب
+// دليلٍ قاطع على أنهما نفس الوسيط).
+// عنصرا نفس الهويّة يتّحدان حقلاً‑حقلاً (أيّ حقلٍ معرَّفٍ في إحدى النسختين
+// يبقى)، فينتج عنصرٌ واحدٌ أغنى لا عنصران مكرّران.
+function mergeRefList<T extends Record<string, unknown> & { sourceMediaID?: string }>(
   a: T[] | undefined,
   b: T[] | undefined,
   identityKeys: (keyof T)[]
@@ -439,7 +447,10 @@ function mergeRefList<T extends Record<string, unknown>>(
   const av = a ?? [];
   const bv = b ?? [];
   if (!av.length && !bv.length) return undefined;
-  const identityOf = (item: T): string => identityKeys.map((k) => JSON.stringify(item[k] ?? null)).join("|");
+  const fallbackIdentity = (item: T): string =>
+    identityKeys.map((k) => JSON.stringify(item[k] ?? null)).join("|");
+  const identityOf = (item: T): string =>
+    item.sourceMediaID ? `id:${item.sourceMediaID}` : `fallback:${fallbackIdentity(item)}`;
   const order: string[] = [];
   const byIdentity = new Map<string, T>();
   const put = (item: T) => {

@@ -189,7 +189,7 @@ describe("معاينات الفيديو/PDF تظهر فعلياً داخل مد�
     const parsed = await parseMadarImportFile(madarFile(records, mediaItems));
     // dual-write تحقّق: الهاش في photoRefs، لا في videoRefs.posterHash فقط.
     expect(parsed.entries[0].photoRefs).toEqual([HASH_A]);
-    expect(parsed.entries[0].videoRefs).toEqual([{ type: "image/jpeg", posterHash: HASH_A, duration: 9 }]);
+    expect(parsed.entries[0].videoRefs).toEqual([{ type: "image/jpeg", posterHash: HASH_A, duration: 9, sourceMediaID: "vid" }]);
 
     // نحاكي أنّ البايتات وصلت محلياً (كما تفعل fetchInlineMedia بعد أول تنزيل
     // من R2) — نفس أسلوب sync.photos.test.ts، فلا حاجة لتزييف fetch/Blob كاملةً.
@@ -211,7 +211,7 @@ describe("معاينات الفيديو/PDF تظهر فعلياً داخل مد�
     const parsed = await parseMadarImportFile(madarFile(records, mediaItems));
     expect(parsed.entries[0].photoRefs).toEqual([HASH_B]);
     expect(parsed.entries[0].attachmentRefs).toEqual([
-      { kind: "pdf", filename: "عقد.pdf", previewHash: HASH_B, status: "uploaded" },
+      { kind: "pdf", filename: "عقد.pdf", previewHash: HASH_B, status: "uploaded", sourceMediaID: "pdf" },
     ]);
 
     idb.set(MEDIA_CACHE_PREFIX + HASH_B, "data:image/jpeg;base64,PREVIEWBYTES");

@@ -153,15 +153,16 @@ describe("parseMadarImportFile — الوسائط: صورة+فيديو مع post
     // تظهر الثلاث فوراً في معرض الصور القائم (hydrateCloudPhotos/
     // JournalEntryCard) بلا حاجة لواجهة عرضٍ مخصّصة جديدة.
     expect(e.photoRefs).toEqual([HASH_A, HASH_B, HASH_C]);
-    // ...وتبقى أيضاً في حقولها النوعية الغنية بالمعلومات الوصفية.
-    expect(e.videoRefs).toEqual([{ type: "image/jpeg", duration: 12.5, posterHash: HASH_B }]);
+    // ...وتبقى أيضاً في حقولها النوعية الغنية بالمعلومات الوصفية، مع
+    // sourceMediaID (=media.id) كهويّة دمجٍ ثابتة.
+    expect(e.videoRefs).toEqual([{ type: "image/jpeg", duration: 12.5, posterHash: HASH_B, sourceMediaID: "vid" }]);
     expect(e.attachmentRefs).toEqual([
-      { kind: "pdf", filename: "عقد.pdf", previewHash: HASH_C, status: "uploaded" },
+      { kind: "pdf", filename: "عقد.pdf", previewHash: HASH_C, status: "uploaded", sourceMediaID: "pdf" },
     ]);
     // صوتٌ metadataOnly: بلا audioRefs (لا بايتات)، لكن بمعلوماتٍ وصفية.
     expect(e.audioRefs).toBeUndefined();
     expect(e.audioMetadataRefs).toEqual([
-      { type: "audio/mp4", duration: 42, filename: "ملاحظة.m4a", status: "metadataOnly" },
+      { type: "audio/mp4", duration: 42, filename: "ملاحظة.m4a", status: "metadataOnly", sourceMediaID: "aud" },
     ]);
     // كل هاشات "photos" الثلاثة (صورة+poster+preview) يجب التحقّق منها في R2.
     expect(r.photoHashes).toEqual(expect.arrayContaining([HASH_A, HASH_B, HASH_C]));
@@ -180,8 +181,25 @@ describe("parseMadarImportFile — الوسائط: صورة+فيديو مع post
     const r = await parseMadarImportFile(jsonFile(manifest(records, mediaItems)));
     const e = r.entries[0];
     expect(e.audioRefs).toEqual([HASH_D]);
-    expect(e.audioMetadataRefs).toEqual([{ type: "audio/mp4", duration: 8, status: "uploaded" }]);
+    expect(e.audioMetadataRefs).toEqual([{ type: "audio/mp4", duration: 8, status: "uploaded", sourceMediaID: "aud" }]);
     expect(r.audioHashes).toEqual([HASH_D]);
+  });
+
+  it("نوع الفيديو الدلاليّ من originalContentType لا contentType (المرفوع لقطة غلافٍ فقط)", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "U1", mediaIDs: ["vid"] })];
+    const mediaItems = [
+      uploaded({
+        id: "vid", recordID: "r1", kind: "video", cloudKind: "photos", cloudHash: HASH_A,
+        // البايتات المرفوعة فعلياً لقطة غلافٍ (jpeg) — النوع الحقيقي للفيديو
+        // نفسه في originalContentType (نوع الملف المصدر على الجهاز).
+        contentType: "image/jpeg", originalContentType: "video/quicktime", durationSeconds: 7,
+      }),
+    ];
+    const r = await parseMadarImportFile(jsonFile(manifest(records, mediaItems)));
+    const e = r.entries[0];
+    expect(e.videoRefs).toEqual([
+      { type: "video/quicktime", duration: 7, posterHash: HASH_A, sourceMediaID: "vid" },
+    ]);
   });
 
   it("وسيطٌ status=missing/failed يُحسب في manifestMissingMedia لا في failed السجلّات", async () => {
@@ -252,6 +270,37 @@ describe("parseMadarImportFile — تحقّقٌ صارم لربط records/media 
     const mediaItems = [
       media({ id: "m1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos", uploadedByteCount: 1024 }),
     ]; // بلا contentType
+    await expect(parseMadarImportFile(jsonFile(manifest(records, mediaItems)))).rejects.toMatchObject({ code: "media" });
+  });
+
+  it("يرفض media.id مكرراً", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "U1", mediaIDs: ["m1"] })];
+    const mediaItems = [
+      media({ id: "m1", recordID: "r1", status: "metadataOnly" }),
+      media({ id: "m1", recordID: "r1", status: "metadataOnly" }), // نفس id مرّتين
+    ];
+    await expect(parseMadarImportFile(jsonFile(manifest(records, mediaItems)))).rejects.toMatchObject({ code: "media" });
+  });
+
+  it("يرفض record.id مكرراً", async () => {
+    const records = [
+      record({ id: "r1", dayOneUUID: "U1" }),
+      record({ id: "r1", dayOneUUID: "U2" }), // نفس id مرّتين
+    ];
+    await expect(parseMadarImportFile(jsonFile(manifest(records, [])))).rejects.toMatchObject({ code: "media" });
+  });
+
+  it("يرفض وسيطاً recordID فيه صحيحٌ لكن غير مذكورٍ في mediaIDs الخاصة بذلك السجلّ", async () => {
+    // r1 موجودٌ فعلاً، وm1.recordID="r1" صحيحٌ — لكن r1.mediaIDs لا يذكر m1
+    // إطلاقاً (بقيت فارغة). وسيطٌ "معلّق" لا يعترف به السجلّ الذي يدّعي الانتماء إليه.
+    const records = [record({ id: "r1", dayOneUUID: "U1", mediaIDs: [] })];
+    const mediaItems = [uploaded({ id: "m1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" })];
+    await expect(parseMadarImportFile(jsonFile(manifest(records, mediaItems)))).rejects.toMatchObject({ code: "media" });
+  });
+
+  it("يرفض mediaID مكرراً داخل mediaIDs لنفس السجلّ", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "U1", mediaIDs: ["m1", "m1"] })];
+    const mediaItems = [uploaded({ id: "m1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" })];
     await expect(parseMadarImportFile(jsonFile(manifest(records, mediaItems)))).rejects.toMatchObject({ code: "media" });
   });
 

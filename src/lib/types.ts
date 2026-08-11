@@ -146,18 +146,24 @@ export interface JournalEntry {
   // رفعها مستورد الذكريات — مُنفصلٌ عمداً عن photoRefs (ليست صورةً حقيقية من
   // المذكرة، بل معاينةٌ لمقطع)؛ يُتحقّق من وجوده في R2 كأي هاش صورة عادي عبر
   // sync.ts#verifyMediaHashesPresent قبل الاستيراد رغم بقائه هنا لا في photoRefs.
-  videoRefs?: { type?: string; duration?: number; posterHash?: string }[];
+  // sourceMediaID (=media.id من مانيفست .madarimport) هويّةٌ ثابتة للدمج —
+  // تميّز الوسيط حتى لو تطابقت type/duration مع وسيطٍ آخر فعلاً مختلف، وتوحّد
+  // نسخة metadataOnly مع نسخة uploaded اللاحقة لنفس الوسيط رغم اختلاف حقولها.
+  // غيابه (مراجع أقدم من هذا الحقل) يُسقط الدمج لحقول type/duration كـfallback
+  // (راجع mergeRefList في utils.ts).
+  videoRefs?: { type?: string; duration?: number; posterHash?: string; sourceMediaID?: string }[];
   // إشارات مرفقاتٍ غير صورةٍ/صوتٍ/فيديو (مستورد الذكريات) — اليوم PDF فقط،
   // لكن kind مصفوفةٌ لا حقلٌ ثابت تحسّباً لنوعٍ لاحق. previewHash مرجع هاش R2
   // (kind=photos) لمعاينة أول صفحة إن رُفعت — منفصلٌ عن photoRefs لنفس سبب
   // posterHash أعلاه. status ("uploaded"/"metadataOnly"/"missing"/"failed"،
   // كما وردت من مستورد الذكريات) يُبقي المعرفة بوجود مرفقٍ حتى بلا معاينة.
-  attachmentRefs?: { kind: "pdf"; filename?: string; previewHash?: string; status: string }[];
+  // sourceMediaID كما في videoRefs أعلاه.
+  attachmentRefs?: { kind: "pdf"; filename?: string; previewHash?: string; status: string; sourceMediaID?: string }[];
   // بيانات وصفية لملاحظةٍ صوتية من مستورد الذكريات — تُملأ **دائماً** حين
   // يذكر المصدر صوتاً، حتى لو status="metadataOnly" بلا cloudHash (بايتات
   // الصوت القابلة للتشغيل، إن وُجدت، تعيش في audioRefs وحدها؛ هذا الحقل وصفٌ
-  // إضافي لا مصدر تشغيل).
-  audioMetadataRefs?: { type?: string; duration?: number; filename?: string; status: string }[];
+  // إضافي لا مصدر تشغيل). sourceMediaID كما في videoRefs أعلاه.
+  audioMetadataRefs?: { type?: string; duration?: number; filename?: string; status: string; sourceMediaID?: string }[];
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";
