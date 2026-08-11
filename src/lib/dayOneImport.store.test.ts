@@ -86,6 +86,49 @@ describe("importDayOneEntries — completes partially-missing media", () => {
   });
 });
 
+describe("importDayOneEntries — يوحّد photoRefs/audioRefs الواردة من .madarimport", () => {
+  it("مذكرةٌ نصّية بحتة موجودة تكتسب photoRefs/audioRefs من إعادة استيراد لاحقة", () => {
+    // مذكرةٌ نصّية بلا أي وسائط (كأنها استُوردت أول مرة من JSON نصّي فقط).
+    useAppStore.setState({ journalEntries: [doEntry("v1", { content: "نصٌّ فقط" })] });
+
+    const HASH_A = "a".repeat(32);
+    const HASH_B = "b".repeat(32);
+    const r = useAppStore.getState().importDayOneEntries([
+      doEntry("v1", { content: "نصٌّ مختلف من .madarimport", photoRefs: [HASH_A], audioRefs: [HASH_B] }),
+    ]);
+
+    const e = useAppStore.getState().journalEntries.find((x) => x.id === "do-v1")!;
+    expect(r.added).toBe(0);
+    expect(r.completed).toBe(1); // اكتمال، لا إضافة
+    expect(r.photos).toBe(1);
+    expect(r.audio).toBe(1);
+    expect(e.photoRefs).toEqual([HASH_A]);
+    expect(e.audioRefs).toEqual([HASH_B]);
+    // النصّ الأصلي يبقى كما هو — لا تُكتب المراجع فوق content إطلاقاً.
+    expect(e.content).toBe("نصٌّ فقط");
+  });
+
+  it("يضيف مرجعاً ناقصاً فقط ولا يُسقط مرجعاً موجوداً مسبقاً (اتحادٌ لا استبدال)", () => {
+    const HASH_A = "a".repeat(32);
+    const HASH_B = "b".repeat(32);
+    useAppStore.setState({ journalEntries: [doEntry("v2", { photoRefs: [HASH_A] })] });
+
+    const r = useAppStore.getState().importDayOneEntries([doEntry("v2", { photoRefs: [HASH_A, HASH_B] })]);
+
+    const e = useAppStore.getState().journalEntries.find((x) => x.id === "do-v2")!;
+    expect(r.completed).toBe(1);
+    expect(e.photoRefs).toEqual([HASH_A, HASH_B]); // HASH_A بقي، HASH_B أُضيف
+  });
+
+  it("لا يُحدث أي تغيير (لا اكتمال) حين تكون المراجع الواردة موجودة مسبقاً بالكامل", () => {
+    const HASH_A = "a".repeat(32);
+    useAppStore.setState({ journalEntries: [doEntry("v3", { photoRefs: [HASH_A] })] });
+
+    const r = useAppStore.getState().importDayOneEntries([doEntry("v3", { photoRefs: [HASH_A] })]);
+    expect(r.added + r.completed).toBe(0);
+  });
+});
+
 describe("updateJournalEntry — records media tombstones on single-photo delete", () => {
   it("tombstones the removed photo for THIS entry (and not the kept one)", async () => {
     useAppStore.setState({

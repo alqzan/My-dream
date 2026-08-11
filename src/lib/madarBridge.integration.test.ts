@@ -56,8 +56,11 @@ const HASH_B = "b".repeat(32);
 function record(o: Partial<MadarBridgeRecord> & { id: string; dayOneUUID: string }): MadarBridgeRecord {
   return { createdAt: "2026-01-01T09:00:00Z", text: "نص", tags: [], starred: false, mediaIDs: [], ...o };
 }
+// إيصالٌ كاملٌ افتراضياً (uploadedByteCount/contentType) — لا يختبر هذا الملف
+// النقص عمداً (ذاك في madarBridge.test.ts)، فالوسيط هنا يجب أن يكون صالحاً
+// بالكامل كي يمرّ التحقّق الصارم في assertMediaIntegrity.
 function media(o: Partial<MadarBridgeMedia> & { id: string; recordID: string }): MadarBridgeMedia {
-  return { kind: "photo", status: "uploaded", ...o };
+  return { kind: "photo", status: "uploaded", uploadedByteCount: 1024, contentType: "image/jpeg", ...o };
 }
 function summaryOf(records: MadarBridgeRecord[], media_: MadarBridgeMedia[]): MadarBridgeSummary {
   const recordIds = new Set(records.map((r) => r.id));
@@ -165,6 +168,38 @@ describe("hash ناقص في R2 يوقف الاستيراد كاملاً قبل 
 
     if (check.ok) useAppStore.getState().importDayOneEntries(parsed.entries);
     expect(useAppStore.getState().journalEntries).toHaveLength(1);
+  });
+});
+
+describe("إعادة الاستيراد تُكمّل الوسائط الناقصة", () => {
+  it("مذكرةٌ استُوردت بصورةٍ واحدة تكتسب مرجع صوتٍ اكتشفه مستورد الذكريات لاحقاً", async () => {
+    // الملف الأول: صورةٌ واحدة فقط.
+    const v1 = madarFile(
+      [record({ id: "r1", dayOneUUID: "M6", mediaIDs: ["p1"] })],
+      [media({ id: "p1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" })]
+    );
+    const first = await parseMadarImportFile(v1);
+    useAppStore.getState().importDayOneEntries(first.entries);
+    expect(useAppStore.getState().journalEntries[0].photoRefs).toEqual([HASH_A]);
+    expect(useAppStore.getState().journalEntries[0].audioRefs).toBeUndefined();
+
+    // الملف الثاني (إعادة معالجة الأرشيف نفسه): نفس dayOneUUID، الآن مع
+    // مرجع صوتٍ اكتُشف/رُفع لاحقاً — لا يجب أن يُسقط الصورة الموجودة.
+    const v2 = madarFile(
+      [record({ id: "r1", dayOneUUID: "M6", mediaIDs: ["p1", "a1"] })],
+      [
+        media({ id: "p1", recordID: "r1", cloudHash: HASH_A, cloudKind: "photos" }),
+        media({ id: "a1", recordID: "r1", kind: "audio", cloudHash: HASH_B, cloudKind: "audios" }),
+      ]
+    );
+    const second = await parseMadarImportFile(v2);
+    const r = useAppStore.getState().importDayOneEntries(second.entries);
+
+    const e = useAppStore.getState().journalEntries.find((x) => x.id === "do-M6")!;
+    expect(r.added).toBe(0);
+    expect(r.completed).toBe(1);
+    expect(e.photoRefs).toEqual([HASH_A]); // الصورة القديمة بقيت
+    expect(e.audioRefs).toEqual([HASH_B]); // والصوت الجديد أُضيف
   });
 });
 

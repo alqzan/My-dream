@@ -140,13 +140,24 @@ export interface JournalEntry {
   photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
   audio?: string; // ملاحظة صوتية (base64 data URL) — الأولى؛ audios يحمل الكل
   audios?: string[]; // عدة ملاحظات صوتية (audio يبقى للتوافق = الأولى)
-  // إشارات مقاطع فيديو مستوردة من Day One — لا يُخزَّن الملف نفسه (كبير ولا
-  // يتزامن)، فقط تذكير بأن التدوينة فيها مقطع (النوع + المدة إن وُجدت).
-  videoRefs?: { type?: string; duration?: number }[];
-  // إشارات مرفقات PDF (مستورد الذكريات) — كـvideoRefs تماماً: بلا ملف، فقط
-  // تذكير بوجود مرفق (عدد الصفحات إن وُجد). المعاينة (إن رُفعت) صورةٌ عادية
-  // ضمن photoRefs/photos، فلا حاجة لمرجعٍ منفصل هنا.
-  pdfRefs?: { pages?: number }[];
+  // إشارات مقاطع فيديو مستوردة من Day One/مستورد الذكريات — لا يُخزَّن الملف
+  // نفسه (كبير ولا يتزامن)، فقط تذكير بأن التدوينة فيها مقطع (النوع + المدة
+  // إن وُجدت). posterHash مرجع هاش R2 (kind=photos) للقطة غلاف الفيديو حين
+  // رفعها مستورد الذكريات — مُنفصلٌ عمداً عن photoRefs (ليست صورةً حقيقية من
+  // المذكرة، بل معاينةٌ لمقطع)؛ يُتحقّق من وجوده في R2 كأي هاش صورة عادي عبر
+  // sync.ts#verifyMediaHashesPresent قبل الاستيراد رغم بقائه هنا لا في photoRefs.
+  videoRefs?: { type?: string; duration?: number; posterHash?: string }[];
+  // إشارات مرفقاتٍ غير صورةٍ/صوتٍ/فيديو (مستورد الذكريات) — اليوم PDF فقط،
+  // لكن kind مصفوفةٌ لا حقلٌ ثابت تحسّباً لنوعٍ لاحق. previewHash مرجع هاش R2
+  // (kind=photos) لمعاينة أول صفحة إن رُفعت — منفصلٌ عن photoRefs لنفس سبب
+  // posterHash أعلاه. status ("uploaded"/"metadataOnly"/"missing"/"failed"،
+  // كما وردت من مستورد الذكريات) يُبقي المعرفة بوجود مرفقٍ حتى بلا معاينة.
+  attachmentRefs?: { kind: "pdf"; filename?: string; previewHash?: string; status: string }[];
+  // بيانات وصفية لملاحظةٍ صوتية من مستورد الذكريات — تُملأ **دائماً** حين
+  // يذكر المصدر صوتاً، حتى لو status="metadataOnly" بلا cloudHash (بايتات
+  // الصوت القابلة للتشغيل، إن وُجدت، تعيش في audioRefs وحدها؛ هذا الحقل وصفٌ
+  // إضافي لا مصدر تشغيل).
+  audioMetadataRefs?: { type?: string; duration?: number; filename?: string; status: string }[];
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";

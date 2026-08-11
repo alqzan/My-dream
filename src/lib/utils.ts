@@ -414,11 +414,53 @@ export function canonicalEntryId(
 type EntryMediaRefs = JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
 
 // توحيد قائمتَي مراجع (يحفظ الترتيب ويزيل التكرار). المراجع هاشاتُ محتوى، فتوحيدها
-// آمنٌ دائماً — بخلاف بايتات الوسائط، الهاشان المتساويان محتواهما واحد.
-function unionRefs(a?: string[], b?: string[]): string[] | undefined {
+// آمنٌ دائماً — بخلاف بايتات الوسائط، الهاشان المتساويان محتواهما واحد. مُصدَّرة
+// (لا محلية فقط) لأنّ store.ts#importDayOneEntries يعيد استخدامها أيضاً: إكمال
+// مذكرةٍ موجودة بمراجع .madarimport الناقصة هو نفس مسألة «لا تُسقط مرجعاً»
+// التي تحلّها mergeEntryMedia أدناه، فلا داعي لتكرار المنطق.
+export function unionRefs(a?: string[], b?: string[]): string[] | undefined {
   if (!a?.length && !b?.length) return undefined;
   return [...new Set([...(a ?? []), ...(b ?? [])])];
 }
+
+// دمج مصفوفةٍ من إشاراتٍ وصفية (فيديو/مرفقات/بيانات صوت — بلا ملفّ) بحيث لا
+// يضيع عنصرٌ من أيّ جهاز. عنصرٌ يحمل هاشاً حقيقياً (`hashKey`، مثل posterHash/
+// previewHash) يُتَّحد بذلك الهاش تحديداً — نسخةٌ حقلاً‑حقلاً أغنى تفوز (أيّ
+// حقلٍ معرَّف في إحدى النسختين يبقى)، فحين يرفع جهازٌ معاينةً كان الجهاز
+// الآخر يعرف فقط أنها موجودة (status بلا previewHash) لا تضيع الأغنى منهما.
+// عنصرٌ بلا هاش (لم يُرفع شيء لهذه الوسيلة قط) يتّحد بقيمته الكاملة (JSON)
+// كما كانت videoRefs تُدمَج دائماً — نسختان بنفس المحتوى تتوحّدان في واحدة.
+function mergeRefList<T extends Record<string, unknown>>(
+  a: T[] | undefined,
+  b: T[] | undefined,
+  hashKey?: keyof T
+): T[] | undefined {
+  const av = a ?? [];
+  const bv = b ?? [];
+  if (!av.length && !bv.length) return undefined;
+  const byHash = new Map<string, T>();
+  const byValue: T[] = [];
+  const seenValues = new Set<string>();
+  const put = (item: T) => {
+    const h = hashKey ? item[hashKey] : undefined;
+    if (typeof h === "string" && h) {
+      const prev = byHash.get(h);
+      const enriched: Record<string, unknown> = { ...prev };
+      for (const [k, v] of Object.entries(item)) if (v !== undefined) enriched[k] = v;
+      byHash.set(h, enriched as T);
+    } else {
+      const k = JSON.stringify(item);
+      if (!seenValues.has(k)) { seenValues.add(k); byValue.push(item); }
+    }
+  };
+  for (const item of av) put(item);
+  for (const item of bv) put(item);
+  const merged = [...byHash.values(), ...byValue];
+  return merged.length ? merged : undefined;
+}
+
+const refListChanged = <T,>(current: T[] | undefined, merged: T[] | undefined): boolean =>
+  JSON.stringify(merged ?? []) !== JSON.stringify(current ?? []);
 
 // دمج نسختين من المذكرة نفسها بحيث لا تضيع الوسائط أبداً. النصّ وبقية الحقول من
 // `base`. الصور/الأصوات تُملأ فقط إن كانت `base` خاليةً منها — لا نستبدل مجموعةً
@@ -442,20 +484,17 @@ export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): Journa
   if (photoRefs) out = { ...out, photoRefs };
   const audioRefs = unionRefs(b.audioRefs, o.audioRefs);
   if (audioRefs) out = { ...out, audioRefs };
-  // إشارات الفيديو (نوع/مدّة، بلا ملفّ) تتّحد كالمراجع لا «تُملأ إن كانت فارغة»:
-  // نسختان لكلٍّ منهما إشارةٌ مختلفة كانتا تفقدان إحداهما. الاتحاد بالقيمة يُبقي
-  // الاثنتين ويسقط المكرّر، وهو ما يبرّر استثناءها من ختم تعديل المذكرة
-  // (`UNSTAMPED_FIELDS` في store.ts) — لها دمجُها المستقل مثل بقية الوسائط.
-  const vids = [...(base.videoRefs ?? []), ...(other.videoRefs ?? [])];
-  if (vids.length) {
-    const seen = new Set<string>();
-    const merged = vids.filter((v) => {
-      const k = JSON.stringify(v);
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-    if (merged.length !== (base.videoRefs?.length ?? 0)) out = { ...out, videoRefs: merged };
+  // إشارات الفيديو/المرفقات/بيانات الصوت (بلا ملفّ) تتّحد كالمراجع لا «تُملأ
+  // إن كانت فارغة»: نسختان لكلٍّ منهما إشارةٌ مختلفة (أو نفس الإشارة بدرجة
+  // اكتمالٍ مختلفة) كانتا تفقدان إحداهما. هذا يبرّر استثناءها من ختم تعديل
+  // المذكرة (`UNSTAMPED_FIELDS` في store.ts) — لها دمجُها المستقل كبقية الوسائط.
+  const videoRefs = mergeRefList(base.videoRefs, other.videoRefs, "posterHash");
+  if (videoRefs && refListChanged(base.videoRefs, videoRefs)) out = { ...out, videoRefs };
+  const attachmentRefs = mergeRefList(base.attachmentRefs, other.attachmentRefs, "previewHash");
+  if (attachmentRefs && refListChanged(base.attachmentRefs, attachmentRefs)) out = { ...out, attachmentRefs };
+  const audioMetadataRefs = mergeRefList(base.audioMetadataRefs, other.audioMetadataRefs);
+  if (audioMetadataRefs && refListChanged(base.audioMetadataRefs, audioMetadataRefs)) {
+    out = { ...out, audioMetadataRefs };
   }
   return out as JournalEntry;
 }
@@ -472,10 +511,27 @@ export function stripTombstonedMediaRefs(e: JournalEntry, tomb: Set<string>): Jo
   const ar = x.audioRefs?.filter((h) => !tomb.has(mediaTombKey(e.id, "audios", h)));
   const prChanged = !!x.photoRefs && pr!.length !== x.photoRefs.length;
   const arChanged = !!x.audioRefs && ar!.length !== x.audioRefs.length;
-  if (!prChanged && !arChanged) return e;
+  // معاينة الفيديو (posterHash) ومعاينة PDF (previewHash) تعيشان في نفس
+  // مساحة "photos" — حذف تلك الصورة بعينها (شاهدٌ بنفس entryId+kind+hash)
+  // يُسقط المرجع من الإشارة فقط، لا الإشارة كاملةً (النوع/المدّة/الاسم تبقى).
+  const vr = e.videoRefs?.map((v) =>
+    v.posterHash && tomb.has(mediaTombKey(e.id, "photos", v.posterHash))
+      ? { ...v, posterHash: undefined }
+      : v
+  );
+  const vrChanged = !!e.videoRefs && JSON.stringify(vr) !== JSON.stringify(e.videoRefs);
+  const atr = e.attachmentRefs?.map((a) =>
+    a.previewHash && tomb.has(mediaTombKey(e.id, "photos", a.previewHash))
+      ? { ...a, previewHash: undefined }
+      : a
+  );
+  const atrChanged = !!e.attachmentRefs && JSON.stringify(atr) !== JSON.stringify(e.attachmentRefs);
+  if (!prChanged && !arChanged && !vrChanged && !atrChanged) return e;
   const out = { ...x } as EntryMediaRefs;
   if (prChanged) { if (pr!.length) out.photoRefs = pr; else delete out.photoRefs; }
   if (arChanged) { if (ar!.length) out.audioRefs = ar; else delete out.audioRefs; }
+  if (vrChanged) out.videoRefs = vr;
+  if (atrChanged) out.attachmentRefs = atr;
   return out as JournalEntry;
 }
 

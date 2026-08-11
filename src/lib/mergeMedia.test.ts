@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { mergeEntryMedia } from "./utils";
+import { mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
+import { mediaTombKey } from "./mediaHash";
 import type { JournalEntry } from "./types";
 
 type E = JournalEntry & { photoRefs?: string[]; audioRefs?: string[] };
@@ -58,5 +59,80 @@ describe("mergeEntryMedia — no ref is ever dropped, no deletion resurrected", 
     expect(out.photoRefs).toBeUndefined();
     expect(out.audioRefs).toBeUndefined();
     expect(out.photos).toBeUndefined();
+  });
+});
+
+// ===================== مستورد الذكريات: videoRefs.posterHash /
+// attachmentRefs.previewHash / audioMetadataRefs — لا تُفقد عند الدمج =====
+describe("mergeEntryMedia — معاينة فيديو/PDF وبيانات صوت لا تضيع عبر جهازين", () => {
+  it("يُبقي فيديو الجهاز الآخر (posterHash) حين لا يحمله الـbase إطلاقاً", () => {
+    const base = entry({ id: "E1", content: "نص" });
+    const other = entry({ id: "E1", videoRefs: [{ type: "video/quicktime", duration: 8, posterHash: "p1" }] });
+    const out = mergeEntryMedia(base, other);
+    expect(out.videoRefs).toEqual([{ type: "video/quicktime", duration: 8, posterHash: "p1" }]);
+  });
+
+  it("يوحّد فيديو نفس posterHash من الجهازين ويحتفظ بأغنى الحقول", () => {
+    // جهازٌ أ رفع المعاينة (posterHash) بلا مدّة معروفة؛ جهازٌ ب يعرف المدّة
+    // لكن لم يرَ المعاينة بعد — الدمج يجب أن يحتفظ بكليهما معاً لا بأحدهما.
+    const base = entry({ id: "E1", videoRefs: [{ posterHash: "p1" }] });
+    const other = entry({ id: "E1", videoRefs: [{ duration: 12, posterHash: "p1" }] });
+    const out = mergeEntryMedia(base, other);
+    expect(out.videoRefs).toEqual([{ duration: 12, posterHash: "p1" }]);
+  });
+
+  it("لا يكرّر فيديو نفسه حين يحمله الطرفان بالضبط", () => {
+    const v = { type: "video/mp4", duration: 5 };
+    const base = entry({ id: "E1", videoRefs: [v] });
+    const other = entry({ id: "E1", videoRefs: [{ ...v }] });
+    expect(mergeEntryMedia(base, other).videoRefs).toEqual([v]);
+  });
+
+  it("يوحّد attachmentRefs (معاينة PDF) بنفس منطق posterHash", () => {
+    const base = entry({ id: "E1", attachmentRefs: [{ kind: "pdf", status: "metadataOnly" }] });
+    const other = entry({
+      id: "E1",
+      attachmentRefs: [{ kind: "pdf", previewHash: "prev1", filename: "عقد.pdf", status: "uploaded" }],
+    });
+    const out = mergeEntryMedia(base, other);
+    // النسخة بلا previewHash تتّحد بقيمتها الكاملة (لا هاش لتوحيدها به)، فتبقى
+    // الاثنتان — إلا أنّ حالة الاستخدام الواقعية هي أن يحمل أحد الجهازين
+    // previewHash؛ هنا نتأكّد أنّ النسخة الأغنى (المرفوعة) لا تضيع بأي حال.
+    expect(out.attachmentRefs).toContainEqual({
+      kind: "pdf", previewHash: "prev1", filename: "عقد.pdf", status: "uploaded",
+    });
+  });
+
+  it("يوحّد audioMetadataRefs من الجهازين (بلا هاش، بالقيمة الكاملة)", () => {
+    const base = entry({ id: "E1", audioMetadataRefs: [{ status: "metadataOnly", duration: 3 }] });
+    const other = entry({ id: "E1", audioMetadataRefs: [{ status: "uploaded", duration: 3, filename: "note.m4a" }] });
+    const out = mergeEntryMedia(base, other);
+    // كلاهما موجودٌ (قيمتان مختلفتان، فلا تدمُج بحقلٍ ذكي — لكن لا فقد أيضاً).
+    expect(out.audioMetadataRefs).toHaveLength(2);
+    expect(out.audioMetadataRefs).toContainEqual({ status: "metadataOnly", duration: 3 });
+    expect(out.audioMetadataRefs).toContainEqual({ status: "uploaded", duration: 3, filename: "note.m4a" });
+  });
+});
+
+describe("stripTombstonedMediaRefs — حذف صورةٍ يُسقط posterHash/previewHash المطابقين، لا الإشارة كاملةً", () => {
+  it("يُسقط posterHash المحذوف من videoRefs ويُبقي بقية الحقول", () => {
+    const e = entry({ id: "E1", videoRefs: [{ type: "video/mp4", duration: 4, posterHash: "hp1" }] });
+    const tomb = new Set([mediaTombKey("E1", "photos", "hp1")]);
+    const out = stripTombstonedMediaRefs(e, tomb);
+    expect(out.videoRefs).toEqual([{ type: "video/mp4", duration: 4 }]);
+  });
+
+  it("لا يمسّ posterHash لمذكرةٍ أخرى (الشاهد خاصٌّ بـentryId)", () => {
+    const e = entry({ id: "E2", videoRefs: [{ posterHash: "hp1" }] });
+    const tomb = new Set([mediaTombKey("E1", "photos", "hp1")]); // شاهدٌ لمذكرةٍ أخرى
+    const out = stripTombstonedMediaRefs(e, tomb);
+    expect(out.videoRefs).toEqual([{ posterHash: "hp1" }]);
+  });
+
+  it("يُسقط previewHash المحذوف من attachmentRefs", () => {
+    const e = entry({ id: "E1", attachmentRefs: [{ kind: "pdf", previewHash: "hv1", status: "uploaded" }] });
+    const tomb = new Set([mediaTombKey("E1", "photos", "hv1")]);
+    const out = stripTombstonedMediaRefs(e, tomb);
+    expect(out.attachmentRefs).toEqual([{ kind: "pdf", status: "uploaded" }]);
   });
 });

@@ -1383,12 +1383,45 @@
   lint`/`npm run build` على أي تعديلٍ أصلاً، ولا حاجة لمتغيّر بيئةٍ جديد
   (`NEXT_PUBLIC_R2_WORKER_URL` موجودٌ سلفاً). **لم يُدمج بعد عمداً** حتى يثبت
   التوافق فعلياً مع مخرجات Swift حقيقية (تعليمات المالك) — الفرع منفصل ولا PR
-  مفتوحة. **متبقٍّ قبل تجربة أرشيف Day One حقيقي**: لم يُختبر مع ملف
-  `.madarimport` حقيقي فعليّ من التطبيق نفسه (كل الاختبارات على JSON مصطنع
-  مطابقٍ للبنية المعلَنة في الكود لا لمخرجٍ حقيقي مُنتَج فعلياً)؛ لا شارة واجهة
-  مميّزة لمصدر «مستورد الذكريات» (تظهر كـ«Day One» — قرارٌ مقصود لإعادة
-  استخدام كل الآلية القائمة)؛ إعادة استيرادٍ لملفٍّ لاحقٍ يحمل **مزيداً** من
-  `photoRefs` على مذكرةٍ مستوردة سابقاً لا تُكمِلها محلياً (يكتشفها فقط دمج
-  مزامنةٍ لاحق)؛ ترميز تاريخ Swift (`createdAt`/`modifiedAt`) يُفترض نصّاً ISO
-  8601 (`dateEncodingStrategy = .iso8601`، أكّده المالك) — لم يُختبر ضدّ ناتج
+  مفتوحة.
+  **جولة ثانية (سدّ فجوات)، بلا رفع إصدارٍ جديد (لم يُنشر الأول بعد)**:
+  (١) `store.ts#importDayOneEntries` كانت تُكمل photos/audio (بايتات) فقط عند
+  إعادة الاستيراد — الآن تُوحّد photoRefs/audioRefs أيضاً (`unionRefs` من
+  `utils.ts`، مُصدَّرة الآن) فمذكرةٌ نصّية موجودة تكتسب مرجع صورةٍ/صوتٍ وصل
+  لاحقاً بلا فقدٍ ولا كتابةٍ فوق content/title مطلقاً؛ عدادا photos/audio في
+  النتيجة يحتسبان الآن photoRefs/audioRefs لا البايتات المحلية وحدها.
+  (٢) `JournalEntry` (`types.ts`): `videoRefs[].posterHash` (هاش معاينة
+  الفيديو)، `attachmentRefs` جديد (`{kind:"pdf", filename?, previewHash?,
+  status}[]` — استبدل `pdfRefs` المؤقّت)، و`audioMetadataRefs` جديد
+  (`{type?, duration?, filename?, status}[]`، يُملأ **حتى بلا** cloudHash).
+  (٣) `madarBridge.ts`: معاينة الفيديو/PDF لم تعد تُخلط داخل `photoRefs` (كانت
+  كذلك في الجولة الأولى) — `photoRefs` الآن للصور الحقيقية فقط؛ المعاينات في
+  `videoRefs[].posterHash`/`attachmentRefs[].previewHash` (وما زالت هاشاتها
+  تُجمع في `photoHashes` المُرسلة لبوابة R2، فلا يفلت هاشٌ من التحقّق لمجرّد
+  انتقاله لحقلٍ آخر). `audioMetadataRefs` يُملأ لكل وسيطٍ `kind=audio` بصرف
+  النظر عن حالة الرفع. (٤) `assertMediaIntegrity` جديدة — **صارمة لا متساهلة**:
+  ترفض الملف كاملاً (رمز `media`) عند وسيطٍ يتيم (recordID لا يطابق أي سجلّ)،
+  `mediaID` في `record.mediaIDs` لا يحلّ لوسيطٍ، أو يحلّ لوسيطٍ `recordID`ه
+  مختلف، أو وسيطٍ `status=uploaded` بإيصالٍ ناقص (`cloudHash`/`cloudKind`/
+  `uploadedByteCount`/`contentType`) — لا تجاهل صامت بعد اليوم؛ `buildEntries`
+  تثق بهذه الضمانة فلم تعد تحتاج تكرار التحقّق. (٥) `mergeEntryMedia`/
+  `stripTombstonedMediaRefs` في `utils.ts`: `mergeRefList` جديدة تُوحّد
+  `videoRefs`/`attachmentRefs` بمفتاح هاشٍ (posterHash/previewHash — نسخةٌ
+  حقلاً‑حقلاً أغنى تفوز) و`audioMetadataRefs` بالقيمة الكاملة، فلا تضيع معاينة
+  فيديو/PDF أو بيانات صوتٍ عبر جهازين؛ حذف صورةٍ مطابقة hash لتلك المعاينة
+  (شاهدٌ بنفس entryId) يُسقط المرجع من الإشارة لا الإشارة كاملةً (لا يعكس
+  حذف المستخدم). `UNSTAMPED_FIELDS.journalEntries` يضمّ الحقلين الجديدين.
+  **26 اختباراً جديداً** (748 إجمالاً، كانت 729): `madarBridge.test.ts` (33،
+  +7 رفضٍ صارم لسلامة الوسائط)، `dayOneImport.store.test.ts` (+3 لاتحاد
+  المراجع)، `mergeMedia.test.ts` (+8 لدمج/تجريد الحقول الجديدة)،
+  `madarBridge.integration.test.ts` (+1 لإكمال وسائط ناقصة عبر الملف الكامل).
+  **npm test/lint/build نجحت الثلاثة فعلياً بعد هذه الجولة أيضاً.**
+  **متبقٍّ قبل تجربة أرشيف Day One حقيقي**: لم يُختبر مع ملف `.madarimport`
+  حقيقي فعليّ من التطبيق نفسه (كل الاختبارات على JSON مصطنع مطابقٍ للبنية
+  المعلَنة في الكود لا لمخرجٍ حقيقي مُنتَج فعلياً)؛ لا شارة واجهة مميّزة لمصدر
+  «مستورد الذكريات» (تظهر كـ«Day One»)؛ لا عرض واجهة بعد لـvideoRefs.posterHash
+  /attachmentRefs/audioMetadataRefs (البيانات تُحفظ وتُدمج صحيحاً، لكن لا مكوّن
+  يعرضها في `journal/page.tsx`/`JournalEntryCard.tsx` بعد — نطاقٌ منفصل لم
+  يُطلب)؛ ترميز تاريخ Swift (`createdAt`/`modifiedAt`) يُفترض نصّاً ISO 8601
+  (`dateEncodingStrategy = .iso8601`، أكّده المالك) — لم يُختبر ضدّ ناتج
   `JSONEncoder` فعليّ من التطبيق. حالاتٌ حافّية موثّقة هنا لا مموَّهة.

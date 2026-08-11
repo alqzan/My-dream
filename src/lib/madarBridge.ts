@@ -40,7 +40,8 @@ export type MadarImportErrorCode =
   | "path" // حقلٌ يشبه مساراً يحمل بايتات NUL أو طولاً غير معقول
   | "structure" // حقلٌ ناقص أو من نوعٍ خاطئ
   | "version" // schemaVersion غير مدعومة
-  | "summary"; // ملخص الملف لا يطابق محتواه الفعلي (مزوَّر)
+  | "summary" // ملخص الملف لا يطابق محتواه الفعلي (مزوَّر)
+  | "media"; // ربطُ records/media فاسد، أو وسيطٌ uploaded بإيصالٍ ناقص/هاشٍ غير صالح
 
 export class MadarImportError extends Error {
   constructor(
@@ -262,6 +263,57 @@ function assertSummary(manifest: MadarBridgeManifest): void {
   }
 }
 
+// ===================== تحقّق سلامة ربط records/media (صارم) =====================
+// لا تساهل هنا — بخلاف buildEntries أدناه: مرجعٌ يتيم، وسيطٌ recordID فيه لا
+// يطابق أي سجلّ، أو وسيطٌ status="uploaded" بإيصالٍ ناقص (هاش/مساحة/حجم/نوع
+// غير صالحين) — كل هذه تُرفض الملف **كاملاً**. لا نتجاهل هاشاً غير صالحٍ
+// بصمت: ادّعاء «رُفع» بلا إيصالٍ كاملٍ مشبوهٌ بما يكفي لرفض الملف كله بدل
+// استبعاد ذلك المرجع فقط. بعد نجاح هذا التحقّق، buildEntries تثق أنّ كل
+// mediaID في أي record يُحلّ فعلياً وبلا تعارض recordID.
+function assertMediaIntegrity(manifest: MadarBridgeManifest): void {
+  const recordIds = new Set(
+    manifest.records.map((r) => r?.id).filter((x): x is string => typeof x === "string")
+  );
+  const mediaById = new Map(
+    manifest.media.filter((m) => m && typeof m.id === "string").map((m) => [m.id, m])
+  );
+
+  manifest.media.forEach((m, i) => {
+    if (!m || typeof m.recordID !== "string" || !recordIds.has(m.recordID)) {
+      throw new MadarImportError(
+        "media",
+        `media[${i}] مرتبطٌ بسجلٍّ غير موجود (recordID=${m?.recordID ?? "؟"})`
+      );
+    }
+    if (m.status === "uploaded") {
+      const validHash = typeof m.cloudHash === "string" && HASH_RE.test(m.cloudHash);
+      const validKind = typeof m.cloudKind === "string" && CLOUD_KINDS.has(m.cloudKind);
+      const validSize = typeof m.uploadedByteCount === "number" && m.uploadedByteCount > 0;
+      const validType = typeof m.contentType === "string" && m.contentType.length > 0;
+      if (!validHash || !validKind || !validSize || !validType) {
+        throw new MadarImportError(
+          "media",
+          `media[${i}] (${m.id}) بحالة uploaded لكن بإيصالٍ ناقص أو غير صالح ` +
+          `(cloudHash/cloudKind/uploadedByteCount/contentType)`
+        );
+      }
+    }
+  });
+
+  manifest.records.forEach((r) => {
+    if (!r || !Array.isArray(r.mediaIDs)) return; // سجلٌّ فاسدٌ يُستبعد لاحقاً في buildEntries (failed)
+    for (const mid of r.mediaIDs) {
+      const m = mediaById.get(mid);
+      if (!m || m.recordID !== r.id) {
+        throw new MadarImportError(
+          "media",
+          `record ${r.id ?? "؟"} يشير إلى media غير موجود أو غير مطابق (mediaID=${mid})`
+        );
+      }
+    }
+  });
+}
+
 // ===================== تحويل records/media إلى JournalEntry[] =====================
 interface BuildResult {
   entries: JournalEntry[];
@@ -271,9 +323,9 @@ interface BuildResult {
   manifestMissingMedia: number;
 }
 
-// مسارٌ متساهل فردياً عمداً: سجلٌّ واحدٌ فاسد (تاريخ غير صالح، id ناقص) أو
-// مرجع وسائط واحد مشوَّه يُستبعد بدل إسقاط الملف كله — الفحوص القاتلة أعلاه
-// (بنية/نسخة/ملخّص) هي ما يحمي من ملفٍ مزوَّر أو تالف بنيوياً.
+// مسارٌ متساهل فردياً هنا (بخلاف assertMediaIntegrity أعلاه): سجلٌّ واحدٌ فاسد
+// (تاريخ غير صالح، id ناقص) يُستبعد بدل إسقاط الملف كله. أما ربط الوسائط
+// فمضمونُ الصحة بنيوياً بعد assertMediaIntegrity — لا حاجة لتكرار التحقّق هنا.
 function buildEntries(manifest: MadarBridgeManifest): BuildResult {
   const mediaById = new Map(manifest.media.filter((m) => m && typeof m.id === "string").map((m) => [m.id, m]));
   const photoHashes = new Set<string>();
@@ -297,21 +349,55 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
 
     const photoRefs: string[] = [];
     const audioRefs: string[] = [];
-    const videoRefs: { type?: string; duration?: number }[] = [];
-    const pdfRefs: { pages?: number }[] = [];
+    const videoRefs: { type?: string; duration?: number; posterHash?: string }[] = [];
+    const attachmentRefs: { kind: "pdf"; filename?: string; previewHash?: string; status: string }[] = [];
+    const audioMetadataRefs: { type?: string; duration?: number; filename?: string; status: string }[] = [];
 
     for (const mid of r.mediaIDs ?? []) {
+      // assertMediaIntegrity ضَمِنت أن كل mediaID يُحلّ فعلياً وrecordID مطابق —
+      // الحارس هنا دفاعيٌّ فقط (TS لا يعرف تلك الضمانة).
       const m = mediaById.get(mid);
-      // مرجعٌ يتيم (لا يطابق أي وسيط) أو وسيطٌ يشير recordID فيه لسجلٍّ آخر —
-      // خللٌ في هذا المرجع بعينه، لا يُسقط السجلّ كله.
-      if (!m || m.recordID !== r.id) { manifestMissingMedia++; continue; }
+      if (!m) continue;
       if (m.status === "missing" || m.status === "failed") manifestMissingMedia++;
-      if (m.kind === "video") videoRefs.push({ type: m.contentType ?? m.originalContentType, duration: m.durationSeconds });
-      if (m.kind === "pdf") pdfRefs.push({});
-      if (m.status !== "uploaded") continue; // بلا بايتاتٍ في R2 — لا هاش لإرفاقه
-      if (!m.cloudHash || !HASH_RE.test(m.cloudHash) || !m.cloudKind || !CLOUD_KINDS.has(m.cloudKind)) continue;
-      if (m.cloudKind === "photos") { photoRefs.push(m.cloudHash); photoHashes.add(m.cloudHash); }
-      else { audioRefs.push(m.cloudHash); audioHashes.add(m.cloudHash); }
+
+      // uploaded مضمونةٌ الصحة الكاملة (هاش/مساحة/حجم/نوع) بعد assertMediaIntegrity.
+      const uploaded = m.status === "uploaded";
+      const inPhotosBucket = uploaded && m.cloudKind === "photos";
+      const inAudiosBucket = uploaded && m.cloudKind === "audios";
+      const hash = uploaded ? m.cloudHash : undefined;
+
+      if (m.kind === "photo") {
+        // photoRefs تبقى للصور الحقيقية المرفوعة فقط — لا معاينات فيديو/PDF.
+        if (inPhotosBucket && hash) { photoRefs.push(hash); photoHashes.add(hash); }
+      } else if (m.kind === "video") {
+        const posterHash = inPhotosBucket && hash ? hash : undefined;
+        if (posterHash) photoHashes.add(posterHash); // ما زال يحتاج تحقّق R2
+        videoRefs.push({
+          ...(m.contentType ?? m.originalContentType ? { type: m.contentType ?? m.originalContentType } : {}),
+          ...(typeof m.durationSeconds === "number" ? { duration: m.durationSeconds } : {}),
+          ...(posterHash ? { posterHash } : {}),
+        });
+      } else if (m.kind === "pdf") {
+        const previewHash = inPhotosBucket && hash ? hash : undefined;
+        if (previewHash) photoHashes.add(previewHash);
+        attachmentRefs.push({
+          kind: "pdf",
+          ...(m.originalFilename ? { filename: m.originalFilename } : {}),
+          ...(previewHash ? { previewHash } : {}),
+          status: m.status,
+        });
+      } else if (m.kind === "audio") {
+        if (inAudiosBucket && hash) { audioRefs.push(hash); audioHashes.add(hash); }
+        // بيانات وصفية دائماً — حتى بلا cloudHash (status=metadataOnly مثلاً)،
+        // فتبقى المعرفة بوجود ملاحظةٍ صوتية حتى قبل رفع بايتاتها.
+        audioMetadataRefs.push({
+          ...(m.contentType ?? m.originalContentType ? { type: m.contentType ?? m.originalContentType } : {}),
+          ...(typeof m.durationSeconds === "number" ? { duration: m.durationSeconds } : {}),
+          ...(m.originalFilename ? { filename: m.originalFilename } : {}),
+          status: m.status,
+        });
+      }
+      // kind === "unknown": لا إشارة على المذكرة — الحساب في manifestMissingMedia أعلاه فقط.
     }
 
     const tags = (r.tags ?? []).map((t) => t.trim()).filter(Boolean);
@@ -341,7 +427,8 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
       ...(photoRefs.length ? { photoRefs } : {}),
       ...(audioRefs.length ? { audioRefs } : {}),
       ...(videoRefs.length ? { videoRefs } : {}),
-      ...(pdfRefs.length ? { pdfRefs } : {}),
+      ...(attachmentRefs.length ? { attachmentRefs } : {}),
+      ...(audioMetadataRefs.length ? { audioMetadataRefs } : {}),
       source: "dayOne", // يُشغّل كل آلية عدم التكرار/الدمج/عدم الكتابة فوق
       // النص القائمة أصلاً في store.ts وmerge.ts بلا كودٍ إضافي.
       dayOneUUID: r.dayOneUUID,
@@ -385,6 +472,7 @@ export async function parseMadarImportFile(file: Blob): Promise<MadarImportParse
 
   const manifest = validateStructure(raw);
   assertVersion(manifest);
+  assertMediaIntegrity(manifest);
   assertSummary(manifest);
 
   const built = buildEntries(manifest);
