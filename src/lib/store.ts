@@ -11,7 +11,7 @@ import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from 
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf } from "./utils";
+import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf, unionRefs } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
@@ -59,7 +59,10 @@ const UNSTAMPED_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], rea
   recurring: ["lastGenerated"],
   habits: ["logs"],
   reserves: ["deposits"],
-  journalEntries: ["photo", "photos", "audio", "audios", "videoRefs", "photoRefs", "audioRefs"],
+  journalEntries: [
+    "photo", "photos", "audio", "audios", "videoRefs", "photoRefs", "audioRefs",
+    "attachmentRefs", "audioMetadataRefs",
+  ],
 };
 
 // Did this item actually change? Identity first (the common case: an action
@@ -581,7 +584,9 @@ export const useAppStore = create<AppStore>()(
             }
             // إعادة الاستيراد تُكمّل النقص الجزئي: إن حمل الاستيراد صوراً/أصواتاً
             // أكثر مما لدى المذكرة (سقط بعضها سابقاً قبل دعم HEIC مثلاً)، نعتمد
-            // المجموعة الأكمل بدل تخطّيها لمجرّد أنها «تحتوي صوراً».
+            // المجموعة الأكمل بدل تخطّيها لمجرّد أنها «تحتوي صوراً». مطلقاً لا
+            // يمسّ هذا content/title أو أي تعديلٍ كتبه المستخدم — التحديث
+            // الوحيد الممكن هنا وسائط، أبداً نصّاً.
             const patch: Partial<JournalEntry> = {};
             const existingPhotos = existing.photos?.length ?? (existing.photo ? 1 : 0);
             const incomingPhotos = e.photos?.length ?? (e.photo ? 1 : 0);
@@ -589,6 +594,20 @@ export const useAppStore = create<AppStore>()(
             const existingAudios = existing.audios?.length ?? (existing.audio ? 1 : 0);
             const incomingAudios = e.audios?.length ?? (e.audio ? 1 : 0);
             if (incomingAudios > existingAudios) { patch.audios = e.audios; patch.audio = e.audio; }
+            // photoRefs/audioRefs (مراجع هاش من مصدرٍ رفع الوسائط إلى R2
+            // مسبقاً — مستورد الذكريات) تُوحَّد لا تُستبدل: مذكرةٌ نصّية
+            // موجودة (أو مستوردة سابقاً بصورةٍ واحدة) قد تكتسب مرجع صورةٍ لم
+            // تحمله من قبل. هاشاتُ محتوى فتوحيدها آمنٌ دائماً (unionRefs في
+            // utils.ts — نفس الدالة التي يعتمدها mergeEntryMedia عبر الأجهزة)،
+            // ولا يُسقط مرجعاً موجوداً أبداً.
+            const photoRefs = unionRefs(existing.photoRefs, e.photoRefs);
+            if (photoRefs && photoRefs.length !== (existing.photoRefs?.length ?? 0)) {
+              patch.photoRefs = photoRefs;
+            }
+            const audioRefs = unionRefs(existing.audioRefs, e.audioRefs);
+            if (audioRefs && audioRefs.length !== (existing.audioRefs?.length ?? 0)) {
+              patch.audioRefs = audioRefs;
+            }
             if (Object.keys(patch).length) {
               patches.set(existing.id, patch);
               touchedIds.push(existing.id);
@@ -596,15 +615,17 @@ export const useAppStore = create<AppStore>()(
           }
           if (!toAdd.length && !patches.size) return {}; // مطابق تماماً — لا بصمة
           // Media counts across the entries that actually changed (added or
-          // completed) — no ordering assumption, so the summary is exact.
+          // completed) — تشمل الآن photoRefs/audioRefs أيضاً (مذكرة
+          // .madarimport تحمل مراجع هاش لا بايتات محلية بعد)، لا الصور/الصوت
+          // المحلية وحدها، وإلا بدت مذكرةٌ فيها صورة كأنها بلا صور.
           let photos = 0, audio = 0;
           for (const e of toAdd) {
-            if (e.photos?.length || e.photo) photos++;
-            if (e.audios?.length || e.audio) audio++;
+            if (e.photos?.length || e.photo || e.photoRefs?.length) photos++;
+            if (e.audios?.length || e.audio || e.audioRefs?.length) audio++;
           }
           for (const p of patches.values()) {
-            if (p.photos?.length || p.photo) photos++;
-            if (p.audios?.length || p.audio) audio++;
+            if (p.photos?.length || p.photo || p.photoRefs?.length) photos++;
+            if (p.audios?.length || p.audio || p.audioRefs?.length) audio++;
           }
           result = { added: toAdd.length, completed: patches.size, photos, audio };
           const updated = s.journalEntries.map((en) =>

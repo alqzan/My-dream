@@ -140,14 +140,51 @@ export interface JournalEntry {
   photos?: string[]; // عدة صور للمذكرة (الأحدث؛ photo يبقى للتوافق)
   audio?: string; // ملاحظة صوتية (base64 data URL) — الأولى؛ audios يحمل الكل
   audios?: string[]; // عدة ملاحظات صوتية (audio يبقى للتوافق = الأولى)
-  // إشارات مقاطع فيديو مستوردة من Day One — لا يُخزَّن الملف نفسه (كبير ولا
-  // يتزامن)، فقط تذكير بأن التدوينة فيها مقطع (النوع + المدة إن وُجدت).
-  videoRefs?: { type?: string; duration?: number }[];
+  // إشارات مقاطع فيديو مستوردة من Day One/مستورد الذكريات — لا يُخزَّن الملف
+  // نفسه (كبير ولا يتزامن)، فقط تذكير بأن التدوينة فيها مقطع (النوع + المدة
+  // إن وُجدت). posterHash مرجع هاش R2 (kind=photos) للقطة غلاف الفيديو حين
+  // رفعها مستورد الذكريات — مُنفصلٌ عمداً عن photoRefs (ليست صورةً حقيقية من
+  // المذكرة، بل معاينةٌ لمقطع)؛ يُتحقّق من وجوده في R2 كأي هاش صورة عادي عبر
+  // sync.ts#verifyMediaHashesPresent قبل الاستيراد رغم بقائه هنا لا في photoRefs.
+  // sourceMediaID (=media.id من مانيفست .madarimport) هويّةٌ ثابتة للدمج —
+  // تميّز الوسيط حتى لو تطابقت type/duration مع وسيطٍ آخر فعلاً مختلف، وتوحّد
+  // نسخة metadataOnly مع نسخة uploaded اللاحقة لنفس الوسيط رغم اختلاف حقولها.
+  // غيابه (مراجع أقدم من هذا الحقل) يُسقط الدمج لحقول type/duration كـfallback
+  // (راجع mergeRefList في utils.ts).
+  videoRefs?: { type?: string; duration?: number; posterHash?: string; sourceMediaID?: string }[];
+  // إشارات مرفقاتٍ غير صورةٍ/صوتٍ/فيديو (مستورد الذكريات) — اليوم PDF فقط،
+  // لكن kind مصفوفةٌ لا حقلٌ ثابت تحسّباً لنوعٍ لاحق. previewHash مرجع هاش R2
+  // (kind=photos) لمعاينة أول صفحة إن رُفعت — منفصلٌ عن photoRefs لنفس سبب
+  // posterHash أعلاه. status ("uploaded"/"metadataOnly"/"missing"/"failed"،
+  // كما وردت من مستورد الذكريات) يُبقي المعرفة بوجود مرفقٍ حتى بلا معاينة.
+  // sourceMediaID كما في videoRefs أعلاه.
+  attachmentRefs?: { kind: "pdf"; filename?: string; previewHash?: string; status: string; sourceMediaID?: string }[];
+  // بيانات وصفية لملاحظةٍ صوتية من مستورد الذكريات — تُملأ **دائماً** حين
+  // يذكر المصدر صوتاً، حتى لو status="metadataOnly" بلا cloudHash (بايتات
+  // الصوت القابلة للتشغيل، إن وُجدت، تعيش في audioRefs وحدها؛ هذا الحقل وصفٌ
+  // إضافي لا مصدر تشغيل). sourceMediaID كما في videoRefs أعلاه.
+  audioMetadataRefs?: { type?: string; duration?: number; filename?: string; status: string; sourceMediaID?: string }[];
   linkedBookId?: string;
   linkedTransactionIds?: string[];
   source?: "dayOne" | "manual";
   dayOneUUID?: string;
   starred?: boolean;
+  // موقعٌ جغرافيّ اختياري (مستورد الذكريات) — لا يظهر إلا حين يوفّره المصدر.
+  location?: { lat: number; lng: number; place?: string };
+  // لحظة الالتقاط الأصليّة ومنطقتها الزمنية (ISO/IANA) — أدقّ من date/time
+  // المشتقَّين محلياً، تُحفظ كما وردت من المصدر بلا تحويل.
+  capturedAt?: string;
+  timeZone?: string;
+  // آخر تعديلٍ على *الجهاز المصدر* قبل الاستيراد (يختلف عن updatedAt أدناه،
+  // وهو ختم مدار الداخلي لحسم تعارض الدمج).
+  modifiedAt?: string;
+  // مراجع وسائط بصيغة هاش محتوى **بلا بايتات محلية بعد** — تُملأ عند استيراد
+  // مصدرٍ رفع الوسائط إلى R2 مسبقاً (مستورد الذكريات عبر src/lib/madarBridge.ts)
+  // بدل تضمين البايتات في الملف نفسه. دورة المزامنة التالية (hydrateCloudPhotos
+  // في sync.ts) تُرطّبها إلى photos/audios الفعلية تلقائياً — نفس الآلية التي
+  // تُبقي مرجعاً لم يُنزَّل بعد على نسخة السحابة (راجع sync.ts).
+  photoRefs?: string[];
+  audioRefs?: string[];
   // ختم آخر تعديل (ms) — يفوز به التعديل الأحدث لهذه المذكرة بعينها في دمج
   // المزامنة، فلا يضيع تعديلٌ حديث على جهاز بسبب ختم مستندٍ أحدث على جهاز آخر.
   updatedAt?: number;
