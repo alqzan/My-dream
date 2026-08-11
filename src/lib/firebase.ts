@@ -1,5 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { initializeFirestore, type Firestore } from "firebase/firestore";
+import { isValidSyncSpace } from "./syncSpace";
 
 // Firebase web config for the "my-dream-a" project. These NEXT_PUBLIC_
 // values are safe to ship in client code by design — access is gated by
@@ -21,7 +22,10 @@ const firebaseConfig = {
 // settings UI (BackupCard/SyncKeyCard) and never sent anywhere but Firestore.
 export const SYNC_SPACE_STORAGE_KEY = "madar-sync-space";
 
-export function getSyncSpace(): string | null {
+/** القيمة المحفوظة كما هي، بلا تحقّق — **للواجهة وحدها** (SyncKeyCard) كي
+ *  تشخّص مفتاحاً محفوظاً غير صالح وتعرض إصلاحه. لا يمرّ منها أيّ مسار مزامنة:
+ *  كل من يبني مسار Firestore ينادي `getSyncSpace()` أدناه. */
+export function getStoredSyncSpace(): string | null {
   if (process.env.NEXT_PUBLIC_SYNC_SPACE) return process.env.NEXT_PUBLIC_SYNC_SPACE;
   if (typeof window === "undefined") return null;
   try {
@@ -29,6 +33,16 @@ export function getSyncSpace(): string | null {
   } catch {
     return null;
   }
+}
+
+/** معرّف مساحة المزامنة الصالح، أو `null`. قيمةٌ محفوظة لكنها ليست مقطع مسارٍ
+ *  مشروعاً (رابطٌ لُصق سهواً مثلاً) تُعامَل معاملةَ الغياب تماماً: تتعطّل
+ *  المزامنة بهدوء ويعمل التطبيق كاملاً على الجهاز — بدل أن ترمي `doc()`
+ *  تزامنياً داخل useEffect فتُسقط التطبيق كلَّه على كل إقلاع. راجع
+ *  `src/lib/syncSpace.ts` للقاعدة نفسها ولماذا. */
+export function getSyncSpace(): string | null {
+  const raw = getStoredSyncSpace();
+  return isValidSyncSpace(raw) ? raw : null;
 }
 
 // ===================== Data/media key separation (opt-in) =====================

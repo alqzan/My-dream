@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { SYNC_SPACE_STORAGE_KEY } from "@/lib/firebase";
+import { syncSpaceProblem, describeSyncSpaceProblem } from "@/lib/syncSpace";
 import { showToast } from "@/components/ui/UndoToast";
-import { KeyRound, Save, Trash2, Eye, EyeOff, Copy, Dices } from "lucide-react";
+import { KeyRound, Save, Trash2, Eye, EyeOff, Copy, Dices, AlertTriangle } from "lucide-react";
 
 // A strong, random sync key: 160 bits (20 bytes) as hex. This is the ONLY thing
 // protecting the data (login-free model), so it must not be a human passphrase
@@ -32,6 +33,7 @@ export function SyncKeyCard() {
   const [input, setInput] = useState("");
   const [reveal, setReveal] = useState(false);
   const [revealInput, setRevealInput] = useState(false);
+  const savedProblem = saved ? syncSpaceProblem(saved) : null;
 
   useEffect(() => {
     try {
@@ -52,6 +54,15 @@ export function SyncKeyCard() {
   function save() {
     const value = input.trim();
     if (!value) return;
+    // مفتاحٌ لا يصلح مقطعَ مسارٍ في Firestore يُرفض **رفضاً** لا تنبيهاً: حفظه
+    // كان يعطّل المزامنة صامتاً (وقبل هذا الإصلاح كان يُسقط التطبيق على كل
+    // إقلاع). أشيع حالةٍ: لصقُ رابطٍ — عنوان الموقع أو عنوان الـWorker — في
+    // خانة المفتاح أثناء إعداد «مستورد الذكريات».
+    const problem = syncSpaceProblem(value);
+    if (problem) {
+      showToast(describeSyncSpaceProblem(problem), "warning");
+      return;
+    }
     // Nudge on a weak key, but let the owner proceed — they may be re-entering
     // an existing key on a second device, which must never be blocked.
     if (
@@ -90,6 +101,22 @@ export function SyncKeyCard() {
       <p className="text-xs text-gray-400 leading-relaxed mb-3">
         المزامنة السحابية بين أجهزتك تحتاج مفتاحاً سرياً واحداً تحفظه على كل جهاز — لم يعد جزءاً من الكود.
       </p>
+      {/* مفتاحٌ محفوظ لكنه غير صالح: المزامنة متوقّفة الآن بهدوء بدل إسقاط
+          التطبيق — لكن الصمت وحده يترك المالك يظنّها تعمل. نقولها صراحةً
+          ونعطيه المخرج (مسح المفتاح، أو لصق الصحيح فوقه). */}
+      {savedProblem && (
+        <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 mb-3">
+          <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+              المفتاح المحفوظ غير صالح — المزامنة متوقّفة
+            </p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed mt-0.5">
+              {describeSyncSpaceProblem(savedProblem)} بياناتك على الجهاز سليمة ولم تُمسّ.
+            </p>
+          </div>
+        </div>
+      )}
       {saved && (
         <div className="mb-3">
           {reveal ? (

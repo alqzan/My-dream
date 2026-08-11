@@ -216,8 +216,18 @@ export async function deleteInboxItem(id: string): Promise<void> {
 export function subscribeInbox(cb: (items: InboxItem[]) => void): () => void {
   const space = getSyncSpace();
   if (!db || !space) return () => {};
+  // `collection()` تبني المسار **تزامنياً** وترمي على مقطعٍ مخالف. المنادي هنا
+  // هو `PendingInboxWatcher` داخل useEffect، فالرمي كان يسقط التطبيق كلَّه.
+  // `getSyncSpace()` صارت تمنع ذلك عند المصدر؛ وهذه شبكة الأمان الأخيرة —
+  // المزامنة تتعطّل ولا تُسقط التطبيق أبداً.
+  let inbox;
+  try {
+    inbox = collection(db, COLLECTION, space, INBOX);
+  } catch {
+    return () => {};
+  }
   return onSnapshot(
-    collection(db, COLLECTION, space, INBOX),
+    inbox,
     (snap) => {
       cb(
         snap.docs.map((d) => {
@@ -665,8 +675,16 @@ export function subscribeUserMain(
   // Every save writes the main doc (its lastUpdated bumps on any edit, journal
   // included), so this fires on any remote change — **and on the echo of our
   // own write**, which is precisely the case that must stay cheap.
+  // نفس شبكة الأمان التي في `subscribeInbox`: بناء المسار تزامنيّ، والمنادي
+  // `SyncProvider` داخل useEffect — فلا يُسمح لخطأ مسارٍ بإسقاط التطبيق.
+  let main;
+  try {
+    main = doc(db, COLLECTION, uid);
+  } catch {
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, COLLECTION, uid),
+    main,
     (snap) => {
       if (!snap.exists()) return cb(null);
       cb(cloudRead(uid, snap.data() as AppData & CloudMediaMeta));
