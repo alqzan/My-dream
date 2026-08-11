@@ -171,6 +171,57 @@ describe("hash ناقص في R2 يوقف الاستيراد كاملاً قبل 
   });
 });
 
+// نفس بادئة idb-keyval المحلّية في sync.ts (خاصّة، غير مُصدَّرة — يعيد
+// sync.photos.test.ts نفس الثابت هنا بدل استيراده لنفس السبب).
+const MEDIA_CACHE_PREFIX = "madar-media:";
+
+describe("معاينات الفيديو/PDF تظهر فعلياً داخل مدار بعد hydration — لا رفعٌ صامت", () => {
+  // رفع معاينةٍ إلى R2 لا يُعدّ نجاحاً ما لم يستطع المالك رؤيتها داخل مدار.
+  // الحل المعتمد: posterHash/previewHash يُدرجان أيضاً في photoRefs (راجع
+  // madarBridge.ts)، فتمرّان بمسار العرض القائم فعلياً بلا كودٍ جديد:
+  // hydrateCloudPhotos (sync.ts) يُرطّبهما إلى photos، وJournalEntryCard
+  // يعرض photos[0] كما يفعل لأي صورة عادية.
+  it("معاينة فيديو (posterHash) تصل إلى photos بعد hydrateCloudPhotos", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "V1", mediaIDs: ["vid"] })];
+    const mediaItems = [
+      media({ id: "vid", recordID: "r1", kind: "video", cloudKind: "photos", cloudHash: HASH_A, durationSeconds: 9 }),
+    ];
+    const parsed = await parseMadarImportFile(madarFile(records, mediaItems));
+    // dual-write تحقّق: الهاش في photoRefs، لا في videoRefs.posterHash فقط.
+    expect(parsed.entries[0].photoRefs).toEqual([HASH_A]);
+    expect(parsed.entries[0].videoRefs).toEqual([{ type: "image/jpeg", posterHash: HASH_A, duration: 9 }]);
+
+    // نحاكي أنّ البايتات وصلت محلياً (كما تفعل fetchInlineMedia بعد أول تنزيل
+    // من R2) — نفس أسلوب sync.photos.test.ts، فلا حاجة لتزييف fetch/Blob كاملةً.
+    idb.set(MEDIA_CACHE_PREFIX + HASH_A, "data:image/jpeg;base64,POSTERBYTES");
+    const hydrated = await sync.hydrateCloudPhotos("space", baseAppData(parsed.entries));
+    const e = hydrated.journalEntries.find((x) => x.id === "do-V1")!;
+
+    // الاختبار الحاسم: المعاينة تظهر في photos — ما يعرضه JournalEntryCard
+    // فعلياً (entryPhotos()/AppImage) — لا في حقلٍ لا تعرضه أي واجهة اليوم.
+    expect(e.photos).toEqual(["data:image/jpeg;base64,POSTERBYTES"]);
+    expect(e.photo).toBe("data:image/jpeg;base64,POSTERBYTES");
+  });
+
+  it("معاينة PDF (previewHash) تصل إلى photos بعد hydrateCloudPhotos", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "P1", mediaIDs: ["pdf"] })];
+    const mediaItems = [
+      media({ id: "pdf", recordID: "r1", kind: "pdf", cloudKind: "photos", cloudHash: HASH_B, originalFilename: "عقد.pdf" }),
+    ];
+    const parsed = await parseMadarImportFile(madarFile(records, mediaItems));
+    expect(parsed.entries[0].photoRefs).toEqual([HASH_B]);
+    expect(parsed.entries[0].attachmentRefs).toEqual([
+      { kind: "pdf", filename: "عقد.pdf", previewHash: HASH_B, status: "uploaded" },
+    ]);
+
+    idb.set(MEDIA_CACHE_PREFIX + HASH_B, "data:image/jpeg;base64,PREVIEWBYTES");
+    const hydrated = await sync.hydrateCloudPhotos("space", baseAppData(parsed.entries));
+    const e = hydrated.journalEntries.find((x) => x.id === "do-P1")!;
+
+    expect(e.photos).toEqual(["data:image/jpeg;base64,PREVIEWBYTES"]);
+  });
+});
+
 describe("إعادة الاستيراد تُكمّل الوسائط الناقصة", () => {
   it("مذكرةٌ استُوردت بصورةٍ واحدة تكتسب مرجع صوتٍ اكتشفه مستورد الذكريات لاحقاً", async () => {
     // الملف الأول: صورةٌ واحدة فقط.

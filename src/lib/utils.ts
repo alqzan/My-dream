@@ -424,38 +424,39 @@ export function unionRefs(a?: string[], b?: string[]): string[] | undefined {
 }
 
 // دمج مصفوفةٍ من إشاراتٍ وصفية (فيديو/مرفقات/بيانات صوت — بلا ملفّ) بحيث لا
-// يضيع عنصرٌ من أيّ جهاز. عنصرٌ يحمل هاشاً حقيقياً (`hashKey`، مثل posterHash/
-// previewHash) يُتَّحد بذلك الهاش تحديداً — نسخةٌ حقلاً‑حقلاً أغنى تفوز (أيّ
-// حقلٍ معرَّف في إحدى النسختين يبقى)، فحين يرفع جهازٌ معاينةً كان الجهاز
-// الآخر يعرف فقط أنها موجودة (status بلا previewHash) لا تضيع الأغنى منهما.
-// عنصرٌ بلا هاش (لم يُرفع شيء لهذه الوسيلة قط) يتّحد بقيمته الكاملة (JSON)
-// كما كانت videoRefs تُدمَج دائماً — نسختان بنفس المحتوى تتوحّدان في واحدة.
+// يضيع عنصرٌ من أيّ جهاز، وبحيث لا تتضاعف نفس الوسيلة حين تختلف درجة اكتمالها
+// بين الجهازين. الهويّة **لا تعتمد على الهاش أبداً** (posterHash/previewHash
+// غائبٌ تماماً على نسخةٍ metadataOnly لم تُرفع بعد) — بل على حقولٍ وصفية
+// مستقرّة (`identityKeys`، مثل type+duration للفيديو) تبقى نفسها بصرف النظر
+// عن اكتمال الرفع. عنصرا الجهازين بنفس الهويّة يتّحدان حقلاً‑حقلاً (أيّ حقلٍ
+// معرَّفٍ في إحدى النسختين يبقى)، فحين يرفع جهازٌ معاينةً كان الجهاز الآخر
+// يعرف فقط أنها موجودة، ينتج عنصرٌ واحدٌ أغنى لا عنصران مكرّران.
 function mergeRefList<T extends Record<string, unknown>>(
   a: T[] | undefined,
   b: T[] | undefined,
-  hashKey?: keyof T
+  identityKeys: (keyof T)[]
 ): T[] | undefined {
   const av = a ?? [];
   const bv = b ?? [];
   if (!av.length && !bv.length) return undefined;
-  const byHash = new Map<string, T>();
-  const byValue: T[] = [];
-  const seenValues = new Set<string>();
+  const identityOf = (item: T): string => identityKeys.map((k) => JSON.stringify(item[k] ?? null)).join("|");
+  const order: string[] = [];
+  const byIdentity = new Map<string, T>();
   const put = (item: T) => {
-    const h = hashKey ? item[hashKey] : undefined;
-    if (typeof h === "string" && h) {
-      const prev = byHash.get(h);
-      const enriched: Record<string, unknown> = { ...prev };
-      for (const [k, v] of Object.entries(item)) if (v !== undefined) enriched[k] = v;
-      byHash.set(h, enriched as T);
-    } else {
-      const k = JSON.stringify(item);
-      if (!seenValues.has(k)) { seenValues.add(k); byValue.push(item); }
+    const key = identityOf(item);
+    const prev = byIdentity.get(key);
+    if (!prev) {
+      order.push(key);
+      byIdentity.set(key, item);
+      return;
     }
+    const enriched: Record<string, unknown> = { ...prev };
+    for (const [k, v] of Object.entries(item)) if (v !== undefined) enriched[k] = v;
+    byIdentity.set(key, enriched as T);
   };
   for (const item of av) put(item);
   for (const item of bv) put(item);
-  const merged = [...byHash.values(), ...byValue];
+  const merged = order.map((k) => byIdentity.get(k)!);
   return merged.length ? merged : undefined;
 }
 
@@ -488,11 +489,11 @@ export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): Journa
   // إن كانت فارغة»: نسختان لكلٍّ منهما إشارةٌ مختلفة (أو نفس الإشارة بدرجة
   // اكتمالٍ مختلفة) كانتا تفقدان إحداهما. هذا يبرّر استثناءها من ختم تعديل
   // المذكرة (`UNSTAMPED_FIELDS` في store.ts) — لها دمجُها المستقل كبقية الوسائط.
-  const videoRefs = mergeRefList(base.videoRefs, other.videoRefs, "posterHash");
+  const videoRefs = mergeRefList(base.videoRefs, other.videoRefs, ["type", "duration"]);
   if (videoRefs && refListChanged(base.videoRefs, videoRefs)) out = { ...out, videoRefs };
-  const attachmentRefs = mergeRefList(base.attachmentRefs, other.attachmentRefs, "previewHash");
+  const attachmentRefs = mergeRefList(base.attachmentRefs, other.attachmentRefs, ["kind", "filename"]);
   if (attachmentRefs && refListChanged(base.attachmentRefs, attachmentRefs)) out = { ...out, attachmentRefs };
-  const audioMetadataRefs = mergeRefList(base.audioMetadataRefs, other.audioMetadataRefs);
+  const audioMetadataRefs = mergeRefList(base.audioMetadataRefs, other.audioMetadataRefs, ["type", "duration", "filename"]);
   if (audioMetadataRefs && refListChanged(base.audioMetadataRefs, audioMetadataRefs)) {
     out = { ...out, audioMetadataRefs };
   }

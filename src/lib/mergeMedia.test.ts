@@ -64,6 +64,11 @@ describe("mergeEntryMedia — no ref is ever dropped, no deletion resurrected", 
 
 // ===================== مستورد الذكريات: videoRefs.posterHash /
 // attachmentRefs.previewHash / audioMetadataRefs — لا تُفقد عند الدمج =====
+//
+// الهويّة **لا تعتمد على الهاش أبداً** (posterHash/previewHash غائبٌ تماماً
+// على نسخةٍ metadataOnly لم تُرفع بعد على أيّ جهاز) بل على حقولٍ وصفية
+// مستقرّة تُعرَف محلياً قبل الرفع: type+duration للفيديو، kind+filename
+// للـPDF، type+duration+filename للصوت — راجع mergeRefList في utils.ts.
 describe("mergeEntryMedia — معاينة فيديو/PDF وبيانات صوت لا تضيع عبر جهازين", () => {
   it("يُبقي فيديو الجهاز الآخر (posterHash) حين لا يحمله الـbase إطلاقاً", () => {
     const base = entry({ id: "E1", content: "نص" });
@@ -72,13 +77,14 @@ describe("mergeEntryMedia — معاينة فيديو/PDF وبيانات صوت 
     expect(out.videoRefs).toEqual([{ type: "video/quicktime", duration: 8, posterHash: "p1" }]);
   });
 
-  it("يوحّد فيديو نفس posterHash من الجهازين ويحتفظ بأغنى الحقول", () => {
-    // جهازٌ أ رفع المعاينة (posterHash) بلا مدّة معروفة؛ جهازٌ ب يعرف المدّة
-    // لكن لم يرَ المعاينة بعد — الدمج يجب أن يحتفظ بكليهما معاً لا بأحدهما.
-    const base = entry({ id: "E1", videoRefs: [{ posterHash: "p1" }] });
-    const other = entry({ id: "E1", videoRefs: [{ duration: 12, posterHash: "p1" }] });
+  it("metadataOnly (بلا هاش) ثم uploaded (بهاش) لنفس الفيديو ينتجان مرجعاً واحداً فقط", () => {
+    // نفس الفيديو تماماً (type+duration مطابقان — معروفان محلياً قبل الرفع)؛
+    // جهازٌ أ رآه قبل الرفع (بلا posterHash)، وجهازٌ ب بعد الرفع (بهاش).
+    const base = entry({ id: "E1", videoRefs: [{ type: "video/quicktime", duration: 8 }] });
+    const other = entry({ id: "E1", videoRefs: [{ type: "video/quicktime", duration: 8, posterHash: "p1" }] });
     const out = mergeEntryMedia(base, other);
-    expect(out.videoRefs).toEqual([{ duration: 12, posterHash: "p1" }]);
+    expect(out.videoRefs).toHaveLength(1); // لا تكرار
+    expect(out.videoRefs).toEqual([{ type: "video/quicktime", duration: 8, posterHash: "p1" }]);
   });
 
   it("لا يكرّر فيديو نفسه حين يحمله الطرفان بالضبط", () => {
@@ -88,29 +94,46 @@ describe("mergeEntryMedia — معاينة فيديو/PDF وبيانات صوت 
     expect(mergeEntryMedia(base, other).videoRefs).toEqual([v]);
   });
 
-  it("يوحّد attachmentRefs (معاينة PDF) بنفس منطق posterHash", () => {
-    const base = entry({ id: "E1", attachmentRefs: [{ kind: "pdf", status: "metadataOnly" }] });
-    const other = entry({
-      id: "E1",
-      attachmentRefs: [{ kind: "pdf", previewHash: "prev1", filename: "عقد.pdf", status: "uploaded" }],
-    });
-    const out = mergeEntryMedia(base, other);
-    // النسخة بلا previewHash تتّحد بقيمتها الكاملة (لا هاش لتوحيدها به)، فتبقى
-    // الاثنتان — إلا أنّ حالة الاستخدام الواقعية هي أن يحمل أحد الجهازين
-    // previewHash؛ هنا نتأكّد أنّ النسخة الأغنى (المرفوعة) لا تضيع بأي حال.
-    expect(out.attachmentRefs).toContainEqual({
-      kind: "pdf", previewHash: "prev1", filename: "عقد.pdf", status: "uploaded",
-    });
+  it("يفرّق بين فيديوين مختلفين (type/duration مختلفان) فلا يدمجهما خطأً", () => {
+    const base = entry({ id: "E1", videoRefs: [{ type: "video/mp4", duration: 5 }] });
+    const other = entry({ id: "E1", videoRefs: [{ type: "video/mp4", duration: 20 }] });
+    expect(mergeEntryMedia(base, other).videoRefs).toHaveLength(2);
   });
 
-  it("يوحّد audioMetadataRefs من الجهازين (بلا هاش، بالقيمة الكاملة)", () => {
-    const base = entry({ id: "E1", audioMetadataRefs: [{ status: "metadataOnly", duration: 3 }] });
-    const other = entry({ id: "E1", audioMetadataRefs: [{ status: "uploaded", duration: 3, filename: "note.m4a" }] });
+  it("metadataOnly (بلا previewHash) ثم uploaded (بهاش) لنفس ملف PDF ينتجان مرجعاً واحداً فقط", () => {
+    // نفس اسم الملف (معروفٌ محلياً قبل الرفع) — previewHash يظهر بعد الرفع فقط.
+    const base = entry({ id: "E1", attachmentRefs: [{ kind: "pdf", filename: "عقد.pdf", status: "metadataOnly" }] });
+    const other = entry({
+      id: "E1",
+      attachmentRefs: [{ kind: "pdf", filename: "عقد.pdf", previewHash: "prev1", status: "uploaded" }],
+    });
     const out = mergeEntryMedia(base, other);
-    // كلاهما موجودٌ (قيمتان مختلفتان، فلا تدمُج بحقلٍ ذكي — لكن لا فقد أيضاً).
-    expect(out.audioMetadataRefs).toHaveLength(2);
-    expect(out.audioMetadataRefs).toContainEqual({ status: "metadataOnly", duration: 3 });
-    expect(out.audioMetadataRefs).toContainEqual({ status: "uploaded", duration: 3, filename: "note.m4a" });
+    expect(out.attachmentRefs).toHaveLength(1); // لا تكرار
+    expect(out.attachmentRefs).toEqual([
+      { kind: "pdf", filename: "عقد.pdf", previewHash: "prev1", status: "uploaded" },
+    ]);
+  });
+
+  it("يوحّد audioMetadataRefs بنفس منطق metadataOnly→uploaded (type+duration+filename مطابقة)", () => {
+    const base = entry({
+      id: "E1",
+      audioMetadataRefs: [{ type: "audio/mp4", duration: 3, filename: "note.m4a", status: "metadataOnly" }],
+    });
+    const other = entry({
+      id: "E1",
+      audioMetadataRefs: [{ type: "audio/mp4", duration: 3, filename: "note.m4a", status: "uploaded" }],
+    });
+    const out = mergeEntryMedia(base, other);
+    expect(out.audioMetadataRefs).toHaveLength(1); // لا تكرار
+    expect(out.audioMetadataRefs).toEqual([
+      { type: "audio/mp4", duration: 3, filename: "note.m4a", status: "uploaded" },
+    ]);
+  });
+
+  it("audioMetadataRefs بأسماء ملفاتٍ مختلفة تبقى عنصرين (ملاحظتان صوتيتان حقيقيتان)", () => {
+    const base = entry({ id: "E1", audioMetadataRefs: [{ duration: 3, filename: "a.m4a", status: "metadataOnly" }] });
+    const other = entry({ id: "E1", audioMetadataRefs: [{ duration: 3, filename: "b.m4a", status: "metadataOnly" }] });
+    expect(mergeEntryMedia(base, other).audioMetadataRefs).toHaveLength(2);
   });
 });
 

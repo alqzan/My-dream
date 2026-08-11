@@ -367,11 +367,18 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
       const hash = uploaded ? m.cloudHash : undefined;
 
       if (m.kind === "photo") {
-        // photoRefs تبقى للصور الحقيقية المرفوعة فقط — لا معاينات فيديو/PDF.
         if (inPhotosBucket && hash) { photoRefs.push(hash); photoHashes.add(hash); }
       } else if (m.kind === "video") {
         const posterHash = inPhotosBucket && hash ? hash : undefined;
-        if (posterHash) photoHashes.add(posterHash); // ما زال يحتاج تحقّق R2
+        if (posterHash) {
+          photoHashes.add(posterHash); // يحتاج تحقّق R2 كأي هاش صورة
+          // ينضمّ أيضاً إلى photoRefs (لا يستبدل وجوده في videoRefs.posterHash
+          // أدناه) كي يظهر في معرض الصور فوراً عبر hydrateCloudPhotos/
+          // JournalEntryCard القائمين أصلاً — رفعُ معاينةٍ لا يُعدّ نجاحاً ما
+          // لم يستطع المالك رؤيتها داخل مدار، ولا واجهة عرضٍ مخصّصة اليوم
+          // لـvideoRefs.posterHash وحده.
+          photoRefs.push(posterHash);
+        }
         videoRefs.push({
           ...(m.contentType ?? m.originalContentType ? { type: m.contentType ?? m.originalContentType } : {}),
           ...(typeof m.durationSeconds === "number" ? { duration: m.durationSeconds } : {}),
@@ -379,7 +386,10 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
         });
       } else if (m.kind === "pdf") {
         const previewHash = inPhotosBucket && hash ? hash : undefined;
-        if (previewHash) photoHashes.add(previewHash);
+        if (previewHash) {
+          photoHashes.add(previewHash);
+          photoRefs.push(previewHash); // نفس سبب معاينة الفيديو أعلاه — عرضٌ فوريّ.
+        }
         attachmentRefs.push({
           kind: "pdf",
           ...(m.originalFilename ? { filename: m.originalFilename } : {}),

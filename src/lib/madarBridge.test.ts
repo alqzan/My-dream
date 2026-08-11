@@ -149,11 +149,12 @@ describe("parseMadarImportFile — الوسائط: صورة+فيديو مع post
     const r = await parseMadarImportFile(jsonFile(manifest(records, mediaItems)));
     const e = r.entries[0];
 
-    // photoRefs تبقى للصور الحقيقية فقط — لا معاينة فيديو ولا PDF فيها.
-    expect(e.photoRefs).toEqual([HASH_A]);
-    // معاينة الفيديو تعيش في videoRefs[].posterHash.
+    // photoRefs يضمّ الصورة الحقيقية + معاينة الفيديو + معاينة PDF معاً — كي
+    // تظهر الثلاث فوراً في معرض الصور القائم (hydrateCloudPhotos/
+    // JournalEntryCard) بلا حاجة لواجهة عرضٍ مخصّصة جديدة.
+    expect(e.photoRefs).toEqual([HASH_A, HASH_B, HASH_C]);
+    // ...وتبقى أيضاً في حقولها النوعية الغنية بالمعلومات الوصفية.
     expect(e.videoRefs).toEqual([{ type: "image/jpeg", duration: 12.5, posterHash: HASH_B }]);
-    // معاينة PDF تعيش في attachmentRefs[].previewHash.
     expect(e.attachmentRefs).toEqual([
       { kind: "pdf", filename: "عقد.pdf", previewHash: HASH_C, status: "uploaded" },
     ]);
