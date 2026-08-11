@@ -496,3 +496,68 @@ describe("mergeAppData ثمّ hydrateCloudPhotos — استكمالٌ جزئيّ
     }
   });
 });
+
+// ===================== ميزانية الترطيب =====================
+// العطل الذي أنشأ هذه المجموعة: أرشيف Day One حقيقيّ (2113 وسيطاً ≈ 692
+// ميغابايت) رُطِّب كاملاً في الذاكرة ثمّ حُشر في لقطة المتجر، فقتل المتصفحُ
+// التبويبَ على كل إقلاع («حدثت مشكلة بشكل متكرر»). السقف هنا لا يُسقط شيئاً:
+// ما تجاوزه يبقى مرجعَ هاشٍ وبايتاته في مخزن الهاش المحليّ وفي R2.
+describe("hydrateCloudPhotos — سقف الذاكرة", () => {
+  // وسيطٌ مخبّأ محلياً: يُقرأ من idb مباشرةً بلا شبكة، فيدخل الميزانية.
+  const cached = (hash: string, bytes: number) => {
+    idbStore.set(MEDIA_CACHE_PREFIX + hash, "data:image/jpeg;base64," + "A".repeat(bytes));
+  };
+  const hashN = (i: number) => String(i).padStart(4, "0") + "d".repeat(28);
+
+  it("يتوقّف عند سقف العدد، والباقي يبقى مرجعاً لا يضيع", async () => {
+    // 460 وسيطاً مخبّأً — أكثر من HYDRATE_MAX_ITEMS (400).
+    const entries = Array.from({ length: 460 }, (_, i) => {
+      cached(hashN(i), 16);
+      // الأحدث أولاً: التواريخ تنازلية مع i، فأوّل 400 هي الأحدث.
+      const day = String(28 - (i % 28)).padStart(2, "0");
+      return { ...cloudEntry(`e${i}`, { photoRefs: [hashN(i)] }), date: `2026-01-${day}` };
+    });
+    const out = await sync.hydrateCloudPhotos("space", appData(entries));
+
+    const withBytes = out.journalEntries.filter((e) => (e as JournalEntry).photos?.length);
+    const withRefs = out.journalEntries.filter(
+      (e) => ((e as JournalEntry & { photoRefs?: string[] }).photoRefs ?? []).length
+    );
+    expect(withBytes.length).toBeLessThanOrEqual(400);
+    expect(withBytes.length).toBeGreaterThan(0);
+    // لا وسيطَ ضاع: كل مذكرة إمّا حملت بايتاتها أو احتفظت بمرجعها.
+    expect(withBytes.length + withRefs.length).toBe(460);
+  });
+
+  it("يتوقّف عند سقف البايتات ولو كان العدد تحت الحدّ", async () => {
+    // 60 وسيطاً × 1 ميغابايت = 60 ميغابايت > HYDRATE_MAX_BYTES (48).
+    const oneMB = 1024 * 1024;
+    const entries = Array.from({ length: 60 }, (_, i) => {
+      cached(hashN(i), oneMB);
+      return cloudEntry(`e${i}`, { photoRefs: [hashN(i)] });
+    });
+    const out = await sync.hydrateCloudPhotos("space", appData(entries));
+
+    const inlined = out.journalEntries.flatMap((e) => (e as JournalEntry).photos ?? []);
+    const totalBytes = inlined.reduce((n, s) => n + s.length, 0);
+    // تجاوزٌ طفيف بمقدار الطلبات الجارية (6) مقبول؛ الممنوع هو الستّون كاملة.
+    expect(totalBytes).toBeLessThan(60 * oneMB);
+    expect(inlined.length).toBeLessThan(60);
+    expect(inlined.length).toBeGreaterThan(0);
+  });
+
+  it("مكتبةٌ صغيرة تُرطَّب كاملةً — السقف لا يمسّ الاستخدام العادي", async () => {
+    const entries = Array.from({ length: 12 }, (_, i) => {
+      cached(hashN(i), 64);
+      return cloudEntry(`e${i}`, { photoRefs: [hashN(i)] });
+    });
+    const out = await sync.hydrateCloudPhotos("space", appData(entries));
+
+    expect(out.journalEntries.every((e) => (e as JournalEntry).photos?.length === 1)).toBe(true);
+    expect(
+      out.journalEntries.every(
+        (e) => !((e as JournalEntry & { photoRefs?: string[] }).photoRefs ?? []).length
+      )
+    ).toBe(true);
+  });
+});

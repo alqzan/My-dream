@@ -791,6 +791,25 @@ export async function inlineCachedMedia<T extends Partial<AppData>>(
 // can't fire thousands of simultaneous R2 fetches (see mapWithConcurrency).
 const HYDRATE_CONCURRENCY = 6;
 
+// ===================== ميزانية الترطيب (سقفٌ للذاكرة) =====================
+// كان الترطيب بلا سقفِ **حجم** إطلاقاً — سقف التزامن أعلاه يحدّ عدد الطلبات
+// المتوازية لا حجم ما يبقى في الذاكرة. فكان يجمع بايتات **كل** وسائط المكتبة
+// في `Map` واحد ثمّ يحشرها كلها داخل لقطة المتجر، فتُسلسَل نصّ JSON واحداً في
+// IndexedDB. أرشيف Day One حقيقيّ (2113 وسيطاً ≈ 692 ميغابايت base64) يعني في
+// الذروة: الـMap + نصّ اللقطة + الكائنات المفكوكة — أضعاف ذلك. ميزانية تبويب
+// الجوال مئات الميغابايت، فيقتله المتصفح ويعيد الكرّة كل إقلاع.
+//
+// السقف هنا **لا يُسقط شيئاً**: ما تجاوز الميزانية يبقى مرجعَ هاشٍ على المذكرة
+// (`keep` + `photoOrder` أدناه — نفس مسار «تعذّر الجلب» الموجود والمختبَر
+// أصلاً)، وبايتاته محفوظةٌ كما هي في مخزن الهاش المحليّ (`madar-media:<hash>`)
+// وفي R2. فلا فقدَ بيانات ولا يُتْمَ كائناتٍ في R2، والحفظ التالي يعيد كتابة
+// المرجع في موضعه الصحيح.
+//
+// الأولوية للأحدث: المذكرات تُرتّب تنازلياً بالتاريخ قبل جمع المراجع، فما يدخل
+// الميزانية هو ما يفتحه المالك فعلاً أولاً.
+const HYDRATE_MAX_ITEMS = 400;
+const HYDRATE_MAX_BYTES = 48 * 1024 * 1024;
+
 // Local-only, never written to the cloud: the original ref order an entry had
 // when hydrate couldn't resolve one of its photos. prepareForCloud reads it to
 // re-sort the emitted refs, then strips it. (The cloud's own photoRefs array is
@@ -833,16 +852,28 @@ export async function hydrateCloudPhotos(
   //    by several entries is fetched once, and the pool caps concurrency so a
   //    thousands-strong Day One library can't hang the app.
   const jobs = new Map<string, MediaKind>(); // `${kind}:${hash}` → kind
-  for (const e of main.journalEntries) {
+  // الأحدث أولاً — الترتيب هو الأولوية حين تنفد الميزانية أدناه. نسخةٌ سطحية:
+  // `main.journalEntries` ترتيبها ليس مضموناً ولا يجوز أن نقلبه للمنادي.
+  const byNewest = [...main.journalEntries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  for (const e of byNewest) {
     const ce = e as CloudEntry & { audioRef?: string };
     for (const h of photoRefsOf(ce)) jobs.set(`photos:${h}`, "photos");
     for (const h of audioRefsOf(ce)) jobs.set(`audios:${h}`, "audios");
   }
   const resolved = new Map<string, string>(); // `${kind}:${hash}` → data: URL
-  await mapWithConcurrency([...jobs.entries()], HYDRATE_CONCURRENCY, async ([key, kind]) => {
+  // الميزانية تُحسب على البايتات المُرطَّبة فعلاً لا على تقديرٍ مسبق (لا نعرف
+  // حجم الوسيط قبل قراءته). سقف العدد يحدّ عدد الطلبات أصلاً، وسقف البايتات
+  // يوقف الإضافة فور تجاوزها — تجاوزٌ طفيف بمقدار الطلبات الجارية مقبول.
+  let hydratedBytes = 0;
+  const budgeted = [...jobs.entries()].slice(0, HYDRATE_MAX_ITEMS);
+  await mapWithConcurrency(budgeted, HYDRATE_CONCURRENCY, async ([key, kind]) => {
+    if (hydratedBytes >= HYDRATE_MAX_BYTES) return; // الباقي يبقى مرجعاً
     const hash = key.slice(kind.length + 1);
     const url = await fetchInlineMedia(uid, kind, hash, mediaKey);
-    if (url) resolved.set(key, url);
+    if (!url) return;
+    if (hydratedBytes >= HYDRATE_MAX_BYTES) return; // نفدت أثناء الجلب
+    hydratedBytes += url.length;
+    resolved.set(key, url);
   });
 
   // 2) Rebuild each entry from the resolved map. CRITICAL: a ref whose bytes we
