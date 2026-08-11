@@ -1,6 +1,8 @@
 "use client";
 import type { JournalEntry } from "@/lib/types";
-import { formatDate, entryPhotos, entryAudios } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
+import { useMediaCacheVersion, resolveMediaSlots } from "@/components/ui/useMedia";
 import { stripMarkdown } from "@/lib/markdown";
 import { AppImage } from "@/components/ui/AppImage";
 import { Trash2, Clock, Images, Mic, Film, Star } from "lucide-react";
@@ -15,20 +17,31 @@ interface JournalEntryCardProps {
 export function JournalEntryCard({ entry, onDelete, onClick, onToggleStar }: JournalEntryCardProps) {
   const plain = stripMarkdown(entry.content);
   const preview = plain.slice(0, 180) + (plain.length > 180 ? "..." : "");
-  const photos = entryPhotos(entry);
+  // العدّ من **المصادر** لا من البايتات الحاضرة: مذكرةٌ صورُها في مخزن الهاش
+  // ولم تُقرأ بعد لها صورٌ فعلاً، فلا تُعرض كأنها بلا صور ثم يقفز التخطيط.
+  useMediaCacheVersion();
+  const photoSources = entryPhotoSources(entry);
+  const cover = resolveMediaSlots(photoSources)[0];
+  const audioSources = entryAudioSources(entry);
 
   return (
     <div
       className="bg-white rounded-2xl border border-gray-100 overflow-hidden card-shadow cursor-pointer"
       onClick={onClick}
     >
-      {photos.length > 0 && (
+      {photoSources.length > 0 && (
         <div className="relative">
-          <AppImage src={photos[0]} alt="صورة اليوم" className="w-full h-36 object-cover" />
-          {photos.length > 1 && (
+          {cover ? (
+            <AppImage src={cover} alt="صورة اليوم" className="w-full h-36 object-cover" />
+          ) : (
+            // البايتات تُقرأ من مخزن الهاش الآن — نحجز المساحة نفسها فلا يقفز
+            // التخطيط لحظة وصولها.
+            <div className="w-full h-36 bg-gray-100 dark:bg-white/5 animate-pulse" aria-hidden />
+          )}
+          {photoSources.length > 1 && (
             <span className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/55 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
               <Images size={11} />
-              +{photos.length - 1}
+              +{photoSources.length - 1}
             </span>
           )}
         </div>
@@ -48,10 +61,10 @@ export function JournalEntryCard({ entry, onDelete, onClick, onToggleStar }: Jou
                 {entry.time}
               </span>
             )}
-            {entryAudios(entry).length > 0 && (
+            {audioSources.length > 0 && (
               <span className="flex items-center gap-0.5 text-journal" aria-label="ملاحظة صوتية">
                 <Mic size={12} />
-                {entryAudios(entry).length > 1 && <span className="text-[10px]">{entryAudios(entry).length}</span>}
+                {audioSources.length > 1 && <span className="text-[10px]">{audioSources.length}</span>}
               </span>
             )}
             {entry.videoRefs && entry.videoRefs.length > 0 && (

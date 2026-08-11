@@ -19,8 +19,10 @@ import {
   primeUrlCache,
   inlineCachedMedia,
   lastShardLoadOk,
+  fetchInlineMedia,
   RevisionConflictError,
 } from "@/lib/sync";
+import { setRemoteMediaFetcher } from "@/lib/mediaCache";
 import { useAppStore } from "@/lib/store";
 import type { AppData } from "@/lib/types";
 import { hasData, cloudHasUnseen, shouldAdoptCloud } from "@/lib/syncDecision";
@@ -95,6 +97,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // src/lib/keyDerivation.ts). Identical to `space` unless this device has
     // opted into separated data/media keys — inert today, every device is v1.
     const mediaKey = getMediaAuthKey() ?? space;
+
+    // مرجعُ وسيطٍ بايتاته ليست على هذا الجهاز بعد (جهازٌ جديد، أو وسيطٌ تجاوز
+    // ميزانية الترطيب في `hydrateCloudPhotos`) يُنزَّل عند أوّل عرضٍ له —
+    // `mediaCache.ts` تقرأ محلياً أولاً ولا تصل إلى هنا إلا عند الغياب، ثم
+    // تحفظ الناتج محلياً فلا تتكرّر الرحلة. يُحقن هنا لأنّ هذا المكوّن وحده
+    // يملك معرّف المساحة ومفتاح الوسائط.
+    setRemoteMediaFetcher((hash, kind) => fetchInlineMedia(space, kind, hash, mediaKey));
 
     let cancelled = false;
     let unsubStore: () => void = () => {};
@@ -419,6 +428,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      setRemoteMediaFetcher(null);
       unsubStore();
       unsubSnap();
       unsubFlush();

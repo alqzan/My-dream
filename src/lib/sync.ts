@@ -6,6 +6,7 @@ import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
 import { entryPhotos, entryAudios } from "./utils";
 import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
+import { MEDIA_CACHE_PREFIX } from "./mediaCache";
 import { journalShardId } from "./merge";
 import { showToast } from "@/components/ui/UndoToast";
 
@@ -16,7 +17,9 @@ import { showToast } from "@/components/ui/UndoToast";
 // time this device sees it. After that, rendering never touches the network — no
 // live URL, no expiry, no CORS, nothing left to break. Content hashes are
 // immutable, so a cached entry is valid permanently.
-const MEDIA_CACHE_PREFIX = "madar-media:";
+// البادئة مصدرُها `mediaCache.ts` — هي مفتاحُ **القراءة عند العرض** أيضاً،
+// فلا تُكتب في موضعين (كتابةٌ هنا وقراءةٌ هناك ببادئتين مختلفتين = صورٌ لا
+// تُعرض أبداً بلا خطأٍ ظاهر).
 async function localMediaGet(hash: string): Promise<string | null> {
   try {
     const v = await idbGet(MEDIA_CACHE_PREFIX + hash);
@@ -704,7 +707,10 @@ export function subscribeUserMain(
 // (today's behavior on every device — see src/lib/keyDerivation.ts) but a
 // caller that has opted into separated data/media keys passes its own
 // derived media subkey here instead.
-async function fetchInlineMedia(
+// مُصدَّرة ليحقنها `SyncProvider` في `mediaCache.ts` جالباً احتياطياً: مرجعٌ
+// بايتاته ليست على الجهاز بعد (جهازٌ جديد، أو وسيطٌ تجاوز ميزانية الترطيب)
+// يُنزَّل عند أول عرضٍ له ويُحفظ محلياً — فلا يظهر فراغٌ صامت ولا تتكرّر الرحلة.
+export async function fetchInlineMedia(
   uid: string,
   sub: MediaKind,
   h: string,

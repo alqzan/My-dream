@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { parseDate, entryPhotos, formatDate } from "@/lib/utils";
+import { parseDate, formatDate } from "@/lib/utils";
+import { entryPhotoSources, hasPhoto as entryHasPhoto } from "@/lib/mediaSources";
+import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Photo } from "@/components/ui/Photo";
 import { skyView, entryVoice, silentDates, type MonthCluster, type EntryVoice } from "@/lib/memorySky";
@@ -95,6 +97,11 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
   const view = useMemo(() => skyView(entries), [entries]);
   const [openMonth, setOpenMonth] = useState<string | null>(null);
   const [preview, setPreview] = useState<JournalEntry | null>(null);
+  // بايتات صور المعاينة تُقرأ من مخزن الهاش عند العرض — الاشتراك هنا يُعيد
+  // الرسم لحظة وصولها. سؤال «هل للمذكرة صورة؟» في السماء نفسها لا يقرأ
+  // بايتات إطلاقاً (entryHasPhoto)، وإلا حمّلنا المكتبة كلها لرسم نقاط.
+  useMediaCacheVersion();
+  const previewPhotos = preview ? resolveMedia(entryPhotoSources(preview)) : [];
   // مؤشّر التركيز المتنقّل (roving) — نجمةٌ واحدة قابلة للتركيز في كل لحظة.
   const [focusIdx, setFocusIdx] = useState(0);
   const nodeRefs = useRef<(SVGGElement | null)[]>([]);
@@ -170,7 +177,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
       const f = 0.36 + hashFrac(key, 0x1000193) * 0.64; // radius fraction
       const { x, y } = domePoint(angle, f);
       const voice = entryVoice(entry);
-      const hasPhoto = entryPhotos(entry).length > 0;
+      const hasPhoto = entryHasPhoto(entry);
       const starred = !!entry.starred;
       const r = 0.5 + (hasPhoto ? 0.35 : 0) + (starred ? 0.35 : 0);
       const o = starred ? 0.98 : hasPhoto ? 0.85 : 0.55;
@@ -444,8 +451,8 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
       {preview && (
         <div className="absolute inset-x-3 bottom-3 z-20 bg-[#1c1435]/95 border border-[#e8c99a]/25 rounded-2xl p-3 backdrop-blur animate-fade-up">
           <div className="flex items-start gap-3">
-            {entryPhotos(preview).length > 0 && (
-              <Photo images={entryPhotos(preview)} index={0} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+            {previewPhotos.length > 0 && (
+              <Photo images={previewPhotos} index={0} className="w-14 h-14 rounded-xl object-cover shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <div className="text-[10px] text-[#b9a8d6]">{formatDate(preview.date)}</div>

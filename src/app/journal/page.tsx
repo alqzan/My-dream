@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, entryPhotos, entryAudios, normalizeArabic, uid } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid } from "@/lib/utils";
+import { entryPhotoSources, entryAudioSources, type MediaSource } from "@/lib/mediaSources";
+import { useMediaCacheVersion, resolveMedia, resolveMediaSlots } from "@/components/ui/useMedia";
 import { MOODS } from "@/lib/types";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
@@ -200,6 +202,12 @@ export default function JournalPage() {
     setAdhocEntry(undefined);
   }
   const viewEntry = viewIndex !== null ? filtered[viewIndex] : adhocEntry;
+  // بايتات وسائط المذكرة المفتوحة تُقرأ من مخزن الهاش عند العرض. الاشتراك
+  // هنا (مرّةً في أعلى الصفحة) يُعيد الرسم لحظة وصول أيّ منها — للعارض
+  // وللمعرض معاً، فلا حاجة لخطّافٍ داخل الحلقات.
+  useMediaCacheVersion();
+  const viewPhotos = viewEntry ? resolveMedia(entryPhotoSources(viewEntry)) : [];
+  const viewAudios = viewEntry ? resolveMedia(entryAudioSources(viewEntry)) : [];
   function stepViewer(delta: number) {
     if (viewIndex === null) return;
     const next = viewIndex + delta;
@@ -255,13 +263,16 @@ export default function JournalPage() {
 
   // تبويب المعرض — كل صور المذكرات المطابقة للفلاتر الحالية، أحدث أولاً.
   const galleryPhotos = useMemo(() => {
-    const items: { entry: JournalEntry; url: string }[] = [];
+    const items: { entry: JournalEntry; source: MediaSource }[] = [];
     for (const entry of filtered) {
-      for (const url of entryPhotos(entry)) items.push({ entry, url });
+      for (const source of entryPhotoSources(entry)) items.push({ entry, source });
     }
     return items;
   }, [filtered]);
-  const visibleGallery = galleryPhotos.slice(0, galleryCount);
+  // **الشريحة المعروضة وحدها** تُقرأ بايتاتها. بناء القائمة أعلاه من المصادر
+  // لا يلمس بايتةً واحدة — ولولا ذلك لطلب معرضُ ألفَي صورةٍ المكتبةَ كلّها.
+  const visibleGallery = resolveMediaSlots(galleryPhotos.slice(0, galleryCount).map((g) => g.source))
+    .map((url, i) => ({ entry: galleryPhotos[i].entry, url }));
   const hasMoreGallery = galleryPhotos.length > visibleGallery.length;
 
   return (
@@ -583,7 +594,11 @@ export default function JournalPage() {
                     onClick={() => openViewer(item.entry)}
                     className="aspect-square overflow-hidden rounded-lg press"
                   >
-                    <AppImage src={item.url} alt="" className="w-full h-full object-cover" />
+                    {item.url ? (
+                      <AppImage src={item.url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-100 dark:bg-white/5 animate-pulse" aria-hidden />
+                    )}
                   </button>
                 ))}
               </div>
@@ -668,19 +683,19 @@ export default function JournalPage() {
                 ))}
               </div>
             )}
-            {entryPhotos(viewEntry).length > 0 && (
+            {viewPhotos.length > 0 && (
               <div className="space-y-2">
-                {entryPhotos(viewEntry).map((p, i) => (
+                {viewPhotos.map((p, i) => (
                   <Photo
                     key={i}
-                    images={entryPhotos(viewEntry)}
+                    images={viewPhotos}
                     index={i}
                     className="w-full max-h-80 object-cover rounded-2xl"
                   />
                 ))}
               </div>
             )}
-            {entryAudios(viewEntry).map((a, i) => (
+            {viewAudios.map((a, i) => (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <audio key={i} controls src={a} className="w-full h-10" />
             ))}
