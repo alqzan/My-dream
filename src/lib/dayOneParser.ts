@@ -50,7 +50,7 @@ export interface DayOneParseResult {
 // Clean Day One markdown noise:
 //  - photo/audio embeds like ![](dayone-moment://UUID) shown as literal text
 //  - English "Daily Prompt" heading lines (###### Who was ...?)
-//  - leftover markdown heading hashes
+// Arabic headings keep their markers so the renderer styles them.
 // Returns the cleaned body plus a title taken from the first Arabic heading
 // (or a short standalone first line) when one exists.
 function cleanDayOneText(raw: string): { title: string; body: string } {
@@ -75,7 +75,10 @@ function cleanDayOneText(raw: string): { title: string; body: string } {
         continue;
       }
     }
-    kept.push(line.replace(/^#{1,6}\s*/, ""));
+    // Any other heading keeps its markdown markers — the renderer turns them
+    // into headings (and ###### into Day One's soft prompt chip), so stripping
+    // the hashes here would only leave them as literal text.
+    kept.push(line);
   }
 
   let body = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -85,7 +88,7 @@ function cleanDayOneText(raw: string): { title: string; body: string } {
     const lines = body.split("\n");
     const first = lines[0]?.trim() ?? "";
     const rest = lines.slice(1).join("\n").trim();
-    if (first && first.length <= 50 && !/[.!؟?،:]$/.test(first) && rest.length > first.length) {
+    if (first && !first.startsWith("#") && first.length <= 50 && !/[.!؟?،:]$/.test(first) && rest.length > first.length) {
       title = first;
       body = rest;
     }
