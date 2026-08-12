@@ -20,10 +20,17 @@ export function ImageLightbox({
   images,
   index,
   onClose,
+  captions,
+  onOpenEntry,
 }: {
   images: string[];
   index: number;
   onClose: () => void;
+  /** سطرٌ تحت الصورة بمحاذاة `images` موضعاً بموضع (تاريخُ المذكرة وعنوانها في
+   *  جدار المعرض). غيابه يُبقي التلميح الافتراضي كما كان. */
+  captions?: (string | undefined)[];
+  /** «افتح المذكرة» — يُظهر زراً يقفز من الصورة إلى مذكرتها. */
+  onOpenEntry?: (index: number) => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [i, setI] = useState(index);
@@ -224,8 +231,23 @@ export function ImageLightbox({
         </>
       )}
 
-      <div className="absolute bottom-5 inset-x-0 text-center text-white/60 text-xs pointer-events-none">
-        اضغط ضغطتين للتكبير · اسحب للتنقّل
+      <div className="absolute bottom-5 inset-x-0 px-6 flex flex-col items-center gap-2">
+        {captions?.[i] && (
+          <p className="text-center text-white text-sm font-bold leading-snug max-w-md pointer-events-none">
+            {captions[i]}
+          </p>
+        )}
+        {onOpenEntry && (
+          <button
+            onClick={() => onOpenEntry(i)}
+            className="text-xs font-bold text-white bg-white/15 hover:bg-white/25 backdrop-blur-sm px-3.5 py-1.5 rounded-full transition-colors press"
+          >
+            افتح المذكرة
+          </button>
+        )}
+        <span className="text-center text-white/60 text-xs pointer-events-none">
+          اضغط ضغطتين للتكبير · اسحب للتنقّل
+        </span>
       </div>
     </div>,
     document.body

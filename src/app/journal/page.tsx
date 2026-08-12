@@ -3,12 +3,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
 import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid } from "@/lib/utils";
-import { entryPhotoSources, entryAudioSources, type MediaSource } from "@/lib/mediaSources";
-import { useMediaCacheVersion, resolveMedia, resolveMediaSlots } from "@/components/ui/useMedia";
+import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
+import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { MOODS } from "@/lib/types";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
-import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
+import { JournalTimeline } from "@/components/journal/JournalTimeline";
+import { EntryPhotos } from "@/components/journal/PhotoCollage";
+import { MemoryStrip } from "@/components/journal/MemoryStrip";
+import { PhotoWall, type WallPhoto } from "@/components/journal/PhotoWall";
 import { JournalForm } from "@/components/journal/JournalForm";
 // Day One import pulls in the ZIP decoder (fflate) — load it only when the
 // import sheet is actually opened, keeping it out of the journal page bundle.
@@ -21,16 +24,14 @@ import { QuestionMoon } from "@/components/journal/QuestionMoon";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
 import { MemorySky } from "@/components/journal/MemorySky";
 import { DayView } from "@/components/day/DayView";
-import { Photo } from "@/components/ui/Photo";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { JournalEntry } from "@/lib/types";
-import { Plus, Upload, Search, Flame, Clock, CalendarHeart, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3 } from "lucide-react";
+import { Plus, Upload, Search, Flame, Clock, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3 } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
-import { AppImage } from "@/components/ui/AppImage";
 import { SECTION_DEEP } from "@/lib/palette";
 
 export default function JournalPage() {
@@ -206,8 +207,9 @@ export default function JournalPage() {
   // هنا (مرّةً في أعلى الصفحة) يُعيد الرسم لحظة وصول أيّ منها — للعارض
   // وللمعرض معاً، فلا حاجة لخطّافٍ داخل الحلقات.
   useMediaCacheVersion();
-  const viewPhotos = viewEntry ? resolveMedia(entryPhotoSources(viewEntry)) : [];
+  const viewPhotoSources = viewEntry ? entryPhotoSources(viewEntry) : [];
   const viewAudios = viewEntry ? resolveMedia(entryAudioSources(viewEntry)) : [];
+  const viewMood = viewEntry?.mood ? MOODS.find((m) => m.value === viewEntry.mood) : undefined;
   function stepViewer(delta: number) {
     if (viewIndex === null) return;
     const next = viewIndex + delta;
@@ -245,34 +247,21 @@ export default function JournalPage() {
   );
   const hasMore = !searching && filtered.length > visible.length;
 
-  // تجميع حسب الشهر — عرض أجمل للمذكرات القديمة والرجوع لها
-  const grouped = useMemo(() => {
-    const groups: { key: string; label: string; entries: JournalEntry[] }[] = [];
-    for (const entry of visible) {
-      const key = entry.date.slice(0, 7);
-      let group = groups[groups.length - 1];
-      if (!group || group.key !== key) {
-        const [y, m] = key.split("-").map(Number);
-        group = { key, label: `${arabicMonthName(m - 1)} ${y}`, entries: [] };
-        groups.push(group);
-      }
-      group.entries.push(entry);
-    }
-    return groups;
-  }, [visible]);
-
   // تبويب المعرض — كل صور المذكرات المطابقة للفلاتر الحالية، أحدث أولاً.
   const galleryPhotos = useMemo(() => {
-    const items: { entry: JournalEntry; source: MediaSource }[] = [];
+    const items: WallPhoto[] = [];
     for (const entry of filtered) {
       for (const source of entryPhotoSources(entry)) items.push({ entry, source });
     }
     return items;
   }, [filtered]);
-  // **الشريحة المعروضة وحدها** تُقرأ بايتاتها. بناء القائمة أعلاه من المصادر
-  // لا يلمس بايتةً واحدة — ولولا ذلك لطلب معرضُ ألفَي صورةٍ المكتبةَ كلّها.
-  const visibleGallery = resolveMediaSlots(galleryPhotos.slice(0, galleryCount).map((g) => g.source))
-    .map((url, i) => ({ entry: galleryPhotos[i].entry, url }));
+  // **الشريحة المعروضة وحدها** تُمرَّر للجدار فتُقرأ بايتاتُها. بناء القائمة
+  // أعلاه من المصادر لا يلمس بايتةً واحدة — ولولا ذلك لطلب معرضُ ألفَي صورةٍ
+  // المكتبةَ كلّها دفعةً واحدة.
+  const visibleGallery = useMemo(
+    () => galleryPhotos.slice(0, galleryCount),
+    [galleryPhotos, galleryCount]
+  );
   const hasMoreGallery = galleryPhotos.length > visibleGallery.length;
 
   return (
@@ -363,36 +352,11 @@ export default function JournalPage() {
         <FutureLetters />
       </div>
 
-      {/* في مثل هذا اليوم */}
+      {/* في مثل هذا اليوم — بطاقاتٌ مصوّرة تنزلق أفقياً */}
       {memories.length > 0 && (
-        <Card className="border-brand-200/60 bg-gradient-to-br from-brand-50 to-white dark:from-transparent dark:to-transparent animate-fade-up stagger-2">
-          <div className="flex items-center gap-2 mb-2.5">
-            <CalendarHeart size={16} className="text-brand-600" />
-            <span className="text-sm font-bold text-gray-800">في مثل هذا اليوم 🕰️</span>
-          </div>
-          <div className="space-y-2">
-            {memories.map((m) => {
-              const yearsAgo = parseInt(todayStr) - parseInt(m.date);
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => openViewer(m)}
-                  className="w-full text-right bg-white/70 dark:bg-white/5 rounded-xl px-3 py-2.5 hover:bg-white transition-colors press"
-                >
-                  <p className="text-[11px] font-bold text-brand-600 mb-0.5">
-                    قبل {yearsAgo === 1 ? "سنة" : yearsAgo === 2 ? "سنتين" : `${yearsAgo} سنوات`} — {formatDate(m.date)}
-                  </p>
-                  {m.title && <p className="text-sm font-bold text-gray-800 mb-0.5 truncate">{m.title}</p>}
-                  {/* «truncate» (نص بسطر واحد) بدل line-clamp-1: على WebKit في iOS
-                      كان -webkit-line-clamp يحجز ارتفاع النص كاملاً كفراغ فارغ أسفل
-                      السطر الظاهر، فتتباعد البطاقات بفجوات ضخمة تكبر مع طول المذكرة.
-                      white-space:nowrap يُثبّت الارتفاع بسطرٍ واحد على كل المتصفّحات. */}
-                  <p className="text-xs text-gray-500 truncate">{stripMarkdown(m.content)}</p>
-                </button>
-              );
-            })}
-          </div>
-        </Card>
+        <div className="animate-fade-up stagger-2">
+          <MemoryStrip memories={memories} todayStr={todayStr} onOpen={openViewer} />
+        </div>
       )}
 
       <Card className="animate-fade-up stagger-3">
@@ -552,26 +516,14 @@ export default function JournalPage() {
               }
             />
           )}
-          {grouped.map((group) => (
-            <div key={group.key} className="space-y-3">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-black text-journal bg-journal/10 px-3 py-1 rounded-full">
-                  {group.label}
-                </span>
-                <div className="flex-1 h-px bg-gray-100" />
-                <span className="text-[10px] text-gray-300">{group.entries.length}</span>
-              </div>
-              {group.entries.map((entry) => (
-                <JournalEntryCard
-                  key={entry.id}
-                  entry={entry}
-                  onDelete={handleDelete}
-                  onToggleStar={handleToggleStar}
-                  onClick={() => openViewer(entry)}
-                />
-              ))}
-            </div>
-          ))}
+          <JournalTimeline
+            entries={visible}
+            onOpen={openViewer}
+            onDelete={handleDelete}
+            onToggleStar={handleToggleStar}
+            onOpenDay={setSelectedDay}
+          />
+
           {hasMore && (
             <button
               onClick={() => setVisibleCount((c) => c + PAGE)}
@@ -587,21 +539,7 @@ export default function JournalPage() {
             <EmptyState emoji="🖼️" title="لا صور بعد" subtitle="الصور المرفقة بمذكراتك تظهر هنا" />
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-1">
-                {visibleGallery.map((item, i) => (
-                  <button
-                    key={`${item.entry.id}-${i}`}
-                    onClick={() => openViewer(item.entry)}
-                    className="aspect-square overflow-hidden rounded-lg press"
-                  >
-                    {item.url ? (
-                      <AppImage src={item.url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gray-100 dark:bg-white/5 animate-pulse" aria-hidden />
-                    )}
-                  </button>
-                ))}
-              </div>
+              <PhotoWall photos={visibleGallery} onOpenEntry={openViewer} />
               {hasMoreGallery && (
                 <button
                   onClick={() => setGalleryCount((c) => c + GALLERY_PAGE)}
@@ -652,6 +590,12 @@ export default function JournalPage() {
                   {viewEntry.time}
                 </span>
               )}
+              {viewEntry.mood && (
+                <span className="flex items-center gap-1" title={viewMood?.label}>
+                  <span className="text-sm leading-none">{viewMood?.emoji}</span>
+                  <span>{viewMood?.label}</span>
+                </span>
+              )}
               {viewEntry.source === "dayOne" && (
                 <span className="text-[10px] bg-purple-50 text-purple-500 px-2 py-0.5 rounded-full font-medium">
                   Day One
@@ -683,18 +627,8 @@ export default function JournalPage() {
                 ))}
               </div>
             )}
-            {viewPhotos.length > 0 && (
-              <div className="space-y-2">
-                {viewPhotos.map((p, i) => (
-                  <Photo
-                    key={i}
-                    images={viewPhotos}
-                    index={i}
-                    className="w-full max-h-80 object-cover rounded-2xl"
-                  />
-                ))}
-              </div>
-            )}
+            {/* كلّ الصور في كولاجاتٍ متتابعة — والضغطة تفتح العارض عليها */}
+            <EntryPhotos sources={viewPhotoSources} />
             {viewAudios.map((a, i) => (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <audio key={i} controls src={a} className="w-full h-10" />

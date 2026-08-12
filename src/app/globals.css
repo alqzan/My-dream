@@ -25,6 +25,10 @@
      يكسر الوضع الليلي في عشرات الشاشات دفعةً واحدة. */
   --surface: #ffffff;
   --border-subtle: #f3f4f6; /* = gray-100 */
+  /* أرضيةُ الصفحة نفسها — يحتاجها ما يلتصق أعلى الشاشة (رأس الشهر في الخطّ
+     الزمني للمذكرات): سطحٌ شبه معتمٍ يحجب ما يمرّ تحته بلا حافّةٍ لونية
+     غريبة. مطابقٌ لـ`background-color` في `body` أدناه، وله نظيرٌ في `.dark`. */
+  --page-bg: #f4eee2;
 }
 
 * {
@@ -134,6 +138,7 @@ body {
      عالميةٍ يمكن أن تفوت سطحاً جديداً. */
   --surface: #241c12;
   --border-subtle: #3a2e1e;
+  --page-bg: #171009; /* = background-color في `.dark body` أدناه */
 }
 
 .dark body {
@@ -775,6 +780,12 @@ body {
   scrollbar-width: none;
 }
 .mushaf-spread-scroll::-webkit-scrollbar { display: none; }
+
+/* شريطُ التمرير مخفيّ في الأشرطة المنزلقة أفقياً (رقائق الفلاتر، شريط
+   «في مثل هذا اليوم»). كانت `scrollbar-none` مكتوبةً في ثلاثة مواضع بلا أيّ
+   تعريف — ليست أداةً في Tailwind — فيبقى شريطٌ رماديٌّ تحت البطاقات. */
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
 
 .mushaf-leaf-page {
   overflow: hidden;
