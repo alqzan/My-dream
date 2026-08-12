@@ -2,15 +2,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid, entriesCount, daysCount } from "@/lib/utils";
 import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
 import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { MOODS } from "@/lib/types";
 import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
+import { duplicateDays } from "@/lib/mergeDay";
 import { JournalTimeline } from "@/components/journal/JournalTimeline";
 import { EntryPhotos } from "@/components/journal/PhotoCollage";
 import { MemoryStrip } from "@/components/journal/MemoryStrip";
+import { MergeBadge } from "@/components/journal/MergeBadge";
+import { MergeDaysSheet } from "@/components/journal/MergeDaysSheet";
 import { PhotoWall, type WallPhoto } from "@/components/journal/PhotoWall";
 import { JournalForm } from "@/components/journal/JournalForm";
 // Day One import pulls in the ZIP decoder (fflate) — load it only when the
@@ -30,7 +33,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { JournalEntry } from "@/lib/types";
-import { Plus, Upload, Search, Flame, Clock, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3 } from "lucide-react";
+import { Plus, Upload, Search, Flame, Clock, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3, Combine } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
 import { SECTION_DEEP } from "@/lib/palette";
 
@@ -63,6 +66,8 @@ export default function JournalPage() {
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [adhocEntry, setAdhocEntry] = useState<JournalEntry | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // لوحة الدمج: `""` تعني «كل الأيام المكرّرة»، وتاريخٌ يعني يوماً بعينه.
+  const [mergeDay, setMergeDay] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "gallery" | "sky">("list");
   // Render the newest page of entries first; "عرض المزيد" reveals more. Keeps
   // a big archive (e.g. after a Day One import) from mounting hundreds of
@@ -125,6 +130,9 @@ export default function JournalPage() {
     const moodCount = Object.values(moods).reduce((s, n) => s + n, 0);
     return { count: month.length, days, moods, topTags, moodCount };
   }, [journalEntries, todayStr]);
+
+  // كم يوماً في الأرشيف كلّه فيه أكثر من مذكرة — مدخلُ الدمج الشامل.
+  const mergeableDays = useMemo(() => duplicateDays(journalEntries).length, [journalEntries]);
 
   const streak = getJournalStreak(journalEntries);
   const markedDates = journalEntries.map((e) => e.date);
@@ -286,7 +294,7 @@ export default function JournalPage() {
               {streak > 0 ? `${streak} يوم متواصل` : "ابدأ سلسلتك اليوم"}
             </span>
             <span className="text-xs text-gray-300">•</span>
-            <span className="text-xs text-gray-400">{journalEntries.length} مذكرة</span>
+            <span className="text-xs text-gray-400">{entriesCount(journalEntries.length)}</span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -516,12 +524,32 @@ export default function JournalPage() {
               }
             />
           )}
+          {/* أيامٌ فيها أكثر من مذكرة — عرضٌ واحدٌ لدمجها كلّها بمعاينة */}
+          {mergeableDays > 0 && (
+            <button
+              onClick={() => setMergeDay("")}
+              className="w-full flex items-center gap-2.5 rounded-2xl border border-journal/25 bg-journal/[0.06] px-3.5 py-2.5 text-start press"
+            >
+              <Combine size={16} className="text-journal shrink-0" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-[12px] font-bold text-gray-800">
+                  عندك {daysCount(mergeableDays)} فيها أكثر من مذكرة
+                </span>
+                <span className="block text-[11px] text-gray-500">
+                  ادمج كل يومٍ في مذكرةٍ واحدة — بمعاينةٍ أولاً وبلا فقد
+                </span>
+              </span>
+              <ChevronLeft size={16} className="text-journal/60 shrink-0" />
+            </button>
+          )}
+
           <JournalTimeline
             entries={visible}
             onOpen={openViewer}
             onDelete={handleDelete}
             onToggleStar={handleToggleStar}
             onOpenDay={setSelectedDay}
+            onMergeDay={setMergeDay}
           />
 
           {hasMore && (
@@ -609,6 +637,9 @@ export default function JournalPage() {
                 <Star size={16} fill={viewEntry.starred ? "currentColor" : "none"} />
               </button>
             </div>
+            {(viewEntry.mergedFrom?.length ?? 0) > 0 && (
+              <MergeBadge sources={viewEntry.mergedFrom!} />
+            )}
             {viewEntry.question && (
               <p className="text-xs text-journal bg-journal/10 rounded-xl px-3 py-2 leading-relaxed">
                 💭 {viewEntry.question}
@@ -679,6 +710,12 @@ export default function JournalPage() {
           </div>
         )}
       </Modal>
+
+      <MergeDaysSheet
+        open={mergeDay !== null}
+        onClose={() => setMergeDay(null)}
+        only={mergeDay || undefined}
+      />
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
 

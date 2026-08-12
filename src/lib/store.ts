@@ -13,6 +13,7 @@ import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf, unionRefs } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
+import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { persistedIdbStorage } from "./idbStorage";
@@ -122,6 +123,13 @@ interface AppStore extends AppData {
   addJournalEntry: (entry: JournalEntry) => void;
   updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
+  // يدمج مذكراتِ يومٍ واحد في مذكرةٍ واحدة (المنطق النقيّ في `mergeDay.ts`).
+  // يُرجع المذكرات الأصلية كما كانت — يمرّرها المستدعي إلى `restoreJournalEntries`
+  // للتراجع. `undefined` حين لا يصحّ الدمج (أقلّ من اثنتين أو تواريخ مختلفة).
+  mergeJournalDay: (ids: string[]) => JournalEntry[] | undefined;
+  // يعيد مذكراتٍ إلى ما كانت عليه حرفياً (تراجعُ الدمج): تُستبدل الموجودة بها
+  // وتُضاف الغائبة، وتُرفع شواهدُ حذفها فلا يعيد الدمجُ السحابيّ حذفها.
+  restoreJournalEntries: (entries: JournalEntry[]) => void;
   // Returns an accurate breakdown: entries newly added, existing entries whose
   // missing media was completed, and how many of those carry photos/audio — so
   // the import summary never has to guess which of the parsed entries changed.
@@ -562,6 +570,47 @@ export const useAppStore = create<AppStore>()(
           journalEntries: s.journalEntries.filter((e) => e.id !== id),
         })),
 
+      mergeJournalDay: (ids) => {
+        const wanted = new Set(ids);
+        const originals = get().journalEntries.filter((e) => wanted.has(e.id));
+        const merged = mergeDayEntries(originals);
+        if (!merged) return undefined;
+        // **لا شواهدَ وسائط هنا**: شواهدُ الوسائط مفتاحُها `معرّف المذكرة + هاش`
+        // (راجع `applyMediaTombstones`)، والدمج لا يحذف وسيطاً — بل ينقله إلى
+        // معرّف الناجية. فتمريرُه عبر `trackMediaChange` كان سيشهد على صور
+        // المصادر بأنّها محذوفةٌ من مذكراتها، فتختفي عند أوّل مزامنة.
+        set((s) => {
+          const dropped = new Set(originals.map((e) => e.id).filter((id) => id !== merged.id));
+          return {
+            journalEntries: s.journalEntries
+              .filter((e) => !dropped.has(e.id))
+              .map((e) => (e.id === merged.id ? merged : e)),
+          };
+        });
+        return originals;
+      },
+
+      restoreJournalEntries: (entries) =>
+        set((s) => {
+          const byId = new Map(entries.map((e) => [e.id, { ...e, updatedAt: Date.now() }]));
+          const kept = s.journalEntries.map((e) => byId.get(e.id) ?? e);
+          const present = new Set(s.journalEntries.map((e) => e.id));
+          const added = entries.filter((e) => !present.has(e.id)).map((e) => byId.get(e.id)!);
+          // رفعُ شاهد الحذف عن كلّ مُعاد — وإلّا أعاد `alive()` في الدمج
+          // السحابيّ حذفَه فوراً (نفس علّة «التراجع عن الحذف» في addJournalEntry).
+          let deleted = s.deleted;
+          for (const e of entries) {
+            if (deleted && e.id in deleted) {
+              deleted = { ...deleted };
+              delete deleted[e.id];
+            }
+          }
+          return {
+            journalEntries: [...added, ...kept],
+            ...(deleted === s.deleted ? {} : { deleted }),
+          };
+        }),
+
       importDayOneEntries: (entries) => {
         let result: ImportResult = { added: 0, completed: 0, photos: 0, audio: 0 };
         set((s) => {
@@ -570,12 +619,24 @@ export const useAppStore = create<AppStore>()(
               .filter((e) => e.dayOneUUID)
               .map((e) => [e.dayOneUUID as string, e] as const)
           );
+          // معرّفات Day One التي ابتلعها **دمجُ يوم**: مذكرتُها لم تعد قائمة
+          // بذاتها، فلا `dayOneUUID` لها في القائمة أعلاه. بلا هذه المجموعة
+          // تُعيد إعادةُ الاستيراد إضافتَها مذكرةً جديدة، فيعود اليوم متشظّياً
+          // بعد أن دُمج — وينسخ نصَّها مرّتين (مرّةً داخل المدموجة ومرّةً وحدها).
+          const mergedUuids = new Set(
+            s.journalEntries.flatMap((e) =>
+              (e.mergedFrom ?? []).map((m) => m.dayOneUUID).filter(Boolean) as string[]
+            )
+          );
           const toAdd: JournalEntry[] = [];
           const patches = new Map<string, Partial<JournalEntry>>();
           // Ids we add or complete — their tombstones (if any) MUST be lifted,
           // or the cloud merge's alive() drops them right back on the next sync.
           const touchedIds: string[] = [];
           for (const e of entries) {
+            // دُمجت سابقاً ⇒ تُتخطّى تماماً: لا تُضاف ولا تُرقَّع. ترقيعُ
+            // وسائطها كان سيستبدل وسائطَ المدموجة كلَّها بوسائط مصدرٍ واحد.
+            if (e.dayOneUUID && mergedUuids.has(e.dayOneUUID)) continue;
             const existing = e.dayOneUUID ? byUuid.get(e.dayOneUUID) : undefined;
             if (!existing) {
               toAdd.push(e);

@@ -6,6 +6,7 @@ import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
 import { useMediaCacheVersion } from "@/components/ui/useMedia";
 import { stripMarkdown } from "@/lib/markdown";
 import { PhotoCollage } from "./PhotoCollage";
+import { MergeChip } from "./MergeBadge";
 import { Trash2, Clock, Mic, Film, Star, Paperclip } from "lucide-react";
 
 interface JournalEntryCardProps {
@@ -82,6 +83,7 @@ export function JournalEntryCard({
                 {attachments > 1 && <span>{attachments}</span>}
               </span>
             )}
+            {(entry.mergedFrom?.length ?? 0) > 0 && <MergeChip count={entry.mergedFrom!.length} />}
             {entry.source === "dayOne" && (
               <span className="text-[10px] bg-purple-50 text-purple-500 px-1.5 py-0.5 rounded-full font-medium shrink-0">
                 Day One

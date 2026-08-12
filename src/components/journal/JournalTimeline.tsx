@@ -2,8 +2,9 @@
 import { useMemo } from "react";
 import type { JournalEntry } from "@/lib/types";
 import { groupJournalByDay } from "@/lib/journalTimeline";
-import { hijriDay, parseDate, today } from "@/lib/utils";
+import { hijriDay, parseDate, today, entriesCount } from "@/lib/utils";
 import { JournalEntryCard } from "./JournalEntryCard";
+import { Combine } from "lucide-react";
 
 // ===================== الخطّ الزمني للمذكرات =====================
 // كانت القائمة بطاقاتٍ متساويةً تحت عنوان شهر، فيضيع «اليوم»: مذكرتان في يومٍ
@@ -20,9 +21,11 @@ interface JournalTimelineProps {
   onToggleStar: (id: string) => void;
   /** فتحُ «يوم كامل» (DayView) من حبّة اليوم. */
   onOpenDay?: (date: string) => void;
+  /** فتحُ لوحة دمج مذكرات هذا اليوم — تظهر فقط حين تتعدّد مذكراتُه. */
+  onMergeDay?: (date: string) => void;
 }
 
-export function JournalTimeline({ entries, onOpen, onDelete, onToggleStar, onOpenDay }: JournalTimelineProps) {
+export function JournalTimeline({ entries, onOpen, onDelete, onToggleStar, onOpenDay, onMergeDay }: JournalTimelineProps) {
   const months = useMemo(() => groupJournalByDay(entries), [entries]);
   const todayStr = today();
 
@@ -45,7 +48,7 @@ export function JournalTimeline({ entries, onOpen, onDelete, onToggleStar, onOpe
                 {month.label}
               </span>
               <div className="flex-1 h-px bg-[var(--border-subtle)]" />
-              <span className="text-[10px] text-gray-400 tabular-nums">{month.count} مذكرة</span>
+              <span className="text-[10px] text-gray-400 tabular-nums">{entriesCount(month.count)}</span>
             </div>
           </div>
 
@@ -62,12 +65,13 @@ export function JournalTimeline({ entries, onOpen, onDelete, onToggleStar, onOpe
                     aria-hidden
                   />
 
-                  {/* حبّة اليوم */}
+                  {/* حبّة اليوم — ومعها «ادمج» حين تتعدّد مذكراته */}
+                  <div className="flex items-center gap-2 mb-2">
                   <button
                     type="button"
                     onClick={() => onOpenDay?.(day.date)}
                     disabled={!onOpenDay}
-                    className={`flex items-center gap-2.5 mb-2 rounded-xl ${onOpenDay ? "press" : ""}`}
+                    className={`flex items-center gap-2.5 rounded-xl ${onOpenDay ? "press" : ""}`}
                     aria-label={`يوم ${day.date}`}
                   >
                     <span
@@ -88,11 +92,22 @@ export function JournalTimeline({ entries, onOpen, onDelete, onToggleStar, onOpe
                       </span>
                       {day.entries.length > 1 && (
                         <span className="text-[10px] text-gray-400 tabular-nums">
-                          {day.entries.length} مذكرات
+                          {entriesCount(day.entries.length)}
                         </span>
                       )}
                     </span>
                   </button>
+                  {onMergeDay && day.entries.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => onMergeDay(day.date)}
+                      className="flex items-center gap-1 text-[11px] font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-full px-2.5 py-1 press"
+                    >
+                      <Combine size={12} />
+                      ادمج اليوم
+                    </button>
+                  )}
+                  </div>
 
                   {/* مذكرات اليوم معلّقةٌ على المسار */}
                   <div className="space-y-2.5" style={{ marginInlineStart: "2.75rem" }}>

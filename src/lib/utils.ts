@@ -859,3 +859,28 @@ export function arabicMonthName(month: number): string {
   ];
   return months[month];
 }
+
+/**
+ * صياغةُ عددٍ بالعربية على قواعده الأربع بدل «3 مذكرات» و«11 مذكرات»:
+ * مفردٌ (١) · مثنّى (٢) · جمعُ قلّةٍ مسبوقٌ بالعدد (٣–١٠) · تمييزٌ مفردٌ
+ * مسبوقٌ بالعدد (١١ فأكثر). الصفر يأخذ صيغة الجمع كالمعتاد («0 مذكرات»).
+ * الأرقام لاتينية كبقية أرقام التطبيق — لا تمرّ بـ`toLocaleString("ar-SA")`.
+ */
+export function arabicCount(
+  n: number,
+  forms: { zero?: string; one: string; two: string; few: string; many: string }
+): string {
+  if (n === 0) return forms.zero ?? `0 ${forms.few}`;
+  if (n === 1) return forms.one;
+  if (n === 2) return forms.two;
+  if (n <= 10) return `${n} ${forms.few}`;
+  return `${n} ${forms.many}`;
+}
+
+/** «مذكرة · مذكرتان · ٣ مذكرات · ١١ مذكرة» — أكثر عدّادٍ يتكرّر في المذكرات. */
+export const entriesCount = (n: number): string =>
+  arabicCount(n, { one: "مذكرة واحدة", two: "مذكرتان", few: "مذكرات", many: "مذكرة" });
+
+/** «يوم · يومان · ٣ أيام · ١١ يوماً». */
+export const daysCount = (n: number): string =>
+  arabicCount(n, { one: "يوم واحد", two: "يومان", few: "أيام", many: "يوماً" });

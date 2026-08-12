@@ -25,7 +25,13 @@ const FULL: Required<AppData> = {
   transactions: [{ id: "t1", date: "2026-05-01", amount: 25, category: "c1", note: "قهوة" }],
   books: [{ id: "b1", title: "ك", author: "م", totalPages: 300, currentPage: 42, status: "أقرأ" }],
   readingLogs: [{ id: "r1", bookId: "b1", date: "2026-05-01", pagesRead: 20 }],
-  journalEntries: [{ id: "e1", date: "2026-05-01", content: "نص" }],
+  // `mergedFrom` مقصودٌ هنا: هو سجلّ «هذه المذكرة مدموجة ومِمَّ». لو سقط في
+  // الدورة (لقطة → ترطيب → نسخة → دمج) صارت المدموجة تبدو مذكرةً عادية على
+  // الجهاز الآخر — وهو بالضبط الدمج الغامض الذي تتجنّبه هذه الميزة.
+  journalEntries: [{
+    id: "e1", date: "2026-05-01", content: "نص",
+    mergedFrom: [{ id: "e1", time: "07:10", chars: 3, photos: 0, audios: 0, mergedAt: 1 }],
+  }],
   habits: [{ id: "h1", name: "مشي", icon: "🚶", color: "#000", logs: ["2026-05-01"] }],
   recurring: [{
     id: "rc1", amount: 500, category: "c1", note: "إيجار", unit: "شهري", every: 1,
