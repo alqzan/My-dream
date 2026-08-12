@@ -4,7 +4,7 @@ import {
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalEntry } from "./types";
-import { entryPhotos, entryAudios } from "./utils";
+import { entryPhotos, entryAudios, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
 import { MEDIA_CACHE_PREFIX } from "./mediaCache";
 import { journalShardId } from "./merge";
@@ -436,10 +436,47 @@ async function loadJournalShards(
   return [...byId.values()];
 }
 
-// Write the journal shards for this snapshot: only shards whose contents changed
-// are written, and shards that became empty (all their entries deleted/moved to
-// another month) are removed. Updates shardSignatures to match.
-async function writeJournalShards(uid: string, entries: CloudEntry[]): Promise<void> {
+// Merge one local shard into the copy currently in Firestore. A device can hold
+// an old/partial journal (for example after waking a months-old mobile tab), so
+// replacing the whole month from that snapshot is never safe. Cloud-only entries
+// survive unless an explicit tombstone is newer than the entry; same-id edits use
+// the per-entry stamp and always union their media refs.
+function mergeJournalShardEntries(
+  local: CloudEntry[],
+  remote: CloudEntry[],
+  deleted: Record<string, number>,
+  deletedMedia: Record<string, number>
+): CloudEntry[] {
+  const mediaTomb = new Set(Object.keys(deletedMedia));
+  const byId = new Map(remote.map((e) => [e.id, e]));
+  for (const e of local) {
+    const other = byId.get(e.id);
+    if (!other) {
+      byId.set(e.id, e);
+      continue;
+    }
+    const localNewer = (e.updatedAt ?? 0) > (other.updatedAt ?? 0);
+    const base = localNewer ? e : other;
+    byId.set(e.id, mergeEntryMedia(base, base === e ? other : e) as CloudEntry);
+  }
+  return [...byId.values()]
+    .filter((e) => {
+      const deletedAt = deleted[e.id];
+      return deletedAt === undefined || (e.updatedAt ?? 0) > deletedAt;
+    })
+    .map((e) => stripTombstonedMediaRefs(e, mediaTomb) as CloudEntry);
+}
+
+// Write only changed journal shards. Each shard is merged transactionally with
+// the current cloud copy, so a stale device is additive: it cannot truncate a
+// month, and missing months are never deleted merely because this device did not
+// load them. Explicit item tombstones remain the sole deletion authority.
+async function writeJournalShards(
+  uid: string,
+  entries: CloudEntry[],
+  deleted: Record<string, number> = {},
+  deletedMedia: Record<string, number> = {}
+): Promise<void> {
   if (!db) return;
   const database = db; // التضييق يضيع داخل ردّ نداء المجمّع المتوازي أدناه
   const shards = splitJournalShards(entries);
@@ -455,26 +492,24 @@ async function writeJournalShards(uid: string, entries: CloudEntry[]): Promise<v
   }
   // الشهور المتغيّرة تُكتب على التوازي بحدٍّ صغير بدل انتظار كلٍّ منها على حدة:
   // استيرادٌ يمسّ عشرين شهراً كان عشرين رحلةَ شبكةٍ **متسلسلة**.
+  const mergedSigs = new Map<string, string>();
   await mapWithConcurrency(changed, SHARD_WRITE_CONCURRENCY, async ([sid, es]) => {
-    await setDoc(doc(database, COLLECTION, uid, JOURNAL_SUB, sid), { entries: es }, { merge: false });
+    const sig = await runTransaction(database, async (txn) => {
+      const ref = doc(database, COLLECTION, uid, JOURNAL_SUB, sid);
+      const snap = await txn.get(ref);
+      const remote = snap.exists()
+        ? ((snap.data() as { entries?: CloudEntry[] }).entries ?? [])
+        : [];
+      const merged = mergeJournalShardEntries(es, remote, deleted, deletedMedia);
+      const mergedSig = shardSig(merged);
+      if (mergedSig !== shardSig(remote)) txn.set(ref, { entries: merged }, { merge: false });
+      return mergedSig;
+    });
+    mergedSigs.set(sid, sig);
   });
-  // Delete shards we knew about that hold nothing now — BUT never when the whole
-  // journal is empty. An empty journal at save time almost always means the
-  // store isn't hydrated yet (a fresh tab, a failed load), not that the user
-  // deleted everything; deleting every shard here would be catastrophic data
-  // loss. Real per-entry deletes are handled by tombstones regardless, and a
-  // genuinely-emptied month is cleaned once other months are saved (entries>0).
-  if (entries.length > 0) {
-    for (const sid of shardSignatures.keys()) {
-      if (!shards.has(sid)) {
-        try { await deleteDoc(doc(db, COLLECTION, uid, JOURNAL_SUB, sid)); } catch { /* already gone */ }
-      }
-    }
-    shardSignatures = nextSigs;
-  } else {
-    // Keep prior knowledge of existing shards so a later real save can reconcile.
-    shardSignatures = new Map([...shardSignatures, ...nextSigs]);
-  }
+  // Preserve signatures for cloud-only months. Forgetting them made a partial
+  // device believe those months had vanished and delete them on its next save.
+  shardSignatures = new Map([...shardSignatures, ...nextSigs, ...mergedSigs]);
 }
 
 let shardWarned = false;
@@ -1128,7 +1163,7 @@ export async function saveUserData(
   //    keeps the journal off the 1MB single-doc cap. Then write the main doc
   //    (no journal inline) with a manifest of only what actually reached the
   //    cloud, so any media that didn't upload is retried on the next save.
-  await writeJournalShards(uid, cloudJournal);
+  await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
   const honestMain = {
     ...main,
     photoManifest: [...knownCloudHashes],

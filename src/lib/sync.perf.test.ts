@@ -220,6 +220,66 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
     expect(writes).toHaveLength(1);
     expect(((writes[0][0] as { __doc: unknown[] }).__doc).at(-1)).toBe("2026-02");
   });
+
+  it("لقطة جهاز قديمة لا تختصر شهراً سحابياً كاملاً", async () => {
+    const remote = [
+      { id: "e1", date: "2026-01-10", content: "a", updatedAt: 100 },
+      { id: "e2", date: "2026-01-20", content: "b", updatedAt: 100 },
+    ];
+    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": remote }));
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
+      const parts = ref.__doc ?? [];
+      return parts.includes("journal")
+        ? { exists: () => true, data: () => ({ entries: remote }) }
+        : mainDoc({ revision: 0 });
+    });
+    await sync.loadUserMain("space");
+    setDocMock.mockClear();
+
+    // The stale device knows only e1. Its save must union e2 back in before the
+    // transaction writes the shard, never replace the cloud month with [e1].
+    const editedE1 = { ...remote[0], content: "edited", updatedAt: 200 } as JournalEntry;
+    await sync.saveUserData("space", appData([editedE1]));
+
+    const write = journalWrites()[0][1] as { entries: JournalEntry[] };
+    expect(write.entries.map((e) => e.id).sort()).toEqual(["e1", "e2"]);
+    expect(write.entries.find((e) => e.id === "e1")?.content).toBe("edited");
+  });
+
+  it("شهراً لا يعرفه الجهاز القديم لا يُحذف", async () => {
+    const jan = [{ id: "e1", date: "2026-01-10", content: "a" }];
+    const feb = [{ id: "e2", date: "2026-02-10", content: "b" }];
+    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": jan, "2026-02": feb }));
+    await sync.loadUserMain("space");
+    setDocMock.mockClear();
+    deleteDocMock.mockClear();
+
+    await sync.saveUserData("space", appData(jan as JournalEntry[]));
+
+    expect(deleteDocMock).not.toHaveBeenCalled();
+  });
+
+  it("الحذف الصريح فقط يستطيع إزالة مذكرة سحابية", async () => {
+    const remote = [
+      { id: "e1", date: "2026-01-10", content: "a", updatedAt: 100 },
+      { id: "e2", date: "2026-01-20", content: "b", updatedAt: 100 },
+    ];
+    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": remote }));
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
+      const parts = ref.__doc ?? [];
+      return parts.includes("journal")
+        ? { exists: () => true, data: () => ({ entries: remote }) }
+        : mainDoc({ revision: 0 });
+    });
+    await sync.loadUserMain("space");
+    setDocMock.mockClear();
+
+    const local = { ...appData([remote[0] as JournalEntry]), deleted: { e2: 5000 } };
+    await sync.saveUserData("space", local);
+
+    const write = journalWrites()[0][1] as { entries: JournalEntry[] };
+    expect(write.entries.map((e) => e.id)).toEqual(["e1"]);
+  });
 });
 
 describe("saveUserData — الوسيط الذي في R2 لا يُرفع ثانيةً", () => {

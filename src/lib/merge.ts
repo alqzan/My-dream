@@ -334,7 +334,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   };
   // Drop any id-keyed item that carries a live tombstone — this is what stops a
   // resurrected copy from a second device.
-  const alive = <T extends { id: string }>(arr: T[]) => arr.filter((x) => !(x.id in deleted));
+  // A tombstone wins only while it is at least as new as the item. Re-adding or
+  // re-importing an entry gives it a fresh `updatedAt`, which must lift an older
+  // delete copied from an offline device instead of letting that stale device
+  // erase the restored item forever.
+  const alive = <T extends { id: string; updatedAt?: number }>(arr: T[]) =>
+    arr.filter((x) => deleted[x.id] === undefined || (x.updatedAt ?? 0) > deleted[x.id]);
   const byId = <T extends { id: string }>(p: T[], s: T[]) =>
     alive(unionOrdered(p, s, (x) => x.id));
 
@@ -462,6 +467,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // Drop refs to media the user deleted — applied to EVERY entry (merged or
     // unique) so a deleted photo can't ride back in on either side's copy.
   ).map((e) => stripTombstonedMediaRefs(e, mediaTomb));
+  // Converge the main document too: once a newer re-add has defeated a stale
+  // journal tombstone, remove that obsolete marker so future devices do not
+  // have to rediscover the same resurrection on every merge.
+  for (const e of journalEntries) {
+    if (deleted[e.id] !== undefined && (e.updatedAt ?? 0) > deleted[e.id]) delete deleted[e.id];
+  }
 
   return {
     transactions: byIdNewer(primary.transactions, secondary.transactions),

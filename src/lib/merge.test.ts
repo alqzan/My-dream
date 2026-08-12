@@ -216,24 +216,30 @@ describe("mergeAppData — tombstones", () => {
   });
 
   it("a fresh re-add (undo) with the tombstone cleared survives", () => {
+    const now = Date.now();
     // Simulates addJournalEntry having removed the tombstone locally.
     const local = base({
-      journalEntries: [entry({ id: "E1", content: "restored", updatedAt: 5000 })],
+      journalEntries: [entry({ id: "E1", content: "restored", updatedAt: now })],
       deleted: {},
       lastUpdated: "2026-05-10T12:00:00.000Z",
     });
     const cloud = base({
       journalEntries: [],
-      deleted: { E1: Date.now() - 1000 },
+      deleted: { E1: now - 1000 },
       lastUpdated: "2026-05-10T11:00:00.000Z",
     });
-    // Local (newer doc stamp) carries no tombstone; but cloud still does. The
-    // merge unions tombstones, so E1 is filtered. This documents that undo MUST
-    // clear the tombstone on BOTH the local map (done) — here cloud's stale
-    // tombstone still wins until it converges. We assert the union behavior.
     const merged = mergeAppData(local, cloud);
-    // With cloud's tombstone present, E1 is filtered — expected convergence cost.
-    expect(merged.journalEntries.find((e) => e.id === "E1")).toBeUndefined();
+    expect(merged.journalEntries.find((e) => e.id === "E1")?.content).toBe("restored");
+    expect(merged.deleted?.E1).toBeUndefined(); // obsolete remote marker converges away
+  });
+
+  it("an older re-add cannot defeat a newer explicit delete", () => {
+    const now = Date.now();
+    const local = base({
+      journalEntries: [entry({ id: "E1", content: "stale", updatedAt: now - 2000 })],
+    });
+    const cloud = base({ journalEntries: [], deleted: { E1: now - 1000 } });
+    expect(mergeAppData(local, cloud).journalEntries).toEqual([]);
   });
 });
 
