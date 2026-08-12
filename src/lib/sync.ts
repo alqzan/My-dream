@@ -345,6 +345,11 @@ function seedKnownMedia(main: CloudMediaMeta): void {
 // by the entry's date is stable across devices and naturally bounded (a month
 // of entries is small), and only shards whose contents changed are rewritten.
 const JOURNAL_SUB = "journal";
+// Security-rules handshake. Production rules accept journal writes only when
+// this marker is present, so a months-old cached client (which writes only
+// `{ entries }`) cannot replace or delete a shard before it refreshes itself.
+// Bump only when the journal-write contract changes incompatibly.
+const JOURNAL_WRITER_VERSION = 2;
 const SHARD_WARN_BYTES = 850 * 1024; // warn before a single shard nears 1MB
 const SHARD_WRITE_CONCURRENCY = 4;
 
@@ -502,7 +507,9 @@ async function writeJournalShards(
         : [];
       const merged = mergeJournalShardEntries(es, remote, deleted, deletedMedia);
       const mergedSig = shardSig(merged);
-      if (mergedSig !== shardSig(remote)) txn.set(ref, { entries: merged }, { merge: false });
+      if (mergedSig !== shardSig(remote)) {
+        txn.set(ref, { entries: merged, writerVersion: JOURNAL_WRITER_VERSION }, { merge: false });
+      }
       return mergedSig;
     });
     mergedSigs.set(sid, sig);

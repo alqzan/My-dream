@@ -203,7 +203,11 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
     );
     await sync.saveUserData("space", appData(edited));
 
-    expect(journalWrites()).toHaveLength(1);
+    const writes = journalWrites();
+    expect(writes).toHaveLength(1);
+    // حارس قواعد الإنتاج: النسخ القديمة لا تحمل هذه العلامة فتُرفض قبل
+    // استبدال شهرٍ كامل من لقطة ناقصة.
+    expect((writes[0][1] as { writerVersion?: number }).writerVersion).toBe(2);
   });
 
   it("شهرٌ جديد لا يجرّ معه إعادةَ كتابة الشهر القديم", async () => {

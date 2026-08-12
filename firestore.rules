@@ -42,6 +42,18 @@ service cloud.firestore {
       return space == "REPLACED_IN_FIREBASE_CONSOLE";
     }
 
+    // A server-side generation gate for journal writers. Versions predating
+    // 0.1.348 wrote only `{ entries }` and could replace/delete a whole month
+    // from a stale device snapshot. Current clients always send this exact
+    // two-field shape; cached old clients are denied before touching data.
+    function isCurrentJournalShard() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['entries', 'writerVersion'])
+        && d.keys().hasOnly(['entries', 'writerVersion'])
+        && d.entries is list
+        && d.writerVersion == 2;
+    }
+
     // Main record: one document per space holding every non-sharded field
     // (transactions, journal metadata, prayers, habits, settings, media
     // manifests, `revision`, …). Journal entries live in the `journal`
@@ -61,8 +73,11 @@ service cloud.firestore {
       // Monthly journal shards: userData/{space}/journal/{YYYY-MM}.
       match /journal/{shardId} {
         allow get, list: if isSpace(space);
-        allow create, update: if isSpace(space);
-        allow delete: if isSpace(space);
+        allow create, update: if isSpace(space) && isCurrentJournalShard();
+        // Current clients never delete month documents. Keeping the document
+        // (possibly with no live entries) is what prevents a partial device
+        // from treating an absent month as authorization to erase it.
+        allow delete: if false;
       }
 
       // Automatic bank-SMS inbox: userData/{space}/inbox/{itemId}. An iOS

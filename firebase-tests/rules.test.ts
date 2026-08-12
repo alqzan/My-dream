@@ -99,16 +99,44 @@ describe("firestore.rules — journal shards (userData/{space}/journal/{shardId}
   it("scopes journal shard read/write to the matching space only", async () => {
     const db = clientFirestore();
     await assertSucceeds(
-      db.collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08").set({ entries: [] })
+      db.collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08").set({
+        entries: [], writerVersion: 2,
+      })
     );
     await assertFails(
-      db.collection("userData").doc(OTHER_SPACE).collection("journal").doc("2026-08").set({ entries: [] })
+      db.collection("userData").doc(OTHER_SPACE).collection("journal").doc("2026-08").set({
+        entries: [], writerVersion: 2,
+      })
     );
+  });
+
+  it("rejects old cached writers and accepts the current generation", async () => {
+    const ref = clientFirestore()
+      .collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08");
+    // Old clients sent only `entries`; accepting this is the data-loss path.
+    await assertFails(ref.set({ entries: [] }));
+    await assertFails(ref.set({ entries: [], writerVersion: 1 }));
+    await assertFails(ref.set({ entries: [], writerVersion: 2, unexpected: true }));
+    await assertSucceeds(ref.set({ entries: [], writerVersion: 2 }));
+  });
+
+  it("allows a current client to upgrade a legacy shard but denies deleting it", async () => {
+    let ref!: FirebaseFirestore.DocumentReference;
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      ref = ctx.firestore().collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08");
+      await ref.set({ entries: [{ id: "old" }] }); // real pre-marker shape
+    });
+    const clientRef = clientFirestore()
+      .collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08");
+    await assertSucceeds(clientRef.set({ entries: [{ id: "old" }, { id: "new" }], writerVersion: 2 }));
+    await assertFails(clientRef.delete());
   });
 
   it("allows the matching space to list its own shards, denies a different space", async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await ctx.firestore().collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08").set({ entries: [] });
+      await ctx.firestore().collection("userData").doc(REAL_SPACE).collection("journal").doc("2026-08").set({
+        entries: [], writerVersion: 2,
+      });
     });
     await assertSucceeds(
       clientFirestore().collection("userData").doc(REAL_SPACE).collection("journal").get()
