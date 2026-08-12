@@ -510,10 +510,10 @@ describe("hydrateCloudPhotos — سقف الذاكرة", () => {
   const hashN = (i: number) => String(i).padStart(4, "0") + "d".repeat(28);
 
   it("يتوقّف عند سقف العدد، والباقي يبقى مرجعاً لا يضيع", async () => {
-    // 460 وسيطاً مخبّأً — أكثر من HYDRATE_MAX_ITEMS (400).
-    const entries = Array.from({ length: 460 }, (_, i) => {
+    // 80 وسيطاً مخبّأً — أكثر من HYDRATE_MAX_ITEMS (48).
+    const entries = Array.from({ length: 80 }, (_, i) => {
       cached(hashN(i), 16);
-      // الأحدث أولاً: التواريخ تنازلية مع i، فأوّل 400 هي الأحدث.
+      // الأحدث أولاً: التواريخ تنازلية مع i، فأوّل 48 هي الأحدث.
       const day = String(28 - (i % 28)).padStart(2, "0");
       return { ...cloudEntry(`e${i}`, { photoRefs: [hashN(i)] }), date: `2026-01-${day}` };
     });
@@ -523,16 +523,16 @@ describe("hydrateCloudPhotos — سقف الذاكرة", () => {
     const withRefs = out.journalEntries.filter(
       (e) => ((e as JournalEntry & { photoRefs?: string[] }).photoRefs ?? []).length
     );
-    expect(withBytes.length).toBeLessThanOrEqual(400);
+    expect(withBytes.length).toBeLessThanOrEqual(48);
     expect(withBytes.length).toBeGreaterThan(0);
     // لا وسيطَ ضاع: كل مذكرة إمّا حملت بايتاتها أو احتفظت بمرجعها.
-    expect(withBytes.length + withRefs.length).toBe(460);
+    expect(withBytes.length + withRefs.length).toBe(80);
   });
 
   it("يتوقّف عند سقف البايتات ولو كان العدد تحت الحدّ", async () => {
-    // 60 وسيطاً × 1 ميغابايت = 60 ميغابايت > HYDRATE_MAX_BYTES (48).
+    // 16 وسيطاً × 1 ميغابايت = 16 ميغابايت > HYDRATE_MAX_BYTES (8).
     const oneMB = 1024 * 1024;
-    const entries = Array.from({ length: 60 }, (_, i) => {
+    const entries = Array.from({ length: 16 }, (_, i) => {
       cached(hashN(i), oneMB);
       return cloudEntry(`e${i}`, { photoRefs: [hashN(i)] });
     });
@@ -540,9 +540,9 @@ describe("hydrateCloudPhotos — سقف الذاكرة", () => {
 
     const inlined = out.journalEntries.flatMap((e) => (e as JournalEntry).photos ?? []);
     const totalBytes = inlined.reduce((n, s) => n + s.length, 0);
-    // تجاوزٌ طفيف بمقدار الطلبات الجارية (6) مقبول؛ الممنوع هو الستّون كاملة.
-    expect(totalBytes).toBeLessThan(60 * oneMB);
-    expect(inlined.length).toBeLessThan(60);
+    // تجاوزٌ طفيف بمقدار الطلبات الجارية (6) مقبول؛ الممنوع هو الستة عشر كاملة.
+    expect(totalBytes).toBeLessThan(16 * oneMB);
+    expect(inlined.length).toBeLessThan(16);
     expect(inlined.length).toBeGreaterThan(0);
   });
 

@@ -848,8 +848,13 @@ const HYDRATE_CONCURRENCY = 6;
 //
 // الأولوية للأحدث: المذكرات تُرتّب تنازلياً بالتاريخ قبل جمع المراجع، فما يدخل
 // الميزانية هو ما يفتحه المالك فعلاً أولاً.
-const HYDRATE_MAX_ITEMS = 400;
-const HYDRATE_MAX_BYTES = 48 * 1024 * 1024;
+// أول صفحة في السجل تعرض 40 مذكرة فقط، وما وراءها يملكه مسار الجلب الكسول
+// الآمن في `mediaCache.ts`. لذلك لا معنى لتنزيل 400 وسيط عند كل جهاز جديد:
+// كان ذلك يضيف مئات الميغابايت إلى IndexedDB قبل أن يطلب المالك صورةً واحدة.
+// نُمهّد أحدث صفحة تقريباً، بسقف 8MB، ثم تُجلب بقية الصور عند ظهورها وتُخزّن
+// مرةً واحدة بالهاش. هذا يخفّف الإقلاع من دون إسقاط مرجع أو بايتة من السحابة.
+const HYDRATE_MAX_ITEMS = 48;
+const HYDRATE_MAX_BYTES = 8 * 1024 * 1024;
 
 // Local-only, never written to the cloud: the original ref order an entry had
 // when hydrate couldn't resolve one of its photos. prepareForCloud reads it to
