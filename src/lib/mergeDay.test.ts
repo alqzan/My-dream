@@ -137,6 +137,12 @@ describe("chronological / sectionHeading", () => {
   it("عنوانُ قسمٍ بلا وقتٍ ولا عنوان يبقى مفهوماً", () => {
     expect(sectionHeading(e({ id: "x" }))).toBe("### بلا وقت");
   });
+
+  it("منتصفُ الليل ليس وقتاً، ورموزُ العنوان تُنظَّف", () => {
+    expect(sectionHeading(e({ id: "x", time: "00:00", title: "بسوي \\.\\.\\." })))
+      .toBe("### بسوي ...");
+    expect(sectionHeading(e({ id: "y", time: "00:00" }))).toBe("### بلا وقت");
+  });
 });
 
 describe("duplicateDays", () => {

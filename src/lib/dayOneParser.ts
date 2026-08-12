@@ -1,6 +1,7 @@
 import { Unzip, UnzipInflate } from "fflate";
 import type { JournalEntry } from "./types";
 import { uid, today } from "./utils";
+import { plainTitle } from "./markdown";
 import { compressImageSmart } from "./imageUtils";
 
 interface DayOneRichText {
@@ -71,7 +72,7 @@ function cleanDayOneText(raw: string): { title: string; body: string } {
       if (latin > arabic) continue; // English prompt heading → drop
       // First Arabic heading becomes the entry title instead of body text
       if (!title && kept.every((l) => !l.trim())) {
-        title = body.trim();
+        title = plainTitle(body);
         continue;
       }
     }
@@ -130,7 +131,9 @@ function extractDateTime(entry: DayOneEntry): { date: string; time?: string } {
     const time = new Intl.DateTimeFormat("en-GB", {
       ...opts, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
     }).format(d);
-    return { date, time };
+    // منتصف الليل في أرشيف Day One يعني «تدوينة يومٍ بلا وقت» لا الساعة ١٢
+    // ليلاً — فلا نخزّن وقتاً أصلاً، ولا يُعرض «00:00» على أنّه وقتُ الكتابة.
+    return time === "00:00" ? { date } : { date, time };
   } catch {
     // Unknown timezone identifier — fall back to the raw UTC date portion.
     return { date: entry.creationDate.slice(0, 10) };

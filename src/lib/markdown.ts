@@ -195,6 +195,12 @@ export function stripMarkdown(src: string): string {
     .trim();
 }
 
+// عنوان المذكرة يُعرض نصّاً عادياً لا HTML، لكنّه قد يحمل رموز ماركداون جاءت
+// من Day One («اليوم بسوي \.\.\.\.») — فيمرّ بالقاعدة نفسها قبل عرضه.
+export function plainTitle(title?: string): string {
+  return stripMarkdown(title ?? "").replace(/\s+/g, " ").trim();
+}
+
 export function wordCount(src: string): number {
   const t = (src ?? "").trim();
   if (!t) return 0;

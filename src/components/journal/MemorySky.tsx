@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { parseDate, formatDate } from "@/lib/utils";
+import { plainTitle } from "@/lib/markdown";
 import { entryPhotoSources, hasPhoto as entryHasPhoto } from "@/lib/mediaSources";
 import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -379,7 +380,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
               ref={(el) => { nodeRefs.current[i] = el; }}
               role="button"
               tabIndex={i === focusIdx ? 0 : -1}
-              aria-label={st.entry.title ? `${st.entry.title} — ${formatDate(st.entry.date)}` : formatDate(st.entry.date)}
+              aria-label={plainTitle(st.entry.title) ? `${plainTitle(st.entry.title)} — ${formatDate(st.entry.date)}` : formatDate(st.entry.date)}
               onFocus={() => setFocusIdx(i)}
               onClick={() => { setSilentPick(null); setPreview(st.entry); }}
               onKeyDown={(e) => onNodeKey(e, () => setPreview(st.entry))}
@@ -456,7 +457,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
             )}
             <div className="flex-1 min-w-0">
               <div className="text-[10px] text-[#b9a8d6]">{formatDate(preview.date)}</div>
-              {preview.title && <div className="text-sm font-bold text-[#f4ead6] truncate">{preview.title}</div>}
+              {plainTitle(preview.title) && <div className="text-sm font-bold text-[#f4ead6] truncate">{plainTitle(preview.title)}</div>}
               <p className="text-[11px] text-[#cfc4e6] line-clamp-2 mt-0.5">{preview.content}</p>
             </div>
             <button onClick={() => setPreview(null)} aria-label="إغلاق المعاينة" className="shrink-0 text-[#b9a8d6] hover:text-white press">

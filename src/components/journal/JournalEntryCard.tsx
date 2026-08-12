@@ -1,10 +1,10 @@
 "use client";
 import type { JournalEntry } from "@/lib/types";
 import { MOODS } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, displayTime } from "@/lib/utils";
 import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
 import { useMediaCacheVersion } from "@/components/ui/useMedia";
-import { stripMarkdown } from "@/lib/markdown";
+import { stripMarkdown, plainTitle } from "@/lib/markdown";
 import { PhotoCollage } from "./PhotoCollage";
 import { MergeChip } from "./MergeBadge";
 import { Trash2, Clock, Mic, Film, Star, Paperclip } from "lucide-react";
@@ -59,10 +59,10 @@ export function JournalEntryCard({
               </span>
             )}
             {showDate && <span className="font-medium truncate">{formatDate(entry.date)}</span>}
-            {entry.time && (
+            {displayTime(entry.time) && (
               <span className="flex items-center gap-0.5 tabular-nums">
                 <Clock size={10} />
-                {entry.time}
+                {displayTime(entry.time)}
               </span>
             )}
             {audioSources.length > 0 && (
@@ -113,8 +113,8 @@ export function JournalEntryCard({
           </div>
         </div>
 
-        {entry.title && (
-          <h3 className="text-[17px] font-black text-gray-900 leading-snug">{entry.title}</h3>
+        {plainTitle(entry.title) && (
+          <h3 className="text-[17px] font-black text-gray-900 leading-snug">{plainTitle(entry.title)}</h3>
         )}
 
         {entry.question && (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMarkdown, stripMarkdown, wordCount } from "./markdown";
+import { renderMarkdown, stripMarkdown, plainTitle, wordCount } from "./markdown";
 
 // النصّ كما يخرج من Day One فعلاً: مربّعات مهام، فواصل ---، سؤالٌ يوميّ
 // بستّة #، ونقاطٌ مهروبة (\.) — كلّها كانت تظهر حرفيّة قبل هذا.
@@ -113,6 +113,21 @@ describe("stripMarkdown", () => {
 
   it("يبقي النصّ العاديّ كما هو", () => {
     expect(stripMarkdown("يومٌ هادئ")).toBe("يومٌ هادئ");
+  });
+});
+
+describe("plainTitle", () => {
+  it("ينظّف عنوان Day One المهروب", () => {
+    expect(plainTitle("اليوم بسوي \\.\\.\\.\\.")).toBe("اليوم بسوي ....");
+  });
+
+  it("يزيل علامات العنوان والتنسيق", () => {
+    expect(plainTitle("### **رحلة** الطائف")).toBe("رحلة الطائف");
+  });
+
+  it("بلا عنوان ⇒ نصٌّ فارغ", () => {
+    expect(plainTitle(undefined)).toBe("");
+    expect(plainTitle("   ")).toBe("");
   });
 });
 

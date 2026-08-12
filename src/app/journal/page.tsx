@@ -2,11 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
-import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid, entriesCount, daysCount } from "@/lib/utils";
+import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid, entriesCount, daysCount, displayTime } from "@/lib/utils";
 import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
 import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { MOODS } from "@/lib/types";
-import { renderMarkdown, stripMarkdown } from "@/lib/markdown";
+import { renderMarkdown, stripMarkdown, plainTitle } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
 import { duplicateDays } from "@/lib/mergeDay";
 import { JournalTimeline } from "@/components/journal/JournalTimeline";
@@ -605,17 +605,17 @@ export default function JournalPage() {
       >
         {viewEntry && (
           <div className="space-y-4 pt-4">
-            {viewEntry.title && (
-              <h2 className="text-2xl font-black text-gray-900 leading-snug">{viewEntry.title}</h2>
+            {plainTitle(viewEntry.title) && (
+              <h2 className="text-2xl font-black text-gray-900 leading-snug">{plainTitle(viewEntry.title)}</h2>
             )}
             <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
               <span className="font-medium">{formatDate(viewEntry.date)}</span>
               <span className="text-gray-300">·</span>
               <span>{hijriDate(viewEntry.date)}</span>
-              {viewEntry.time && (
+              {displayTime(viewEntry.time) && (
                 <span className="flex items-center gap-1">
                   <Clock size={11} />
-                  {viewEntry.time}
+                  {displayTime(viewEntry.time)}
                 </span>
               )}
               {viewEntry.mood && (

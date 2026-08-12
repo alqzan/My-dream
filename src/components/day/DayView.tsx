@@ -4,7 +4,7 @@ import { aggregateDay } from "@/lib/dayAggregator";
 import { PRAYERS, PRAYER_META, prayerStatusMeta, EMPTY_HIFZ } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, entryPhotos, entryAudios } from "@/lib/utils";
 import { describeRange } from "@/lib/quran/meta";
-import { renderMarkdown } from "@/lib/markdown";
+import { renderMarkdown, plainTitle } from "@/lib/markdown";
 import { Modal } from "@/components/ui/Modal";
 import { Photo } from "@/components/ui/Photo";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
@@ -174,8 +174,8 @@ export function DayView({ date, onClose }: DayViewProps) {
                       ))}
                     </div>
                   )}
-                  {entry.title && (
-                    <h3 className="text-base font-black text-gray-900 mb-1">{entry.title}</h3>
+                  {plainTitle(entry.title) && (
+                    <h3 className="text-base font-black text-gray-900 mb-1">{plainTitle(entry.title)}</h3>
                   )}
                   <div
                     className="prose-journal text-sm text-gray-700 leading-relaxed line-clamp-6"

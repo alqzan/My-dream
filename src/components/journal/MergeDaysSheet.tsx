@@ -2,8 +2,8 @@
 import { useMemo, useState } from "react";
 import type { JournalEntry } from "@/lib/types";
 import { duplicateDays, type DuplicateDay } from "@/lib/mergeDay";
-import { formatDate, entriesCount, daysCount } from "@/lib/utils";
-import { stripMarkdown } from "@/lib/markdown";
+import { formatDate, entriesCount, daysCount, displayTime } from "@/lib/utils";
+import { stripMarkdown, plainTitle } from "@/lib/markdown";
 import { entryPhotoSources, entryAudioSources } from "@/lib/mediaSources";
 import { useAppStore } from "@/lib/store";
 import { Modal } from "@/components/ui/Modal";
@@ -40,8 +40,8 @@ function DayRow({
           const text = stripMarkdown(e.content);
           return (
             <li key={e.id} className="flex items-center gap-2 text-[11px] text-gray-500">
-              <span className="font-bold text-journal tabular-nums shrink-0">{e.time ?? "—"}</span>
-              <span className="flex-1 min-w-0 truncate">{e.title || text || "بلا نصّ"}</span>
+              <span className="font-bold text-journal tabular-nums shrink-0">{displayTime(e.time) ?? "—"}</span>
+              <span className="flex-1 min-w-0 truncate">{plainTitle(e.title) || text || "بلا نصّ"}</span>
               {photos > 0 && (
                 <span className="flex items-center gap-0.5 text-gray-400 shrink-0 tabular-nums">
                   <Images size={11} />

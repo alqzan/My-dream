@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import type { MergedSource } from "@/lib/types";
-import { entriesCount } from "@/lib/utils";
+import { entriesCount, displayTime } from "@/lib/utils";
+import { plainTitle } from "@/lib/markdown";
 import { Combine, ChevronDown } from "lucide-react";
 
 // ===================== شارةُ «مدموجة» =====================
@@ -60,10 +61,10 @@ export function MergeBadge({ sources }: { sources: MergedSource[] }) {
                 className="flex items-center gap-2 text-[11px] bg-[var(--surface)] rounded-lg px-2.5 py-1.5"
               >
                 <span className="font-bold text-journal tabular-nums shrink-0">
-                  {s.time ?? "—"}
+                  {displayTime(s.time) ?? "—"}
                 </span>
                 <span className="flex-1 min-w-0 truncate text-gray-600">
-                  {s.title || "بلا عنوان"}
+                  {plainTitle(s.title) || "بلا عنوان"}
                 </span>
                 <span className="text-gray-400 tabular-nums shrink-0">
                   {s.chars} حرفاً

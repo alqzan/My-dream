@@ -17,7 +17,8 @@
 // نقيّ: بلا React ولا DOM ولا IndexedDB (راجع docs/APP-STORE-PLAN.md).
 
 import type { JournalEntry, MergedSource } from "./types";
-import { entryPhotos, entryAudios } from "./utils";
+import { entryPhotos, entryAudios, displayTime } from "./utils";
+import { plainTitle } from "./markdown";
 
 /** «09:30» → 570 دقيقة؛ وما لا وقت له يقع في ذيل اليوم لا في صدره. */
 function minutesOf(e: JournalEntry): number {
@@ -35,7 +36,7 @@ export function chronological(entries: JournalEntry[]): JournalEntry[] {
 
 /** عنوان القسم الواحد داخل النصّ المدموج: «### 07:10 · صباحٌ بارد». */
 export function sectionHeading(e: JournalEntry): string {
-  const parts = [e.time?.trim(), e.title?.trim()].filter(Boolean);
+  const parts = [displayTime(e.time), plainTitle(e.title)].filter(Boolean);
   return `### ${parts.length ? parts.join(" · ") : "بلا وقت"}`;
 }
 

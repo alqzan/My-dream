@@ -91,6 +91,24 @@ describe("parseDayOneJson — التاريخ والوقت", () => {
     const r = parseDayOneJson(wrap([entry({ creationDate: undefined })]));
     expect(r.entries[0].date).toBe(today());
   });
+
+  it("منتصفُ الليل يعني «بلا وقت» فلا يُخزَّن 00:00", () => {
+    // تدوينةُ يومٍ كامل في Day One تحمل منتصف ليل منطقتها — لا الساعة ١٢ ليلاً.
+    const r = parseDayOneJson(
+      wrap([entry({ creationDate: "2021-08-11T21:00:00Z", timeZone: "Asia/Riyadh" })])
+    );
+    expect(r.entries[0].date).toBe("2021-08-12");
+    expect(r.entries[0].time).toBeUndefined();
+  });
+});
+
+describe("parseDayOneJson — العنوان بلا رموز", () => {
+  it("عنوانٌ من ترويسةٍ مهروبة يصل نظيفاً", () => {
+    const r = parseDayOneJson(
+      wrap([entry({ text: "###### اليوم بسوي \\.\\.\\.\\.\\.\n وكتبت عن يومي كلّه بتفصيل." })])
+    );
+    expect(r.entries[0].title).toBe("اليوم بسوي .....");
+  });
 });
 
 describe("parseDayOneJson — تنظيف النصّ", () => {

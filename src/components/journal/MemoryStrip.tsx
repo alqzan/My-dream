@@ -3,7 +3,7 @@ import type { JournalEntry } from "@/lib/types";
 import { formatDateShort, parseDate } from "@/lib/utils";
 import { entryPhotoSources } from "@/lib/mediaSources";
 import { useMediaCacheVersion, resolveMediaSlots } from "@/components/ui/useMedia";
-import { stripMarkdown } from "@/lib/markdown";
+import { stripMarkdown, plainTitle } from "@/lib/markdown";
 import { AppImage } from "@/components/ui/AppImage";
 import { CalendarHeart } from "lucide-react";
 
@@ -78,8 +78,8 @@ export function MemoryStrip({
 
               <span className="absolute inset-x-0 bottom-0 p-2.5 flex flex-col gap-0.5">
                 <span className="text-[10px] font-medium text-white/70">{formatDateShort(m.date)}</span>
-                {m.title ? (
-                  <span className="text-[13px] font-black text-white leading-snug line-clamp-2">{m.title}</span>
+                {plainTitle(m.title) ? (
+                  <span className="text-[13px] font-black text-white leading-snug line-clamp-2">{plainTitle(m.title)}</span>
                 ) : null}
                 <span className="text-[11px] text-white/85 leading-snug line-clamp-2">{text}</span>
               </span>

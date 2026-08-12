@@ -4,7 +4,7 @@
 // من منتقي Safari (بتقويمٍ هجريّ على الجهاز) كانت تمحو آخر تاريخٍ صالح، فيبدو
 // زرُّ الحفظ معطّلاً بلا سبب.
 import { describe, it, expect } from "vitest";
-import { isValidDateKey, keepValidDate, parseDate, toDateStr } from "./utils";
+import { isValidDateKey, keepValidDate, parseDate, toDateStr, displayTime } from "./utils";
 import { isValidDateKey as fromInstallments } from "./installments";
 
 describe("isValidDateKey", () => {
@@ -63,5 +63,27 @@ describe("keepValidDate — القيمة الفارغة العابرة من من
     date = keepValidDate("", date);           // Safari يُطلق change فارغة
     expect(date).toBe("2026-02-15");
     expect(isValidDateKey(date)).toBe(true);  // فيبقى الزرّ صالحاً للحفظ
+  });
+});
+
+// ===================== وقتُ المذكرة كما يُعرض =====================
+// أرشيف Day One يعطي منتصف الليل لتدوينة يومٍ بلا وقت، فكان «00:00» يظهر
+// وقتَ كتابةٍ محدّداً وليس كذلك.
+describe("displayTime", () => {
+  it("منتصفُ الليل ليس وقتاً", () => {
+    expect(displayTime("00:00")).toBeNull();
+    expect(displayTime("0:00")).toBeNull();
+    expect(displayTime("24:00")).toBeNull();
+  });
+
+  it("الأوقات الحقيقية تمرّ كما هي", () => {
+    expect(displayTime("07:10")).toBe("07:10");
+    expect(displayTime("00:01")).toBe("00:01");
+    expect(displayTime("23:49")).toBe("23:49");
+  });
+
+  it("الفراغ والغياب ⇒ لا شيء", () => {
+    expect(displayTime(undefined)).toBeNull();
+    expect(displayTime("  ")).toBeNull();
   });
 });

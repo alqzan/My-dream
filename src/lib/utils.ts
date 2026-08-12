@@ -395,6 +395,15 @@ export function entryAudios(e: { audio?: string; audios?: string[] }): string[] 
   return e.audio ? [e.audio] : [];
 }
 
+// وقتُ المذكرة كما يُعرض — أو لا شيء. أرشيف Day One يعطي منتصف الليل للمذكرات
+// التي لا وقت لها أصلاً (تدوينة يومٍ كامل)، فكان «00:00» يظهر وقتاً محدّداً
+// وليس كذلك. المصدر الوحيد لهذا القرار: لا تعرضه في مكانين بقاعدتين.
+export function displayTime(time?: string): string | null {
+  const t = time?.trim();
+  if (!t) return null;
+  return /^(?:00?|24):00$/.test(t) ? null : t;
+}
+
 // ===== هوية المذكرات المستوردة والحفاظ على وسائطها عبر الأجهزة =====
 
 // هوية مذكرة Day One الثابتة هي UUID الخاص بها — نفسه على كل جهاز وفي كل إعادة

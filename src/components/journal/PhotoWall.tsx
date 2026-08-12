@@ -4,6 +4,7 @@ import type { JournalEntry } from "@/lib/types";
 import type { MediaSource } from "@/lib/mediaSources";
 import { isWallFeature } from "@/lib/photoLayout";
 import { arabicMonthName, formatDate } from "@/lib/utils";
+import { plainTitle } from "@/lib/markdown";
 import { useMediaCacheVersion, resolveMediaSlots } from "@/components/ui/useMedia";
 import { AppImage } from "@/components/ui/AppImage";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
@@ -65,7 +66,8 @@ export function PhotoWall({
 
   const captions = shown.map(({ wallIndex }) => {
     const e = photos[wallIndex].entry;
-    return e.title ? `${e.title} · ${formatDate(e.date)}` : formatDate(e.date);
+    const t = plainTitle(e.title);
+    return t ? `${t} · ${formatDate(e.date)}` : formatDate(e.date);
   });
 
   return (
