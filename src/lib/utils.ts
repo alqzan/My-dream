@@ -448,7 +448,7 @@ export function unionRefs(a?: string[], b?: string[]): string[] | undefined {
 // دليلٍ قاطع على أنهما نفس الوسيط).
 // عنصرا نفس الهويّة يتّحدان حقلاً‑حقلاً (أيّ حقلٍ معرَّفٍ في إحدى النسختين
 // يبقى)، فينتج عنصرٌ واحدٌ أغنى لا عنصران مكرّران.
-function mergeRefList<T extends Record<string, unknown> & { sourceMediaID?: string }>(
+function mergeRefList<T extends { sourceMediaID?: string }>(
   a: T[] | undefined,
   b: T[] | undefined,
   identityKeys: (keyof T)[]
@@ -541,11 +541,13 @@ export function stripTombstonedMediaRefs(e: JournalEntry, tomb: Set<string>): Jo
       : v
   );
   const vrChanged = !!e.videoRefs && JSON.stringify(vr) !== JSON.stringify(e.videoRefs);
-  const atr = e.attachmentRefs?.map((a) =>
-    a.previewHash && tomb.has(mediaTombKey(e.id, "photos", a.previewHash))
-      ? { ...a, previewHash: undefined }
-      : a
-  );
+  const atr = e.attachmentRefs
+    ?.filter((a) => !(a.hash && tomb.has(mediaTombKey(e.id, "attachments", a.hash))))
+    .map((a) =>
+      a.previewHash && tomb.has(mediaTombKey(e.id, "photos", a.previewHash))
+        ? { ...a, previewHash: undefined }
+        : a
+    );
   const atrChanged = !!e.attachmentRefs && JSON.stringify(atr) !== JSON.stringify(e.attachmentRefs);
   if (!prChanged && !arChanged && !vrChanged && !atrChanged) return e;
   const out = { ...x } as EntryMediaRefs;

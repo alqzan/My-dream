@@ -17,7 +17,9 @@ the two in sync when editing.
 - `GET /v1/media/blob?kind&hash&exp&sig` — streams an object straight from R2.
   The link is HMAC-signed with an absolute `exp`, so it needs no Bearer header.
 - `POST /v1/media/put?kind&hash&ct` — body is the bytes. Validates kind/hash/MIME
-  and the declared size, then writes to R2 via the binding. Returns
+  and the declared size, then writes to R2 via the binding. PDFs use the existing
+  private `photos` bucket with a 32MB limit, so no new R2 bucket or migration is
+  needed. Returns
   `exists: true` when an immutable object with the same size is already present.
 - `POST /v1/media/download-url` — checks existence and returns a signed
   `/v1/media/blob` link (TTL clamped to 1–7 days).

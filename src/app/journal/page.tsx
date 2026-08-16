@@ -11,6 +11,7 @@ import { dailyQuestion } from "@/lib/questions";
 import { duplicateDays } from "@/lib/mergeDay";
 import { JournalTimeline } from "@/components/journal/JournalTimeline";
 import { EntryPhotos } from "@/components/journal/PhotoCollage";
+import { JournalAttachments } from "@/components/journal/JournalAttachments";
 import { MemoryStrip } from "@/components/journal/MemoryStrip";
 import { MergeBadge } from "@/components/journal/MergeBadge";
 import { MergeDaysSheet } from "@/components/journal/MergeDaysSheet";
@@ -173,7 +174,8 @@ export default function JournalPage() {
         normalizeArabic(e.content).includes(q) ||
         normalizeArabic(e.title ?? "").includes(q) ||
         normalizeArabic(e.question ?? "").includes(q) ||
-        (e.tags ?? []).some((t) => normalizeArabic(t).includes(q))
+        (e.tags ?? []).some((t) => normalizeArabic(t).includes(q)) ||
+        (e.attachmentRefs ?? []).some((a) => normalizeArabic(a.filename ?? "").includes(q))
       );
     });
     return [...list].sort((a, b) => b.date.localeCompare(a.date));
@@ -660,6 +662,7 @@ export default function JournalPage() {
             )}
             {/* كلّ الصور في كولاجاتٍ متتابعة — والضغطة تفتح العارض عليها */}
             <EntryPhotos sources={viewPhotoSources} />
+            <JournalAttachments attachments={viewEntry.attachmentRefs} />
             {viewAudios.map((a, i) => (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <audio key={i} controls src={a} className="w-full h-10" />

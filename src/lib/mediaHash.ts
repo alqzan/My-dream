@@ -53,7 +53,7 @@ export async function mediaHashOf(item: string): Promise<string | null> {
   return null;
 }
 
-export type MediaKindTag = "photos" | "audios";
+export type MediaKindTag = "photos" | "audios" | "attachments";
 
 // A media tombstone is keyed by ENTRY + kind + content-hash, not by hash alone.
 // The same photo can live in two entries (common with Day One imports); deleting

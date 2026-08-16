@@ -17,6 +17,7 @@ interface Env {
   MEDIA_BUCKET: R2Bucket;
   ALLOWED_ORIGINS: string;
   MAX_IMAGE_BYTES: string;
+  MAX_PDF_BYTES: string;
   MAX_AUDIO_BYTES: string;
   DOWNLOAD_URL_TTL_SECONDS: string;
   SYNC_KEY_SHA256: string;
@@ -42,6 +43,7 @@ const IMAGE_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
+const PDF_TYPES = new Set(["application/pdf"]);
 const AUDIO_TYPES = new Set([
   "audio/webm",
   "audio/mp4",
@@ -168,9 +170,12 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isSafeInteger(n) && n > 0 ? n : fallback;
 }
 
-function maxBytes(kind: MediaKind, env: Env): number {
+function maxBytes(kind: MediaKind, contentType: string, env: Env): number {
   return kind === "photos"
-    ? parsePositiveInt(env.MAX_IMAGE_BYTES, 8 * 1024 * 1024)
+    ? parsePositiveInt(
+        contentType === "application/pdf" ? env.MAX_PDF_BYTES : env.MAX_IMAGE_BYTES,
+        contentType === "application/pdf" ? 32 * 1024 * 1024 : 8 * 1024 * 1024,
+      )
     : parsePositiveInt(env.MAX_AUDIO_BYTES, 32 * 1024 * 1024);
 }
 
@@ -186,13 +191,13 @@ async function putBlob(request: Request, env: Env): Promise<Response> {
   const kind = parseKind(url.searchParams.get("kind"));
   const hash = parseHash(url.searchParams.get("hash"));
   const contentType = normalizeContentType(url.searchParams.get("ct"));
-  const allowed = kind === "photos" ? IMAGE_TYPES : AUDIO_TYPES;
+  const allowed = kind === "photos" ? new Set([...IMAGE_TYPES, ...PDF_TYPES]) : AUDIO_TYPES;
   if (!allowed.has(contentType)) throw new HttpError(415, `Content type ${contentType} is not allowed`);
 
   const body = await request.arrayBuffer();
   const size = body.byteLength;
   if (size <= 0) throw new HttpError(400, "Empty body");
-  if (size > maxBytes(kind, env)) throw new HttpError(413, "File is too large");
+  if (size > maxBytes(kind, contentType, env)) throw new HttpError(413, "File is too large");
 
   const key = objectKey(kind, hash);
   const existing = await env.MEDIA_BUCKET.head(key);

@@ -2,15 +2,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppStore } from "@/lib/store";
-import type { JournalEntry } from "@/lib/types";
+import type { JournalAttachment, JournalEntry } from "@/lib/types";
 import { MOODS } from "@/lib/types";
 import { uid, today, parseDate, entryAudios } from "@/lib/utils";
 import { compressImage } from "@/lib/imageUtils";
+import { photoHash } from "@/lib/mediaHash";
 import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
 import { AudioRecorder, MAX_AUDIO_NOTES } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown } from "lucide-react";
+import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown, FileText } from "lucide-react";
 import { AppImage } from "@/components/ui/AppImage";
 
 interface JournalFormProps {
@@ -67,17 +68,20 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
   const [audios, setAudios] = useState<string[]>(initial ? entryAudios(initial) : []);
+  const [attachments, setAttachments] = useState<JournalAttachment[]>(initial?.attachmentRefs ?? []);
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [mood, setMood] = useState<JournalEntry["mood"]>(initial?.mood);
   const [compressing, setCompressing] = useState(false);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [attachmentError, setAttachmentError] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
   // «إضافات» — صور/صوت/وسوم/شعور مطويّة لإبقاء سطح الكتابة صافياً، وتُفتح تلقائياً
   // عند تعديل مذكرةٍ فيها إضافات أصلاً.
   const [showExtras, setShowExtras] = useState(
     Boolean(
       initial?.photos?.length || initial?.photo || initial?.audios?.length || initial?.audio ||
-      initial?.tags?.length || initial?.mood
+      initial?.attachmentRefs?.length || initial?.tags?.length || initial?.mood
     )
   );
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -172,7 +176,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     }
   }, [initial, date, title, content, question, answering]);
 
-  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audios.length || tags.length);
+  const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audios.length || attachments.length || tags.length);
 
   // إضافة وسم: تشذيب، بلا تكرار، وحد أقصى معقول للعدد والطول.
   function addTag(raw: string) {
@@ -199,6 +203,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photo: photos[0] ?? "",
         audios,
         audio: audios[0] ?? "",
+        attachmentRefs: attachments,
         tags,
         mood,
       });
@@ -212,6 +217,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         ...(answering ? { question } : {}),
         ...(photos.length ? { photos, photo: photos[0] } : {}),
         ...(audios.length ? { audios, audio: audios[0] } : {}),
+        ...(attachments.length ? { attachmentRefs: attachments } : {}),
         ...(tags.length ? { tags } : {}),
         ...(mood ? { mood } : {}),
         time: nowHHMM(),
@@ -232,7 +238,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
     saveTimer.current = setTimeout(persist, 700);
     return () => clearTimeout(saveTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, title, content, question, answering, photos, audios, tags, mood]);
+  }, [date, title, content, question, answering, photos, audios, attachments, tags, mood]);
 
   // "تم" — flush any pending save immediately and close. If the entry was
   // emptied out, treat it as a cancel: delete the auto-created row (or revert
@@ -262,6 +268,7 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         photo: initial.photo ?? "",
         audios: entryAudios(initial),
         audio: initial.audio ?? "",
+        attachmentRefs: initial.attachmentRefs ?? [],
         tags: initial.tags ?? [],
       });
     } else if (savedId.current) {
@@ -302,6 +309,8 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
   );
 
   const MAX_PHOTOS = 6;
+  const MAX_ATTACHMENTS = 5;
+  const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
 
   async function handlePhotoFiles(files: File[]) {
     setCompressing(true);
@@ -315,6 +324,53 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
       setPhotos((prev) => [...prev, ...compressed].slice(0, MAX_PHOTOS));
     } finally {
       setCompressing(false);
+    }
+  }
+
+  function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error ?? new Error("تعذّر قراءة الملف"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleAttachmentFiles(files: File[]) {
+    setAttachmentError("");
+    const remaining = MAX_ATTACHMENTS - attachments.length;
+    if (remaining <= 0) return;
+    setAttachmentBusy(true);
+    try {
+      const next: JournalAttachment[] = [];
+      for (const file of files.slice(0, remaining)) {
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        if (!isPdf) {
+          setAttachmentError("يمكن إرفاق ملفات PDF فقط.");
+          continue;
+        }
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          setAttachmentError("حجم ملف PDF يجب ألا يتجاوز 32 م.ب.");
+          continue;
+        }
+        const localData = await fileToDataUrl(file);
+        const hash = await photoHash(localData);
+        if (attachments.some((a) => a.hash === hash) || next.some((a) => a.hash === hash)) continue;
+        next.push({
+          kind: "pdf",
+          filename: file.name,
+          hash,
+          contentType: "application/pdf",
+          size: file.size,
+          status: "uploaded",
+          localData,
+        });
+      }
+      if (next.length) setAttachments((prev) => [...prev, ...next].slice(0, MAX_ATTACHMENTS));
+    } catch {
+      setAttachmentError("تعذّرت قراءة ملف PDF — جرّب اختياره مرة أخرى.");
+    } finally {
+      setAttachmentBusy(false);
     }
   }
 
@@ -489,10 +545,10 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
           <Paperclip size={14} className="text-journal" />
           إضافات
           {(() => {
-            const n = photos.length + audios.length + tags.length + (mood ? 1 : 0);
+            const n = photos.length + audios.length + attachments.length + tags.length + (mood ? 1 : 0);
             return n > 0 ? <span className="text-[10px] bg-journal/10 text-journal rounded-full px-2 py-0.5">{n}</span> : null;
           })()}
-          <span className="text-gray-300 font-normal">صور · صوت · وسوم · شعور</span>
+          <span className="text-gray-300 font-normal">صور · صوت · PDF · وسوم · شعور</span>
           <ChevronDown size={15} className={`ms-auto transition-transform ${showExtras ? "rotate-180" : ""}`} />
         </button>
         {showExtras && (
@@ -556,6 +612,54 @@ export function JournalForm({ onClose, initial }: JournalFormProps) {
         {!compressing && photos.length < MAX_PHOTOS && (
           <p className="text-[10px] text-gray-300 mt-1 text-center">أي صورة تُضغط تلقائياً لتوفير المساحة</p>
         )}
+      </div>
+
+      {/* ملفات PDF — تحفظ المذكرة المرجع والبيانات المحلية، وترفعها المزامنة
+          إلى مخزن الوسائط دون حشر الملف داخل مستند Firestore. */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+          ملفات PDF
+          {attachments.length > 0 && <span className="text-gray-300 font-normal"> — {attachments.length}/{MAX_ATTACHMENTS}</span>}
+        </label>
+        {attachments.length > 0 && (
+          <div className="space-y-1.5 mb-2">
+            {attachments.map((attachment, index) => (
+              <div key={attachment.sourceMediaID ?? attachment.hash ?? `${attachment.filename}-${index}`} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-2.5 py-2">
+                <FileText size={17} className="text-red-500 shrink-0" />
+                <span className="text-xs text-gray-700 truncate flex-1" title={attachment.filename}>{attachment.filename || `ملف PDF ${index + 1}`}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                  className="p-1 text-gray-300 hover:text-red-500 rounded-lg press"
+                  aria-label={`حذف ${attachment.filename || "ملف PDF"}`}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {attachmentBusy ? (
+          <div className="flex items-center justify-center h-16 border-2 border-dashed border-gray-200 rounded-xl">
+            <Loader2 size={20} className="text-gray-400 animate-spin" />
+          </div>
+        ) : attachments.length < MAX_ATTACHMENTS ? (
+          <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
+            <FileText size={19} className="text-gray-400" />
+            <span className="text-xs text-gray-400">أضف ملف PDF</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => { if (e.target.files?.length) void handleAttachmentFiles([...e.target.files]); e.target.value = ""; }}
+            />
+          </label>
+        ) : (
+          <p className="text-[10px] text-gray-300 text-center">وصلت الحد الأقصى ({MAX_ATTACHMENTS} ملفات)</p>
+        )}
+        {attachmentError && <p className="text-[11px] text-red-500 mt-1.5">{attachmentError}</p>}
+        <p className="text-[10px] text-gray-300 mt-1 text-center">الحد الأقصى للملف الواحد 32 م.ب.</p>
       </div>
 
       {/* ملاحظة صوتية */}

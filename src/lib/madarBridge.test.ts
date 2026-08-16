@@ -124,6 +124,22 @@ describe("parseMadarImportFile — ملفٌّ صحيح مطابقٌ لمخرجا
     const r = await parseMadarImportFile(jsonFile(manifest([], [])));
     expect(r.entries).toHaveLength(0);
   });
+
+  it("يحفظ مرجع PDF الأصلي عندما تكون بايتاته مرفوعة، دون تحويله إلى صورة", async () => {
+    const records = [record({ id: "r1", dayOneUUID: "PDF1", mediaIDs: ["pdf"] })];
+    const mediaItems = [uploaded({
+      id: "pdf", recordID: "r1", kind: "pdf", cloudKind: "photos", cloudHash: HASH_C,
+      contentType: "application/pdf", originalContentType: "application/pdf",
+      originalFilename: "عقد.pdf", originalByteCount: 4096, uploadedByteCount: 4096,
+    })];
+    const r = await parseMadarImportFile(jsonFile(manifest(records, mediaItems)));
+    expect(r.entries[0].photoRefs).toBeUndefined();
+    expect(r.entries[0].attachmentRefs).toEqual([{
+      kind: "pdf", filename: "عقد.pdf", hash: HASH_C, contentType: "application/pdf",
+      size: 4096, status: "uploaded", sourceMediaID: "pdf",
+    }]);
+    expect(r.photoHashes).toEqual([HASH_C]);
+  });
 });
 
 describe("parseMadarImportFile — الوسائط: صورة+فيديو مع poster+PDF مع preview+صوت metadataOnly معاً", () => {

@@ -17,7 +17,7 @@
 // المدعومة (schemaVersion)، البنية، الملخّص، الحجم، والنوع — قبل أن يُسمح
 // لمحتواه بالوصول لأي مسار كتابة.
 
-import type { JournalEntry } from "./types";
+import type { JournalAttachment, JournalEntry } from "./types";
 
 export const MADAR_IMPORT_EXTENSION = ".madarimport";
 export const MADAR_IMPORT_SCHEMA_VERSION = 1;
@@ -382,7 +382,7 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
     const photoRefs: string[] = [];
     const audioRefs: string[] = [];
     const videoRefs: { type?: string; duration?: number; posterHash?: string; sourceMediaID?: string }[] = [];
-    const attachmentRefs: { kind: "pdf"; filename?: string; previewHash?: string; status: string; sourceMediaID?: string }[] = [];
+    const attachmentRefs: JournalAttachment[] = [];
     const audioMetadataRefs: { type?: string; duration?: number; filename?: string; status: string; sourceMediaID?: string }[] = [];
 
     for (const mid of r.mediaIDs ?? []) {
@@ -422,14 +422,23 @@ function buildEntries(manifest: MadarBridgeManifest): BuildResult {
           sourceMediaID: m.id, // هويّة الدمج الثابتة — راجع mergeRefList في utils.ts
         });
       } else if (m.kind === "pdf") {
-        const previewHash = inPhotosBucket && hash ? hash : undefined;
+        // Older Memory Importer builds upload a first-page JPEG as the media
+        // object. Newer builds may upload the original PDF itself. Keep both
+        // cases in one ref so the journal can show a useful preview today and
+        // open the original file whenever its bytes are available.
+        const sourceType = (m.originalContentType ?? m.contentType ?? "").toLowerCase();
+        const originalHash = inPhotosBucket && hash && sourceType === "application/pdf" ? hash : undefined;
+        const previewHash = inPhotosBucket && hash && !originalHash ? hash : undefined;
+        if (originalHash) photoHashes.add(originalHash);
         if (previewHash) {
           photoHashes.add(previewHash);
-          photoRefs.push(previewHash); // نفس سبب معاينة الفيديو أعلاه — عرضٌ فوريّ.
+          photoRefs.push(previewHash); // معاينةٌ فوريةٌ للمرفق القديم.
         }
         attachmentRefs.push({
           kind: "pdf",
           ...(m.originalFilename ? { filename: m.originalFilename } : {}),
+          ...(originalHash ? { hash: originalHash, contentType: "application/pdf" } : {}),
+          ...(originalHash && typeof m.originalByteCount === "number" ? { size: m.originalByteCount } : {}),
           ...(previewHash ? { previewHash } : {}),
           status: m.status,
           sourceMediaID: m.id,

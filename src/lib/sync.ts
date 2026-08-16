@@ -3,7 +3,7 @@ import {
 } from "firebase/firestore";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
-import type { AppData, JournalEntry } from "./types";
+import type { AppData, JournalAttachment, JournalEntry } from "./types";
 import { entryPhotos, entryAudios, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
 import { MEDIA_CACHE_PREFIX } from "./mediaCache";
@@ -610,12 +610,38 @@ async function prepareForCloud(
       // This entry's own delete-guards (a photo deleted elsewhere doesn't count).
       const photoDeleted = (h: string) => mediaTomb.has(mediaTombKey(src.id, "photos", h));
       const audioDeleted = (h: string) => mediaTomb.has(mediaTombKey(src.id, "audios", h));
+      const attachmentDeleted = (h: string) => mediaTomb.has(mediaTombKey(src.id, "attachments", h));
       // Drop any surviving ref the user has since deleted from THIS entry.
       const survivingPhotoRefs = (src.photoRefs ?? []).filter((h) => !photoDeleted(h));
       const survivingAudioRefs = (src.audioRefs ?? []).filter((h) => !audioDeleted(h));
       const { photo: _p, photos: _ps, audio: _a, audios: _as,
-              photoRefs: _pr, audioRefs: _aur, photoOrder: _po, audioOrder: _ao, ...rest } = src;
-      const out: CloudEntry = rest;
+              photoRefs: _pr, audioRefs: _aur, photoOrder: _po, audioOrder: _ao,
+              attachmentRefs: _attachments, ...rest } = src;
+      // PDF bytes use the existing private `photos` R2 bucket for backwards
+      // compatibility with the Day One preview references. Only the hash and
+      // metadata go to Firestore; `localData` stays on this device and is queued
+      // for the same content-addressed upload path as a photo.
+      const cloudAttachments: JournalAttachment[] = [];
+      for (const attachment of src.attachmentRefs ?? []) {
+        let hash = attachment.hash;
+        if (attachment.localData) {
+          const localHash = await photoHash(attachment.localData);
+          // Never trust a stale local hash over the bytes currently held.
+          hash = localHash;
+          if (!attachmentDeleted(hash) && !knownPhotos.has(hash)) {
+            newPhotos.set(hash, attachment.localData);
+          }
+          void localMediaPut(hash, attachment.localData);
+        }
+        if (hash && attachmentDeleted(hash)) continue;
+        if (hash) photoRefs.add(hash); // included in the existing photos manifest
+        const { localData: _localData, ...metadata } = attachment;
+        cloudAttachments.push({ ...metadata, ...(hash ? { hash } : {}) });
+      }
+      const out: CloudEntry = {
+        ...rest,
+        ...(cloudAttachments.length ? { attachmentRefs: cloudAttachments } : {}),
+      };
       if (imgs.length || survivingPhotoRefs.length) {
         const refs = await attach(imgs, newPhotos, photoRefs, knownPhotos, photoDeleted);
         mergeSurviving(refs, survivingPhotoRefs, photoRefs);
@@ -1360,6 +1386,10 @@ export async function inventoryMedia(
     const ce = e as { photoRefs?: string[]; audioRefs?: string[] };
     for (const h of ce.photoRefs ?? []) pendingPhotoRefs.add(h);
     for (const h of ce.audioRefs ?? []) pendingAudioRefs.add(h);
+    for (const attachment of e.attachmentRefs ?? []) {
+      if (attachment.localData) photoItems.push(attachment.localData);
+      if (attachment.hash) pendingPhotoRefs.add(attachment.hash);
+    }
   }
   const [photoRefs, audioRefs, cloudPhotos, cloudAudios] = await Promise.all([
     referencedHashes(photoItems),

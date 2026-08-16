@@ -128,6 +128,21 @@ export interface ReadingLog {
   updatedAt?: number;
 }
 
+/** ملفٌ مرفق بالمذكرة. `localData` جهازية فقط ولا تُكتب إلى Firestore؛
+ * `hash` هو مرجع الملف الأصلي في مخزن الوسائط، بينما `previewHash` هو
+ * معاينة الصورة التي يرسلها مستورد الذكريات لبعض مرفقات Day One القديمة. */
+export interface JournalAttachment {
+  kind: "pdf";
+  filename?: string;
+  hash?: string;
+  previewHash?: string;
+  contentType?: string;
+  size?: number;
+  status: string;
+  sourceMediaID?: string;
+  localData?: string;
+}
+
 export interface JournalEntry {
   id: string;
   date: string; // YYYY-MM-DD
@@ -158,7 +173,7 @@ export interface JournalEntry {
   // posterHash أعلاه. status ("uploaded"/"metadataOnly"/"missing"/"failed"،
   // كما وردت من مستورد الذكريات) يُبقي المعرفة بوجود مرفقٍ حتى بلا معاينة.
   // sourceMediaID كما في videoRefs أعلاه.
-  attachmentRefs?: { kind: "pdf"; filename?: string; previewHash?: string; status: string; sourceMediaID?: string }[];
+  attachmentRefs?: JournalAttachment[];
   // بيانات وصفية لملاحظةٍ صوتية من مستورد الذكريات — تُملأ **دائماً** حين
   // يذكر المصدر صوتاً، حتى لو status="metadataOnly" بلا cloudHash (بايتات
   // الصوت القابلة للتشغيل، إن وُجدت، تعيش في audioRefs وحدها؛ هذا الحقل وصفٌ

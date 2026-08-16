@@ -450,7 +450,7 @@ export const useAppStore = create<AppStore>()(
       rawSet(patch as Partial<AppStore>, replace as false);
     }) as typeof rawSet;
 
-    // Record/lift media tombstones when a single photo/voice note is removed
+    // Record/lift media tombstones when a single photo/voice note/PDF is removed
     // (or re-added) within an entry. Async because content hashing is async —
     // the hash MUST equal the ref hash sync uses (both go through mediaHashOf),
     // or the tombstone would never match and the deleted photo would ride back
@@ -496,6 +496,13 @@ export const useAppStore = create<AppStore>()(
       }
       if (updates.audios !== undefined || updates.audio !== undefined) {
         diff(entryAudios(before), entryAudios({ ...before, ...updates }), "audios");
+      }
+      if (updates.attachmentRefs !== undefined) {
+        const attachmentItems = (entry: JournalEntry): string[] =>
+          (entry.attachmentRefs ?? [])
+            .map((a) => a.hash ?? a.localData)
+            .filter((value): value is string => Boolean(value));
+        diff(attachmentItems(before), attachmentItems({ ...before, ...updates }), "attachments");
       }
       if (removed.length || added.length) void applyMediaTombstones(before.id, removed, added);
     };
