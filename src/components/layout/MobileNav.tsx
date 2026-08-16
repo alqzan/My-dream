@@ -1,10 +1,10 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
+import { nativeNavHref } from "@/lib/navHref";
 import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
 import { Modal } from "@/components/ui/Modal";
 
@@ -34,6 +34,7 @@ export function MobileNav() {
   // "المزيد" instead of pointing at the wrong slot.
   const onOverflowPage = overflow.some((item) => normPath(item.href) === pathname);
   const slot = 100 / count;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f4eee2]/85 dark:bg-[#171009]/85 backdrop-blur-lg border-t border-gray-100/70 pb-safe">
@@ -57,9 +58,9 @@ export function MobileNav() {
         {primary.map((item) => {
           const active = normPath(item.href) === pathname;
           return (
-            <Link
+            <a
               key={item.href}
-              href={item.href}
+              href={nativeNavHref(item.href, basePath)}
               aria-label={item.label}
               className={cn(
                 // min-h-[44px]: a comfortable touch target (WCAG 2.2 target-size).
@@ -80,7 +81,7 @@ export function MobileNav() {
                 <item.icon size={20} />
               </span>
               <span className="text-[10.5px] leading-none font-medium whitespace-nowrap">{item.shortLabel ?? item.label}</span>
-            </Link>
+            </a>
           );
         })}
         {overflow.length > 0 && (
@@ -108,9 +109,9 @@ export function MobileNav() {
         <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="بقية الأقسام">
           <div className="grid grid-cols-3 gap-3 pb-1">
             {overflow.map((item) => (
-              <Link
+              <a
                 key={item.href}
-                href={item.href}
+                href={nativeNavHref(item.href, basePath)}
                 onClick={() => setMoreOpen(false)}
                 className="min-h-[44px] flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-gray-50 dark:bg-white/5 press"
               >
@@ -118,7 +119,7 @@ export function MobileNav() {
                   <item.icon size={20} className={item.color} />
                 </span>
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{item.label}</span>
-              </Link>
+              </a>
             ))}
           </div>
         </Modal>

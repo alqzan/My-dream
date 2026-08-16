@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   basePath: basePath || undefined,
   assetPrefix: basePath || undefined,
+  // The mobile bottom bar uses native document links to avoid a stalled RSC
+  // request swallowing a tap. Expose the same path that next/link applies.
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
 };
 
 export default nextConfig;
