@@ -1,7 +1,7 @@
 // مدار — offline service worker.
-// Navigations are network-first (so deploys show up) with a cache fallback for
-// offline; static assets are cache-first. All user data lives in IndexedDB, so
-// caching the shell is enough for the whole app to work with no connection.
+// Navigations are cache-first with a background refresh; static assets are
+// cache-first. All user data lives in IndexedDB, so showing the cached shell
+// immediately keeps navigation responsive while the network catches up.
 //
 // v4: precache. On install we fetch precache.json (generated at build time by
 // scripts/gen-precache.mjs) and cache EVERY route + asset, so a route works
@@ -65,10 +65,28 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     event.respondWith(
       (async () => {
+        // The mobile bar uses native document links so it cannot be blocked by
+        // an App Router RSC request. Return the precached HTML immediately;
+        // waiting for GitHub Pages here made every tap look like a spinner.
+        const cached = await caches.match(req);
+        if (cached) {
+          event.waitUntil(
+            (async () => {
+              try {
+                const res = await fetch(req, { cache: "no-store" });
+                if (res.ok && (res.type === "basic" || res.type === "default")) {
+                  await putAndTrim(req, res.clone());
+                }
+              } catch {
+                /* cached navigation is already available while offline */
+              }
+            })()
+          );
+          return cached;
+        }
+
         try {
           const res = await fetch(req);
-          // Tie the cache write to the event so the SW isn't terminated before
-          // it finishes (the old code let this race).
           event.waitUntil(putAndTrim(req, res.clone()));
           return res;
         } catch {

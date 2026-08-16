@@ -73,6 +73,20 @@ function loadWorker(opts: { cached?: string[]; fetchImpl?: (r: FakeReq) => Promi
 }
 
 describe("service worker · حمولةُ تنقّل RSC", () => {
+  it("تعرض الصفحة المسبقة التخزين فوراً قبل تحديثها من الشبكة", async () => {
+    const cachedUrl = "https://example.test/journal/";
+    const { handle, fetchSpy } = loadWorker({
+      cached: [cachedUrl],
+      // If navigation waited for this request, the test would never finish.
+      fetchImpl: () => new Promise(() => {}),
+    });
+
+    const res = await handle(req(cachedUrl, "navigate"));
+
+    expect(res).toBeTruthy();
+    expect(fetchSpy).toHaveBeenCalledOnce(); // background refresh only
+  });
+
   it("تُخدَم من الخزن المسبق رغم اختلاف `?_rsc=` — بلا شبكة", async () => {
     const { handle, fetchSpy } = loadWorker({ cached: ["https://example.test/journal/index.txt"] });
 
