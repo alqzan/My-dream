@@ -12,6 +12,37 @@
 const CACHE = "madar-__BUILD__";
 const MAX_ENTRIES = 200;
 
+// ===== الخزن المسبق لا يمسّه التشذيب =====
+// `cache.keys()` تحفظ ترتيب الإدخال، فأقدمُ المدخلات هي مدخلاتُ التثبيت نفسها:
+// أوجهُ المسارات وحزمُ JS التي يقوم عليها التطبيق. فما إن يتجاوز مجموعُ
+// المدخلات السقفَ حتى يبدأ التشذيب بأكل الخزن المسبق من رأسه، فتخيب المطابقةُ
+// ويذهب الطلب إلى الشبكة — وعلى جوّالٍ شبكتُه نائمة يعني ذلك حزمةً لا تصل، أي
+// `ChunkLoadError`، أي `error.tsx` يمحو الخزن ويعيد التحميل: يُقذف المالك من
+// مكانه إلى شاشة «مدار». عددُ الحزم يكبر مع كلّ ميزة (78 حزمةً اليوم من 116
+// مدخلاً)، فبلوغُ السقف مسألةُ وقتٍ لا احتمالٌ بعيد.
+//
+// والقائمة تُحفظ **في الخزن نفسه** لا في متغيّرٍ عامّ: العاملُ يُوقَظ ويُوقَف بلا
+// حالةٍ تعبر، فقائمةٌ في الذاكرة تضيع عند أوّل إيقاف ويعود التشذيب يأكل الخزن.
+const manifestKey = () => new URL("precache.json", self.registration.scope).href;
+
+let precachedPromise = null;
+function precachedUrls() {
+  if (!precachedPromise) {
+    precachedPromise = (async () => {
+      try {
+        const cache = await caches.open(CACHE);
+        const res = await cache.match(manifestKey());
+        if (!res) return new Set();
+        const { urls } = await res.json();
+        return new Set((urls ?? []).map((u) => new URL(u, location.origin).href));
+      } catch {
+        return new Set(); // بلا قائمة لا نشذّب شيئاً — الأسلم
+      }
+    })();
+  }
+  return precachedPromise;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -23,6 +54,9 @@ self.addEventListener("install", (event) => {
           // Cache each entry independently so one failed asset (a 404 on an old
           // deploy, a flaky fetch) can't abort the whole install like addAll would.
           await Promise.allSettled((urls ?? []).map((u) => cache.add(u)));
+          // القائمة نفسها في الخزن: يقرأها التشذيب بعد أيّ إيقاظٍ للعامل.
+          await cache.put(manifestKey(), new Response(JSON.stringify({ urls: urls ?? [] })));
+          precachedPromise = null;
         }
       } catch {
         /* offline install or missing manifest — runtime caching still fills in */
@@ -45,14 +79,19 @@ self.addEventListener("activate", (event) => {
 // insertion order, so the oldest entries (typically stale hashed chunks from
 // past deploys) are the first evicted. A still-referenced asset that gets
 // trimmed is simply re-fetched on next need — cache-first falls back to network.
+//
+// لكنّ الخزن المسبق مستثنى (السبب في تعليق `precachedUrls` أعلاه): ما دخل عند
+// التثبيت هو التطبيقُ نفسه، وإخراجُه من الخزن يُبطل العمل دون شبكة ويحوّل أوّلَ
+// حزمةٍ متأخّرة إلى إعادة تحميلٍ كاملة. فالسقفُ سقفُ ما أضافه التشغيل وحده.
 async function putAndTrim(req, res) {
   const cache = await caches.open(CACHE);
   await cache.put(req, res);
   const keys = await cache.keys();
-  if (keys.length > MAX_ENTRIES) {
-    for (const old of keys.slice(0, keys.length - MAX_ENTRIES)) {
-      await cache.delete(old);
-    }
+  if (keys.length <= MAX_ENTRIES) return; // فحصٌ رخيص قبل قراءة القائمة
+  const precached = await precachedUrls();
+  const evictable = keys.filter((k) => !precached.has(k.url) && k.url !== manifestKey());
+  for (const old of evictable.slice(0, evictable.length - MAX_ENTRIES)) {
+    await cache.delete(old);
   }
 }
 

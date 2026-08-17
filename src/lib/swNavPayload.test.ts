@@ -22,6 +22,9 @@ class FakeCache {
   async put(r: FakeReq | string, res: unknown) {
     this.entries.set(typeof r === "string" ? r : r.url, res);
   }
+  async add(url: string) {
+    this.entries.set(url, { url, ok: true, type: "basic", clone: () => ({ url }) });
+  }
   async match(r: FakeReq | string, opts: { ignoreSearch?: boolean } = {}) {
     const url = typeof r === "string" ? r : r.url;
     if (this.entries.has(url)) return this.entries.get(url);
@@ -39,7 +42,7 @@ class FakeCache {
 }
 
 /** Loads public/sw.js into a stub worker scope and returns its fetch handler. */
-function loadWorker(opts: { cached?: string[]; fetchImpl?: (r: FakeReq) => Promise<unknown> } = {}) {
+function loadWorker(opts: { cached?: string[]; fetchImpl?: (r: FakeReq | URL) => Promise<unknown> } = {}) {
   const cache = new FakeCache();
   for (const url of opts.cached ?? []) cache.entries.set(url, { url, ok: true, type: "basic", clone: () => ({ url }) });
 
@@ -64,12 +67,25 @@ function loadWorker(opts: { cached?: string[]; fetchImpl?: (r: FakeReq) => Promi
   new Function("self", "caches", "fetch", "location", SW_SRC)(self, caches, fetchSpy, location);
 
   const onFetch = listeners.get("fetch")!;
+  // وعودُ `waitUntil` تُجمَع بدل أن تُرمى: عملُ الخلفية (الخزن والتشذيب) يقع
+  // فيها، فاختبارُه يحتاج انتظارَها صراحةً — والاختبارات التي لا تعنيها تتجاهلها.
+  const waits: Promise<unknown>[] = [];
   const handle = async (request: FakeReq) => {
     let responded: Promise<unknown> | undefined;
-    onFetch({ request, respondWith: (p: Promise<unknown>) => { responded = p; }, waitUntil: () => {} });
+    onFetch({
+      request,
+      respondWith: (p: Promise<unknown>) => { responded = p; },
+      waitUntil: (p: Promise<unknown>) => { waits.push(p); },
+    });
     return responded === undefined ? undefined : await responded;
   };
-  return { handle, fetchSpy, cache };
+  const install = async () => {
+    let done: Promise<unknown> | undefined;
+    listeners.get("install")!({ waitUntil: (p: Promise<unknown>) => { done = p; } });
+    await done;
+  };
+  const settleWaits = async () => { await Promise.allSettled(waits.splice(0)); };
+  return { handle, fetchSpy, cache, install, settleWaits };
 }
 
 describe("service worker · حمولةُ تنقّل RSC", () => {
@@ -117,6 +133,47 @@ describe("service worker · حمولةُ تنقّل RSC", () => {
     await handle(req("https://example.test/stats/index.txt?_rsc=abc"));
 
     expect([...cache.entries.keys()]).toEqual(["https://example.test/stats/index.txt"]);
+  });
+
+  // ===== حارسُ الخزن المسبق =====
+  // `cache.keys()` بترتيب الإدخال، فأقدمُ المدخلات مدخلاتُ التثبيت. وكان التشذيب
+  // يحذف الأقدم بلا تمييز، فما إن يتجاوز الخزنُ سقفه حتى يأكل التطبيقَ نفسه:
+  // حزمةٌ محذوفة → طلبٌ للشبكة → `ChunkLoadError` على شبكةٍ نائمة → `error.tsx`
+  // يمحو كلّ شيءٍ ويعيد التحميل، فيُقذف المالك من مكانه إلى شاشة «مدار».
+  it("التشذيب لا يأكل الخزن المسبق مهما تجاوز السقف", async () => {
+    const urls = Array.from({ length: 205 }, (_, i) => `https://example.test/_next/static/c${i}.js`);
+    const manifest = { ok: true, json: async () => ({ urls }) };
+    const asset = { url: "new", ok: true, type: "basic", clone: () => ({ url: "new" }) };
+    const { handle, cache, install, settleWaits } = loadWorker({
+      fetchImpl: async (r: FakeReq | URL) => (String(r).endsWith("precache.json") ? manifest : asset),
+    });
+
+    await install();
+    expect(cache.entries.size).toBe(urls.length + 1); // + قائمةُ الخزن المسبق
+
+    // أصلٌ جديد وقت التشغيل يتجاوز بالخزن سقفَه.
+    await handle(req("https://example.test/_next/static/runtime-new.js"));
+    await settleWaits();
+
+    for (const u of urls) expect(cache.entries.has(u)).toBe(true);
+  });
+
+  it("يشذّب ما أضافه التشغيل وحده حين يتجاوز سقفَه", async () => {
+    const manifest = { ok: true, json: async () => ({ urls: ["https://example.test/quran/"] }) };
+    const asset = { url: "new", ok: true, type: "basic", clone: () => ({ url: "new" }) };
+    const { handle, cache, install, settleWaits } = loadWorker({
+      fetchImpl: async (r: FakeReq | URL) => (String(r).endsWith("precache.json") ? manifest : asset),
+    });
+
+    await install();
+    for (let i = 0; i < 201; i++) {
+      await handle(req(`https://example.test/_next/static/r${i}.js`));
+      await settleWaits(); // كتابةٌ ثمّ تشذيبٌ بترتيبٍ معلوم
+    }
+
+    expect(cache.entries.has("https://example.test/quran/")).toBe(true); // الخزن المسبق سليم
+    expect(cache.entries.has("https://example.test/_next/static/r0.js")).toBe(false); // أقدمُ ما أضافه التشغيل
+    expect(cache.entries.has("https://example.test/_next/static/r200.js")).toBe(true);
   });
 
   it("الأصول العادية تبقى على المطابقة التامّة (لا يمسّها `ignoreSearch`)", async () => {

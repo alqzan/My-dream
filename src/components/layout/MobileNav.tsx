@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
-import { nativeNavHref } from "@/lib/navHref";
+import { isPlainClick, nativeNavHref } from "@/lib/navHref";
 import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
 import { Modal } from "@/components/ui/Modal";
 
@@ -14,8 +14,14 @@ import { Modal } from "@/components/ui/Modal";
 // route.
 const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
 
+// شبكةُ الأمان: إن لم يقع التنقّل الداخليّ خلال هذه المهلة (حمولةُ المسار
+// متعلّقةٌ على شبكةٍ نائمة) ننتقل انتقالاً أصلياً بالرابط نفسه. فالنقرة لا تذهب
+// سدىً أبداً — وهي العلّة التي وُلدت منها الروابط الأصلية أوّلاً.
+const SOFT_NAV_FALLBACK_MS = 1200;
+
 export function MobileNav() {
   const pathname = normPath(usePathname());
+  const router = useRouter();
   // Read once on mount (a saved preference change reloads the page — same
   // pattern as SyncKeyCard — so this never needs to react live).
   const [prefs] = useState(() => loadNavPrefs());
@@ -35,6 +41,32 @@ export function MobileNav() {
   const onOverflowPage = overflow.some((item) => normPath(item.href) === pathname);
   const slot = 100 / count;
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+  // ===== نقرةُ التبويب تنقّلٌ داخليّ، لا إعادةَ إقلاعٍ للتطبيق =====
+  // الروابط الأصلية كانت تُعيد تحميل المستند كاملاً عند **كلّ** تبويب، وإعادةُ
+  // التحميل في «مدار» ليست رخيصة: `ClientOnly` يحجب الواجهة كلّها خلف شاشة
+  // «مدار» حتى يُرطَّب المتجر من IndexedDB، ثمّ يبدأ `SyncProvider` دورةَ
+  // مزامنةٍ كاملة (قراءةُ المستند وshards المذكرات · دمج · ترطيبُ وسائط حتى
+  // 8MB · كتابةٌ راجعة). فبدا التنقّل بين التبويبات تعليقاً، وضاعت كلُّ حالةٍ
+  // في الذاكرة مع كلّ ضغطة — ومنها موضعُ المراجعة في القرآن (`HifzCoach` يحفظ
+  // موضعه في حالة React لا في المتجر، فإعادةُ التحميل تُخرج المالك من المراجعة).
+  // والشريط الجانبي على الحاسوب لم يُصَب لأنه بقي على `next/link`.
+  //
+  // يبقى `href` أصلياً على الرابط: يعمل قبل الترطيب، ومع الضغط المطوّل وفتحِ
+  // تبويبٍ جديد، وهو نفسُه ما تستعمله شبكةُ الأمان أدناه. فلا تعود نقرةٌ ميّتة.
+  const pendingRef = useRef<string | null>(null);
+  const go = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isPlainClick(e)) return; // ضغطةٌ بمُعدِّل — سلوكُ الرابط للمستخدم
+    e.preventDefault();
+    const target = nativeNavHref(href, basePath);
+    pendingRef.current = target;
+    router.push(href);
+    window.setTimeout(() => {
+      if (pendingRef.current !== target) return; // ألغتها نقرةٌ أحدث
+      if (normPath(window.location.pathname) === normPath(target)) return; // وصلنا
+      window.location.href = target;
+    }, SOFT_NAV_FALLBACK_MS);
+  };
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f4eee2]/85 dark:bg-[#171009]/85 backdrop-blur-lg border-t border-gray-100/70 pb-safe">
@@ -61,6 +93,7 @@ export function MobileNav() {
             <a
               key={item.href}
               href={nativeNavHref(item.href, basePath)}
+              onClick={go(item.href)}
               aria-label={item.label}
               className={cn(
                 // min-h-[44px]: a comfortable touch target (WCAG 2.2 target-size).
@@ -112,7 +145,10 @@ export function MobileNav() {
               <a
                 key={item.href}
                 href={nativeNavHref(item.href, basePath)}
-                onClick={() => setMoreOpen(false)}
+                onClick={(e) => {
+                  setMoreOpen(false);
+                  go(item.href)(e);
+                }}
                 className="min-h-[44px] flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-gray-50 dark:bg-white/5 press"
               >
                 <span className={cn("flex items-center justify-center rounded-full p-2", item.tint)}>

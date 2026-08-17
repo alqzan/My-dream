@@ -12,8 +12,9 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   basePath: basePath || undefined,
   assetPrefix: basePath || undefined,
-  // The mobile bottom bar uses native document links to avoid a stalled RSC
-  // request swallowing a tap. Expose the same path that next/link applies.
+  // الشريط السفلي يكتب `href` أصلياً على روابطه (تعمل قبل الترطيب، ومع الضغط
+  // المطوّل، وكشبكةِ أمانٍ إن تعثّر التنقّل الداخليّ) — فيحتاج المسارَ الذي
+  // يضيفه `next/link` عنّا على GitHub Pages.
   env: { NEXT_PUBLIC_BASE_PATH: basePath },
 };
 
