@@ -21,7 +21,7 @@ function bookPace(book: Book, logs: ReadingLog[]) {
   const remaining = book.totalPages - book.currentPage;
   const daysLeft = avgPerDay > 0 ? Math.ceil(remaining / avgPerDay) : null;
   const finishDate = daysLeft
-    ? new Date(Date.now() + daysLeft * 86400000).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    ? new Date(Date.now() + daysLeft * 86400000).toLocaleDateString("ar-SA-u-ca-gregory-nu-arab", {
         month: "long",
         day: "numeric",
       })

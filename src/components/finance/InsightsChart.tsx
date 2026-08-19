@@ -5,6 +5,9 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, ReferenceLine,
 } from "recharts";
+// علاماتُ المحور من `<tspan>` يعيد recharts رسمَها مع كلّ تحريك، فتُنسَّق من
+// مصدرها لا بمحوِّل الأرقام العامّ.
+import { toIndicDigits } from "@/lib/utils";
 import { SECTION } from "@/lib/palette";
 
 interface ChartPoint {
@@ -35,6 +38,7 @@ export function InsightsChart({ data, period, maxBar, dailyBudgetAmount, format 
           axisLine={false}
           tickLine={false}
           interval={period === "شهر" ? 4 : 0}
+          tickFormatter={(v: string) => toIndicDigits(String(v))}
         />
         <YAxis hide domain={[0, Math.max(maxBar, showBudgetLine ? dailyBudgetAmount! * 1.15 : 0)]} />
         <Tooltip

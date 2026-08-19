@@ -43,6 +43,20 @@ export function normalizeArabic(s: string): string {
 // Convert Arabic-Indic (٠-٩) and Persian/Extended (۰-۹) digits — plus the
 // Arabic decimal separator (٫) — to their Latin equivalents, so numbers typed
 // on an Arabic keyboard are accepted and stored as plain ASCII everywhere.
+const INDIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+
+/**
+ * حوِّل الأرقامَ اللاتينية في نصٍّ إلى هندية — **البوّابةُ الوحيدة** لذلك في
+ * التطبيق. تُستعمل لِما لا يمرّ بمنسّقِ `Intl` (نصٌّ مركَّب، عدٌّ عربيّ،
+ * قيمةٌ تُدرَج في جملة).
+ *
+ * لا تُمرّر عليها مفتاحَ تاريخٍ (`YYYY-MM-DD`) ولا معرّفاً ولا أيّ قيمةٍ
+ * تُخزَّن أو تُقارَن — هذه للعرض وحده.
+ */
+export function toIndicDigits(s: string): string {
+  return s.replace(/[0-9]/g, (d) => INDIC_DIGITS[Number(d)]);
+}
+
 export function toLatinDigits(s: string): string {
   return s
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
@@ -102,14 +116,16 @@ export function keepValidDate(next: string, current: string): string {
 // Intl formatters are expensive to construct, so build each once at module
 // level and reuse it — with hundreds of journal/finance cards rendering, a
 // fresh formatter per call was a measurable chunk of render time.
-// Gregorian calendar + Latin digits so server (build) and client render
-// identically — avoids hydration mismatches from ar-SA's Hijri default.
-const gregLongFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+// التقويمُ ميلاديٌّ **ونظامُ الأرقام مثبَّتٌ صراحةً** (`-u-nu-arab`) لا متروكٌ
+// لافتراضِ `ar-SA`: التثبيتُ هو ما يجعل الخادمَ (البناء) والعميلَ يرسمان النصَّ
+// نفسَه فلا يقع تعارضُ ترطيب. كانت القيمةُ `-u-nu-latn` للسبب ذاته، ثمّ قرّر
+// المالك أن تكون **الأرقام كلُّها هندية** — فتغيّر النظامُ ولم يتغيّر المبدأ.
+const gregLongFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", {
   year: "numeric",
   month: "long",
   day: "numeric",
 });
-const gregShortFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+const gregShortFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-arab", {
   month: "short",
   day: "numeric",
 });
@@ -128,7 +144,7 @@ export function formatDateShort(dateStr: string) {
 export function hijriDate(dateStr: string) {
   try {
     const d = parseDate(dateStr);
-    const formatted = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+    const formatted = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", {
       day: "numeric",
       month: "long",
       year: "numeric",
@@ -144,7 +160,7 @@ export function hijriDate(dateStr: string) {
 // calendars to print the Hijri day beside the Gregorian one in each cell.
 const hijriDayFmt =
   typeof Intl !== "undefined"
-    ? new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", { day: "numeric" })
+    ? new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", { day: "numeric" })
     : null;
 
 export function hijriDay(dateStr: string): string {
@@ -159,8 +175,8 @@ export function hijriDay(dateStr: string): string {
 // A Gregorian month always spans one or two Hijri months.
 export function hijriMonthLabel(year: number, month: number): string {
   try {
-    const fmtMonth = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", { month: "long" });
-    const fmtYear = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", { year: "numeric" });
+    const fmtMonth = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", { month: "long" });
+    const fmtYear = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-arab", { year: "numeric" });
     const first = new Date(year, month, 1);
     const last = new Date(year, month + 1, 0);
     const m1 = fmtMonth.format(first);
@@ -307,7 +323,7 @@ export function getCachedCoords(): { lat: number; lng: number } {
 }
 
 export function formatClock(d: Date): string {
-  return d.toLocaleTimeString("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString("ar-SA-u-nu-arab", { hour: "numeric", minute: "2-digit" });
 }
 
 // Tiny haptic tick on satisfying actions (habit done, prayer logged).
@@ -325,7 +341,7 @@ export function yearProgress(now = new Date()): number {
   return Math.round(((now.getTime() - start) / (end - start)) * 100);
 }
 
-const amountFmt = new Intl.NumberFormat("ar-SA-u-nu-latn", {
+const amountFmt = new Intl.NumberFormat("ar-SA-u-nu-arab", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
@@ -875,17 +891,18 @@ export function arabicMonthName(month: number): string {
  * صياغةُ عددٍ بالعربية على قواعده الأربع بدل «3 مذكرات» و«11 مذكرات»:
  * مفردٌ (١) · مثنّى (٢) · جمعُ قلّةٍ مسبوقٌ بالعدد (٣–١٠) · تمييزٌ مفردٌ
  * مسبوقٌ بالعدد (١١ فأكثر). الصفر يأخذ صيغة الجمع كالمعتاد («0 مذكرات»).
- * الأرقام لاتينية كبقية أرقام التطبيق — لا تمرّ بـ`toLocaleString("ar-SA")`.
+ * الأرقام **هندية** كبقية أرقام التطبيق (عبر `toIndicDigits`) — لا تمرّ
+ * بـ`toLocaleString("ar-SA")` المجرّدة، فنظامُ الأرقام يُثبَّت لا يُترَك للافتراض.
  */
 export function arabicCount(
   n: number,
   forms: { zero?: string; one: string; two: string; few: string; many: string }
 ): string {
-  if (n === 0) return forms.zero ?? `0 ${forms.few}`;
+  if (n === 0) return forms.zero ?? `${toIndicDigits("0")} ${forms.few}`;
   if (n === 1) return forms.one;
   if (n === 2) return forms.two;
-  if (n <= 10) return `${n} ${forms.few}`;
-  return `${n} ${forms.many}`;
+  if (n <= 10) return `${toIndicDigits(String(n))} ${forms.few}`;
+  return `${toIndicDigits(String(n))} ${forms.many}`;
 }
 
 /** «مذكرة · مذكرتان · ٣ مذكرات · ١١ مذكرة» — أكثر عدّادٍ يتكرّر في المذكرات. */

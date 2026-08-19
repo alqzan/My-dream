@@ -31,5 +31,5 @@ export function AnimatedNumber({ value, duration = 900, format }: AnimatedNumber
   }, [value, duration]);
 
   const rounded = Math.round(display);
-  return <span>{format ? format(rounded) : rounded.toLocaleString("ar-SA-u-nu-latn")}</span>;
+  return <span>{format ? format(rounded) : rounded.toLocaleString("ar-SA-u-nu-arab")}</span>;
 }

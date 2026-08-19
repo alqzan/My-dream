@@ -58,6 +58,7 @@ import { UpdatePrompt } from "@/components/layout/UpdatePrompt";
 import { ViewportWatcher } from "@/components/layout/ViewportWatcher";
 import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
+import { IndicDigits } from "@/components/layout/IndicDigits";
 import { SyncProvider } from "@/components/sync/SyncProvider";
 import { PendingInboxWatcher } from "@/components/finance/PendingInboxWatcher";
 import { RecurringRunner } from "@/components/finance/RecurringRunner";
@@ -108,6 +109,8 @@ export default function RootLayout({
           <SWRegister bp={bp} />
           <ViewportWatcher />
           <ThemeApplier />
+          {/* الأرقامُ الهندية في كلّ التطبيق — يقع بعد الترطيب فلا تعارض. */}
+          <IndicDigits />
           <PrivacyLock>
             <SyncProvider>
               <div className="min-h-screen flex">

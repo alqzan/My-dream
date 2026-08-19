@@ -49,7 +49,7 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
 
   const d = parseDate(dateStr);
   suggestions.push(`خواطر ${WEEKDAYS[d.getDay()]}`);
-  suggestions.push(`صفحة من دفتر ${d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "long" })}`);
+  suggestions.push(`صفحة من دفتر ${d.toLocaleDateString("ar-SA-u-ca-gregory-nu-arab", { month: "long" })}`);
 
   return [...new Set(suggestions)].slice(0, 4);
 }

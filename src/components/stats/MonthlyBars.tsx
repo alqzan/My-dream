@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { toIndicDigits } from "@/lib/utils";
 
 // Warm serif tooltip in the app's display font, on a soft cream card — matches
 // the instruments' warm palette instead of recharts' plain white/sans box.
@@ -44,8 +45,25 @@ export function MonthlyBars({ data, dataKey, color, cursorFill, yWidth, format }
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} barGap={2}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={GRID_GOLD} strokeOpacity={0.22} />
-        <XAxis dataKey="name" reversed tick={tickStyle} axisLine={false} tickLine={false} />
-        <YAxis orientation="right" tick={{ ...tickStyle, fontSize: 10 }} axisLine={false} tickLine={false} width={yWidth} />
+        <XAxis
+          dataKey="name"
+          reversed
+          tick={tickStyle}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={(v: string) => toIndicDigits(String(v))}
+        />
+        {/* علاماتُ المحور يرسمها recharts في `<tspan>` ويعيد رسمَها مع كلّ
+            تحريك — فلا تُترك لمحوِّل الأرقام العامّ (يسابقه فيظهر لاتينياً
+            لحظةً)، بل تُنسَّق من مصدرها هنا. */}
+        <YAxis
+          orientation="right"
+          tick={{ ...tickStyle, fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          width={yWidth}
+          tickFormatter={(v: number) => toIndicDigits(String(v))}
+        />
         <Tooltip
           formatter={(v: number) => [format(v), ""]}
           contentStyle={tooltipStyle}

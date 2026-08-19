@@ -51,7 +51,11 @@ export default function SettingsPage() {
       <footer className="pt-6 pb-2 flex flex-col items-center gap-1.5 animate-fade-up stagger-4">
         <BrandMark size={30} />
         <p className="text-base font-bold text-gray-500 dark:text-gray-400">مدار</p>
-        <p className="text-xs text-gray-400">مساحتك الشخصية · الإصدار {APP_VERSION}</p>
+        {/* رقمُ الإصدار **معرّفٌ لا كمّية** — يبقى لاتينياً كما يُكتب في
+            package.json وفي الوسوم، فيُقارَن ويُنسخ كما هو. */}
+        <p className="text-xs text-gray-400">
+          مساحتك الشخصية · الإصدار <span data-digits="latin">{APP_VERSION}</span>
+        </p>
         <p className="text-[10px] text-gray-300 dark:text-gray-500">التعديل رقم {APP_BUILD} منذ أوّل نسخة مستقرة</p>
       </footer>
     </div>

@@ -219,7 +219,11 @@ export function DataHealthCard() {
         </div>
         <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1.5" dir="rtl">
           <span>المستند الرئيسي: {mainKb}KB</span>
-          <span>{info.shardId ? `أكبر شهر (${info.shardId}): ${shardKb}KB` : "لا مذكرات بعد"}</span>
+          {/* `shardId` مفتاحُ shard (`YYYY-MM`) لا تاريخٌ يُقرأ — يبقى لاتينياً
+              ليطابق ما في Firestore حين يقارنه المالك بعينه. */}
+          <span data-digits="latin">
+            {info.shardId ? `أكبر شهر (${info.shardId}): ${shardKb}KB` : "لا مذكرات بعد"}
+          </span>
         </div>
         {pct >= 75 ? (
           <p className="text-[11px] text-red-600 font-semibold mt-1.5 leading-relaxed">
@@ -260,7 +264,7 @@ export function DataHealthCard() {
           )}
           {lastSyncedAt && (
             <span className="text-gray-400 mr-auto">
-              آخر مزامنة: {new Date(lastSyncedAt).toLocaleTimeString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit" })}
+              آخر مزامنة: {new Date(lastSyncedAt).toLocaleTimeString("ar-SA-u-nu-arab", { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
         </div>

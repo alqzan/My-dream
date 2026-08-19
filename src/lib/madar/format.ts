@@ -1,68 +1,56 @@
 /**
  * تنسيقُ الأرقام في الشاشات المنقولة من تصميم مدار.
  *
- * **قاعدةٌ فيها تعارضٌ محسوم هنا في موضعٍ واحد:** `CLAUDE.md` يقول «أرقامٌ
- * لاتينية» ويقصد بها المبالغ (`formatAmount` عبر `ar-SA-u-nu-latn`)، بينما
- * ملفُّ المزامنة `github.md` في مشروع التصميم يقرّر: **هنديةٌ للأعداد
- * والتواريخ، ولاتينيةٌ للمبالغ المالية**. والتصميمُ المصدر يرسم الأعدادَ
- * هنديةً فعلاً (`٣ من ٧ أيام` · `آخرُ ثلاثين ليلة`).
+ * **القاعدةُ الآن: الأرقام كلُّها هندية** — بقرار المالك، والمبالغُ منها.
+ * (كانت `CLAUDE.md` تقول «لاتينية» وكان `github.md` يستثني المبالغ؛ حُسم
+ * الأمر إلى الهندية في كلّ موضع، وحُدِّثت `CLAUDE.md` تبعاً لذلك.)
  *
- * فكلُّ عددٍ في الشاشات المنقولة يمرّ من `arNum` وحدَها، ولا يُكتب رقمٌ
- * بيدك في مكوّن. إن قرّر المالكُ لاحقاً العكسَ فالعدولُ سطرٌ واحد هنا،
- * لا مراجعةُ خمسِ شاشات.
+ * التحويلُ نفسُه في `utils.ts#toIndicDigits` — **بوّابةٌ واحدةٌ لا نسختان**،
+ * فلا يفترق سلوكُ شاشةٍ منقولةٍ عن شاشةٍ لم تُنقل بعد. وما هنا لفٌّ لها بصيغٍ
+ * يحتاجها التصميم (عدٌّ عربيّ · نسبة · ساعة · تاريخٌ هجريٌّ بلا سنة).
  *
- * المبالغُ لا تمرّ من هنا أبداً — لها `formatAmount` في `utils.ts`.
+ * **لا تُمرّر على هذه الدوالّ قيمةً تُخزَّن أو تُقارَن** — مفاتيحُ التواريخ
+ * والمعرّفاتُ تبقى لاتينيةً كما هي؛ هذه للعرض وحده.
  */
+import { toIndicDigits, arabicCount, formatAmount } from "../utils";
 
-const INDIC = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+export { toIndicDigits };
 
-/** حوّل كلَّ رقمٍ لاتينيٍّ في النصّ إلى هنديّ. */
-export function toIndicDigits(s: string): string {
-  return s.replace(/[0-9]/g, (d) => INDIC[Number(d)]);
-}
-
-/** عددٌ للعرض في الشاشات المنقولة — هنديٌّ بحسب التصميم. */
+/** عددٌ للعرض — هنديّ. */
 export function arNum(n: number): string {
   return toIndicDigits(String(n));
 }
 
 /**
- * عدٌّ عربيٌّ صحيحُ الصيغة بأرقامٍ هندية — نظيرُ `arabicCount` في `utils.ts`
- * الذي يُخرج أرقاماً لاتينية. نلفُّه بدل أن ننسخ منطقَ الصيغ.
+ * عدٌّ عربيٌّ صحيحُ الصيغة. لفٌّ لـ`arabicCount` في `utils.ts` (وهي هنديةٌ
+ * أصلاً الآن) حتى لا يكون لصياغة المفرد/المثنّى/الجمع تعريفان.
  */
-export function arCount(
-  n: number,
-  forms: { zero?: string; one: string; two: string; few: string; many: string }
-): string {
-  if (n === 0) return forms.zero ?? `${arNum(0)} ${forms.few}`;
-  if (n === 1) return forms.one;
-  if (n === 2) return forms.two;
-  if (n <= 10) return `${arNum(n)} ${forms.few}`;
-  return `${arNum(n)} ${forms.many}`;
-}
+export const arCount = arabicCount;
 
 /** نسبةٌ مئوية بأرقامٍ هندية، بلا كسور. */
 export function arPct(ratio: number): string {
   return `${arNum(Math.round(ratio * 100))}٪`;
 }
 
+/** مبلغٌ ماليّ — هنديٌّ كبقيّة الأرقام (`formatAmount` تُخرجه هندياً الآن). */
+export const arAmount = formatAmount;
+
 /**
- * وقتٌ للعرض في الشاشات المنقولة. `formatClock` في `utils.ts` تُخرج أرقاماً
- * لاتينية (`nu-latn`) عمداً لبقيّة التطبيق؛ والتصميمُ يكتب المواقيتَ هنديةً
- * («الفجر ٤:٥٢»)، فنحوّلها هنا بدل أن نُنشئ منسّقاً ثانياً.
+ * وقتٌ للعرض. `formatClock` صارت هنديةً في `utils.ts`، فهذه تُبقي موضعَ
+ * النداء واحداً في الشاشات المنقولة ولا تحوّل مرّتين.
  */
 export function arClock(d: Date, format: (d: Date) => string): string {
   return toIndicDigits(format(d));
 }
 
-/** تاريخٌ هجريٌّ بلا سنةٍ وبأرقامٍ هندية — «٦ ربيع الأول». */
+/** تاريخٌ هجريٌّ بلا سنةٍ — «٦ ربيع الأول». */
 export function arHijriDayMonth(hijri: string): string {
-  return toIndicDigits(hijri.replace(/\s*\d+\s*هـ\s*$/, "").trim());
+  return toIndicDigits(hijri.replace(/\s*[\d٠-٩]+\s*هـ\s*$/, "").trim());
 }
 
 /**
  * مدّةٌ مختصرةٌ للعرض: ساعاتٌ إن بلغت الستّين، وإلّا دقائق — «بعد ١١ ساعة»
- * أو «منذ ٤٠ د». تأخذ الدقائقَ المطلقة، والاتّجاهُ من نداءِ المستدعي.
+ * أو «منذ ٤٠ د». تأخذ الدقائقَ، والاتّجاهُ من نداءِ المستدعي.
  */
 export function arSpan(minutes: number): string {
   const v = Math.abs(Math.round(minutes));
