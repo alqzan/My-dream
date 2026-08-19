@@ -64,7 +64,9 @@ export function MergeBadge({ sources }: { sources: MergedSource[] }) {
                   {displayTime(s.time) ?? "—"}
                 </span>
                 <span className="flex-1 min-w-0 truncate text-gray-600">
-                  {plainTitle(s.title) || "بلا عنوان"}
+                  {/* بلا عنوانٍ لا نكتب «بلا عنوان»: الوقتُ وعددُ الحروف حوله
+                      يعرّفان المقطع، والعبارةُ المكرَّرة ضجيجٌ لا خبر. */}
+                  {plainTitle(s.title)}
                 </span>
                 <span className="text-gray-400 tabular-nums shrink-0">
                   {s.chars} حرفاً

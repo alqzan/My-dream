@@ -211,11 +211,20 @@ export const QUESTION_LIBRARY: QuestionCategory[] = [
 
 export const ALL_QUESTIONS: string[] = QUESTION_LIBRARY.flatMap((c) => c.questions);
 
-// Deterministic pick: نفس السؤال طوال اليوم مهما أُعيد فتح التطبيق.
+/**
+ * سؤالُ اليوم — حتميٌّ **وسنويّ**: المفتاحُ يومٌ وشهرٌ بلا سنة، فيعود السؤالُ
+ * نفسُه في مثل هذا اليوم من كلّ عام.
+ *
+ * كان المفتاحُ يشمل السنة، فسؤالُ اليوم غيرُ سؤال العام الماضي — بينما تعرض
+ * الشاشةُ مذكرةَ العام الماضي تحت عنوان «جوابُك على السؤال نفسه قبل سنة».
+ * كان ذلك **خبراً كاذباً**: نصٌّ لا علاقة له بالسؤال المعروض. وبهذا المفتاح
+ * صارت العبارةُ صادقة، وصار للسؤال معنًى: تقارن جوابَك بجوابك.
+ */
 export function dailyQuestion(dateStr: string): string {
+  const key = dateStr.length >= 10 ? dateStr.slice(5) : dateStr; // MM-DD
   let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
   }
   return ALL_QUESTIONS[hash % ALL_QUESTIONS.length];
 }

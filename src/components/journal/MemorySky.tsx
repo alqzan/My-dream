@@ -197,7 +197,11 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
       const doy = dayOfYear(`${c.key}-15`);
       const f = 0.42 + hashFrac(c.key, 0x51ed) * 0.5;
       const { x, y } = domePoint(baseAngle(doy), f);
-      const size = 1.4 + Math.min(1.6, Math.log2(c.count + 1) * 0.5);
+      // حجمُ الكوكبة ينمو بلوغاريتم عددِها **ومحدودٌ بحدٍّ ضيّق**: كان
+      // ١٫٤+١٫٦ فتبلغ ٣ وحدات، وهالتُها ٢٫٦ أضعافها — فمع عشرين كوكبةً تتلاقى
+      // الهالاتُ وتصير السماءُ ضباباً أبيضَ لا نجوماً. السماءُ تُقرأ بتباعُد
+      // نقاطها لا بسعتها.
+      const size = 1.1 + Math.min(0.9, Math.log2(c.count + 1) * 0.26);
       return { cluster: c, x, y, size };
     });
   }, [clusters]);
@@ -343,7 +347,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
               onKeyDown={(e) => onNodeKey(e, () => { setOpenMonth(c.cluster.key); setPreview(null); })}
               style={{ cursor: "pointer" }}
             >
-              <circle cx={c.x} cy={c.y} r={c.size * 2.6} fill="url(#skyHalo)" opacity={0.5} />
+              <circle cx={c.x} cy={c.y} r={c.size * 1.5} fill="url(#skyHalo)" opacity={0.26} />
               {/* عنقودٌ صغير من النجيمات يوحي بكوكبة */}
               {[[0, 0], [0.8, -0.6], [-0.7, 0.5], [0.6, 0.8], [-0.9, -0.4]].map(([dx, dy], k) => (
                 <circle key={k} cx={c.x + dx * c.size} cy={c.y + dy * c.size} r={c.size * (k === 0 ? 0.5 : 0.3)} fill="#fdfbf5" opacity={0.9 - k * 0.12} />

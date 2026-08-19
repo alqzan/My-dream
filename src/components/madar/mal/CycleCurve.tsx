@@ -22,7 +22,9 @@ export function CycleCurve({ curve, startLabel, endLabel }: {
   endLabel: string;
 }) {
   const g = curveGeometry(curve);
-  const tone = curve.over ? "var(--clay)" : "var(--ink)";
+  // لونُ بابِ المال أخضر، فالخطُّ المنضبطُ أخضرُ لا حبريّ — والحبريُّ في وضعٍ
+  // ليليّ كريميٌّ فاقعٌ يشدّ العينَ إلى الرسم قبل رقمِه.
+  const tone = curve.over ? "var(--clay)" : "var(--green)";
   const bars = disciplineDays(curve);
   const score = disciplineScore(curve);
   const scoreTone = score.ratio >= 0.7 ? "var(--gold)" : "var(--clay)";

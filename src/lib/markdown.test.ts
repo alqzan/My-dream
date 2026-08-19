@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMarkdown, stripMarkdown, plainTitle, wordCount } from "./markdown";
+import { renderMarkdown, stripMarkdown, plainTitle, wordCount , previewTitle, previewText } from "./markdown";
 
 // النصّ كما يخرج من Day One فعلاً: مربّعات مهام، فواصل ---، سؤالٌ يوميّ
 // بستّة #، ونقاطٌ مهروبة (\.) — كلّها كانت تظهر حرفيّة قبل هذا.
@@ -135,5 +135,38 @@ describe("wordCount", () => {
   it("يعدّ الكلمات", () => {
     expect(wordCount("كلمة واحدة فقط")).toBe(3);
     expect(wordCount("   ")).toBe(0);
+  });
+});
+
+describe("اسمُ المذكرة في القوائم — «بلا عنوان» لا تُكتب", () => {
+  it("العنوانُ الموجود يُستعمل مجرَّداً من الماركداون", () => {
+    expect(previewTitle("**ذكريات**", "نصّ")).toBe("ذكريات");
+  });
+
+  it("**بلا عنوانٍ يُؤخذ أوّلُ سطرٍ ذي معنًى من النصّ** لا عبارةٌ مكرّرة", () => {
+    const body = "### ٠٠:٠٠ احداث اليوم\nيوم أبرز مافيه ذهابنا لخوالي";
+    expect(previewTitle("", body)).toBe("٠٠:٠٠ احداث اليوم");
+    expect(previewTitle(undefined, body)).not.toMatch(/بلا عنوان/);
+  });
+
+  it("يتخطّى الأسطرَ الفارغة في أوّل النصّ", () => {
+    expect(previewTitle("", "\n\n   \nأوّلُ كلامٍ حقيقيّ")).toBe("أوّلُ كلامٍ حقيقيّ");
+  });
+
+  it("بلا عنوانٍ ولا نصّ يُرجع فراغاً — لا اسمَ مخترَعاً", () => {
+    expect(previewTitle("", "")).toBe("");
+    expect(previewTitle(undefined, undefined)).toBe("");
+  });
+
+  it("يقصُّ الطويلَ بعلامةِ حذف", () => {
+    const t = previewTitle("ا".repeat(200), "");
+    expect(t.length).toBeLessThanOrEqual(61);
+    expect(t.endsWith("…")).toBe(true);
+  });
+
+  it("المقتطفُ بلا ماركداون ولا وسوم ولا أسطرٍ متعدّدة", () => {
+    const x = previewText("### عنوان\n\n**قوي** و<b>وسم</b>");
+    expect(x).not.toMatch(/#|\*\*|</);
+    expect(x).not.toMatch(/\n/);
   });
 });

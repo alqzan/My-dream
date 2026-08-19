@@ -8,6 +8,7 @@ import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { MOODS } from "@/lib/types";
 import { renderMarkdown, stripMarkdown, plainTitle } from "@/lib/markdown";
 import { dailyQuestion } from "@/lib/questions";
+import { previewText } from "@/lib/markdown";
 import { duplicateDays } from "@/lib/mergeDay";
 import { JournalTimeline } from "@/components/journal/JournalTimeline";
 import { EntryPhotos } from "@/components/journal/PhotoCollage";
@@ -33,7 +34,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { MdrButton, TabBar, SectionHead } from "@/components/madar/primitives";
-import { MemoryDome } from "@/components/madar/journal/MemoryDome";
+import { MemorySky } from "@/components/journal/MemorySky";
 import { MoonQuestion, MonthGrid, PastDays } from "@/components/madar/journal/JournalParts";
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame, Clock, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3, Combine } from "lucide-react";
@@ -59,6 +60,10 @@ export default function JournalPage() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editEntry, setEditEntry] = useState<JournalEntry | undefined>();
+  // يومٌ صامتٌ لُمس في السماء: يُفتح المحرّر على **ذلك اليوم** لا على اليوم الحاضر.
+  const [writeDate, setWriteDate] = useState<string | undefined>();
+  // فُتح المحرّرُ من بطاقة السؤال؟ عندها يبدأ مجيباً فيُسجَّل الجوابُ جواباً.
+  const [answerMode, setAnswerMode] = useState(false);
   // «سطر سريع» — التقاطُ خاطرةٍ في سطرٍ واحد دون فتح المحرّر الكامل.
   const [quickLine, setQuickLine] = useState("");
   const [search, setSearch] = useState("");
@@ -77,7 +82,6 @@ export default function JournalPage() {
   // تبويباتُ التصميم الأربعة. «الصور» تقود عرضَ المعرض القائم بدل مبدّلٍ ثانٍ
   // أسفل الصفحة — مبدّلان لشيءٍ واحد يربكان.
   const [topTab, setTopTab] = useState<JournalTab>("السماء");
-  const [skyPick, setSkyPick] = useState<string | null>(null);
   const [calYear, setCalYear] = useState(() => Number(today().slice(0, 4)));
   const [calMonth, setCalMonth] = useState(() => Number(today().slice(5, 7)));
   const view: "list" | "gallery" = topTab === "الصور" ? "gallery" : "list";
@@ -147,29 +151,35 @@ export default function JournalPage() {
   const mergeableDays = useMemo(() => duplicateDays(journalEntries).length, [journalEntries]);
 
   // النجمةُ المختارة من القبّة — بطاقةُ معاينةٍ قبل فتح المذكرة كاملة.
-  const skyPickEntry = useMemo(
-    () => (skyPick ? journalEntries.find((e) => e.id === skyPick) : undefined),
-    [skyPick, journalEntries]
-  );
-
-  /**
-   * جوابُك على **سؤال اليوم نفسِه** قبل سنة. الأسئلةُ دوريّةٌ بيوم السنة
-   * (`dailyQuestion`)، فمذكرةُ اليوم نفسِه من السنة الماضية جوابٌ للسؤال ذاته —
-   * وهذه المقابلةُ هي أنفعُ ما في «سؤال القمر»: ترى كيف تغيّرتَ في سنة.
-   */
-  const lastYearAnswer = useMemo(() => {
-    const [y, ...rest] = todayStr.split("-");
-    const lastYear = `${Number(y) - 1}-${rest.join("-")}`;
-    const entry = journalEntries.find((e) => e.date === lastYear && (e.question || e.content));
-    if (!entry) return undefined;
-    const text = (entry.content || "").replace(/<[^>]+>/g, " ").trim();
-    return text ? text.slice(0, 180) : undefined;
-  }, [journalEntries, todayStr]);
 
   const streak = getJournalStreak(journalEntries);
   const markedDates = journalEntries.map((e) => e.date);
   const question = dailyQuestion(todayStr);
-  const hasToday = journalEntries.some((e) => e.date === todayStr);
+
+  /**
+   * جوابُك على **هذا السؤال بعينه** في سنةٍ ماضية — لا «أيَّ شيءٍ كتبتَه في
+   * مثل هذا اليوم».
+   *
+   * كانت تُعرض مذكرةُ العام الماضي مهما كان موضوعُها تحت عنوان «جوابُك على
+   * السؤال نفسه»، وهو خبرٌ كاذب. الآن نطابق `e.question` نصّاً: إن لم تُجب عن
+   * هذا السؤال قبلُ فلا يُعرض شيء — والصمتُ أصدقُ من نسبةِ كلامٍ إلى سؤالٍ
+   * لم يُقَل. (والسؤالُ صار سنويّاً حقيقةً، فالمطابقةُ ممكنةٌ أصلاً.)
+   */
+  const lastAnswer = useMemo(() => {
+    const prior = journalEntries
+      .filter((e) => e.date < todayStr && e.question === question && (e.content || "").trim())
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!prior) return undefined;
+    return { date: prior.date, text: previewText(prior.content, 180) };
+  }, [journalEntries, todayStr, question]);
+
+  /**
+   * «أجبتَ عنه» = مذكرةُ اليومِ تحمل **هذا السؤال**. كان الشرط «أيُّ مذكرةٍ
+   * اليوم»، فيُقال لك أجبتَ وأنت لم تفتح السؤال أصلاً.
+   */
+  const answeredToday = journalEntries.some((e) => e.date === todayStr && e.question === question);
+  /** كتبتَ اليومَ شيئاً — أعمُّ من «أجبتَ عن السؤال»، ولزرِّ الكتابة وحده. */
+  const wroteToday = journalEntries.some((e) => e.date === todayStr);
 
   // «في مثل هذا اليوم» — مذكرات نفس اليوم والشهر من سنوات سابقة
   const memories = useMemo(() => {
@@ -335,7 +345,7 @@ export default function JournalPage() {
             borderRadius: 16, fontSize: 14, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
           }}
         >
-          {hasToday ? "أضِف إلى مذكرة اليوم" : "اكتب مذكرة اليوم"}
+          {wroteToday ? "أضِف إلى مذكرة اليوم" : "اكتب مذكرة اليوم"}
         </button>
 
         {/* أدواتٌ ثانوية — الاستيرادُ والذكرى العشوائية باقيان، لا يسقط شيء */}
@@ -383,9 +393,9 @@ export default function JournalPage() {
         <MoonQuestion
           question={question}
           todayStr={todayStr}
-          answered={hasToday}
-          lastYearAnswer={lastYearAnswer}
-          onWrite={() => setShowForm(true)}
+          answered={answeredToday}
+          lastAnswer={lastAnswer}
+          onWrite={() => { setEditEntry(undefined); setAnswerMode(true); setShowForm(true); }}
         />
 
         <TabBar tabs={JOURNAL_TABS} active={topTab} onPick={(t) => setTopTab(t as JournalTab)} marginTop={14} />
@@ -397,36 +407,17 @@ export default function JournalPage() {
                 <MemoryStrip memories={memories} todayStr={todayStr} onOpen={openViewer} />
               </div>
             )}
-            <MemoryDome
+            {/* **سماءُ الذكريات الأصلية.** القبّةُ المنقولة من التصميم رسمت
+                هالةً لكلّ نجمة فصارت السماءُ كتلاً بيضاء متداخلة عند أرشيفٍ
+                كبير، وأسقطت ما في هذه: الصورُ في المعاينة · الأيامُ الصامتة ·
+                فتحُ الكوكبة الشهرية. المالك رآهما فاختار هذه — والاختيارُ له. */}
+            <MemorySky
               entries={filtered}
+              memories={memories}
+              onOpen={openViewer}
+              onPickDate={(date) => { setEditEntry(undefined); setWriteDate(date); setShowForm(true); }}
               todayStr={todayStr}
-              selectedId={skyPick}
-              onPick={setSkyPick}
             />
-            {skyPickEntry && (
-              <div style={{ margin: "16px 0 0", border: "1px solid var(--gline)", borderRadius: 20, background: "var(--paper2)", padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontSize: 10.5, color: "var(--ink34)" }}>{formatDate(skyPickEntry.date)}</span>
-                    <span style={{ display: "block", fontSize: 15, fontWeight: 900, marginTop: 3 }}>{skyPickEntry.title || "بلا عنوان"}</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--ink52)", lineHeight: 1.8, marginTop: 4 }}>
-                      {(skyPickEntry.content || "").replace(/<[^>]+>/g, " ").slice(0, 90)}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSkyPick(null)}
-                    aria-label="أغلق"
-                    style={{ width: 34, height: 34, flex: "none", background: "transparent", border: "none", color: "var(--ink34)", fontSize: 17, cursor: "pointer" }}
-                  >
-                    ×
-                  </button>
-                </div>
-                <MdrButton kind="ink" onClick={() => { openViewer(skyPickEntry); setSkyPick(null); }} minHeight={46} style={{ marginTop: 12, padding: "0 18px" }}>
-                  افتح المذكرة
-                </MdrButton>
-              </div>
-            )}
             <PastDays
               entries={journalEntries}
               todayStr={todayStr}
@@ -627,8 +618,10 @@ export default function JournalPage() {
       {/* محرّر المذكرة بملء الشاشة (يدير رقعته الكاملة بنفسه، لا نافذة) */}
       {(showForm || editEntry) && (
         <JournalForm
-          onClose={() => { setShowForm(false); setEditEntry(undefined); }}
+          onClose={() => { setShowForm(false); setEditEntry(undefined); setWriteDate(undefined); setAnswerMode(false); }}
           initial={editEntry}
+          initialDate={writeDate}
+          startAnswering={answerMode}
         />
       )}
 

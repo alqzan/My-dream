@@ -201,6 +201,33 @@ export function plainTitle(title?: string): string {
   return stripMarkdown(title ?? "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * **اسمُ المذكرة في القوائم.** المذكرةُ بلا عنوانٍ ليست بلا اسم: أوّلُ سطرٍ
+ * ذي معنًى من نصّها هو اسمُها. كتابةُ «بلا عنوان» تملأ الشاشةَ بصفٍّ من
+ * العناوين المتطابقة فلا يُميَّز يومٌ من يوم — وهي أسوأُ من لا عنوان.
+ *
+ * ويُنظَّف من الماركداون: عناوينُ `###` وطوابعُ الوقت جاءت من أرشيف Day One،
+ * فتظهر خاماً في القائمة إن لم تُجرَّد.
+ */
+export function previewTitle(title: string | undefined, content: string | undefined, max = 60): string {
+  const t = plainTitle(title);
+  if (t) return t.length > max ? t.slice(0, max).trimEnd() + "…" : t;
+  const first = stripMarkdown(content ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  if (!first) return "";
+  return first.length > max ? first.slice(0, max).trimEnd() + "…" : first;
+}
+
+/** مقتطفُ نصِّ المذكرة — بلا ماركداون ولا وسوم ولا أسطرٍ فارغة. */
+export function previewText(content: string | undefined, max = 90): string {
+  const t = stripMarkdown((content ?? "").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+  return t.length > max ? t.slice(0, max).trimEnd() + "…" : t;
+}
+
 export function wordCount(src: string): number {
   const t = (src ?? "").trim();
   if (!t) return 0;

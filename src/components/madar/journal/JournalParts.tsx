@@ -2,9 +2,10 @@
 import type React from "react";
 /** قِطعُ شاشة المذكرات: سؤالُ القمر · شبكةُ الشهر · الأيامُ الماضية. */
 import type { JournalEntry } from "@/lib/types";
-import { hijriDayNumber, hijriDay, hijriMonthLabel, parseDate, toDateStr, arabicMonthName } from "@/lib/utils";
+import { hijriDayNumber, hijriDay, hijriMonthLabel, parseDate, toDateStr, arabicMonthName, formatDate } from "@/lib/utils";
 import { MOOD_SKY } from "@/lib/memoryDome";
 import { arNum } from "@/lib/madar/format";
+import { previewTitle, previewText } from "@/lib/markdown";
 import { SectionHead, HeadMeta, MdrButton } from "../primitives";
 
 /* ─────────────────────── سؤالُ القمر ─────────────────────── */
@@ -20,14 +21,14 @@ export function MoonQuestion({
   question,
   todayStr,
   answered,
-  lastYearAnswer,
+  lastAnswer,
   onWrite,
 }: {
   question: string;
   todayStr: string;
   answered: boolean;
-  /** جوابُك على السؤال نفسِه قبل سنة — إن وُجد. */
-  lastYearAnswer?: string;
+  /** جوابُك على **هذا السؤال بعينه** في سنةٍ ماضية — إن وُجد، بتاريخه. */
+  lastAnswer?: { date: string; text: string };
   onWrite: () => void;
 }) {
   const day = Math.min(30, Math.max(1, hijriDayNumber(todayStr)));
@@ -58,7 +59,7 @@ export function MoonQuestion({
           {answered ? "أجبتَ عنه اليوم." : "لم تُجب عنه بعد."}
         </p>
 
-        {lastYearAnswer && (
+        {lastAnswer && (
           <div
             style={{
               margin: "10px 0 0", padding: "11px 13px", borderRadius: 16,
@@ -66,10 +67,10 @@ export function MoonQuestion({
             }}
           >
             <span style={{ display: "block", fontSize: 10, letterSpacing: ".12em", color: "var(--gold)", fontWeight: 700 }}>
-              جوابُك على السؤال نفسه قبل سنة
+              جوابُك على هذا السؤال في {formatDate(lastAnswer.date)}
             </span>
             <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--ink72)", lineHeight: 1.85 }}>
-              {lastYearAnswer}
+              {lastAnswer.text}
             </p>
           </div>
         )}
@@ -233,8 +234,12 @@ export function PastDays({
         {days.map((d) => {
           const entry = byDate.get(d);
           const tone = entry ? "var(--gold)" : "var(--ink34)";
+          // العنوانُ من النصّ حين لا عنوان، والمقتطفُ مجرَّدٌ من الماركداون —
+          // «بلا عنوان» صفٌّ من عناوينَ متطابقةٍ لا يُميَّز فيها يومٌ من يوم،
+          // و«###» من أرشيف Day One تظهر خاماً إن لم تُجرَّد.
+          const label = entry ? previewTitle(entry.title, entry.content) : "—";
           const excerpt = entry
-            ? (entry.content || "").replace(/<[^>]+>/g, " ").trim().slice(0, 70) || "بلا نصّ"
+            ? previewText(entry.content, 70) || "بلا نصّ"
             : "لم تكتب في هذا اليوم";
           return (
             <button
@@ -265,7 +270,7 @@ export function PastDays({
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}
                 >
-                  {entry ? entry.title || "بلا عنوان" : "—"}
+                  {label}
                 </span>
                 <span
                   style={{

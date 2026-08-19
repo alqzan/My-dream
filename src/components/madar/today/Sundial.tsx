@@ -8,7 +8,7 @@
  */
 import { useMemo } from "react";
 import {
-  dayFraction, dialGeometry, dueArc, DUE_ARC_LABEL, DIAL_W, DIAL_H,
+  dayFraction, dialGeometry, dueArc, sunWindow, DUE_ARC_LABEL, DIAL_W, DIAL_H,
 } from "@/lib/sundial";
 import { computePrayerTimes, getCachedCoords, formatClock, parseDate } from "@/lib/utils";
 import { arNum, arClock, arPct } from "@/lib/madar/format";
@@ -32,8 +32,11 @@ export function Sundial({
   // بلا مواقيتَ محسوبة (إحداثيّاتٌ قطبيّة أو شاذّة) لا نرسم مزولةً كاذبة.
   if (!times) return null;
 
+  // الشروقُ مرآةُ المغرب حول الظهر الشمسيّ — وهي العلاقةُ التي يبني عليها
+  // `computePrayerTimes` المغربَ نفسَه، فالاشتقاقُ منها دقيقٌ لا تقدير.
+  const sunrise = new Date(2 * times.الظهر.getTime() - times.المغرب.getTime());
   const frac = dayFraction(now, times.الفجر, times.العشاء);
-  const g = dialGeometry(frac);
+  const g = dialGeometry(frac, sunWindow(times.الفجر, times.العشاء, sunrise, times.المغرب));
   const due = dueArc(prayed, hifzDue);
 
   return (

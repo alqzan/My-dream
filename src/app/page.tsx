@@ -254,31 +254,28 @@ export default function Dashboard() {
               <span style={{ color: "var(--ink52)" }}>{formatDate(todayStr)}</span>
             </p>
           </div>
-          <span className="mdr-star" style={{ width: 24, height: 24 }} />
+          {/* **فلكُ السنة في الترويسة لا تحت الأقواس.** كان صفّاً يتيماً أسفلَ
+              رأس اليوم: عنوانٌ في جهةٍ وحلقةٌ في الأخرى وفراغٌ بينهما، ولا
+              يخصّ اليومَ أصلاً حتى يُقحَم في وسطه. مكانُه مع التاريخ — كلاهما
+              يقول «أين أنت من الزمن»، والشمسةُ الزخرفية لا تقول شيئاً. */}
+          <YearOrbit
+            pct={yearPct}
+            prayer={hasTodayPrayer}
+            journal={hasTodayJournal}
+            reading={hasTodayReading}
+            habits={hasTodayHabit}
+            wird={hasTodayWird}
+            hifz={hasHifzPlan ? hasTodayHifz : null}
+            journalFrozen={frozen.has("core:journal")}
+            readingFrozen={frozen.has("core:reading")}
+            wirdFrozen={frozen.has("core:wird")}
+            habitsShown={habits.length === 0 || habits.some((h) => !frozen.has(h.id))}
+          />
         </div>
 
         <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
 
         <ThreeArcs due={dueNow} arcs={arcSpecs} />
-      </div>
-
-      <div className="flex items-center justify-between gap-4 animate-fade-up" style={{ marginTop: 18 }}>
-        <div>
-          <p className="page-subtitle">تقدُّمُك في العام</p>
-        </div>
-        <YearOrbit
-          pct={yearPct}
-          prayer={hasTodayPrayer}
-          journal={hasTodayJournal}
-          reading={hasTodayReading}
-          habits={hasTodayHabit}
-          wird={hasTodayWird}
-          hifz={hasHifzPlan ? hasTodayHifz : null}
-          journalFrozen={frozen.has("core:journal")}
-          readingFrozen={frozen.has("core:reading")}
-          wirdFrozen={frozen.has("core:wird")}
-          habitsShown={habits.length === 0 || habits.some((h) => !frozen.has(h.id))}
-        />
       </div>
 
       {isFirstRun && <OnboardingCard />}

@@ -45,10 +45,19 @@ export function ThreeArcs({ arcs, due }: { arcs: ArcSpec[]; due: DueArc }) {
               </clipPath>
             </defs>
             <rect x="0" y="0" width="100" height="132" fill={a.wash} clipPath={`url(#mdrArc-${a.key})`} />
+            {/* منسوبُ الماء: كان `opacity=".4"` فوق غَسلٍ من اللون نفسِه، فبدا
+                القوسُ ممتلئاً دائماً مهما كان حالُك — والقوسُ الذي لا يتغيّر
+                بتغيّر عملك ليس مقياساً. الآن للمنسوب حدٌّ ظاهرٌ فوقه. */}
             <rect
               x="0" y={fillY(a.ratio)} width="100" height="132"
-              fill={a.color} opacity=".4" clipPath={`url(#mdrArc-${a.key})`}
+              fill={a.color} opacity=".62" clipPath={`url(#mdrArc-${a.key})`}
             />
+            {a.ratio > 0.02 && a.ratio < 0.99 && (
+              <line
+                x1="0" x2="100" y1={fillY(a.ratio)} y2={fillY(a.ratio)}
+                stroke={a.color} strokeWidth="2" clipPath={`url(#mdrArc-${a.key})`}
+              />
+            )}
             <path d="M20 132 L20 60 A33 33 0 1 1 80 60 L80 132" fill="none" stroke="var(--paper)" strokeWidth="8" />
             <path d="M20 60 A33 33 0 1 1 80 60" fill="none" stroke={a.color} strokeWidth="8" strokeDasharray="8.4 8.4" />
             <path d="M20 132 L20 60 A33 33 0 1 1 80 60 L80 132" fill="none" stroke="var(--gline)" strokeWidth="1" />

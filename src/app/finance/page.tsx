@@ -265,18 +265,6 @@ export default function FinancePage() {
 
       <SalaryBanner />
 
-      {/* منحنى الدورة — الرصيدُ رقمٌ واحد، والمنحنى يقول **متى** انحرفت. */}
-      {cycleCurve && (
-        <Card>
-          <div className="mdr">
-            <CycleCurve
-              curve={cycleCurve}
-              startLabel={`الراتب · ${formatDateShort(cycleCurve.start)}`}
-              endLabel={`الراتب التالي · ${formatDateShort(cycleCurve.end)}`}
-            />
-          </div>
-        </Card>
-      )}
 
       <Link href="/finance/insights" className="block animate-fade-up">
         <div className="relative overflow-hidden rounded-2xl p-3.5 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine">
@@ -308,6 +296,20 @@ export default function FinancePage() {
         badge={overview.hasBudget && overview.availableToday < 0 ? <AlertBadge>سالب</AlertBadge> : undefined}
       >
         <DailyBudgetCard />
+        {/* منحنى الدورة **تحت رقمِه لا فوق الصفحة**: هو صورةُ الرصيد المتراكم
+            نفسِه — «متى انحرفت» بدل «كم رصيدك». كان كتلةً في رأس الشاشة تُزيح
+            أدواتِ المال كلَّها تحتها، وهي أوّلُ ما يُفتح لأجله البابُ أصلاً. */}
+        {cycleCurve && (
+          <Card>
+            <div className="mdr">
+              <CycleCurve
+                curve={cycleCurve}
+                startLabel={`الراتب · ${formatDateShort(cycleCurve.start)}`}
+                endLabel={`الراتب التالي · ${formatDateShort(cycleCurve.end)}`}
+              />
+            </div>
+          </Card>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection

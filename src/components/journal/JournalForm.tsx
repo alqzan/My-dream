@@ -17,6 +17,13 @@ import { AppImage } from "@/components/ui/AppImage";
 interface JournalFormProps {
   onClose: () => void;
   initial?: JournalEntry;
+  // يومٌ يُفتح المحرّر عليه لمذكرةٍ **جديدة** (يومٌ صامتٌ في السماء مثلاً).
+  // لا يمسّ التعديل: `initial.date` أولى دائماً.
+  initialDate?: string;
+  // يُفتح المحرّر **مجيباً عن سؤال اليوم**. بدونه كان زرّ «اكتب عنه» في بطاقة
+  // السؤال يفتح محرّراً عادياً، فيُكتب الجوابُ ولا يُسجَّل أنّه جواب — فتبقى
+  // البطاقة تقول «لم تُجب عنه بعد» بعد أن أجبت.
+  startAnswering?: boolean;
 }
 
 function nowHHMM() {
@@ -56,13 +63,13 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
 
 const DRAFT_KEY = "madar-journal-draft";
 
-export function JournalForm({ onClose, initial }: JournalFormProps) {
+export function JournalForm({ onClose, initial, initialDate, startAnswering }: JournalFormProps) {
   const { addJournalEntry, updateJournalEntry, deleteJournalEntry } = useAppStore();
-  const [date, setDate] = useState(initial?.date ?? today());
+  const [date, setDate] = useState(initial?.date ?? initialDate ?? today());
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
   const [question, setQuestion] = useState(initial?.question ?? dailyQuestion(today()));
-  const [answering, setAnswering] = useState(!!initial?.question);
+  const [answering, setAnswering] = useState(!!initial?.question || !!startAnswering);
   const [showLibrary, setShowLibrary] = useState(false);
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
