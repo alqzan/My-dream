@@ -25,6 +25,7 @@ export function hasData(d: Partial<AppData>): boolean {
     (hifz.mistakes?.length ?? 0) > 0)) return true;
   if ((d.quranKhatma?.completed ?? 0) > 0 || (d.quranKhatma?.juz ?? 0) > 0) return true;
   if (d.dailyBudget || (d.monthlyIncome ?? 0) > 0 || (d.readingGoal ?? 0) > 0) return true;
+  if ((d.qadaBacklog ?? 0) > 0) return true;
   if (Object.keys(d.merchantRules ?? {}).length > 0) return true;
   // A device whose only "state" is having deleted things still has real intent
   // to preserve — otherwise its tombstones can't seed a cloud that lacks them.

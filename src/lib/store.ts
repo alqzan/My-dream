@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
-  RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, DailyBudget,
+  RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, DailyBudget,
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode,
@@ -13,6 +13,7 @@ import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf, unionRefs } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
+import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
@@ -265,6 +266,14 @@ interface AppStore extends AppData {
   // Prayers
   setPrayerStatus: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
   cyclePrayerStatus: (date: string, prayer: PrayerName) => void;
+  // السننُ الرواتب وقيامُ الليل — قيمتان في يوم الصلاة نفسِه، لكلٍّ طابعُها.
+  setSunan: (date: string, count: number) => void;
+  setQiyam: (date: string, patch: Partial<QiyamNight>) => void;
+  clearQiyam: (date: string) => void;
+  // الفوائت: «اقضِ واحدة» تقلب أقدمَ فائتةٍ مسجّلةٍ إلى «قضاء»؛ فإن لم تكن ثمّة
+  // فائتةٌ مسجّلة خُصِمت من الدَّين السابق. تُرجع false حين لا شيءَ يُقضى.
+  doQada: () => boolean;
+  addQadaBacklog: (n?: number) => void;
 
   // Quran — reflections (تدبّر), memorization (حفظ + مراجعة متباعدة),
   // daily wird, and the running khatma (مدار الختمة).
@@ -412,7 +421,16 @@ export const useAppStore = create<AppStore>()(
             if (!touched) { stamps = { ...(p.prayerUpdatedAt ?? {}) }; touched = true; }
             stamps![name] = Date.now();
           }
-          return touched ? { ...p, prayerUpdatedAt: stamps } : p;
+          let out = touched ? { ...p, prayerUpdatedAt: stamps } : p;
+          // السننُ والقيامُ قيمتان مستقلّتان عن الخمس في اليوم نفسِه، فلكلٍّ
+          // طابعُه — بالمنطق ذاته الذي جعل لكلّ فرضٍ طابعَه. بطابعِ اليومِ
+          // الواحد كان تسجيلُ ركعاتِ القيام على الجوّال يطغى على تصحيح سنّةٍ
+          // سُجّلت على الآيباد في اليوم نفسِه.
+          if (was?.sunan !== p.sunan) out = { ...out, sunanUpdatedAt: Date.now() };
+          if (was?.qiyam?.rakaat !== p.qiyam?.rakaat || was?.qiyam?.witr !== p.qiyam?.witr) {
+            out = { ...out, qiyamUpdatedAt: Date.now() };
+          }
+          return out;
         });
       }
       // Budgets are keyed by category — likewise.
@@ -523,6 +541,7 @@ export const useAppStore = create<AppStore>()(
       categories: DEFAULT_CATEGORIES,
       reserves: [],
       prayerLogs: [],
+      qadaBacklog: 0,
       quranReflections: [],
       quranHifz: EMPTY_HIFZ,
       quranWird: [],
@@ -1568,6 +1587,64 @@ export const useAppStore = create<AppStore>()(
           return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
         }),
 
+      // مُساعدٌ واحدٌ لكلّ ما يُكتب على يوم صلاةٍ خارج الخمس: يُنشئ اليومَ إن
+      // لم يكن، ويُبقي بقيّةَ حقوله. الختمُ يتكفّل به غلافُ `set`.
+      setSunan: (date, count) =>
+        set((s) => {
+          const sunan = Math.max(0, Math.min(SUNAN_MAX, Math.round(count)));
+          const existing = s.prayerLogs.find((l) => l.date === date);
+          if (!existing) return { prayerLogs: [...s.prayerLogs, { date, prayers: {}, sunan }] };
+          return {
+            prayerLogs: s.prayerLogs.map((l) => (l.date === date ? { ...l, sunan } : l)),
+          };
+        }),
+
+      setQiyam: (date, patch) =>
+        set((s) => {
+          const existing = s.prayerLogs.find((l) => l.date === date);
+          const current = qiyamOf(existing);
+          const qiyam = {
+            rakaat: Math.max(0, Math.min(QIYAM_MAX, patch.rakaat ?? current.rakaat)),
+            witr: patch.witr ?? current.witr,
+          };
+          if (!existing) return { prayerLogs: [...s.prayerLogs, { date, prayers: {}, qiyam }] };
+          return {
+            prayerLogs: s.prayerLogs.map((l) => (l.date === date ? { ...l, qiyam } : l)),
+          };
+        }),
+
+      clearQiyam: (date) =>
+        set((s) => ({
+          prayerLogs: s.prayerLogs.map((l) =>
+            l.date === date ? { ...l, qiyam: { rakaat: 0, witr: false } } : l
+          ),
+        })),
+
+      // «اقضِ واحدة». تُفضَّل الفائتةُ المسجّلة على الدَّين المجرَّد لأنّها تحمل
+      // يومَها وفرضَها، فيبقى السجلّ صادقاً عمّا قُضِي بالضبط.
+      doQada: () => {
+        const s = get();
+        const target = oldestMissed(s.prayerLogs);
+        if (target) {
+          set((st) => ({
+            prayerLogs: st.prayerLogs.map((l) =>
+              l.date === target.date
+                ? { ...l, prayers: { ...l.prayers, [target.prayer]: "قضاء" as PrayerStatus } }
+                : l
+            ),
+          }));
+          return true;
+        }
+        if ((s.qadaBacklog ?? 0) > 0) {
+          set(() => ({ qadaBacklog: (s.qadaBacklog ?? 0) - 1 }));
+          return true;
+        }
+        return false;
+      },
+
+      addQadaBacklog: (n = 1) =>
+        set((s) => ({ qadaBacklog: Math.max(0, (s.qadaBacklog ?? 0) + n) })),
+
       // ---------- Quran ----------
       addReflection: (r) =>
         set((s) => ({ quranReflections: [r, ...s.quranReflections] })),
@@ -1929,6 +2006,7 @@ export const useAppStore = create<AppStore>()(
           categories: data.categories ?? DEFAULT_CATEGORIES,
           reserves: data.reserves ?? [],
           prayerLogs: data.prayerLogs ?? [],
+          qadaBacklog: data.qadaBacklog ?? 0,
           quranReflections: data.quranReflections ?? [],
           quranHifz: data.quranHifz ?? EMPTY_HIFZ,
           quranWird: data.quranWird ?? [],
@@ -1964,6 +2042,7 @@ export const useAppStore = create<AppStore>()(
           categories: s.categories,
           reserves: s.reserves,
           prayerLogs: s.prayerLogs,
+          qadaBacklog: s.qadaBacklog ?? 0,
           quranReflections: s.quranReflections,
           quranHifz: s.quranHifz ?? EMPTY_HIFZ,
           quranWird: s.quranWird,

@@ -164,6 +164,7 @@ export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
     categories: g("categories", DEFAULT_CATEGORIES),
     reserves: g("reserves", []),
     prayerLogs: g("prayerLogs", []),
+    qadaBacklog: g("qadaBacklog", 0),
     quranReflections: g("quranReflections", []),
     quranHifz: g("quranHifz", { plan: null, frontierId: 0, sessions: [], reviews: [] }),
     quranWird: g("quranWird", []),

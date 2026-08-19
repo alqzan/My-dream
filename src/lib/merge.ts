@@ -406,10 +406,25 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
       const newest = Math.max(pt, st);
       if (newest) stamps[name] = newest;
     }
+    // السننُ والقيامُ قيمتان مستقلّتان في اليوم نفسِه، فتُحسمان بطابعيهما لا
+    // بفوز اليوم كلِّه لجهةٍ واحدة — وإلّا ضاعت ركعاتُ ليلةٍ سُجّلت على الجوّال
+    // لمجرّد أنّ تصحيحَ سنّةٍ على الآيباد جعل نسختَه هي الأولى في الاتحاد.
+    const sunanT = { p: pl.sunanUpdatedAt ?? 0, s: sMatch.sunanUpdatedAt ?? 0 };
+    const sunanWin = sunanT.s > sunanT.p ? sMatch : pl;
+    const sunanNewest = Math.max(sunanT.p, sunanT.s);
+    const qiyamT = { p: pl.qiyamUpdatedAt ?? 0, s: sMatch.qiyamUpdatedAt ?? 0 };
+    const qiyamWin = qiyamT.s > qiyamT.p ? sMatch : pl;
+    const qiyamNewest = Math.max(qiyamT.p, qiyamT.s);
     return {
       ...pl,
       prayers,
       ...(Object.keys(stamps).length ? { prayerUpdatedAt: stamps } : {}),
+      // القيمةُ الفائزة تُؤخذ كما هي حتى لو كانت غائبة — فمسحُها ينتشر بدل أن
+      // تعيدها نسخةٌ قديمة، تماماً كمسح حالةِ فرض.
+      ...(sunanWin.sunan === undefined ? { sunan: undefined } : { sunan: sunanWin.sunan }),
+      ...(sunanNewest ? { sunanUpdatedAt: sunanNewest } : {}),
+      ...(qiyamWin.qiyam === undefined ? { qiyam: undefined } : { qiyam: qiyamWin.qiyam }),
+      ...(qiyamNewest ? { qiyamUpdatedAt: qiyamNewest } : {}),
     };
   });
 
@@ -507,6 +522,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     ),
     reserves,
     prayerLogs,
+    // دَينُ الفوائت السابق قيمةٌ **تُضبط** لا تُزاد، فيكفيها آخرُ ضابطٍ لها؛
+    // أمّا الزياداتُ اليومية فمخزَّنةٌ حالةَ «فائتة» في يومها وتُدمج بطابعها.
+    qadaBacklog: pickSingleton("qadaBacklog", primary.qadaBacklog ?? secondary.qadaBacklog ?? 0),
     // القرآن: تأمّلات ومحفوظات تُوحَّد بالـid (مع الأختام)، والوِرد يُوحَّد
     // كتواريخ (كسجلّات العادات) فلا يضيع وِردٌ سُجّل على جهاز.
     quranReflections: byIdNewer(primary.quranReflections ?? [], secondary.quranReflections ?? []),

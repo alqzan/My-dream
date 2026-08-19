@@ -864,6 +864,45 @@ describe("mergeAppData — تعديلُ عنصرٍ قائم يفوز بطابع�
     }
   });
 
+  it("السننُ والقيام: لكلٍّ طابعُه، فلا يطغى تسجيلُ ليلةٍ على تصحيحِ سنّة", () => {
+    const iphone = base({
+      lastUpdated: olderDoc,
+      prayerLogs: [{
+        date: "2026-05-01", prayers: {},
+        sunan: 6, sunanUpdatedAt: 9000,
+        qiyam: { rakaat: 2, witr: false }, qiyamUpdatedAt: 100,
+      }],
+    });
+    const ipad = base({
+      lastUpdated: newerDoc,
+      prayerLogs: [{
+        date: "2026-05-01", prayers: {},
+        sunan: 2, sunanUpdatedAt: 100,
+        qiyam: { rakaat: 11, witr: true }, qiyamUpdatedAt: 9500,
+      }],
+    });
+    for (const merged of [mergeAppData(iphone, ipad), mergeAppData(ipad, iphone)]) {
+      expect(merged.prayerLogs[0].sunan).toBe(6); // تصحيحُ السنّة الأحدث
+      expect(merged.prayerLogs[0].qiyam).toEqual({ rakaat: 11, witr: true }); // وليلةُ الجهاز الآخر
+      expect(merged.prayerLogs[0].sunanUpdatedAt).toBe(9000);
+      expect(merged.prayerLogs[0].qiyamUpdatedAt).toBe(9500);
+    }
+  });
+
+  it("دَينُ الفوائت السابق: يفوز آخرُ من ضبطه لا آخرُ من زامن", () => {
+    const iphone = base({
+      lastUpdated: olderDoc, qadaBacklog: 12,
+      fieldUpdatedAt: { qadaBacklog: 9000 },
+    });
+    const ipad = base({
+      lastUpdated: newerDoc, qadaBacklog: 3,
+      fieldUpdatedAt: { qadaBacklog: 100 },
+    });
+    for (const merged of [mergeAppData(iphone, ipad), mergeAppData(ipad, iphone)]) {
+      expect(merged.qadaBacklog).toBe(12);
+    }
+  });
+
   it("حالة الصلاة: إلغاءُ تسجيلِ صلاةٍ يسري ولا تعود من النسخة القديمة", () => {
     const cleared = base({
       lastUpdated: olderDoc,

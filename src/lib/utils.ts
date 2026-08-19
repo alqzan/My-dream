@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { mediaTombKey } from "./mediaHash";
 import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, RecurringGenerationMode, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
-import { PRAYERS, UNKNOWN_CATEGORY } from "./types";
+import { PRAYERS, UNKNOWN_CATEGORY, isPrayedStatus } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -828,7 +828,7 @@ export function countDayPrayers(log: PrayerLog | undefined): { prayed: number; m
   let mosque = 0;
   for (const p of PRAYERS) {
     const status = log.prayers[p];
-    if (status === "منفردة" || status === "جماعة") prayed++;
+    if (isPrayedStatus(status)) prayed++;
     if (status === "جماعة") mosque++;
   }
   return { prayed, mosque };
@@ -838,7 +838,7 @@ export function countDayPrayers(log: PrayerLog | undefined): { prayed: number; m
 // (in the mosque or alone — either counts).
 export function getPrayerStreak(logs: PrayerLog[]): number {
   const fullDays = logs
-    .filter((l) => PRAYERS.every((p) => l.prayers[p] === "منفردة" || l.prayers[p] === "جماعة"))
+    .filter((l) => PRAYERS.every((p) => isPrayedStatus(l.prayers[p])))
     .map((l) => l.date);
   return calcStreak(fullDays);
 }

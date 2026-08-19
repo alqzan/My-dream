@@ -52,7 +52,14 @@ const FULL: Required<AppData> = {
     id: "f1", name: "سفرة", icon: "✈️", color: "#000", createdAt: "2026-01-01",
     deposits: [{ id: "d1", amount: 100, date: "2026-05-01" }],
   }],
-  prayerLogs: [{ date: "2026-05-01", prayers: { الفجر: "جماعة" } }],
+  // السننُ والقيامُ داخل يوم الصلاة: لو سقطا في الدورة (لقطة → ترطيب → نسخة →
+  // دمج) لعاد الجهازُ الجديد بأيامِ صلاةٍ بلا سننٍ ولا ليالٍ — وهو الانزلاقُ
+  // الصامت نفسُه الذي وقع لـ`assets`.
+  prayerLogs: [{
+    date: "2026-05-01", prayers: { الفجر: "جماعة", الظهر: "فائتة" },
+    sunan: 6, qiyam: { rakaat: 8, witr: true },
+  }],
+  qadaBacklog: 3,
   quranReflections: [{ id: "q1", date: "2026-05-01", text: "تأمّل", createdAt: "2026-05-01" }],
   quranHifz: {
     plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" },

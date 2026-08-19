@@ -22,12 +22,19 @@ describe("prayerStatusMeta — حالةُ صلاةٍ خارج المعروف", (
     expect(prayerStatusMeta("لم")).toBe(PRAYER_STATUS_META["لم"]);
   });
 
+  it("تعرف الحالتين المضافتين مع شاشة الصلاة المنقولة", () => {
+    // «فائتة» و«قضاء» كانتا مثالَي «قيمةٍ مجهولة» في هذا الملفّ، ثمّ صارتا
+    // حالتين حقيقيتين — فمن حقّهما وصفٌ خاصٌّ لا الرجوعُ إلى «لم».
+    expect(prayerStatusMeta("فائتة")).toBe(PRAYER_STATUS_META["فائتة"]);
+    expect(prayerStatusMeta("قضاء")).toBe(PRAYER_STATUS_META["قضاء"]);
+  });
+
   it("تعود إلى «لم» عند قيمةٍ مجهولة بدل أن ترمي", () => {
-    // «في وقتها» و«فائتة» صيغتان معقولتان لا يعرفهما النوع — تماماً كما قد
+    // «في وقتها» و«مقضية» صيغتان معقولتان لا يعرفهما النوع — تماماً كما قد
     // يكتبها جهازٌ بإصدارٍ آخر أو نسخةٌ احتياطية محرّرة بيد.
     expect(() => prayerStatusMeta("في وقتها")).not.toThrow();
     expect(prayerStatusMeta("في وقتها")).toBe(PRAYER_STATUS_META["لم"]);
-    expect(prayerStatusMeta("فائتة").color).toBe(PRAYER_STATUS_META["لم"].color);
+    expect(prayerStatusMeta("مقضية").color).toBe(PRAYER_STATUS_META["لم"].color);
   });
 
   it("تعود إلى «لم» عند غياب القيمة أصلاً", () => {
