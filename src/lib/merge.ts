@@ -529,6 +529,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // فتُوحَّد بالـid ويفوز التعديلُ الأحدث للعنصر نفسِه، والحذفُ يبقى شاهداً.
     knowledgeSources: byIdNewer(primary.knowledgeSources ?? [], secondary.knowledgeSources ?? []),
     benefits: byIdNewer(primary.benefits ?? [], secondary.benefits ?? []),
+    // الرفّ: عنصرٌ بمعرّفٍ وطابع — و«تركتُه» و«اشتريتُه» تعديلان عليه لا حذف،
+    // فيفوز الأحدثُ منهما ولا يعود العنصرُ إلى الانتظار من نسخةٍ قديمة.
+    shelfItems: byIdNewer(primary.shelfItems ?? [], secondary.shelfItems ?? []),
     // القرآن: تأمّلات ومحفوظات تُوحَّد بالـid (مع الأختام)، والوِرد يُوحَّد
     // كتواريخ (كسجلّات العادات) فلا يضيع وِردٌ سُجّل على جهاز.
     quranReflections: byIdNewer(primary.quranReflections ?? [], secondary.quranReflections ?? []),

@@ -15,9 +15,15 @@ import { PiggyBank, CalendarClock, Link2Off, ShieldOff } from "lucide-react";
 interface TransactionFormProps {
   onClose: () => void;
   initial?: Transaction;
+  // قيمٌ ابتدائية لمصروفٍ **جديد** (لا تعديل): يستعملها «الرفّ» حين ينضج شيءٌ
+  // فيُشترى — فيصل المبلغُ والاسمُ جاهزين ويبقى **اختيارُ التصنيف بيد المالك**.
+  // لا تخلطها بـ`initial`: تلك تعني تعديلَ معاملةٍ قائمة.
+  prefill?: { amount?: number; note?: string };
+  // يُنادى بالمعاملة بعد حفظها — ليربطها مصدرُها بمعرّفها (عنصرُ الرفّ بمعاملته).
+  onSaved?: (tx: Transaction) => void;
 }
 
-export function TransactionForm({ onClose, initial }: TransactionFormProps) {
+export function TransactionForm({ onClose, initial, prefill, onSaved }: TransactionFormProps) {
   const {
     categories, reserves, transactions, budgets, monthlyIncome, merchantRules, installmentPlans,
     addTransaction, updateTransaction, addCategory, rememberMerchant,
@@ -32,15 +38,16 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
     initialCat?.parentId ?? initialCat?.id ?? mains[0]?.id ?? ""
   );
   const [subCat, setSubCat] = useState<string>(initialCat?.parentId ? initialCat.id : "");
-  const [amount, setAmount] = useState(initial?.amount?.toString() ?? "");
-  const [note, setNote] = useState(initial?.note ?? "");
+  const [amount, setAmount] = useState(initial?.amount?.toString() ?? prefill?.amount?.toString() ?? "");
+  const [note, setNote] = useState(initial?.note ?? prefill?.note ?? "");
   const [date, setDate] = useState(initial?.date ?? today());
   const [splits, setSplits] = useState<ReserveSplit[]>(initial?.reserveSplits ?? []);
   const [addingSub, setAddingSub] = useState(false);
   const [newSubName, setNewSubName] = useState("");
   // Once the user picks a category by hand we stop auto-suggesting from the note.
   const [touchedCat, setTouchedCat] = useState(false);
-  const [showCats, setShowCats] = useState(!!initial); // شبكة التصنيفات (مطويّة حتى يُكتب التاجر)
+  // شبكة التصنيفات (مطويّة حتى يُكتب التاجر — ومفتوحةٌ إن جاء الاسم جاهزاً)
+  const [showCats, setShowCats] = useState(!!initial || !!prefill);
   const [showDetails, setShowDetails] = useState(false); // التاريخ ومصدر الصرف
   // ربطُ هذا المصروف بخطة أقساط (الطريق اليوميّ: سجّل كالعادة ثمّ اربط بضغطة).
   const [linkPlan, setLinkPlan] = useState<string | null>(initial?.planId ?? null);
@@ -230,6 +237,7 @@ export function TransactionForm({ onClose, initial }: TransactionFormProps) {
         "warning"
       );
     }
+    onSaved?.(tx);
     onClose();
   }
 

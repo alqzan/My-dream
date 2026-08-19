@@ -12,6 +12,7 @@ import { CategoryManager } from "@/components/finance/CategoryManager";
 import { ReserveFunds } from "@/components/finance/ReserveFunds";
 import { InstallmentPlans } from "@/components/finance/InstallmentPlans";
 import { Assets } from "@/components/finance/Assets";
+import { Shelf } from "@/components/madar/mal/Shelf";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceGlance } from "@/components/finance/FinanceGlance";
@@ -24,21 +25,29 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
-import type { Transaction } from "@/lib/types";
-import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package } from "lucide-react";
-import { getCategoryInfo, normalizeArabic, formatAmount, today } from "@/lib/utils";
+import type { Transaction, ShelfItem } from "@/lib/types";
+import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package, Hourglass } from "lucide-react";
+import { getCategoryInfo, normalizeArabic, formatAmount, today, uid } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
 } from "@/lib/financeOverview";
 import { assetsOverview } from "@/lib/assets";
 import { spendWindow } from "@/lib/budgetCycle";
+import { waitingItems, savedTotal, isRipe } from "@/lib/shelf";
 import { showUndo } from "@/components/ui/UndoToast";
 
 // شارة تحذيرٍ حمراء صغيرة لرأس قسمٍ مطويّ (تبقى ظاهرةً دون فتحه).
 function AlertBadge({ children }: { children: ReactNode }) {
   return (
     <span className="shrink-0 text-[10px] font-bold text-white bg-red-500 rounded-full px-2 py-0.5">{children}</span>
+  );
+}
+
+// شارةُ «نضج» — خضراء لا حمراء: هذا ليس خطراً، بل إذنٌ بالحكم بعد أن هدأتَ.
+function RipeBadge({ children }: { children: ReactNode }) {
+  return (
+    <span className="shrink-0 text-[10px] font-bold text-white bg-emerald-600 rounded-full px-2 py-0.5">{children}</span>
   );
 }
 
@@ -58,7 +67,8 @@ function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
 export default function FinancePage() {
   const {
     transactions, recurring, installmentPlans, assets, categories, dailyBudget, reserves, budgets, salaryDay, lastSalaryConfirm, budgetWindow, monthlyIncome,
-    deleteTransaction, addTransaction,
+    shelfItems, deleteTransaction, addTransaction,
+    addShelfItem, releaseShelfItem, renewShelfItem, buyShelfItem,
   } = useAppStore();
 
   // Instant delete + 5s undo window.
@@ -74,6 +84,10 @@ export default function FinancePage() {
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [importSms, setImportSms] = useState<string | null>(null);
+  // عنصرُ الرفّ الذي نضج ويُشترى الآن: نفتح به نموذجَ المصروف نفسَه (لا مساراً
+  // ثانياً للصرف) ثمّ نربط المعاملة بالعنصر بمعرّفها. هكذا يمرّ الشراء بكلّ ما
+  // يمرّ به أيّ مصروف — الميزانية اليومية والسقوف والسجل — بلا استثناء.
+  const [buyingShelf, setBuyingShelf] = useState<ShelfItem | null>(null);
   // حالة فتح أقسام «الخطة»: افتراضٌ ثابت (الميزانية اليومية) يطابق الخادم، ثمّ
   // نطبّق التفضيل المحفوظ محلياً + أي قسمٍ يطلبه رابطٌ عميق بعد التركيب.
   const [openSections, setOpenSections] = useState<Record<PlanSectionId, boolean>>(
@@ -157,6 +171,19 @@ export default function FinancePage() {
   );
   // ملخّص الأصول لرأس القسم — حسابٌ نقيّ من assets.ts، بلا أثرٍ على أيّ صرف.
   const assetsSummary = useMemo(() => assetsOverview(assets ?? [], today()), [assets]);
+  // ملخّص الرفّ لرأس القسم: كم ينتظر، وكم نضج، وكم وفَّرتَ بتركِه — كلُّها مشتقّة.
+  const shelfSummary = useMemo(() => {
+    const list = shelfItems ?? [];
+    const todayStr = today();
+    const waiting = waitingItems(list);
+    const ripe = waiting.filter((k) => isRipe(k, todayStr)).length;
+    const saved = savedTotal(list);
+    // «نضج» تُقال مرّةً واحدة — في الشارة. تكرارُها في الملخّص ضجيجٌ لا خبر.
+    const text = waiting.length === 0
+      ? saved > 0 ? `وفَّرت ${formatAmount(saved)} ر.س بتركِه` : "لا شيء على الرفّ"
+      : `${formatAmount(waiting.length)} ينتظر`;
+    return { waiting: waiting.length, ripe, saved, text };
+  }, [shelfItems]);
   // تنبيهات السقوف على نافذة دورة الراتب (لا الشهر الميلادي) — نفس نافذة
   // BudgetTracker، فتتصفّر مع تأكيد «نزل الراتب».
   const cycleStart = useMemo(
@@ -284,6 +311,34 @@ export default function FinancePage() {
           <Tags size={16} className="text-finance" />
           تصنيفاتي
         </button>
+      </CollapsibleSection>
+
+      {/* «الرفّ»: تأخيرُ الحكم ثلاثين يوماً — لا يمنع شراءً، يؤجّله حتى تهدأ
+          الشهوة. ما تُرِكَ يُجمع ثمنُه في «وفَّرت» **اشتقاقاً** من العناصر
+          المتروكة لا بعدّادٍ يتراكم (عدّادٌ يخسر زيادةً عند الدمج بين جهازين). */}
+      <CollapsibleSection
+        id="shelf"
+        title="الرفّ"
+        icon={<Hourglass size={16} />}
+        open={openSections.shelf}
+        onToggle={() => toggleSection("shelf")}
+        summary={shelfSummary.text}
+        badge={shelfSummary.ripe > 0 ? <RipeBadge>{formatAmount(shelfSummary.ripe)} نضج</RipeBadge> : undefined}
+      >
+        <Card>
+          <div className="mdr">
+            <Shelf
+              items={shelfItems ?? []}
+              todayStr={today()}
+              onAdd={(draft) =>
+                addShelfItem({ id: uid(), name: draft.name, price: draft.price, reason: draft.reason, placedAt: today() })
+              }
+              onRelease={releaseShelfItem}
+              onRenew={renewShelfItem}
+              onBuy={setBuyingShelf}
+            />
+          </div>
+        </Card>
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -455,6 +510,22 @@ export default function FinancePage() {
         title={editTx ? "تعديل المصروف" : "مصروف جديد"}
       >
         <TransactionForm onClose={() => { setShowForm(false); setEditTx(undefined); }} initial={editTx} />
+      </Modal>
+
+      {/* شراءُ ما نضج: نموذجُ المصروف نفسُه بمبلغٍ واسمٍ جاهزين — والتصنيفُ بيد
+          المالك. بعد الحفظ نربط المعاملةَ بالعنصر فيخرج من الرفّ إلى السجل. */}
+      <Modal
+        open={!!buyingShelf}
+        onClose={() => setBuyingShelf(null)}
+        title={buyingShelf ? `اشترِ «${buyingShelf.name}»` : "شراء"}
+      >
+        {buyingShelf && (
+          <TransactionForm
+            onClose={() => setBuyingShelf(null)}
+            prefill={{ amount: buyingShelf.price, note: buyingShelf.name }}
+            onSaved={(tx) => buyShelfItem(buyingShelf.id, tx.id)}
+          />
+        )}
       </Modal>
 
       <Modal

@@ -121,8 +121,17 @@ describe("planSectionFromHash — deep links open the right collapsible", () => 
   it("resolves the assets section too (‎/finance#assets‎)", () => {
     expect(planSectionFromHash("assets")).toBe("assets");
   });
-  it("the plan-sections registry keeps every section, الأقساط ثمّ الأصول قبل الاحتياطيات", () => {
-    expect([...PLAN_SECTIONS]).toEqual(["daily", "budgets", "recurring", "installments", "assets", "reserves"]);
+  it("resolves the shelf section too (‎/finance#shelf‎)", () => {
+    expect(planSectionFromHash("shelf")).toBe("shelf");
+  });
+  it("the plan-sections registry keeps every section, «الرفّ» بعد السقوف وقبل المتكرّرة", () => {
+    expect([...PLAN_SECTIONS]).toEqual([
+      "daily", "budgets", "shelf", "recurring", "installments", "assets", "reserves",
+    ]);
+  });
+  it("«الرفّ» لا يُفتح تلقائياً — لا ينافس ما يحتاج انتباهاً فعلاً", () => {
+    expect(defaultPlanOpen({ budgetAttention: false, negativeBalance: false }).shelf).toBe(false);
+    expect(defaultPlanOpen({ budgetAttention: true, negativeBalance: false }).shelf).toBe(false);
   });
 });
 

@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, DailyBudget,
-  KnowledgeSource, Benefit,
+  KnowledgeSource, Benefit, ShelfItem,
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode,
@@ -27,7 +27,7 @@ const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
   "quranReflections", "installmentPlans", "assets", "countdownEvents",
-  "knowledgeSources", "benefits",
+  "knowledgeSources", "benefits", "shelfItems",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -251,6 +251,16 @@ interface AppStore extends AppData {
 
   // Reading
   // ---------- المحبرة: المصادر والفوائد ----------
+  // ---------- الرفّ ----------
+  addShelfItem: (item: ShelfItem) => void;
+  /** «دَعْه» — يبقى محفوظاً ليُجمع ثمنُه فيما وفَّرت. */
+  releaseShelfItem: (id: string) => void;
+  /** «ثلاثون أخرى» — يُعيد عدّ النضوج من اليوم. */
+  renewShelfItem: (id: string) => void;
+  /** «اشترِه» — يربطه بمعاملةٍ سُجّلت له. */
+  buyShelfItem: (id: string, transactionId: string) => void;
+  deleteShelfItem: (id: string) => void;
+
   addKnowledgeSource: (src: KnowledgeSource) => void;
   updateKnowledgeSource: (id: string, updates: Partial<KnowledgeSource>) => void;
   deleteKnowledgeSource: (id: string) => void;
@@ -541,6 +551,7 @@ export const useAppStore = create<AppStore>()(
       readingLogs: [],
       knowledgeSources: [],
       benefits: [],
+      shelfItems: [],
       journalEntries: [],
       habits: [
         { id: "h1", name: "رياضة", icon: "🏃", color: "#3d9640", logs: [] },
@@ -1505,6 +1516,31 @@ export const useAppStore = create<AppStore>()(
       deleteFutureLetter: (id) =>
         set((s) => ({ futureLetters: s.futureLetters.filter((l) => l.id !== id) })),
 
+      addShelfItem: (item) => set((st) => ({ shelfItems: [item, ...(st.shelfItems ?? [])] })),
+      releaseShelfItem: (id) =>
+        set((st) => ({
+          shelfItems: (st.shelfItems ?? []).map((x) =>
+            x.id === id ? { ...x, releasedAt: today() } : x
+          ),
+        })),
+      renewShelfItem: (id) =>
+        set((st) => ({
+          shelfItems: (st.shelfItems ?? []).map((x) =>
+            x.id === id ? { ...x, placedAt: today(), releasedAt: undefined } : x
+          ),
+        })),
+      buyShelfItem: (id, transactionId) =>
+        set((st) => ({
+          shelfItems: (st.shelfItems ?? []).map((x) =>
+            x.id === id ? { ...x, boughtAt: today(), transactionId } : x
+          ),
+        })),
+      deleteShelfItem: (id) =>
+        set((st) => ({
+          shelfItems: (st.shelfItems ?? []).filter((x) => x.id !== id),
+          deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
+        })),
+
       addKnowledgeSource: (src) =>
         set((st) => ({ knowledgeSources: [src, ...(st.knowledgeSources ?? [])] })),
       updateKnowledgeSource: (id, updates) =>
@@ -2028,6 +2064,7 @@ export const useAppStore = create<AppStore>()(
           readingLogs: data.readingLogs ?? [],
           knowledgeSources: data.knowledgeSources ?? [],
           benefits: data.benefits ?? [],
+          shelfItems: data.shelfItems ?? [],
           journalEntries: data.journalEntries ?? [],
           habits: data.habits ?? [],
           recurring: data.recurring ?? [],
@@ -2072,6 +2109,7 @@ export const useAppStore = create<AppStore>()(
           readingLogs: s.readingLogs,
           knowledgeSources: s.knowledgeSources ?? [],
           benefits: s.benefits ?? [],
+          shelfItems: s.shelfItems ?? [],
           journalEntries: s.journalEntries,
           habits: s.habits,
           recurring: s.recurring,
