@@ -13,6 +13,7 @@ import { ReserveFunds } from "@/components/finance/ReserveFunds";
 import { InstallmentPlans } from "@/components/finance/InstallmentPlans";
 import { Assets } from "@/components/finance/Assets";
 import { Shelf } from "@/components/madar/mal/Shelf";
+import { CycleCurve } from "@/components/madar/mal/CycleCurve";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceGlance } from "@/components/finance/FinanceGlance";
@@ -27,13 +28,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { Transaction, ShelfItem } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package, Hourglass } from "lucide-react";
-import { getCategoryInfo, normalizeArabic, formatAmount, today, uid } from "@/lib/utils";
+import { getCategoryInfo, normalizeArabic, formatAmount, formatDateShort, today, uid } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
 } from "@/lib/financeOverview";
 import { assetsOverview } from "@/lib/assets";
-import { spendWindow } from "@/lib/budgetCycle";
+import { spendWindow, nextSalaryDate } from "@/lib/budgetCycle";
+import { buildCycleCurve } from "@/lib/cycleCurve";
 import { waitingItems, savedTotal, isRipe } from "@/lib/shelf";
 import { showUndo } from "@/components/ui/UndoToast";
 
@@ -194,6 +196,13 @@ export default function FinancePage() {
     () => budgetAlerts(budgets, transactions, categories, monthlyIncome, cycleStart),
     [budgets, transactions, categories, monthlyIncome, cycleStart]
   );
+  // منحنى الدورة: صرفٌ تراكميٌّ فوق خطِّ الخطّة من الراتب إلى الراتب. يُقاس
+  // ببدلِ الميزانية اليومية و`dailyShare` نفسِهما، فلا تعطي الشاشةُ الواحدة
+  // رقمين متناقضين — وبلا ميزانيةٍ يومية لا يُرسم أصلاً (لا خطَّ يُقاس عليه).
+  const cycleCurve = useMemo(
+    () => buildCycleCurve(dailyBudget, transactions, cycleStart, nextSalaryDate(salaryDay ?? 27, today()), today()),
+    [dailyBudget, transactions, cycleStart, salaryDay]
+  );
   // ما يستحقّ الفتح عند أوّل زيارةٍ بلا تفضيلٍ محفوظ — في مرجعٍ يُقرأ داخل تأثير
   // الوصول (لا يُعاد تشغيله مع كل تغيّر رقم).
   const attentionRef = useRef({ budgetAttention: false, negativeBalance: false, installmentOverdue: false });
@@ -255,6 +264,19 @@ export default function FinancePage() {
       <FinanceGlance overview={overview} categories={categories} onGo={goToSection} />
 
       <SalaryBanner />
+
+      {/* منحنى الدورة — الرصيدُ رقمٌ واحد، والمنحنى يقول **متى** انحرفت. */}
+      {cycleCurve && (
+        <Card>
+          <div className="mdr">
+            <CycleCurve
+              curve={cycleCurve}
+              startLabel={`الراتب · ${formatDateShort(cycleCurve.start)}`}
+              endLabel={`الراتب التالي · ${formatDateShort(cycleCurve.end)}`}
+            />
+          </div>
+        </Card>
+      )}
 
       <Link href="/finance/insights" className="block animate-fade-up">
         <div className="relative overflow-hidden rounded-2xl p-3.5 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine">
