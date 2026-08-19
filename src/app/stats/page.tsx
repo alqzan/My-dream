@@ -29,6 +29,13 @@ const MonthlyBars = dynamic(
 );
 import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck } from "lucide-react";
 import { SECTION } from "@/lib/palette";
+import { windowStats, yearPetals, yearAverage, yearInventory, pctOf } from "@/lib/hasila";
+import { arNum, arPct } from "@/lib/madar/format";
+import { SectionHead } from "@/components/madar/primitives";
+import {
+  KpiGrid, YearBloom, DoorRows, PrayerScale, YearInventory,
+  type Kpi, type DoorRow,
+} from "@/components/madar/hasila/HasilaParts";
 
 export default function StatsPage() {
   const {
@@ -150,8 +157,128 @@ export default function StatsPage() {
   }, [readingLogs]);
   const hasReadingData = readingMonthly.some((m) => m.صفحات > 0);
 
+  /* ═══ حساباتُ الحصيلة المنقولة ═══ */
+  const todayStr = today();
+  const habits = useAppStore((st) => st.habits);
+  const benefits = useAppStore((st) => st.benefits ?? []);
+  const win = useMemo(
+    () => windowStats(todayStr, { prayerLogs, journalEntries, readingLogs, habits, transactions }),
+    [todayStr, prayerLogs, journalEntries, readingLogs, habits, transactions]
+  );
+  const petals = useMemo(() => yearPetals(prayerLogs, todayStr), [prayerLogs, todayStr]);
+  const yearAvg = yearAverage(petals);
+  const inventory = useMemo(
+    () => yearInventory(Number(year), { journalEntries, readingLogs, books, prayerLogs, benefits }),
+    [year, journalEntries, readingLogs, books, prayerLogs, benefits]
+  );
+
+  const kpis: Kpi[] = [
+    {
+      label: "الصلواتُ المسجَّلة",
+      value: arPct(win.prayedTotal / Math.max(1, win.days.length * 5)),
+      delta: `${arNum(win.jamaah)} جماعة`,
+      color: "var(--clay)", deltaColor: "var(--green)",
+      pct: pctOf(win.prayedTotal, win.days.length * 5),
+    },
+    {
+      label: "صفحاتٌ قرأت",
+      value: arNum(win.pagesTotal),
+      delta: `${arNum(win.pages.filter((x) => x > 0).length)} يومًا`,
+      color: "var(--green)", deltaColor: "var(--ink34)",
+      pct: Math.min(100, win.pagesTotal),
+    },
+    {
+      label: "أيامٌ كتبتَها",
+      value: `${arNum(win.wroteDays)}/${arNum(win.days.length)}`,
+      delta: win.wroteDays >= 20 ? "انتظام" : "متقطِّع",
+      color: "var(--blue)", deltaColor: "var(--ink34)",
+      pct: pctOf(win.wroteDays, win.days.length),
+    },
+    {
+      label: "العادات",
+      value: arPct(win.habitsCap ? win.habitsTotal / win.habitsCap : 0),
+      delta: `من ${arNum(habits.length)}`,
+      color: "var(--gold)", deltaColor: "var(--ink34)",
+      pct: pctOf(win.habitsTotal, win.habitsCap),
+    },
+  ];
+
+  const doorRows: DoorRow[] = [
+    {
+      key: "salah", label: "الصلاة", color: "var(--clay)", series: win.prayed,
+      value: `${arNum(win.prayedTotal)} فرضًا`,
+      note: `${arNum(win.jamaah)} منها في جماعة · ${arPct(win.prayedTotal / Math.max(1, win.days.length * 5))} من الخمس`,
+    },
+    {
+      key: "reading", label: "القراءة", color: "var(--green)", series: win.pages,
+      value: `${arNum(win.pagesTotal)} صفحة`,
+      note: `${arNum(win.pages.filter((x) => x > 0).length)} يومًا قرأتَ فيه`,
+    },
+    {
+      key: "writing", label: "الكتابة", color: "var(--blue)", series: win.wrote,
+      value: `${arNum(win.wroteDays)} يومًا`,
+      note: win.wroteDays >= 20 ? "شهرٌ مكتوبٌ في أكثره" : "الأيامُ التي لا تُكتب تسقط من سنتك",
+    },
+    {
+      key: "habits", label: "العادات", color: "var(--gold)", series: win.habits,
+      value: `${arNum(win.habitsTotal)} مرَّة`,
+      note: `${arPct(win.habitsCap ? win.habitsTotal / win.habitsCap : 0)} من المتاح`,
+    },
+    {
+      key: "mal", label: "المال", color: "var(--ink)", series: win.spend,
+      value: formatAmount(win.spendTotal),
+      note: `${arNum(win.spend.filter((x) => x > 0).length)} يومًا فيه صرف`,
+    },
+  ];
+
+  // جملةٌ واحدةٌ صادقة: لا تُقال إلا إن كان في البيانات ما يُقال.
+  const insight =
+    win.prayedTotal === 0 && win.wroteDays === 0
+      ? "ابدأ بيومٍ واحدٍ كاملٍ تُسجِّل فيه كلَّ شيء، وستقرأ هنا نمطَك بعد أسبوع."
+      : win.wroteDays >= 20 && win.prayedTotal >= win.days.length * 4
+        ? "شهرٌ ثابت: كتبتَ أكثرَ أيامه وحافظتَ على أكثرِ فرائضه. الثباتُ أنفعُ من الوثبة."
+        : win.wroteDays < 8
+          ? `كتبتَ ${arNum(win.wroteDays)} من ${arNum(win.days.length)} يومًا. الأيامُ التي لا تُكتب لا تُستعاد.`
+          : `${arNum(win.jamaah)} فرضًا في جماعة هذا الشهر — وهو أكثرُ ما يثبت البقيّة.`;
+
   return (
-    <div className="page-shell">
+    <div className="page-shell mdr">
+      {/* ═══ الحصيلة — منقولةٌ من تصميم مدار ═══
+          تُوضع فوق التفاصيل القديمة لا بدلاً منها: هذه قراءةٌ سريعةٌ للحال،
+          وتلك أدواتُ تنقيبٍ يحتاجها من أراد التفصيل. */}
+      <div style={{ padding: "0 20px 8px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "16px 0 0" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 25, fontWeight: 900, lineHeight: 1.25 }}>الحصيلة</p>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--ink72)" }}>
+              سنةُ الالتزام · الحفظ · الصلاة · المال
+            </p>
+          </div>
+          <span className="mdr-star" style={{ width: 24, height: 24 }} />
+        </div>
+
+        <KpiGrid kpis={kpis} />
+        <YearBloom petals={petals} average={yearAvg} />
+        <DoorRows rows={doorRows} />
+
+        <p
+          style={{
+            margin: "12px 0 0", padding: "16px 18px", borderRadius: 22,
+            background: "var(--paper2)", border: "1px solid var(--gline)",
+            fontSize: 13, lineHeight: 2, color: "var(--ink72)",
+          }}
+        >
+          {insight}
+        </p>
+
+        <SectionHead title="ميزانُ الفرائض" marginTop={26} marginBottom={0} />
+        <PrayerScale logs={prayerLogs} todayStr={todayStr} />
+
+        <YearInventory rows={inventory} year={Number(year)} />
+
+        <SectionHead title="تفصيلٌ أعمق" marginTop={30} marginBottom={0} />
+      </div>
+
       <div className="animate-fade-up">
         <div className="flex items-center gap-2.5">
           <SectionSignet href="/stats" />
