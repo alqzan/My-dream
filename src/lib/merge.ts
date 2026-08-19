@@ -525,6 +525,10 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // دَينُ الفوائت السابق قيمةٌ **تُضبط** لا تُزاد، فيكفيها آخرُ ضابطٍ لها؛
     // أمّا الزياداتُ اليومية فمخزَّنةٌ حالةَ «فائتة» في يومها وتُدمج بطابعها.
     qadaBacklog: pickSingleton("qadaBacklog", primary.qadaBacklog ?? secondary.qadaBacklog ?? 0),
+    // المحبرة: مصادرُ المعرفة والفوائد — عناصرُ بمعرّفاتٍ وأختامِ تعديل،
+    // فتُوحَّد بالـid ويفوز التعديلُ الأحدث للعنصر نفسِه، والحذفُ يبقى شاهداً.
+    knowledgeSources: byIdNewer(primary.knowledgeSources ?? [], secondary.knowledgeSources ?? []),
+    benefits: byIdNewer(primary.benefits ?? [], secondary.benefits ?? []),
     // القرآن: تأمّلات ومحفوظات تُوحَّد بالـid (مع الأختام)، والوِرد يُوحَّد
     // كتواريخ (كسجلّات العادات) فلا يضيع وِردٌ سُجّل على جهاز.
     quranReflections: byIdNewer(primary.quranReflections ?? [], secondary.quranReflections ?? []),

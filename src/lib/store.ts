@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, DailyBudget,
+  KnowledgeSource, Benefit,
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent, InstallmentPlan, InstallmentRole, Asset,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode,
@@ -26,6 +27,7 @@ const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "recurring", "reserves", "habits", "futureLetters", "categories",
   "quranReflections", "installmentPlans", "assets", "countdownEvents",
+  "knowledgeSources", "benefits",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -248,6 +250,14 @@ interface AppStore extends AppData {
   setReadingGoal: (goal: number | null) => void;
 
   // Reading
+  // ---------- المحبرة: المصادر والفوائد ----------
+  addKnowledgeSource: (src: KnowledgeSource) => void;
+  updateKnowledgeSource: (id: string, updates: Partial<KnowledgeSource>) => void;
+  deleteKnowledgeSource: (id: string) => void;
+  addBenefit: (b: Benefit) => void;
+  updateBenefit: (id: string, updates: Partial<Benefit>) => void;
+  deleteBenefit: (id: string) => void;
+
   addBook: (book: Book) => void;
   updateBook: (id: string, updates: Partial<Book>) => void;
   deleteBook: (id: string) => void;
@@ -529,6 +539,8 @@ export const useAppStore = create<AppStore>()(
       transactions: [],
       books: [],
       readingLogs: [],
+      knowledgeSources: [],
+      benefits: [],
       journalEntries: [],
       habits: [
         { id: "h1", name: "رياضة", icon: "🏃", color: "#3d9640", logs: [] },
@@ -1493,6 +1505,28 @@ export const useAppStore = create<AppStore>()(
       deleteFutureLetter: (id) =>
         set((s) => ({ futureLetters: s.futureLetters.filter((l) => l.id !== id) })),
 
+      addKnowledgeSource: (src) =>
+        set((st) => ({ knowledgeSources: [src, ...(st.knowledgeSources ?? [])] })),
+      updateKnowledgeSource: (id, updates) =>
+        set((st) => ({
+          knowledgeSources: (st.knowledgeSources ?? []).map((x) => (x.id === id ? { ...x, ...updates } : x)),
+        })),
+      deleteKnowledgeSource: (id) =>
+        set((st) => ({
+          knowledgeSources: (st.knowledgeSources ?? []).filter((x) => x.id !== id),
+          // شاهدُ حذفٍ حتى لا يعيده اتحادُ الدمج من جهازٍ ما زال يحمله.
+          deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
+        })),
+
+      addBenefit: (b) => set((st) => ({ benefits: [b, ...(st.benefits ?? [])] })),
+      updateBenefit: (id, updates) =>
+        set((st) => ({ benefits: (st.benefits ?? []).map((x) => (x.id === id ? { ...x, ...updates } : x)) })),
+      deleteBenefit: (id) =>
+        set((st) => ({
+          benefits: (st.benefits ?? []).filter((x) => x.id !== id),
+          deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
+        })),
+
       addBook: (book) =>
         set((s) => ({ books: [book, ...s.books] })),
 
@@ -1992,6 +2026,8 @@ export const useAppStore = create<AppStore>()(
           transactions: data.transactions ?? [],
           books: data.books ?? [],
           readingLogs: data.readingLogs ?? [],
+          knowledgeSources: data.knowledgeSources ?? [],
+          benefits: data.benefits ?? [],
           journalEntries: data.journalEntries ?? [],
           habits: data.habits ?? [],
           recurring: data.recurring ?? [],
@@ -2034,6 +2070,8 @@ export const useAppStore = create<AppStore>()(
           assets: s.assets ?? [],
           books: s.books,
           readingLogs: s.readingLogs,
+          knowledgeSources: s.knowledgeSources ?? [],
+          benefits: s.benefits ?? [],
           journalEntries: s.journalEntries,
           habits: s.habits,
           recurring: s.recurring,

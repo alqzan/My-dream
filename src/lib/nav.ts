@@ -30,7 +30,10 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/prayers", icon: MosqueIcon, label: "الصلاة", color: "text-prayer", tint: "bg-prayer/10" },
   { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-journal", tint: "bg-journal/10" },
   { href: "/finance", icon: Wallet, label: "الأموال", color: "text-finance", tint: "bg-finance/10" },
-  { href: "/reading", icon: BookOpen, label: "القراءة", color: "text-reading", tint: "bg-reading/10" },
+  // «المحبرة» لا «القراءة»: الباب صار مسارَ معرفةٍ (مصدرٌ ← فائدةٌ ← سؤالٌ ←
+  // تطبيق) والكتبُ رفٌّ داخله، لا العكس. المسار `/reading` كما هو فلا تنكسر
+  // الروابطُ المحفوظة ولا اختصارُ PWA.
+  { href: "/reading", icon: BookOpen, label: "المحبرة", color: "text-reading", tint: "bg-reading/10" },
   { href: "/quran", icon: QuranIcon, label: "قرآن", color: "text-quran", tint: "bg-quran/10" },
   { href: "/stats", icon: BarChart3, label: "الإحصائيات", shortLabel: "إحصاء", color: "text-brand-600", tint: "bg-brand-500/15" },
 ];

@@ -153,6 +153,8 @@ export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
     transactions: g("transactions", []),
     books: g("books", []),
     readingLogs: g("readingLogs", []),
+    knowledgeSources: g("knowledgeSources", []),
+    benefits: g("benefits", []),
     journalEntries: g("journalEntries", []),
     habits: g("habits", []),
     recurring: g("recurring", []),

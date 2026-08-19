@@ -25,6 +25,10 @@ const FULL: Required<AppData> = {
   transactions: [{ id: "t1", date: "2026-05-01", amount: 25, category: "c1", note: "قهوة" }],
   books: [{ id: "b1", title: "ك", author: "م", totalPages: 300, currentPage: 42, status: "أقرأ" }],
   readingLogs: [{ id: "r1", bookId: "b1", date: "2026-05-01", pagesRead: 20 }],
+  // المحبرة: مصدرٌ وفائدةٌ منه. لو سقطا في الدورة لعاد جهازٌ جديد بلا مسارِ
+  // معرفةٍ أصلاً — وهو الانزلاقُ الصامت نفسُه الذي وقع لـ`assets`.
+  knowledgeSources: [{ id: "ks1", kind: "كتاب", name: "صيد الخاطر", author: "ابن الجوزي", bookId: "b1", createdAt: "2026-05-01" }],
+  benefits: [{ id: "bn1", sourceId: "ks1", text: "أكثرُ ما يفسد العملَ العجلةُ في أوّله.", question: "ما حدُّ الأناة؟", applied: true, createdAt: "2026-05-01" }],
   // `mergedFrom` مقصودٌ هنا: هو سجلّ «هذه المذكرة مدموجة ومِمَّ». لو سقط في
   // الدورة (لقطة → ترطيب → نسخة → دمج) صارت المدموجة تبدو مذكرةً عادية على
   // الجهاز الآخر — وهو بالضبط الدمج الغامض الذي تتجنّبه هذه الميزة.

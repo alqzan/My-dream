@@ -117,6 +117,44 @@ export interface Book {
   updatedAt?: number;
 }
 
+/* ===================== المحبرة — المصادر والفوائد ===================== */
+
+/**
+ * مصدرُ معرفة. **الكتبُ لا تُكرَّر هنا**: مصدرٌ من نوع «كتاب» يحمل `bookId`
+ * يشير إلى `Book` في الرفّ، فتقدُّمُ القراءة يبقى في مكانٍ واحد. وما ليس كتاباً
+ * (مقالٌ أو درسٌ أو تجربة) يعيش هنا وحدَه.
+ */
+export type SourceKind = "كتاب" | "مقال" | "درس" | "تجربة";
+
+export interface KnowledgeSource {
+  id: string;
+  kind: SourceKind;
+  name: string;
+  author?: string;
+  /** لمصادر «كتاب» فقط — مرجعٌ إلى `books` بدل تكرار الصفحات والتقدّم. */
+  bookId?: string;
+  createdAt: string; // YYYY-MM-DD
+  // طابع آخر تعديلٍ لهذا العنصر (ms) — كبقيّة العناصر المعرّفة بـid.
+  updatedAt?: number;
+}
+
+/**
+ * فائدةٌ محرَّرةٌ **بعبارتك أنت** لا بعبارة الكتاب — هذا شرطُ المسار كلِّه:
+ * ما لم تُعِد صياغتَه لم تفهمه. و`question` هو «السؤالُ الباقي» الذي يُبقي
+ * الفائدةَ حيّةً حتى تُطبَّق.
+ */
+export interface Benefit {
+  id: string;
+  /** معرّفُ مصدرٍ من `knowledgeSources` — أو معرّفُ كتابٍ من `books` مباشرة. */
+  sourceId?: string;
+  text: string;
+  question?: string;
+  /** دخلت في عملٍ فعليّ — آخرُ درجات المسار. */
+  applied?: boolean;
+  createdAt: string; // YYYY-MM-DD
+  updatedAt?: number;
+}
+
 export interface ReadingLog {
   id: string;
   bookId: string;
@@ -667,6 +705,10 @@ export interface AppData {
   transactions: Transaction[];
   books: Book[];
   readingLogs: ReadingLog[];
+  // المحبرة: مصادرُ المعرفة والفوائدُ المستخلَصة منها. اختياريّان فبياناتٌ
+  // قديمةٌ بلا الحقلين تعمل.
+  knowledgeSources?: KnowledgeSource[];
+  benefits?: Benefit[];
   journalEntries: JournalEntry[];
   habits: Habit[];
   recurring: RecurringTransaction[];
