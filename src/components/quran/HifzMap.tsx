@@ -5,7 +5,7 @@ import { EMPTY_HIFZ, type HifzUnit } from "@/lib/types";
 import { SURAHS, TOTAL_PAGES, idToPage, idToSurahAyah } from "@/lib/quran/meta";
 import { today, formatDate } from "@/lib/utils";
 import {
-  hifzProgress, hifzPace, hifzStreak, hifzUnits, mapCounts, mistakesInRange,
+  hifzProgress, hifzPace, hifzStreak, hifzUnits, mapCounts, mistakesInRange, groupPagesByJuz,
   type Portion, type JuzState, type UnitCell, type MapUnit,
 } from "@/lib/quran/hifz";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -23,7 +23,8 @@ const MAP_UNITS: { key: MapUnit; label: string; word: string }[] = [
   { key: "hizb", label: "أحزاب", word: "الحزب" },
   { key: "page", label: "أوجه", word: "الوجه" },
 ];
-const COLS: Record<MapUnit, string> = { juz: "grid-cols-6", hizb: "grid-cols-10", page: "grid-cols-[repeat(auto-fill,minmax(13px,1fr))]" };
+// «الأوجه» لا تدخل هنا: لها جدارٌ بسطرٍ لكلِّ جزء لا شبكةٌ متساوية.
+const COLS: Record<Exclude<MapUnit, "page">, string> = { juz: "grid-cols-6", hizb: "grid-cols-10" };
 
 const STATE: Record<JuzState, { fill: string; text: string; label: string; dot: string }> = {
   fresh:   { fill: SECTION.quran, text: "#fff",     label: "متقن",         dot: SECTION.quran },
@@ -52,6 +53,30 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
   const plan = h.plan!;
   const selCell = sel ? cells.find((c) => c.n === sel) ?? null : null;
   const tiny = unit === "page";
+  // «الأوجه»: ٦٠٤ طوبةً في شبكةٍ واحدة تُري أنّ فيك ضعفاً ولا تُري **أين**.
+  // فتُصفّ أوجهُ كلِّ جزءٍ في سطرٍ معنون — والجزءُ وحدةُ المراجعة التي يفكّر بها
+  // الحافظ أصلاً، فيصير الجدارُ خريطةً لا زخرفة.
+  const juzRows = tiny ? groupPagesByJuz(cells) : [];
+
+  function renderCell(c: UnitCell) {
+    const st = STATE[c.state];
+    const active = sel === c.n;
+    const fillH = c.state === "partial" ? c.fill * 100 : 100;
+    const mk = c.state !== "none" ? mistakesInRange(h, c.start, c.end) : 0;
+    return (
+      <button
+        key={c.n}
+        onClick={() => setSel(active ? null : c.n)}
+        className={`relative ${tiny ? "" : "aspect-square"} rounded-${tiny ? "sm" : "lg"} overflow-hidden border press transition-transform ${active ? "ring-2 ring-quran ring-offset-1 z-10 scale-110" : ""} ${c.state === "none" ? "border-gray-200 dark:border-[#3a2e1e]" : "border-transparent"}`}
+        style={tiny ? { height: 13, flex: 1, minWidth: 0 } : undefined}
+        title={`${MAP_UNITS.find((m) => m.key === unit)!.word} ${c.n} — ${st.label}${mk ? ` · ${mk} خطأ` : ""}`}
+      >
+        {c.state !== "none" && <span className="absolute inset-x-0 bottom-0" style={{ height: `${fillH}%`, backgroundColor: st.fill }} />}
+        {!tiny && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums" style={{ color: st.text }}>{c.n}</span>}
+        {mk > 0 && <span className={`absolute top-0 start-0 rounded-full bg-red-500 ${tiny ? "w-1 h-1" : "w-1.5 h-1.5 m-0.5"}`} />}
+      </button>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-quran/20 bg-gradient-to-b from-quran/[0.06] to-transparent p-4 space-y-3.5">
@@ -92,28 +117,20 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
         ))}
       </div>
 
-      {/* الشبكة */}
-      <div className={`grid ${COLS[unit]} ${tiny ? "gap-[3px]" : "gap-1.5"}`}>
-        {cells.map((c) => {
-          const st = STATE[c.state];
-          const active = sel === c.n;
-          const fillH = c.state === "partial" ? c.fill * 100 : 100;
-          const mk = c.state !== "none" ? mistakesInRange(h, c.start, c.end) : 0;
-          return (
-            <button
-              key={c.n}
-              onClick={() => setSel(active ? null : c.n)}
-              className={`relative ${tiny ? "" : "aspect-square"} rounded-${tiny ? "sm" : "lg"} overflow-hidden border press transition-transform ${active ? "ring-2 ring-quran ring-offset-1 z-10 scale-110" : ""} ${c.state === "none" ? "border-gray-200 dark:border-[#3a2e1e]" : "border-transparent"}`}
-              style={tiny ? { height: 13 } : undefined}
-              title={`${MAP_UNITS.find((m) => m.key === unit)!.word} ${c.n} — ${st.label}${mk ? ` · ${mk} خطأ` : ""}`}
-            >
-              {c.state !== "none" && <span className="absolute inset-x-0 bottom-0" style={{ height: `${fillH}%`, backgroundColor: st.fill }} />}
-              {!tiny && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums" style={{ color: st.text }}>{c.n}</span>}
-              {mk > 0 && <span className={`absolute top-0 start-0 rounded-full bg-red-500 ${tiny ? "w-1 h-1" : "w-1.5 h-1.5 m-0.5"}`} />}
-            </button>
-          );
-        })}
-      </div>
+      {/* الشبكة — وفي «الأوجه» سطرٌ لكلِّ جزء بدل كتلةٍ واحدة لا تُقرأ. */}
+      {tiny ? (
+        <div className="space-y-[3px]">
+          {juzRows.map((row) => (
+            <div key={row.juz} className="flex items-center gap-1.5">
+              <span className="shrink-0 w-5 text-[9px] text-gray-400 tabular-nums text-center">{row.juz}</span>
+              <div className="flex-1 flex gap-[3px] min-w-0">{row.cells.map(renderCell)}</div>
+            </div>
+          ))}
+          <p className="text-[10px] text-gray-400 pt-1">صفٌّ لكلِّ جزء · طوبةٌ لكلِّ وجه · المسْ طوبةً لترى تفاصيلها</p>
+        </div>
+      ) : (
+        <div className={`grid ${COLS[unit as Exclude<MapUnit, "page">]} gap-1.5`}>{cells.map(renderCell)}</div>
+      )}
 
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500">
         {(["fresh", "due", "weak", "partial", "none"] as JuzState[]).map((s) => (

@@ -476,6 +476,32 @@ export function hifzUnits(s: HifzState, todayStr: string, unit: MapUnit): UnitCe
   return cells;
 }
 
+// ===================== جدارُ الأوجه =====================
+// ٦٠٤ وجهاً في شبكةٍ واحدة كتلةٌ لا تُقرأ: ترى أنّ فيك ضعفاً ولا ترى **أين**.
+// فتُصفّ أوجهُ كلِّ جزءٍ في سطرٍ معنون — الجزءُ وحدةُ المراجعة التي يفكّر بها
+// الحافظ أصلاً، فيصير الجدارُ خريطةً لا زخرفة.
+//
+// **الوجهُ يُنسب لجزءِ أوّلِ آيةٍ فيه**: بعضُ الأوجه تقع على حدِّ جزأين، ووجهٌ
+// في سطرين يُعدّ مرّتين ويكذب الجرد. نقيّةٌ ومختبَرة.
+
+export interface JuzRow {
+  juz: number;
+  cells: UnitCell[];
+}
+
+export function groupPagesByJuz(cells: UnitCell[]): JuzRow[] {
+  const rows = new Map<number, UnitCell[]>();
+  for (const c of cells) {
+    const j = idToJuz(c.start);
+    const row = rows.get(j);
+    if (row) row.push(c);
+    else rows.set(j, [c]);
+  }
+  return [...rows.keys()]
+    .sort((a, b) => a - b)
+    .map((juz) => ({ juz, cells: rows.get(juz)!.sort((a, b) => a.n - b.n) }));
+}
+
 export interface HifzMapCounts { memorized: number; fresh: number; due: number; weak: number; partial: number }
 export function mapCounts(cells: UnitCell[]): HifzMapCounts {
   const c: HifzMapCounts = { memorized: 0, fresh: 0, due: 0, weak: 0, partial: 0 };

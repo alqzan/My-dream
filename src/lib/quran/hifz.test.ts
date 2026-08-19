@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   weakSpots, latestRatingByPage, portionEnd, hifzProgress, hifzPace,
   gradeFromMistakes, mistakeTolerance, recentReviewBand, drillsToday, smartTestPortion,
-  openMistakesInRange, marksTodayInRange, markedToday,
+  openMistakesInRange, marksTodayInRange, markedToday, hifzUnits, groupPagesByJuz,
 } from "./hifz";
-import { pageRange, idToPage } from "./meta";
+import { pageRange, idToPage, idToJuz, TOTAL_PAGES, TOTAL_JUZ } from "./meta";
 import type { HifzState, HifzRating } from "../types";
 
 function hz(o: Partial<HifzState> = {}): HifzState {
@@ -253,5 +253,41 @@ describe("smartTestPortion — يرجّح الأطول عهداً لا العش�
 
   it("لا شيء قبل أن يوجد محفوظ", () => {
     expect(smartTestPortion(hz({ frontierId: 0 }), "2026-02-01")).toBeNull();
+  });
+});
+
+describe("جدارُ الأوجه — سطرٌ لكلِّ جزء", () => {
+  const cells = hifzUnits(hz({ frontierId: 400 }), "2026-08-19", "page");
+
+  it("ثلاثون سطراً، ولا وجهَ يسقط ولا يُعدُّ مرّتين", () => {
+    const rows = groupPagesByJuz(cells);
+    expect(rows).toHaveLength(TOTAL_JUZ);
+    expect(rows.reduce((a, r) => a + r.cells.length, 0)).toBe(TOTAL_PAGES);
+    const seen = new Set(rows.flatMap((r) => r.cells.map((c) => c.n)));
+    expect(seen.size).toBe(TOTAL_PAGES);
+  });
+
+  it("الأجزاءُ مرتّبةٌ تصاعديًّا، وأوجهُ كلِّ سطرٍ كذلك", () => {
+    const rows = groupPagesByJuz(cells);
+    expect(rows.map((r) => r.juz)).toEqual([...rows.map((r) => r.juz)].sort((a, b) => a - b));
+    for (const r of rows) {
+      expect(r.cells.map((c) => c.n)).toEqual([...r.cells.map((c) => c.n)].sort((a, b) => a - b));
+    }
+  });
+
+  it("**الوجهُ يُنسب لجزءِ أوّلِ آيةٍ فيه** — فوجهُ الحدِّ في سطرٍ واحدٍ لا سطرين", () => {
+    for (const row of groupPagesByJuz(cells)) {
+      for (const c of row.cells) expect(idToJuz(c.start)).toBe(row.juz);
+    }
+  });
+
+  it("يحفظ حالةَ كلِّ وجهٍ كما هي — التجميعُ ترتيبٌ لا حساب", () => {
+    const rows = groupPagesByJuz(cells);
+    const flat = rows.flatMap((r) => r.cells).sort((a, b) => a.n - b.n);
+    expect(flat).toEqual(cells);
+  });
+
+  it("قائمةٌ فارغة تُعطي صفراً من السطور لا تنهار", () => {
+    expect(groupPagesByJuz([])).toEqual([]);
   });
 });
