@@ -11,6 +11,8 @@ import {
   getPrayerLog,
   countDayPrayers,
   quranActivityDates,
+  computeDailyBudgetStatus,
+  formatAmount,
 } from "@/lib/utils";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { GroupLabel } from "@/components/ui/GroupLabel";
@@ -36,6 +38,11 @@ import { ChevronLeft, BarChart3, TrendingDown, Plus, Wallet, BookMarked, BookOpe
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { SECTION, GOLD_LIGHT, SECTION_DEEP } from "@/lib/palette";
+import { useRouter } from "next/navigation";
+import { dueArc } from "@/lib/sundial";
+import { arNum } from "@/lib/madar/format";
+import { Sundial } from "@/components/madar/today/Sundial";
+import { ThreeArcs, type ArcSpec } from "@/components/madar/today/ThreeArcs";
 
 // تخطيط الرئيسية — **طبقتان** لا قائمةٌ واحدة. كانت اثنتي عشرة كتلةً متساوية
 // الوزن البصريّ بلا شيءٍ يقول «هذا الأهمّ»، وما يخصّ اليوم مختلطٌ بما يُراجَع
@@ -50,6 +57,7 @@ import { SECTION, GOLD_LIGHT, SECTION_DEEP } from "@/lib/palette";
 //
 // و«بوصلة مدار» تبقى خارج الطيّ عمداً: توصياتها تُنفَّذ الآن لا تُقرأ لاحقاً.
 export default function Dashboard() {
+  const router = useRouter();
   // منتقٍ لكلّ شريحة بدل `useAppStore()` المجرّدة: تلك تشترك بالحالة كلّها،
   // فتُعاد رسمُ الصفحة (وشجرتها) مع **أيّ** تعديلٍ في المتجر — ولو كان تعديلاً
   // لا يظهر على هذه الشاشة أصلاً.
@@ -58,6 +66,7 @@ export default function Dashboard() {
   const transactions = useAppStore((s) => s.transactions);
   const books = useAppStore((s) => s.books);
   const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
   const habits = useAppStore((s) => s.habits);
   const quranWird = useAppStore((s) => s.quranWird);
   const quranHifz = useAppStore((s) => s.quranHifz);
@@ -117,6 +126,63 @@ export default function Dashboard() {
   const hasHifzPlan = !!quranHifz?.plan;
   const hasTodayHifz = (quranHifz?.sessions ?? []).some((s) => s.date === todayStr);
 
+  /* ═══ ما تحتاجه المزولةُ والأقواسُ الثلاثة ═══ */
+
+  // ساعةٌ تتقدّم كلَّ دقيقة: المزولةُ تقول «أين أنت من نهارك»، فساعةٌ مجمّدةٌ
+  // على لحظةِ الفتح تكذب بعد قليل. الدقيقةُ كافيةٌ — الظلُّ لا يقفز أسرع.
+  const [nowTick, setNowTick] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const prayedToday = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed;
+  // أوجهُ الحفظ التي حان موعدُ مراجعتها اليوم — من مصدر الحقيقة نفسِه الذي
+  // يقرؤه قسم القرآن، لا من عدٍّ ثانٍ هنا.
+  // مواضعُ الخطأ التي لم تُتقن بعدُ ولم تُختبَر اليوم — هي «ما يستحقّ مراجعتك
+  // الآن» في باب القرآن، لا كلُّ خطأٍ مسجّل.
+  const hifzDueCount = useMemo(
+    () => (quranHifz?.mistakes ?? []).filter((m) => !m.resolved && m.lastDrill !== todayStr).length,
+    [quranHifz, todayStr]
+  );
+  const dueNow = dueArc(prayedToday, hifzDueCount);
+
+  const dailyStatus = useMemo(
+    () => (dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null),
+    [dailyBudget, transactions]
+  );
+
+  const arcSpecs: ArcSpec[] = [
+    {
+      key: "salah", label: "الصلاة",
+      big: arNum(prayedToday), unit: `من ${arNum(5)}`,
+      sub: prayedToday === 5 ? "يومٌ كامل" : `بقيت ${arNum(5 - prayedToday)}`,
+      ratio: prayedToday / 5,
+      color: "var(--clay)", wash: "var(--clayw)",
+      onClick: () => router.push("/prayers"),
+    },
+    {
+      key: "quran", label: "القرآن",
+      big: hifzDueCount ? arNum(hifzDueCount) : "تمَّ",
+      unit: hifzDueCount ? "للمراجعة" : "مراجعةُ اليوم",
+      sub: hasTodayWird ? "وِردُ اليوم تمَّ" : "لم يُسجَّل وِردُك",
+      ratio: hifzDueCount ? Math.max(0.12, 1 - hifzDueCount / 12) : 1,
+      color: "var(--green)", wash: "var(--greenw)",
+      onClick: () => router.push("/quran"),
+    },
+    {
+      key: "mal", label: "المال",
+      big: dailyStatus ? formatAmount(Math.round(Math.abs(dailyStatus.balance))) : "—",
+      unit: dailyStatus ? (dailyStatus.balance < 0 ? "تجاوزتَ" : "ريالًا") : "بلا ميزانية",
+      sub: dailyStatus ? (dailyStatus.balance < 0 ? "راجِع صرفك" : "يكفيك اليوم") : "اضبِط ميزانيتك",
+      ratio: dailyStatus && dailyStatus.allowance > 0
+        ? Math.max(0, Math.min(1, dailyStatus.balance / dailyStatus.allowance))
+        : 0,
+      color: "var(--blue)", wash: "var(--bluew)",
+      onClick: () => router.push("/finance"),
+    },
+  ];
+
   // First run: a brand-new user has nothing tracked in any domain yet, so the
   // dashboard is a wall of empty instruments with no guidance. Detect it from
   // the same store slices the widgets read (no new state) — the instant ANY of
@@ -166,16 +232,39 @@ export default function Dashboard() {
   const yearPct = yearProgress();
 
   return (
-    <div className="page-shell page-shell--wide">
+    <div className="page-shell page-shell--wide mdr">
       {celebrate && <Confetti />}
 
-      <div className="flex items-center justify-between gap-4 animate-fade-up">
+      {/* ═══ رأسُ اليوم — منقولٌ من تصميم مدار ═══
+          التحيّةُ والتاريخان والمزولةُ والأقواسُ الثلاثة. وما تحتها من طبقاتِ
+          الرئيسية باقٍ كما هو: فلكُ السنة والعاداتُ والصلواتُ والبصيرةُ
+          والحكمةُ ورمضانُ والمحطّاتُ وحصيلةُ الأسبوع. */}
+      <div style={{ padding: "0 4px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "8px 0 0" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 25, fontWeight: 900, lineHeight: 1.25 }}>{getGreeting()}</p>
+            <p
+              style={{
+                margin: "6px 0 0", fontSize: 12.5, color: "var(--ink72)",
+                display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+              }}
+            >
+              <span>{hijriDate(todayStr)}</span>
+              <span className="mdr-diamond" style={{ width: 5, height: 5 }} />
+              <span style={{ color: "var(--ink52)" }}>{formatDate(todayStr)}</span>
+            </p>
+          </div>
+          <span className="mdr-star" style={{ width: 24, height: 24 }} />
+        </div>
+
+        <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
+
+        <ThreeArcs due={dueNow} arcs={arcSpecs} />
+      </div>
+
+      <div className="flex items-center justify-between gap-4 animate-fade-up" style={{ marginTop: 18 }}>
         <div>
-          <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-l from-[#5c3d21] to-[#a96c20] dark:from-[#f0d9a8] dark:to-[#e8b15a]">
-            {getGreeting()} 👋
-          </h1>
-          <p className="page-subtitle">{formatDate(todayStr)}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{hijriDate(todayStr)}</p>
+          <p className="page-subtitle">تقدُّمُك في العام</p>
         </div>
         <YearOrbit
           pct={yearPct}
