@@ -14,9 +14,11 @@ import { CalendarHeart } from "lucide-react";
 // تأخذ تدرّجاً بنفسجياً من هوية القسم فتبقى الشريطُ متساوقاً.
 
 const GRADIENTS = [
-  "linear-gradient(150deg, #6f5299, #3d2f57)",
-  "linear-gradient(150deg, #8a6fb0, #4a3a6b)",
-  "linear-gradient(150deg, #b07a5a, #5a3a2f)",
+  // ألوانُ التصميم الدافئة بدل البنفسجيّ — البطاقةُ تجلس على ورقٍ كريميّ
+  // فالبنفسجيُّ كان ينتأ منه نتوءاً. (طينيّ · ذهبيّ · أخضر · أزرق)
+  "linear-gradient(150deg, #b0603a, #5a2f21)",
+  "linear-gradient(150deg, #a97c30, #5b431b)",
+  "linear-gradient(150deg, #2f7a63, #1a4235)",
   "linear-gradient(150deg, #4a7f8f, #24414d)",
 ];
 

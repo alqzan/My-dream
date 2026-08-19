@@ -7,7 +7,7 @@
 import { describe, it, expect } from "vitest";
 import {
   toIndicDigits, toLatinDigits, formatAmount, formatDate, formatDateShort,
-  formatClock, hijriDate, entriesCount,
+  formatClock, hijriDate, entriesCount, hijriDay, hijriDayNumber,
 } from "./utils";
 
 const hasLatinDigit = (s: string) => /[0-9]/.test(s);
@@ -39,6 +39,23 @@ describe("قاعدةُ الأرقام الهندية", () => {
 
   it("العدُّ العربيُّ هنديّ", () => {
     expect(hasLatinDigit(entriesCount(148))).toBe(false);
+  });
+
+  it("من احتاج الرقمَ يناديه رقماً — لا يمرّر نصَّ العرض على Number", () => {
+    // كان طورُ القمر يُحسب بـ`Number(hijriDay(...))`، وصار NaN حين انقلبت
+    // الأرقامُ هنديةً — فبقي القمرُ محاقاً كلَّ ليلة. الحارس هنا لا هناك.
+    expect(Number(hijriDay("2026-08-19"))).toBeNaN();
+    const n = hijriDayNumber("2026-08-19");
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBeGreaterThanOrEqual(1);
+    expect(n).toBeLessThanOrEqual(30);
+    // مدخلٌ فاسد لا يرمي ولا يُخرج NaN — يبقى يوماً صالحاً في المدى.
+    for (const bad of ["", "nope", "2026-13-99"]) {
+      const v = hijriDayNumber(bad);
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThanOrEqual(1);
+      expect(v).toBeLessThanOrEqual(30);
+    }
   });
 
   it("مفاتيحُ التخزين تبقى لاتينية — التحويلُ للعرض لا للبيانات", () => {

@@ -171,6 +171,18 @@ export function hijriDay(dateStr: string): string {
   }
 }
 
+/**
+ * يومُ الشهر الهجريّ **عدداً** (١..٣٠) لا نصّاً.
+ *
+ * موجودةٌ لأنّ `hijriDay` تُخرج نصّاً بأرقامٍ **هندية** منذ أن صارت أرقامُ
+ * التطبيق هندية، و`Number("١٥")` تُساوي `NaN`. من احتاج الرقمَ ليحسب به
+ * (طورُ القمر مثلاً) يناديها، ولا يمرّر نصَّ العرض على `Number`.
+ */
+export function hijriDayNumber(dateStr: string): number {
+  const n = Number(toLatinDigits(hijriDay(dateStr)));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 // Hijri month(s) label for a whole Gregorian month, e.g. "محرم – صفر 1447 هـ".
 // A Gregorian month always spans one or two Hijri months.
 export function hijriMonthLabel(year: number, month: number): string {

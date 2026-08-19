@@ -26,17 +26,22 @@ const DayOneImport = dynamic(
 import { FutureLetters } from "@/components/journal/FutureLetters";
 import { QuestionMoon } from "@/components/journal/QuestionMoon";
 import { StreakCalendar } from "@/components/journal/StreakCalendar";
-import { MemorySky } from "@/components/journal/MemorySky";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
+import { MdrButton, TabBar, SectionHead } from "@/components/madar/primitives";
+import { MemoryDome } from "@/components/madar/journal/MemoryDome";
+import { MoonQuestion, MonthGrid, PastDays } from "@/components/madar/journal/JournalParts";
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame, Clock, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3, Combine } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
 import { SECTION_DEEP } from "@/lib/palette";
+
+const JOURNAL_TABS = ["السماء", "الشهر", "الصور", "الرسائل"] as const;
+type JournalTab = (typeof JOURNAL_TABS)[number];
 
 export default function JournalPage() {
   const { journalEntries, deleteJournalEntry, addJournalEntry, updateJournalEntry } = useAppStore();
@@ -69,7 +74,13 @@ export default function JournalPage() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // لوحة الدمج: `""` تعني «كل الأيام المكرّرة»، وتاريخٌ يعني يوماً بعينه.
   const [mergeDay, setMergeDay] = useState<string | null>(null);
-  const [view, setView] = useState<"list" | "gallery" | "sky">("list");
+  // تبويباتُ التصميم الأربعة. «الصور» تقود عرضَ المعرض القائم بدل مبدّلٍ ثانٍ
+  // أسفل الصفحة — مبدّلان لشيءٍ واحد يربكان.
+  const [topTab, setTopTab] = useState<JournalTab>("السماء");
+  const [skyPick, setSkyPick] = useState<string | null>(null);
+  const [calYear, setCalYear] = useState(() => Number(today().slice(0, 4)));
+  const [calMonth, setCalMonth] = useState(() => Number(today().slice(5, 7)));
+  const view: "list" | "gallery" = topTab === "الصور" ? "gallery" : "list";
   // Render the newest page of entries first; "عرض المزيد" reveals more. Keeps
   // a big archive (e.g. after a Day One import) from mounting hundreds of
   // cards — and their images — all at once. A search shows all its matches.
@@ -134,6 +145,26 @@ export default function JournalPage() {
 
   // كم يوماً في الأرشيف كلّه فيه أكثر من مذكرة — مدخلُ الدمج الشامل.
   const mergeableDays = useMemo(() => duplicateDays(journalEntries).length, [journalEntries]);
+
+  // النجمةُ المختارة من القبّة — بطاقةُ معاينةٍ قبل فتح المذكرة كاملة.
+  const skyPickEntry = useMemo(
+    () => (skyPick ? journalEntries.find((e) => e.id === skyPick) : undefined),
+    [skyPick, journalEntries]
+  );
+
+  /**
+   * جوابُك على **سؤال اليوم نفسِه** قبل سنة. الأسئلةُ دوريّةٌ بيوم السنة
+   * (`dailyQuestion`)، فمذكرةُ اليوم نفسِه من السنة الماضية جوابٌ للسؤال ذاته —
+   * وهذه المقابلةُ هي أنفعُ ما في «سؤال القمر»: ترى كيف تغيّرتَ في سنة.
+   */
+  const lastYearAnswer = useMemo(() => {
+    const [y, ...rest] = todayStr.split("-");
+    const lastYear = `${Number(y) - 1}-${rest.join("-")}`;
+    const entry = journalEntries.find((e) => e.date === lastYear && (e.question || e.content));
+    if (!entry) return undefined;
+    const text = (entry.content || "").replace(/<[^>]+>/g, " ").trim();
+    return text ? text.slice(0, 180) : undefined;
+  }, [journalEntries, todayStr]);
 
   const streak = getJournalStreak(journalEntries);
   const markedDates = journalEntries.map((e) => e.date);
@@ -275,150 +306,192 @@ export default function JournalPage() {
   const hasMoreGallery = galleryPhotos.length > visibleGallery.length;
 
   return (
-    <div className="page-shell">
-      <div className="flex items-center justify-between animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <SectionSignet href="/journal" />
-            <h1 className="page-title">المذكرات</h1>
-            {journalEntries.length > 0 && (
-              <button
-                onClick={openRandomMemory}
-                className="text-xs font-bold text-journal bg-journal/10 hover:bg-journal/20 rounded-full px-2.5 py-1 press"
-              >
-                🎲 ذكرى عشوائية
-              </button>
-            )}
+    // `mdr` على الغلاف كلِّه: أرضيةُ الورق تسري تحت الأرشيف والبحث أيضاً،
+    // فلا ينقسم الشعورُ بين نصفٍ منقولٍ ونصفٍ قديم. البطاقاتُ الداخلية تبقى
+    // على Tailwind كما هي حتى يأتي دورُها.
+    <div className="page-shell mdr">
+      {/* ═══ رأسُ الشاشة — منقولٌ من تصميم مدار ═══ */}
+      <div className="mdr" style={{ padding: "0 20px 24px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "16px 0 0" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 25, fontWeight: 900, lineHeight: 1.25 }}>المذكرات</p>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--ink72)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>{entriesCount(journalEntries.length)}</span>
+              <span className="mdr-diamond" style={{ width: 5, height: 5 }} />
+              <span style={{ color: "var(--ink52)" }}>
+                {streak > 0 ? `${streak} يوم متواصل` : "ابدأ سلسلتك اليوم"}
+              </span>
+            </p>
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <Flame size={14} className={streak > 0 ? "text-orange-500 animate-flame" : "text-gray-300"} />
-            <span className="text-sm text-gray-500">
-              {streak > 0 ? `${streak} يوم متواصل` : "ابدأ سلسلتك اليوم"}
-            </span>
-            <span className="text-xs text-gray-300">•</span>
-            <span className="text-xs text-gray-400">{entriesCount(journalEntries.length)}</span>
-          </div>
+          <span className="mdr-star" style={{ width: 24, height: 24 }} />
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowImport(true)}
-            className="gap-1.5"
-          >
-            <Upload size={14} />
-            Day One
-          </Button>
-          <Button size="sm" onClick={() => setShowForm(true)} className="gap-1.5 bg-journal hover:bg-journal/90">
-            <Plus size={16} />
-            مذكرة
-          </Button>
-        </div>
-      </div>
 
-      {/* سطر سريع — التقاطٌ فوريّ دون فتح المحرّر */}
-      <div className="flex items-center gap-2 bg-white dark:bg-[#241c12] border border-gray-200 dark:border-transparent rounded-2xl px-3 py-2 animate-fade-up stagger-1">
-        <Zap size={16} className="text-journal shrink-0" />
-        <input
-          value={quickLine}
-          onChange={(e) => setQuickLine(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addQuickLine(); } }}
-          placeholder="سطرٌ سريع… خاطرة، امتنان، أو ملاحظة"
-          aria-label="سطر سريع"
-          dir="auto"
-          className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none placeholder:text-gray-400"
-        />
         <button
-          onClick={addQuickLine}
-          disabled={!quickLine.trim()}
-          className="shrink-0 text-xs font-bold text-white bg-journal rounded-lg px-3 py-1.5 press disabled:opacity-40"
+          type="button"
+          onClick={() => setShowForm(true)}
+          style={{
+            display: "block", width: "100%", minHeight: 50, margin: "14px 0 0",
+            background: "var(--ink)", color: "var(--paper)", border: "none",
+            borderRadius: 16, fontSize: 14, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
+          }}
         >
-          أضف
+          {hasToday ? "أضِف إلى مذكرة اليوم" : "اكتب مذكرة اليوم"}
         </button>
-      </div>
 
-      {/* سؤال اليوم */}
-      <div className="rounded-2xl p-4 text-white bg-gradient-to-l from-[#5d4a8a] via-[#7c6fcd] to-[#9587d6] card-shadow shine animate-fade-up stagger-1">
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-bold opacity-80 mb-1">سؤال اليوم 💭</p>
-            <p className="text-base font-bold leading-relaxed">{question}</p>
-            {!hasToday && (
-              <button
-                onClick={() => setShowForm(true)}
-                className="mt-3 flex items-center gap-1.5 bg-white/95 hover:bg-white text-journal text-xs font-bold px-3.5 py-2 rounded-xl transition-colors press"
-              >
-                <PenLine size={13} />
-                اكتب عنه الآن
-              </button>
+        {/* أدواتٌ ثانوية — الاستيرادُ والذكرى العشوائية باقيان، لا يسقط شيء */}
+        <div style={{ display: "flex", gap: 8, margin: "8px 0 0", flexWrap: "wrap" }}>
+          <MdrButton kind="ghost" onClick={() => setShowImport(true)} style={{ fontSize: 12.5 }}>
+            استيراد Day One
+          </MdrButton>
+          {journalEntries.length > 0 && (
+            <MdrButton kind="ghost" onClick={openRandomMemory} style={{ fontSize: 12.5 }}>
+              ذكرى عشوائية
+            </MdrButton>
+          )}
+          {mergeableDays > 0 && (
+            <MdrButton kind="gold" onClick={() => setMergeDay("")} style={{ fontSize: 12.5 }}>
+              دمجُ الأيام المكرّرة
+            </MdrButton>
+          )}
+        </div>
+
+        {/* سطرٌ سريع — التقاطٌ فوريّ دون فتح المحرّر */}
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 8, margin: "12px 0 0",
+            border: "1px solid var(--line)", borderRadius: 18,
+            background: "var(--paper2)", padding: "6px 12px",
+          }}
+        >
+          <input
+            value={quickLine}
+            onChange={(e) => setQuickLine(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addQuickLine(); } }}
+            placeholder="سطرٌ سريع… خاطرة، امتنان، أو ملاحظة"
+            aria-label="سطر سريع"
+            dir="auto"
+            style={{
+              flex: 1, minWidth: 0, background: "transparent", border: "none",
+              outline: "none", fontSize: 13.5, minHeight: 40, fontFamily: "inherit", color: "var(--ink)",
+            }}
+          />
+          <MdrButton kind="ink" onClick={addQuickLine} disabled={!quickLine.trim()} minHeight={40} style={{ fontSize: 12.5, padding: "0 13px" }}>
+            أضِف
+          </MdrButton>
+        </div>
+
+        <MoonQuestion
+          question={question}
+          todayStr={todayStr}
+          answered={hasToday}
+          lastYearAnswer={lastYearAnswer}
+          onWrite={() => setShowForm(true)}
+        />
+
+        <TabBar tabs={JOURNAL_TABS} active={topTab} onPick={(t) => setTopTab(t as JournalTab)} marginTop={14} />
+
+        {topTab === "السماء" && (
+          <>
+            {memories.length > 0 && (
+              <div style={{ margin: "16px 0 0" }}>
+                <MemoryStrip memories={memories} todayStr={todayStr} onOpen={openViewer} />
+              </div>
             )}
-          </div>
-          <QuestionMoon />
-        </div>
-      </div>
-
-      {/* رسائل لنفسك المستقبلية */}
-      <div className="animate-fade-up stagger-2">
-        <FutureLetters />
-      </div>
-
-      {/* في مثل هذا اليوم — بطاقاتٌ مصوّرة تنزلق أفقياً */}
-      {memories.length > 0 && (
-        <div className="animate-fade-up stagger-2">
-          <MemoryStrip memories={memories} todayStr={todayStr} onOpen={openViewer} />
-        </div>
-      )}
-
-      <Card className="animate-fade-up stagger-3">
-        <StreakCalendar markedDates={markedDates} color={SECTION_DEEP.journal} onDayClick={setSelectedDay} />
-      </Card>
-
-      {/* حصيلة الشهر — ملخّصٌ لطيفٌ لمذكرات الشهر الحالي */}
-      {monthSummary.count > 0 && (
-        <Card className="animate-fade-up stagger-3">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 size={16} className="text-journal" />
-            <span className="text-sm font-bold text-gray-800">حصيلة {arabicMonthName(parseDate(todayStr).getMonth())}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="rounded-xl bg-journal/[0.06] px-3 py-2 text-center">
-              <div className="text-xl font-black text-journal tabular-nums">{monthSummary.count}</div>
-              <div className="text-[11px] text-gray-500">مذكرة</div>
-            </div>
-            <div className="rounded-xl bg-journal/[0.06] px-3 py-2 text-center">
-              <div className="text-xl font-black text-journal tabular-nums">{monthSummary.days}</div>
-              <div className="text-[11px] text-gray-500">يوم كتبت فيه</div>
-            </div>
-          </div>
-          {monthSummary.moodCount > 0 && (
-            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-              <span className="text-[11px] text-gray-400">المشاعر:</span>
-              {MOODS.map((m) =>
-                monthSummary.moods[m.value] ? (
-                  <span key={m.value} className="inline-flex items-center gap-0.5 text-xs bg-gray-100 dark:bg-[#2c2318] rounded-full px-2 py-0.5">
-                    <span>{m.emoji}</span>
-                    <span className="tabular-nums text-gray-500">{monthSummary.moods[m.value]}</span>
+            <MemoryDome
+              entries={filtered}
+              todayStr={todayStr}
+              selectedId={skyPick}
+              onPick={setSkyPick}
+            />
+            {skyPickEntry && (
+              <div style={{ margin: "16px 0 0", border: "1px solid var(--gline)", borderRadius: 20, background: "var(--paper2)", padding: 16 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 10.5, color: "var(--ink34)" }}>{formatDate(skyPickEntry.date)}</span>
+                    <span style={{ display: "block", fontSize: 15, fontWeight: 900, marginTop: 3 }}>{skyPickEntry.title || "بلا عنوان"}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--ink52)", lineHeight: 1.8, marginTop: 4 }}>
+                      {(skyPickEntry.content || "").replace(/<[^>]+>/g, " ").slice(0, 90)}
+                    </span>
                   </span>
-                ) : null
-              )}
-            </div>
-          )}
-          {monthSummary.topTags.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] text-gray-400">أبرز الوسوم:</span>
-              {monthSummary.topTags.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => selectTag(t)}
-                  className="text-[11px] font-medium bg-journal/10 text-journal px-2.5 py-0.5 rounded-full press"
-                >
-                  #{t}
-                </button>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
+                  <button
+                    type="button"
+                    onClick={() => setSkyPick(null)}
+                    aria-label="أغلق"
+                    style={{ width: 34, height: 34, flex: "none", background: "transparent", border: "none", color: "var(--ink34)", fontSize: 17, cursor: "pointer" }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <MdrButton kind="ink" onClick={() => { openViewer(skyPickEntry); setSkyPick(null); }} minHeight={46} style={{ marginTop: 12, padding: "0 18px" }}>
+                  افتح المذكرة
+                </MdrButton>
+              </div>
+            )}
+            <PastDays
+              entries={journalEntries}
+              todayStr={todayStr}
+              onOpen={openViewer}
+              onWrite={() => setShowForm(true)}
+            />
+          </>
+        )}
+
+        {topTab === "الشهر" && (
+          <>
+            {/* تقويمٌ واحدٌ لا اثنان: الشبكةُ المنقولة تحمل تنقّلَ الأشهر
+                واليومَ الهجريّ اللذين كانا يميّزان `StreakCalendar` هنا. */}
+            <MonthGrid
+              entries={journalEntries}
+              todayStr={todayStr}
+              year={calYear}
+              month={calMonth}
+              onNavigate={(y, m) => { setCalYear(y); setCalMonth(m); }}
+              onDayClick={setSelectedDay}
+            />
+            {monthSummary.count > 0 && (
+              <div style={{ margin: "18px 0 0" }}>
+                <SectionHead title={`حصيلةُ ${arabicMonthName(parseDate(todayStr).getMonth())}`} marginTop={0} marginBottom={12} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+                  <div style={{ padding: "13px 12px", border: "1px solid var(--line)", borderRadius: 18, background: "var(--paper2)", textAlign: "center" }}>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "var(--gold)" }}>{monthSummary.count}</div>
+                    <div style={{ fontSize: 10.5, color: "var(--ink52)", marginTop: 3 }}>مذكرة</div>
+                  </div>
+                  <div style={{ padding: "13px 12px", border: "1px solid var(--line)", borderRadius: 18, background: "var(--paper2)", textAlign: "center" }}>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "var(--green)" }}>{monthSummary.days}</div>
+                    <div style={{ fontSize: 10.5, color: "var(--ink52)", marginTop: 3 }}>يومًا كتبتَ فيه</div>
+                  </div>
+                </div>
+                {monthSummary.topTags.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 12 }}>
+                    <span style={{ fontSize: 11, color: "var(--ink34)" }}>أبرزُ الوسوم:</span>
+                    {monthSummary.topTags.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => selectTag(t)}
+                        style={{
+                          minHeight: 32, padding: "0 11px", fontSize: 11.5, fontWeight: 700,
+                          background: "var(--goldw)", color: "var(--gold)", border: "1px solid var(--gline)",
+                          borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
+                        }}
+                      >
+                        #{t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {topTab === "الرسائل" && (
+          <div style={{ margin: "16px 0 0" }}>
+            <FutureLetters />
+          </div>
+        )}
+      </div>
+
 
       <div className="relative animate-fade-up stagger-3">
         <Search size={15} className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400" />
@@ -480,39 +553,7 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* تبديل قائمة/معرض/سماء */}
-      <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-4">
-        <button
-          onClick={() => setView("list")}
-          className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
-            view === "list" ? "bg-white dark:bg-[#241c12] text-journal shadow-sm" : "text-gray-400"
-          }`}
-        >
-          المذكرات
-        </button>
-        <button
-          onClick={() => setView("gallery")}
-          className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
-            view === "gallery" ? "bg-white dark:bg-[#241c12] text-journal shadow-sm" : "text-gray-400"
-          }`}
-        >
-          معرض 🖼️
-        </button>
-        <button
-          onClick={() => setView("sky")}
-          className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
-            view === "sky" ? "bg-white dark:bg-[#241c12] text-journal shadow-sm" : "text-gray-400"
-          }`}
-        >
-          السماء ✦
-        </button>
-      </div>
-
-      {view === "sky" ? (
-        <div className="animate-fade-up stagger-4">
-          <MemorySky entries={filtered} memories={memories} onOpen={openViewer} onPickDate={setSelectedDay} todayStr={todayStr} />
-        </div>
-      ) : view === "list" ? (
+      {view === "list" ? (
         <div className="space-y-4 animate-fade-up stagger-4">
           {filtered.length === 0 && (
             <EmptyState
