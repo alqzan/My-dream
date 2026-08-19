@@ -5,7 +5,7 @@
  */
 import type { PrayerLog } from "@/lib/types";
 import { qiyamOf, qiyamChain, stepRakaat } from "@/lib/prayerExtras";
-import { arNum } from "@/lib/madar/format";
+import { arNum, arHijriDayMonth } from "@/lib/madar/format";
 import { formatDateShort, hijriDate } from "@/lib/utils";
 import { Stepper, MdrButton } from "../primitives";
 
@@ -28,7 +28,7 @@ export function QiyamPanel({
 
   const state = q.rakaat ? (q.witr ? "قمتَ وأوترت" : "قمتَ الليلة") : "لم تُسجَّل ليلتك";
   const line = q.rakaat
-    ? `${arNum(q.rakaat)} ركعةً في ليلة ${hijriDate(date)}.${q.witr ? "" : " لم تُوتر بعد."}`
+    ? `${arNum(q.rakaat)} ركعةً في ليلة ${arHijriDayMonth(hijriDate(date))}.${q.witr ? "" : " لم تُوتر بعد."}`
     : "ثنتان تُثبتان الليلةَ خيرٌ من إحدى عشرةَ تنقطع. سجِّل ما قمتَه.";
 
   return (

@@ -135,7 +135,10 @@ export function PrayerCalendar({ prayerLogs, onDayClick, year: yearProp, month: 
       </div>
 
       <div className="flex items-center justify-center gap-3 text-[10px] text-gray-400 pt-1">
-        {(["لم", "منفردة", "جماعة"] as const).map((s) => (
+        {/* الحالتان الأخيرتان أُضيفتا مع نقل شاشة الصلاة — النقاطُ كانت ترسمهما
+            فعلاً (عبر `prayerStatusMeta`) واللائحةُ لا تفسّرهما، فيرى المالك
+            لوناً لا يعرفه. */}
+        {(["لم", "منفردة", "جماعة", "فائتة", "قضاء"] as const).map((s) => (
           <span key={s} className="flex items-center gap-1">
             <span className="block w-2 h-2 rounded-full" style={{ backgroundColor: PRAYER_STATUS_META[s].color }} />
             {PRAYER_STATUS_META[s].short === "لم" ? "لم تُصلَّ" : PRAYER_STATUS_META[s].short}

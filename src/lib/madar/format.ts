@@ -45,3 +45,28 @@ export function arCount(
 export function arPct(ratio: number): string {
   return `${arNum(Math.round(ratio * 100))}٪`;
 }
+
+/**
+ * وقتٌ للعرض في الشاشات المنقولة. `formatClock` في `utils.ts` تُخرج أرقاماً
+ * لاتينية (`nu-latn`) عمداً لبقيّة التطبيق؛ والتصميمُ يكتب المواقيتَ هنديةً
+ * («الفجر ٤:٥٢»)، فنحوّلها هنا بدل أن نُنشئ منسّقاً ثانياً.
+ */
+export function arClock(d: Date, format: (d: Date) => string): string {
+  return toIndicDigits(format(d));
+}
+
+/** تاريخٌ هجريٌّ بلا سنةٍ وبأرقامٍ هندية — «٦ ربيع الأول». */
+export function arHijriDayMonth(hijri: string): string {
+  return toIndicDigits(hijri.replace(/\s*\d+\s*هـ\s*$/, "").trim());
+}
+
+/**
+ * مدّةٌ مختصرةٌ للعرض: ساعاتٌ إن بلغت الستّين، وإلّا دقائق — «بعد ١١ ساعة»
+ * أو «منذ ٤٠ د». تأخذ الدقائقَ المطلقة، والاتّجاهُ من نداءِ المستدعي.
+ */
+export function arSpan(minutes: number): string {
+  const v = Math.abs(Math.round(minutes));
+  if (v < 60) return `${arNum(v)} د`;
+  const h = Math.round(v / 60);
+  return arCount(h, { one: "ساعة", two: "ساعتين", few: "ساعات", many: "ساعة" });
+}

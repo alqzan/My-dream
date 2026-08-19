@@ -214,7 +214,7 @@ export function WeekLog({ logs, todayStr }: { logs: PrayerLog[]; todayStr: strin
                     fontWeight: isToday ? 900 : 400,
                   }}
                 >
-                  {wd.slice(0, 3)}
+                  {wd}
                 </span>
               );
             })}
@@ -243,7 +243,9 @@ export function WeekLog({ logs, todayStr }: { logs: PrayerLog[]; todayStr: strin
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "12px 0 0" }}>
-        {(["جماعة", "منفردة", "فائتة", "قضاء"] as const).map((s) => {
+        {/* المسمّى هنا مسمّى التصميم («منفرد» لا «منفردة») — والقيمةُ المخزّنة
+            تبقى كما هي في النوع؛ لائحةٌ لا مصدرَ حقيقة. */}
+        {([["جماعة", "جماعة"], ["منفردة", "منفرد"], ["فائتة", "فائتة"], ["قضاء", "قضاء"]] as const).map(([s, label]) => {
           const c = cellSkin(s);
           return (
             <span key={s} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ink52)" }}>
@@ -256,7 +258,7 @@ export function WeekLog({ logs, todayStr }: { logs: PrayerLog[]; todayStr: strin
               >
                 {PRAYER_STATUS_GLYPH[s]}
               </span>
-              <span>{s}</span>
+              <span>{label}</span>
             </span>
           );
         })}

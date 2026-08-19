@@ -19,7 +19,7 @@ import {
 import {
   today, computePrayerTimes, getCachedCoords, formatClock, parseDate, buzz,
 } from "@/lib/utils";
-import { arNum, arCount } from "@/lib/madar/format";
+import { arNum, arCount, arClock, arSpan } from "@/lib/madar/format";
 import { Modal } from "@/components/ui/Modal";
 import { MdrScreen, SectionHead, HeadMeta, Stepper, MdrButton } from "../primitives";
 import { Mihrab } from "./Mihrab";
@@ -59,10 +59,18 @@ export function PrayerScreen() {
     const out = {} as Record<PrayerName, { label: string; passed: boolean; at: Date | null }>;
     for (const p of PRAYERS) {
       const at = t?.[p] ?? null;
-      out[p] = { label: at ? formatClock(at) : "—", passed: at ? now >= at : false, at };
+      const passed = at ? now >= at : false;
+      const clock = at ? arClock(at, formatClock) : "—";
+      // ما سُجّل يكفيه وقتُه؛ وما لم يُسجَّل يحمل معه بُعدَه عن الآن — «بعد
+      // ١١ ساعة» أو «منذ ٤٠ د» — فيُقرأ الصفُّ نداءً لا جدولاً.
+      const done = log?.prayers[p] && log.prayers[p] !== "لم";
+      const mins = at ? (at.getTime() - now.getTime()) / 60000 : 0;
+      const label = !at || done ? clock
+        : `${clock} · ${passed ? "منذ" : "بعد"} ${arSpan(mins)}`;
+      out[p] = { label, passed, at };
     }
     return out;
-  }, [todayStr]);
+  }, [todayStr, log]);
 
   const owed = qadaOwed(prayerLogs, qadaBacklog);
   const doneToday = qadaDoneOn(prayerLogs, todayStr);
