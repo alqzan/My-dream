@@ -28,6 +28,15 @@ async function localMediaGet(hash: string): Promise<string | null> {
     return null;
   }
 }
+
+// النسخة الاحتياطية تحتاج قراءة البايتات المحلية مباشرةً قبل محاولة الشبكة:
+// قد يكون ملف PDF محفوظاً سليماً في IndexedDB على جهازٍ بلا مفتاح مزامنة، وفي
+// هذه الحالة لا يجوز أن يتحول التصدير إلى «مرجع هاش» فقط. لا نُصدّر دالة
+// الكتابة عمداً؛ كل الكتابات تبقى عبر مسار المزامنة الموحّد أدناه.
+export async function getLocalInlineMedia(hash: string): Promise<string | null> {
+  return localMediaGet(hash);
+}
+
 async function localMediaPut(hash: string, dataUrl: string): Promise<void> {
   // Best-effort: only inline data: bytes belong in the permanent store (never a
   // transient remote URL), so a later render can rely on it offline.

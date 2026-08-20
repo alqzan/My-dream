@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { normalizeBackup } from "./BackupCard";
+import { embedAllMedia, normalizeBackup } from "./BackupCard";
 import { mergeAppData } from "@/lib/merge";
-import type { AppData } from "@/lib/types";
+import type { AppData, JournalEntry } from "@/lib/types";
 
 // كلّ حقلٍ في AppData يجب أن يعبر التصدير → التطبيع → الاستعادة. `frozenHabits`
 // كانت تُصدَّر ولا تُطبَّع: فالاستبدال يفكّ تجميد كلّ العادات، والدمج يترك القيمة
@@ -39,5 +39,86 @@ describe("normalizeBackup — لا يسقط حقلاً من الملف", () => {
     for (const k of ["assets", "installmentPlans", "frozenHabits", "budgetWindow", "deletedMedia", "fieldUpdatedAt"]) {
       expect(Object.keys(out), `الحقل ${k} غائبٌ عن normalizeBackup`).toContain(k);
     }
+  });
+});
+
+describe("نسخة PDF الاحتياطية — الملف نفسه لا الاسم وحده", () => {
+  const withEntry = (entry: JournalEntry): AppData => ({
+    ...normalizeBackup({}),
+    journalEntries: [entry],
+  });
+
+  it("يجلب بايتات PDF من الهاش ويدمجها داخل ملف النسخة", async () => {
+    const pdf = "data:application/pdf;base64,JVBERi0xLjQ=";
+    const data = withEntry({
+      id: "j1",
+      date: "2026-08-20",
+      content: "مذكرة بعقد",
+      attachmentRefs: [{ kind: "pdf", filename: "عقد.pdf", hash: "pdf-hash", status: "uploaded" }],
+    });
+
+    const out = await embedAllMedia(data, () => {}, async (hash) => hash === "pdf-hash" ? pdf : null);
+
+    expect(out.data.journalEntries[0].attachmentRefs?.[0].localData).toBe(pdf);
+    expect(out.counts.pdfs).toBe(1);
+    expect(out.counts.pdfFiles).toBe(1);
+    expect(out.allEmbedded).toBe(true);
+  });
+
+  it("لا يدّعي الاكتمال إذا تعذّر جلب الملف، ويحفظ المرجع دون إسقاطه", async () => {
+    const data = withEntry({
+      id: "j2",
+      date: "2026-08-20",
+      content: "مذكرة قديمة",
+      attachmentRefs: [{ kind: "pdf", filename: "قديم.pdf", hash: "missing", status: "uploaded" }],
+    });
+
+    const out = await embedAllMedia(data, () => {}, async () => null);
+
+    expect(out.data.journalEntries[0].attachmentRefs?.[0]).toMatchObject({ hash: "missing", filename: "قديم.pdf" });
+    expect(out.counts.pdfs).toBe(1);
+    expect(out.counts.pdfFiles).toBe(0);
+    expect(out.allEmbedded).toBe(false);
+  });
+
+  it("تعطّل جلب PDF واحد لا يُفشل تصدير بقية البيانات", async () => {
+    const data = withEntry({
+      id: "j2b",
+      date: "2026-08-20",
+      content: "يبقى النص سليماً",
+      attachmentRefs: [{ kind: "pdf", filename: "متعذر.pdf", hash: "broken", status: "uploaded" }],
+    });
+
+    const out = await embedAllMedia(data, () => {}, async () => { throw new Error("IndexedDB unavailable"); });
+
+    expect(out.data.journalEntries[0].content).toBe("يبقى النص سليماً");
+    expect(out.data.journalEntries[0].attachmentRefs?.[0]).toMatchObject({ hash: "broken", filename: "متعذر.pdf" });
+    expect(out.counts.pdfFiles).toBe(0);
+    expect(out.allEmbedded).toBe(false);
+  });
+
+  it("الدمج بعد الاستعادة يُغني المرجع القديم ببايتات PDF ولا يكرر المرفق", () => {
+    const local = withEntry({
+      id: "j3",
+      date: "2026-08-20",
+      content: "نفس المذكرة",
+      attachmentRefs: [{ kind: "pdf", filename: "ملف.pdf", hash: "h1", status: "uploaded" }],
+    });
+    const restored = withEntry({
+      id: "j3",
+      date: "2026-08-20",
+      content: "نفس المذكرة",
+      attachmentRefs: [{
+        kind: "pdf",
+        filename: "ملف.pdf",
+        hash: "h1",
+        status: "uploaded",
+        localData: "data:application/pdf;base64,JVBERg==",
+      }],
+    });
+
+    const merged = mergeAppData(local, restored);
+    expect(merged.journalEntries[0].attachmentRefs).toHaveLength(1);
+    expect(merged.journalEntries[0].attachmentRefs?.[0].localData).toMatch(/^data:application\/pdf/);
   });
 });
