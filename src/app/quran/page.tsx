@@ -1,43 +1,14 @@
 "use client";
-import { useState, useEffect } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { HifzSection } from "@/components/quran/HifzSection";
-import { TadabburSection } from "@/components/quran/TadabburSection";
-import { MushafBrowser } from "@/components/quran/MushafBrowser";
 import { QuranBanner } from "@/components/quran/QuranBanner";
-import { Sprout, BookOpenText, BookText } from "lucide-react";
+import { BookOpenText } from "lucide-react";
 
-// قسم «قرآن» — التدبّر (تأمّلات + آية اليوم)، الحفظ (محفوظ + مراجعة متباعدة +
-// مدار الختمة)، والمصحف (تصفّح كل السور وقراءتها). العنوان دعاءٌ نبويّ، وتحته
-// عبارة قرآنية متجدّدة.
-type Tab = "tadabbur" | "hifz" | "mushaf";
+// قسم «القرآن» في هذه المرحلة هو مسار الحفظ وحده. مكوّنات التدبّر والمصحف
+// والبيانات المرتبطة بهما ما زالت في المشروع، لكن لا تُعرض ولا تُحذف من التخزين
+// حتى نضيفها لاحقاً بقرارٍ مستقل.
 
 export default function QuranPage() {
-  // الحفظ أوّلاً وافتراضياً — هو الممارسة اليومية الأكثر استعمالاً.
-  const [tab, setTab] = useState<Tab>("hifz");
-  // سورة يُطلب فتحها في المصحف (من «اقرأ في المصحف» في خريطة الحفظ).
-  const [mushafSurah, setMushafSurah] = useState<number | null>(null);
-  // طلب تأمّلٍ على آيةٍ من المصحف: يفتح مؤلّف التدبّر مهيّأً بها (nonce للإعادة).
-  const [reflectReq, setReflectReq] = useState<{ surah: number; ayah: number; nonce: number } | null>(null);
-
-  // فتح تبويبٍ محدّد عبر ?tab= (من تذكير الحفظ في الرئيسية مثلاً).
-  useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "hifz" || t === "mushaf" || t === "tadabbur") setTab(t);
-  }, []);
-
-  // ينقل المستخدم إلى المصحف على سورةٍ محدّدة (nonce يضمن إعادة الفتح حتى لو
-  // كررنا نفس السورة).
-  const openMushaf = (surah: number) => { setMushafSurah(surah); setTab("mushaf"); };
-  // النقر اليدوي على التبويبات يمسح طلب السورة حتى لا يُعاد فتحها لاحقاً.
-  const selectTab = (t: Tab) => { setMushafSurah(null); setTab(t); };
-  // «تأمّل» على آيةٍ من المصحف → التدبّر مهيّأً بها.
-  const requestReflect = (surah: number, ayah: number) => {
-    setReflectReq({ surah, ayah, nonce: Date.now() });
-    setMushafSurah(null);
-    setTab("tadabbur");
-  };
-
   return (
     <div className="page-shell">
       <div className="animate-fade-up">
@@ -45,55 +16,19 @@ export default function QuranPage() {
           <SectionSignet href="/quran" />
           <h1 className="page-title">القرآن</h1>
         </div>
-        <p className="page-subtitle">التدبّر، الحفظ، والمصحف</p>
+        <p className="page-subtitle">الحفظ والمراجعة</p>
       </div>
 
-      {tab !== "mushaf" && (
-        <div className="animate-fade-up stagger-1">
-          <QuranBanner />
-        </div>
-      )}
-
-      {/* مبدّل الأعمدة */}
-      <div className="flex gap-1.5 p-1 rounded-2xl bg-quran/10 animate-fade-up stagger-1">
-        <TabButton active={tab === "hifz"} onClick={() => selectTab("hifz")} icon={<BookOpenText size={15} />} label="الحفظ" />
-        <TabButton active={tab === "tadabbur"} onClick={() => selectTab("tadabbur")} icon={<Sprout size={15} />} label="التدبّر" />
-        <TabButton active={tab === "mushaf"} onClick={() => selectTab("mushaf")} icon={<BookText size={15} />} label="المصحف" />
+      <div className="animate-fade-up stagger-1">
+        <QuranBanner />
       </div>
 
-      {tab === "tadabbur" && (
-        <div className="animate-fade-up stagger-2 space-y-4">
-          <TadabburSection openReflect={reflectReq} />
+      <div className="mdr-quran-hifz-only animate-fade-up stagger-2 space-y-4">
+        <div className="flex items-center gap-2 text-xs font-bold text-quran">
+          <BookOpenText size={15} /> مسار الحفظ فقط
         </div>
-      )}
-      {tab === "hifz" && (
-        <div className="animate-fade-up stagger-2 space-y-4">
-          <HifzSection onRead={openMushaf} />
-        </div>
-      )}
-      {tab === "mushaf" && (
-        <div className="animate-fade-up stagger-2 space-y-4">
-          <MushafBrowser initialSurah={mushafSurah} onReflect={requestReflect} />
-        </div>
-      )}
+        <HifzSection />
+      </div>
     </div>
-  );
-}
-
-function TabButton({
-  active, onClick, icon, label,
-}: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold press transition-colors ${
-        active ? "bg-quran text-white shadow-sm" : "text-quran hover:bg-quran/10"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }

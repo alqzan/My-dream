@@ -507,6 +507,139 @@ body {
 .mdr-journal-archive .bg-journal\/10 { background-color: var(--goldw) !important; }
 .mdr-journal-archive .bg-journal\/\[0\.06\] { background-color: var(--goldw) !important; }
 .mdr-journal-archive .border-journal\/25 { border-color: var(--gline) !important; }
+.mdr-journal-page .text-journal,
+.mdr-journal-page [class*="text-journal"] { color: var(--gold) !important; }
+.mdr-journal-page [class*="bg-journal/"] { background-color: var(--goldw) !important; }
+.mdr-journal-page .bg-journal { background-color: var(--ink) !important; }
+.mdr-journal-page [class*="border-journal"] { border-color: var(--gline) !important; }
+.mdr-journal-page .bg-purple-50 { background-color: var(--goldw) !important; }
+.mdr-journal-page .text-purple-500 { color: var(--gold) !important; }
+
+/* ===================== تبسيطُ الأبواب الجديدة ===================== */
+/* المال: لوحةٌ أولى هادئة، ثمّ التفاصيل عند الطلب. */
+.mdr-finance-page {
+  --finance-paper: var(--paper2);
+}
+.mdr-finance-page .bg-gradient-to-l,
+.mdr-finance-page .bg-gradient-to-r,
+.mdr-finance-page .bg-gradient-to-b { background-image: none !important; }
+.mdr-finance-page .card-shadow { box-shadow: none !important; }
+.mdr-finance-glance { display: grid; gap: 0.55rem; }
+.mdr-finance-balance {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+.mdr-finance-balance:not(.bg-red-50) { color: var(--ink); }
+.mdr-finance-glance-tile {
+  min-width: 0;
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+.mdr-finance-glance-tile .text-gray-900 { color: var(--ink) !important; }
+.mdr-finance-glance-tile .text-gray-400,
+.mdr-finance-glance-tile .text-gray-500 { color: var(--ink52) !important; }
+.mdr-finance-insight-link > div {
+  background: var(--paper2) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--gline);
+  box-shadow: none !important;
+}
+.mdr-finance-insight-link .opacity-80 { opacity: 1 !important; color: var(--ink52) !important; }
+.mdr-finance-salary > * {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* البهو: السنة في الأعلى، وأدوات القياس في درجٍ ثانوي. */
+.mdr-year-progress {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.8rem 0.75rem;
+  border: 1px solid var(--gline);
+  border-radius: 1rem;
+  background: var(--paper2);
+  color: var(--ink);
+}
+.mdr-year-progress-track {
+  height: 0.3rem;
+  margin-top: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+.mdr-year-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold);
+  transition: width 0.7s ease;
+}
+.mdr-home-instrument-details,
+.mdr-home-secondary,
+.mdr-reading-tools {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper2);
+}
+.mdr-home-instrument-details > summary,
+.mdr-home-secondary > summary,
+.mdr-reading-tools > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.85rem;
+  padding: 0 0.85rem;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+.mdr-home-instrument-details > summary::-webkit-details-marker,
+.mdr-home-secondary > summary::-webkit-details-marker,
+.mdr-reading-tools > summary::-webkit-details-marker { display: none; }
+.mdr-home-instrument-details > summary::after,
+.mdr-home-secondary > summary::after,
+.mdr-reading-tools > summary::after {
+  content: "＋";
+  color: var(--gold);
+  font-size: 1rem;
+  font-weight: 500;
+}
+.mdr-home-instrument-details[open] > summary::after,
+.mdr-home-secondary[open] > summary::after,
+.mdr-reading-tools[open] > summary::after { content: "−"; }
+.mdr-home-instrument-details[open] > summary,
+.mdr-home-secondary[open] > summary,
+.mdr-reading-tools[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.mdr-reading-tools > div { padding: 0 0.85rem 0.9rem; }
+
+/* المذكرات: الكتابة هي المركز؛ الألوان القديمة البنفسجية لا تتسرّب إلى
+   المحرّر، والمرفقات تبقى ظاهرةً كسطرٍ واحد يفتح التفاصيل عند الحاجة. */
+.mdr-journal-composer {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+}
+.mdr-journal-composer header { border-color: var(--line) !important; background: var(--paper) !important; }
+.mdr-journal-composer .bg-gray-50\/70 { background: var(--paper2) !important; }
+.mdr-journal-composer .mdr-journal-editor { box-shadow: none !important; }
+.mdr-journal-composer .mdr-journal-done {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+}
+.mdr-journal-composer .text-journal,
+.mdr-journal-composer [class*="text-journal"] { color: var(--gold) !important; }
+.mdr-journal-composer [class*="bg-journal/"] { background: var(--goldw) !important; }
+.mdr-journal-composer [class*="border-journal"] { border-color: var(--gline) !important; }
+.mdr-journal-composer .mdr-journal-date-row input { background: var(--paper2); color: var(--ink); }
+
+/* القرآن: لا لون إضافي ولا شريط تبويبات؛ اللافتة والخطوة الحالية هما المدخل. */
+.mdr-quran-hifz-only > .text-quran {
+  color: var(--green) !important;
+}
 
 @media (max-width: 639px) {
   .mdr-home { border-inline: none; box-shadow: none; }

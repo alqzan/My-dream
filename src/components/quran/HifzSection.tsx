@@ -33,7 +33,7 @@ const RECALL_TITLE: Record<Exclude<CoachKind, "memorize">, string> = {
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
 const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
 
-export function HifzSection({ onRead }: { onRead: (surah: number) => void }) {
+export function HifzSection({ onRead }: { onRead?: (surah: number) => void } = {}) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [text, setText] = useState<string[] | null>(null);
@@ -123,7 +123,7 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
 }
 
 // ---------------- لوحة الحفظ ----------------
-function HifzDashboard({ text, onRead }: { text: string[] | null; onRead: (surah: number) => void }) {
+function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (surah: number) => void }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
@@ -375,4 +375,3 @@ function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {
     </div>
   );
 }
-

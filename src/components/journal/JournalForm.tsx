@@ -7,11 +7,10 @@ import { MOODS } from "@/lib/types";
 import { uid, today, parseDate, entryAudios } from "@/lib/utils";
 import { compressImage } from "@/lib/imageUtils";
 import { photoHash } from "@/lib/mediaHash";
-import { dailyQuestion, randomQuestion, QUESTION_LIBRARY } from "@/lib/questions";
+import { dailyQuestion } from "@/lib/questions";
 import { AudioRecorder, MAX_AUDIO_NOTES } from "./AudioRecorder";
 import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
-import { Camera, Image as ImageIcon, X, Loader2, RefreshCw, Library, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown, FileText } from "lucide-react";
+import { Camera, Image as ImageIcon, X, Loader2, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown, FileText } from "lucide-react";
 import { AppImage } from "@/components/ui/AppImage";
 
 interface JournalFormProps {
@@ -70,7 +69,6 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const [content, setContent] = useState(initial?.content ?? "");
   const [question, setQuestion] = useState(initial?.question ?? dailyQuestion(today()));
   const [answering, setAnswering] = useState(!!initial?.question || !!startAnswering);
-  const [showLibrary, setShowLibrary] = useState(false);
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
   );
@@ -311,8 +309,8 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   }
 
   const titleIdeas = useMemo(
-    () => suggestTitles(content, date, answering ? question : undefined),
-    [content, date, question, answering]
+    () => suggestTitles(content, date),
+    [content, date]
   );
 
   const MAX_PHOTOS = 6;
@@ -395,9 +393,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     // صفحة المذكرات (بطاقة «في مثل هذا اليوم» وزرّ الإضافة) — يظهر كلما تركت
     // لوحةُ المفاتيح أثراً في القياس: شريط لوحة الآيباد المصغّرة، أو قياسٌ لم
     // يُحدَّث بعدُ على الجوال.
-    <div className="fixed inset-0 z-50 bg-white [animation:fadeIn_0.2s_ease_both]">
+    <div className="fixed inset-0 z-50 mdr mdr-journal-composer [animation:fadeIn_0.2s_ease_both]">
       <div
-        className="absolute inset-x-0 flex flex-col bg-white"
+        className="absolute inset-x-0 flex flex-col bg-[var(--paper)]"
         style={{ top: "var(--vvo, 0px)", height: "var(--vvh, 100dvh)" }}
       >
       {/* شريط علوي ثابت */}
@@ -415,7 +413,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             {saveState === "saving" ? "يُحفظ…" : saveState === "saved" ? "محفوظ تلقائياً ✓" : ""}
           </span>
         </div>
-        <Button onClick={handleDone} size="sm" className="bg-journal hover:bg-journal/90">تم</Button>
+        <Button onClick={handleDone} size="sm" className="mdr-journal-done">تم</Button>
       </header>
 
       {/* المحتوى — يمرّر داخل الشاشة */}
@@ -429,16 +427,16 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           placeholder="عنوان اليوم ✨"
           aria-label="عنوان المذكرة"
           dir="auto"
-          className="w-full text-xl font-black border-0 border-b-2 border-gray-100 focus:border-journal bg-transparent px-1 py-2 focus:outline-none placeholder:text-gray-300 placeholder:font-bold"
+          className="w-full text-xl font-black border-0 border-b-2 border-[var(--line)] focus:border-[var(--gold)] bg-transparent px-1 py-2 focus:outline-none placeholder:text-gray-300 placeholder:font-bold"
         />
         {!title && titleIdeas.length > 0 && (
           <div className="flex gap-1.5 flex-wrap mt-2">
-            <Sparkles size={13} className="text-journal mt-1" />
+            <Sparkles size={13} className="text-[var(--gold)] mt-1" />
             {titleIdeas.map((t) => (
               <button
                 key={t}
                 onClick={() => setTitle(t)}
-                className="text-[11px] bg-journal/10 text-journal px-2.5 py-1 rounded-full hover:bg-journal/20 transition-colors press"
+                className="text-[11px] bg-[var(--goldw)] text-[var(--gold)] px-2.5 py-1 rounded-full hover:bg-[var(--goldw)] transition-colors press"
               >
                 {t}
               </button>
@@ -447,48 +445,23 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         )}
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">التاريخ</label>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-journal/40"
-        />
-      </div>
-
-      {/* سؤال اليوم */}
-      <div className={`rounded-2xl p-3.5 border transition-colors ${answering ? "bg-journal/10 border-journal/40" : "bg-gray-50 border-gray-100"}`}>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[11px] font-bold text-journal">سؤال اليوم 💭</span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setQuestion(randomQuestion(question))}
-              className="p-1.5 text-gray-400 hover:text-journal rounded-lg press"
-              title="سؤال آخر"
-            >
-              <RefreshCw size={13} />
-            </button>
-            <button
-              onClick={() => setShowLibrary(true)}
-              className="p-1.5 text-gray-400 hover:text-journal rounded-lg press"
-              title="مكتبة الأسئلة"
-            >
-              <Library size={14} />
-            </button>
-          </div>
+      <div className="mdr-journal-date-row">
+        <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ المذكرة</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="flex-1 border border-[var(--line)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gline)]"
+          />
+          <button
+            type="button"
+            onClick={() => setDate(today())}
+            className="shrink-0 rounded-xl border border-[var(--line)] px-3 py-2 text-xs font-bold text-[var(--ink52)] hover:border-[var(--gline)] press"
+          >
+            اليوم
+          </button>
         </div>
-        <p className="text-sm text-gray-700 leading-relaxed font-medium">{question}</p>
-        <button
-          onClick={() => setAnswering(!answering)}
-          className={`mt-2 text-xs font-bold px-3 py-1.5 rounded-full transition-colors press ${
-            answering
-              ? "bg-journal text-white"
-              : "bg-white border border-gray-200 text-gray-500 hover:border-journal/40"
-          }`}
-        >
-          {answering ? "أكتب عنه ✓" : "✍️ أجب عليه"}
-        </button>
       </div>
 
       <div>
@@ -501,7 +474,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         </div>
 
         {/* محرّر النص: شريط تنسيق ثابت (بلمسة واحدة) + مساحة تتمدّد مع الكتابة */}
-        <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden transition-colors focus-within:border-journal/50 focus-within:ring-2 focus-within:ring-journal/20">
+        <div className="mdr-journal-editor rounded-2xl border border-[var(--line)] bg-[var(--paper2)] overflow-hidden transition-colors focus-within:border-[var(--gline)] focus-within:ring-2 focus-within:ring-[var(--goldw)]">
           <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-100 bg-gray-50/70">
             {[
               { icon: Bold, t: "عريض", fn: () => wrapSelection("**") },
@@ -516,7 +489,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 title={b.t}
                 aria-label={b.t}
                 onClick={b.fn}
-                className="w-8 h-8 rounded-lg text-gray-500 hover:bg-journal/10 hover:text-journal press flex items-center justify-center"
+                className="w-8 h-8 rounded-lg text-gray-500 hover:bg-[var(--goldw)] hover:text-[var(--gold)] press flex items-center justify-center"
               >
                 <b.icon size={16} />
               </button>
@@ -549,11 +522,11 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           onClick={() => setShowExtras((v) => !v)}
           className="w-full flex items-center gap-2 text-xs font-bold text-gray-500 py-2 press"
         >
-          <Paperclip size={14} className="text-journal" />
-          إضافات
+          <Paperclip size={14} className="text-[var(--gold)]" />
+          المرفقات
           {(() => {
             const n = photos.length + audios.length + attachments.length + tags.length + (mood ? 1 : 0);
-            return n > 0 ? <span className="text-[10px] bg-journal/10 text-journal rounded-full px-2 py-0.5">{n}</span> : null;
+            return n > 0 ? <span className="text-[10px] bg-[var(--goldw)] text-[var(--gold)] rounded-full px-2 py-0.5">{n}</span> : null;
           })()}
           <span className="text-gray-300 font-normal">صور · صوت · PDF · وسوم · شعور</span>
           <ChevronDown size={15} className={`ms-auto transition-transform ${showExtras ? "rotate-180" : ""}`} />
@@ -590,7 +563,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           </div>
         ) : photos.length < MAX_PHOTOS ? (
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
+            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
               <Camera size={20} className="text-gray-400 mb-1" />
               <span className="text-xs text-gray-400">التقط صورة</span>
               <input
@@ -601,7 +574,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
               />
             </label>
-            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
+            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
               <ImageIcon size={20} className="text-gray-400 mb-1" />
               <span className="text-xs text-gray-400">من الاستديو</span>
               <input
@@ -651,7 +624,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             <Loader2 size={20} className="text-gray-400 animate-spin" />
           </div>
         ) : attachments.length < MAX_ATTACHMENTS ? (
-          <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-journal/40 transition-colors press">
+          <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
             <FileText size={19} className="text-gray-400" />
             <span className="text-xs text-gray-400">أضف ملف PDF</span>
             <input
@@ -691,7 +664,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             {tags.map((t) => (
               <span
                 key={t}
-                className="flex items-center gap-1 text-[11px] font-medium bg-journal/10 text-journal px-2.5 py-1 rounded-full"
+                className="flex items-center gap-1 text-[11px] font-medium bg-[var(--goldw)] text-[var(--gold)] px-2.5 py-1 rounded-full"
               >
                 #{t}
                 <button
@@ -719,7 +692,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             }}
             onBlur={() => addTag(tagInput)}
             placeholder="أضف وسماً واضغط Enter (مثل: سفر، عائلة)"
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-journal/40"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gline)]"
           />
         )}
       </div>
@@ -736,10 +709,10 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 onClick={() => setMood(mood === m.value ? undefined : m.value)}
                 aria-label={m.label}
                 aria-pressed={mood === m.value}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border press transition-colors ${mood === m.value ? "border-journal bg-journal/10" : "border-gray-200 dark:border-transparent bg-white dark:bg-[#241c12]"}`}
+                className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border press transition-colors ${mood === m.value ? "border-[var(--gold)] bg-[var(--goldw)]" : "border-gray-200 dark:border-transparent bg-white dark:bg-[#241c12]"}`}
               >
                 <span className="text-xl leading-none">{m.emoji}</span>
-                <span className={`text-[9px] ${mood === m.value ? "text-journal font-bold" : "text-gray-400"}`}>{m.label}</span>
+                <span className={`text-[9px] ${mood === m.value ? "text-[var(--gold)] font-bold" : "text-gray-400"}`}>{m.label}</span>
               </button>
             ))}
           </div>
@@ -759,50 +732,10 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         </button>
       </div>
 
-      {/* مكتبة الأسئلة */}
-      <Modal open={showLibrary} onClose={() => setShowLibrary(false)} title="مكتبة الأسئلة 📚" className="sm:max-w-2xl">
-        <QuestionLibrary
-          onPick={(q) => { setQuestion(q); setAnswering(true); setShowLibrary(false); }}
-        />
-      </Modal>
         </div>
       </div>
       </div>
     </div>,
     document.body
-  );
-}
-
-export function QuestionLibrary({ onPick }: { onPick: (q: string) => void }) {
-  const [openCat, setOpenCat] = useState<string | null>(QUESTION_LIBRARY[0].name);
-
-  return (
-    <div className="space-y-2">
-      {QUESTION_LIBRARY.map((cat) => (
-        <div key={cat.name} className="border border-gray-100 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setOpenCat(openCat === cat.name ? null : cat.name)}
-            className="w-full flex items-center gap-2 px-3.5 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
-          >
-            <span className="text-lg">{cat.icon}</span>
-            <span className="text-sm font-bold text-gray-700 flex-1 text-right">{cat.name}</span>
-            <span className="text-[11px] text-gray-400">{cat.questions.length} سؤال</span>
-          </button>
-          {openCat === cat.name && (
-            <div className="divide-y divide-gray-50">
-              {cat.questions.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => onPick(q)}
-                  className="w-full text-right text-sm text-gray-600 px-4 py-2.5 hover:bg-journal/5 hover:text-journal transition-colors leading-relaxed"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
   );
 }

@@ -36,7 +36,7 @@ const STATE: Record<JuzState, { fill: string; text: string; label: string; dot: 
 
 // لوحة «خريطة الحفظ» — وحدات القرآن (أجزاء/أحزاب/أوجه) كشبكة ملوّنة بحالة كلٍّ،
 // مع إحصاءات وتفاصيل ومراجعة وقراءة مباشرة.
-export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onReview: (p: Portion) => void; onRead: (surah: number) => void }) {
+export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onReview: (p: Portion) => void; onRead?: (surah: number) => void }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [unit, setUnit] = useState<MapUnit>("juz");
@@ -215,7 +215,7 @@ function StatTile({ icon, color, value, label }: { icon: React.ReactNode; color:
 }
 
 function UnitDetail({ cell, word, mistakes, onReview, onRead, onClose }: {
-  cell: UnitCell; word: string; mistakes: number; onReview: (p: Portion) => void; onRead: (surah: number) => void; onClose: () => void;
+  cell: UnitCell; word: string; mistakes: number; onReview: (p: Portion) => void; onRead?: (surah: number) => void; onClose: () => void;
 }) {
   const st = STATE[cell.state];
   const a = idToSurahAyah(cell.start), b = idToSurahAyah(cell.end);
@@ -248,10 +248,12 @@ function UnitDetail({ cell, word, mistakes, onReview, onRead, onClose }: {
             <Headphones size={14} /> راجع المحفوظ
           </button>
         )}
-        <button onClick={() => onRead(a.surah)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-100 dark:bg-[#2c2318] text-gray-600 text-xs font-semibold press">
-          <BookOpen size={14} /> اقرأ في المصحف
-        </button>
+        {onRead && (
+          <button onClick={() => onRead(a.surah)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-100 dark:bg-[#2c2318] text-gray-600 text-xs font-semibold press">
+            <BookOpen size={14} /> اقرأ في المصحف
+          </button>
+        )}
       </div>
     </div>
   );

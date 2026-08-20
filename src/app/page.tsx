@@ -79,6 +79,15 @@ export default function Dashboard() {
   const [reviewOpen, setReviewOpen] = useState(false);
 
   const todayStr = today();
+  // نسبةُ السنة تُعرض في أعلى البهو كإشارةٍ واحدة هادئة، لا كمدارٍ إضافي
+  // يزاحم أدوات اليوم. الحساب مشتقّ من التاريخ نفسه ولا يضيف حالةً جديدة.
+  const yearPct = useMemo(() => {
+    const [year, month, day] = todayStr.split("-").map(Number);
+    const current = new Date(year, month - 1, day).getTime();
+    const start = new Date(year, 0, 1).getTime();
+    const next = new Date(year + 1, 0, 1).getTime();
+    return Math.max(0, Math.min(100, Math.round(((current - start) / (next - start)) * 100)));
+  }, [todayStr]);
 
   // العادات المجمّدة تختفي من التطبيق كلّه: لا تظهر أقمارها على مدار السنة ولا
   // تُحتسب. القراءة/المذكرة/الوِرد المجمّدة تُخفى قمرُها، والعادات المخصّصة
@@ -242,13 +251,19 @@ export default function Dashboard() {
           </div>
         </div>
 
+        <YearProgress pct={yearPct} />
+
         {!isFirstRun && (
-          <>
+          <details className="mdr-home-instrument-details">
+            <summary>
+              <span>إيقاع اليوم</span>
+              <span>المزولة والأقواس</span>
+            </summary>
             <div className="mdr-home-instruments">
               <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
               <ThreeArcs due={dueNow} arcs={arcSpecs} />
             </div>
-          </>
+          </details>
         )}
       </div>
 
@@ -275,10 +290,13 @@ export default function Dashboard() {
       <div className="page-grid mdr-home-grid">
         <div className="space-y-5">
           {!isFirstRun && (
-            <div className="animate-fade-up stagger-1 space-y-3">
-              <HifzReminder />
-              <DayDigestCard />
-            </div>
+            <details className="mdr-home-secondary animate-fade-up stagger-1">
+              <summary>ملخّص القرآن</summary>
+              <div className="space-y-3 pt-3">
+                <HifzReminder />
+                <DayDigestCard />
+              </div>
+            </details>
           )}
 
           <Card className="animate-fade-up stagger-1 mdr-home-panel">
@@ -381,6 +399,20 @@ export default function Dashboard() {
       <Modal open={quickExpense} onClose={() => setQuickExpense(false)} title="مصروف سريع">
         <TransactionForm onClose={() => setQuickExpense(false)} />
       </Modal>
+    </div>
+  );
+}
+
+function YearProgress({ pct }: { pct: number }) {
+  return (
+    <div className="mdr-year-progress" aria-label={`مضى ${pct}% من السنة`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-bold">نسبة السنة</span>
+        <span className="text-sm font-black tabular-nums">{arNum(pct)}٪</span>
+      </div>
+      <div className="mdr-year-progress-track" aria-hidden="true">
+        <span style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }

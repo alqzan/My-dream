@@ -1,8 +1,7 @@
-import type React from "react";
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { getReadingStreak, formatDateShort } from "@/lib/utils";
+import { formatDateShort } from "@/lib/utils";
 import { BookCard } from "@/components/reading/BookCard";
 import { BookForm } from "@/components/reading/BookForm";
 import { ReadingLogForm } from "@/components/reading/ReadingLogForm";
@@ -14,117 +13,20 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { Book, ReadingLog, KnowledgeSource } from "@/lib/types";
+import type { Book, ReadingLog } from "@/lib/types";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { SECTION_DEEP } from "@/lib/palette";
-import { uid, today } from "@/lib/utils";
-import { pathSteps } from "@/lib/mihbara";
+import { today } from "@/lib/utils";
 import { arNum } from "@/lib/madar/format";
-import { TabBar, SectionHead, HeadMeta, MdrButton } from "@/components/madar/primitives";
-import {
-  PathArcs, BenefitCapture, SourceList, BenefitList, ShelfSeats, SOURCE_KINDS,
-} from "@/components/madar/mihbara/MihbaraParts";
+import { SectionHead, HeadMeta, MdrButton } from "@/components/madar/primitives";
+import { ShelfSeats } from "@/components/madar/mihbara/MihbaraParts";
 
 type FilterStatus = "الكل" | "أقرأ" | "أنهيت" | "أريد_قراءة";
-
-const MIHBARA_TABS = ["المسار", "المصادر", "الفوائد", "الرفّ"] as const;
-type MihbaraTab = (typeof MIHBARA_TABS)[number];
-
-/** نموذجُ مصدرٍ جديد — نوعٌ واسمٌ ومؤلِّفٌ اختياريّ، وربطٌ بكتابٍ إن كان كتاباً. */
-function SourceFormModal({
-  open, onClose, books, onSave, todayStr,
-}: {
-  open: boolean;
-  onClose: () => void;
-  books: Book[];
-  onSave: (src: KnowledgeSource) => void;
-  todayStr: string;
-}) {
-  const [kind, setKind] = useState<KnowledgeSource["kind"]>("كتاب");
-  const [name, setName] = useState("");
-  const [author, setAuthor] = useState("");
-  const [bookId, setBookId] = useState<string>("");
-
-  const field: React.CSSProperties = {
-    width: "100%", boxSizing: "border-box", background: "transparent",
-    border: "none", borderBottom: "1px solid var(--line)", minHeight: 44,
-    fontSize: 15, padding: "8px 0", fontFamily: "inherit", color: "var(--ink)", outline: "none",
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="مصدرٌ جديد">
-      <div className="mdr">
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {SOURCE_KINDS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setKind(k)}
-              style={{
-                minHeight: 40, padding: "0 13px", borderRadius: 12,
-                fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                background: kind === k ? "var(--ink)" : "transparent",
-                color: kind === k ? "var(--paper)" : "var(--ink72)",
-                border: `1px solid ${kind === k ? "var(--ink)" : "var(--line)"}`,
-              }}
-            >
-              {k}
-            </button>
-          ))}
-        </div>
-
-        {kind === "كتاب" && books.length > 0 && (
-          <div style={{ margin: "14px 0 0" }}>
-            <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "var(--ink52)" }}>
-              اربِطه بكتابٍ في الرفّ (فلا يتكرّر تقدُّمُ القراءة في مكانين)
-            </p>
-            <select
-              value={bookId}
-              onChange={(e) => {
-                setBookId(e.target.value);
-                const b = books.find((x) => x.id === e.target.value);
-                if (b) { setName(b.title); setAuthor(b.author); }
-              }}
-              style={field}
-            >
-              <option value="">— بلا ربط —</option>
-              {books.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
-            </select>
-          </div>
-        )}
-
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسمُ المصدر" dir="auto" style={{ ...field, margin: "14px 0 0" }} />
-        <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="المؤلِّف أو الجهة (اختياري)" dir="auto" style={{ ...field, margin: "14px 0 0" }} />
-
-        <MdrButton
-          kind="ink"
-          minHeight={48}
-          disabled={!name.trim()}
-          style={{ margin: "18px 0 0", width: "100%" }}
-          onClick={() => {
-            const n = name.trim();
-            if (!n) return;
-            onSave({
-              id: uid(), kind, name: n,
-              author: author.trim() || undefined,
-              bookId: kind === "كتاب" && bookId ? bookId : undefined,
-              createdAt: todayStr,
-            });
-            setName(""); setAuthor(""); setBookId(""); setKind("كتاب");
-          }}
-        >
-          احفظ المصدر
-        </MdrButton>
-      </div>
-    </Modal>
-  );
-}
 
 export default function ReadingPage() {
   const {
     books, readingLogs, deleteBook, deleteReadingLog,
-    knowledgeSources = [], benefits = [], readingGoal,
-    addKnowledgeSource, deleteKnowledgeSource, addBenefit, updateBenefit, deleteBenefit,
+    readingGoal,
   } = useAppStore();
   const [showBookForm, setShowBookForm] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
@@ -135,8 +37,6 @@ export default function ReadingPage() {
   const [timerMinutes, setTimerMinutes] = useState<number | undefined>();
   // الكتاب المستهدَف عند النقر من «قافلة القراءة» — يفتح نموذج التسجيل عليه.
   const [logBookId, setLogBookId] = useState<string | undefined>();
-  const [tab, setTab] = useState<MihbaraTab>("المسار");
-  const [showSourceForm, setShowSourceForm] = useState(false);
   const todayStr = today();
 
   function finishTimer(minutes: number) {
@@ -150,17 +50,10 @@ export default function ReadingPage() {
     .slice(0, 15);
   const bookTitle = (id: string) => books.find((b) => b.id === id)?.title ?? "كتاب";
 
-  const streak = getReadingStreak(readingLogs);
   const logDates = readingLogs.map((l) => l.date);
 
   const totalPagesRead = readingLogs.reduce((s, l) => s + l.pagesRead, 0);
-  const totalMinutes = readingLogs.reduce((s, l) => s + (l.minutesRead ?? 0), 0);
   const booksFinished = books.filter((b) => b.status === "أنهيت").length;
-
-  // «التقاطٌ سريع» أوّلُ درجات المسار — أقربُ ما يقابله في مدار مذكراتُ المالك:
-  // ما قُيّد على عجلٍ قبل أن يصير فائدةً محرَّرة.
-  const captures = useAppStore((st) => st.journalEntries.length);
-  const steps = pathSteps(captures, knowledgeSources, benefits);
 
   const filtered =
     filter === "الكل" ? books : books.filter((b) => b.status === filter);
@@ -181,7 +74,7 @@ export default function ReadingPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 25, fontWeight: 900, lineHeight: 1.25 }}>المحبرة</p>
             <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--ink72)" }}>
-              ما تعلَّمتَه: مصدرٌ وفائدةٌ وسؤال
+              رفُّ كتبك وتقدّمُ قراءتك
             </p>
           </div>
           <span className="mdr-star" style={{ width: 24, height: 24 }} />
@@ -200,45 +93,7 @@ export default function ReadingPage() {
           ))}
         </div>
 
-        <TabBar tabs={MIHBARA_TABS} active={tab} onPick={(t) => setTab(t as MihbaraTab)} marginTop={14} />
-
-        {tab === "المسار" && (
-          <>
-            <PathArcs steps={steps} />
-            <BenefitCapture
-              sources={knowledgeSources}
-              books={books}
-              onNewSource={() => setShowSourceForm(true)}
-              onAdd={(d) => {
-                addBenefit({ id: uid(), text: d.text, sourceId: d.sourceId, question: d.question, createdAt: todayStr });
-                setTab("الفوائد");
-              }}
-            />
-          </>
-        )}
-
-        {tab === "المصادر" && (
-          <SourceList
-            sources={knowledgeSources}
-            books={books}
-            benefits={benefits}
-            onAdd={() => setShowSourceForm(true)}
-            onDelete={deleteKnowledgeSource}
-          />
-        )}
-
-        {tab === "الفوائد" && (
-          <BenefitList
-            benefits={benefits}
-            sources={knowledgeSources}
-            books={books}
-            onApply={(id, applied) => updateBenefit(id, { applied })}
-            onDelete={deleteBenefit}
-          />
-        )}
-
-        {tab === "الرفّ" && (
-          <>
+        <div className="mdr-mihbara-shelf">
             <ShelfSeats books={books} year={Number(todayStr.slice(0, 4))} goal={readingGoal ?? 12} />
 
             <SectionHead
@@ -296,29 +151,32 @@ export default function ReadingPage() {
               </div>
             )}
 
-            {/* أدواتُ القراءة الباقية — لم يسقط منها شيء */}
-            <SectionHead title="رحلةُ القراءة" marginTop={26} marginBottom={12} />
-            <ReadingJourney
-              books={books}
-              logs={readingLogs}
-              onLogBook={(book) => { setLogBookId(book.id); setShowLogForm(true); }}
-            />
+            {/* أدواتُ القراءة لا تختفي: تبقى في درجٍ واحد حتى لا تنافس الرفّ. */}
+            <details className="mdr-reading-tools">
+              <summary>أدوات القراءة وسجلّ الجلسات</summary>
+              <div>
+                <SectionHead title="رحلةُ القراءة" marginTop={18} marginBottom={12} />
+                <ReadingJourney
+                  books={books}
+                  logs={readingLogs}
+                  onLogBook={(book) => { setLogBookId(book.id); setShowLogForm(true); }}
+                />
 
-            <SectionHead title="الهدفُ السنوي" marginTop={26} marginBottom={12} />
-            <ReadingGoalCard />
+                <SectionHead title="الهدفُ السنوي" marginTop={22} marginBottom={12} />
+                <ReadingGoalCard />
 
-            <SectionHead title="أدواتٌ ثانوية" marginTop={26} marginBottom={12} />
-            <ReadingTimer onFinish={finishTimer} />
-            <div style={{ marginTop: 14 }}>
-              <StreakCalendar markedDates={logDates} color={SECTION_DEEP.reading} />
-            </div>
+                <SectionHead title="جلسةٌ مؤقّتة" marginTop={22} marginBottom={12} />
+                <ReadingTimer onFinish={finishTimer} />
+                <div style={{ marginTop: 14 }}>
+                  <StreakCalendar markedDates={logDates} color={SECTION_DEEP.reading} />
+                </div>
 
-            {recentLogs.length > 0 && (
-              <>
+                {recentLogs.length > 0 && (
+                  <>
                 <SectionHead
                   title="جلساتُ القراءة"
                   trailing={<HeadMeta>{arNum(readingLogs.length)} جلسة</HeadMeta>}
-                  marginTop={26}
+                  marginTop={22}
                   marginBottom={12}
                 />
                 <div className="space-y-1.5">
@@ -338,10 +196,11 @@ export default function ReadingPage() {
                     </div>
                   ))}
                 </div>
-              </>
-            )}
-          </>
-        )}
+                  </>
+                )}
+              </div>
+            </details>
+        </div>
       </div>
 
       <Modal
@@ -370,13 +229,6 @@ export default function ReadingPage() {
         />
       </Modal>
 
-      <SourceFormModal
-        open={showSourceForm}
-        onClose={() => setShowSourceForm(false)}
-        books={books}
-        onSave={(src) => { addKnowledgeSource(src); setShowSourceForm(false); }}
-        todayStr={todayStr}
-      />
     </div>
   );
 }

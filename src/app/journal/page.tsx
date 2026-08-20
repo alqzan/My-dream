@@ -766,7 +766,7 @@ export default function JournalPage() {
       {/* زر عائم لكتابة مذكرة سريعة — مثل زر المصروف السريع في الرئيسية */}
       <button
         onClick={() => setShowForm(true)}
-        className="fab p-4 rounded-full bg-journal text-white shadow-lg shadow-journal/30 press"
+        className="fab p-4 rounded-full bg-[var(--ink)] text-[var(--paper)] shadow-lg press"
         aria-label="اكتب مذكرة جديدة"
       >
         <Plus size={22} />

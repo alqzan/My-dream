@@ -239,7 +239,7 @@ export default function FinancePage() {
   }
 
   return (
-    <div className="page-shell">
+    <div className="page-shell mdr-finance-page">
       <div className="flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
@@ -263,11 +263,13 @@ export default function FinancePage() {
       {/* ===== 1 — نظرة اليوم ===== */}
       <FinanceGlance overview={overview} categories={categories} onGo={goToSection} />
 
-      <SalaryBanner />
+      <div className="mdr-finance-salary">
+        <SalaryBanner />
+      </div>
 
 
-      <Link href="/finance/insights" className="block animate-fade-up">
-        <div className="relative overflow-hidden rounded-2xl p-3.5 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine">
+      <Link href="/finance/insights" className="block animate-fade-up mdr-finance-insight-link">
+        <div className="relative overflow-hidden rounded-2xl p-3.5 press">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
