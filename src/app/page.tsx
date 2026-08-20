@@ -267,15 +267,15 @@ export default function Dashboard() {
         <PendingBankBanner />
       </div>
 
-      {/* ===== التفاصيل الثانوية =====
-          التوصيات والقياسات القديمة وتحرير العادات تبقى متاحةً دون أن
-          تنافس خلاصة اليوم في أول شاشة. */}
-      {!isFirstRun && <details className="mdr-home-more">
-        <summary>المزيد من البهو</summary>
+      {/* ===== أدوات البهو =====
+          تبقى الأدوات الأساسية ظاهرةً بعد الخلاصة؛ يمكن طيّها عند الحاجة،
+          لكن لا ندفنها خلف أكثر من درجٍ مغلق. */}
+      {!isFirstRun && <details className="mdr-home-more" open>
+        <summary>أدوات البهو</summary>
         <div className="mdr-home-more-body">
           <SmartInsights showSecondary={false} />
 
-          <details className="mdr-home-instrument-details">
+          <details className="mdr-home-instrument-details" open>
             <summary>إيقاع اليوم</summary>
             <div className="mdr-home-instruments" aria-label="إيقاع اليوم">
               <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
@@ -283,7 +283,7 @@ export default function Dashboard() {
             </div>
           </details>
 
-          <details id="daily-habits" className="mdr-home-habits-details">
+          <details id="daily-habits" className="mdr-home-habits-details" open>
             <summary>إدارة العادات</summary>
             <div className="pt-3">
               <DailyHabits />
