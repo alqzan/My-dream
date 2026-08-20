@@ -11,9 +11,9 @@ export function QuranBanner() {
   useEffect(() => setVerse(shortVerseOfDay(dayOfYear(), 5)), []);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-quran/25 bg-gradient-to-l from-quran/[0.12] via-quran/[0.05] to-transparent p-4">
+    <div className="mdr-quran-banner relative overflow-hidden rounded-2xl border border-quran/25 bg-gradient-to-l from-quran/[0.12] via-quran/[0.05] to-transparent p-4">
       {/* هالةٌ زخرفية خفيفة */}
-      <div className="pointer-events-none absolute -top-8 -left-6 w-28 h-28 rounded-full bg-quran/10 blur-2xl" aria-hidden />
+      <div className="mdr-quran-banner-glow pointer-events-none absolute -top-8 -left-6 w-28 h-28 rounded-full bg-quran/10 blur-2xl" aria-hidden />
       <p className="relative text-center text-lg font-black text-quran leading-relaxed">
         اللهم اجعل القرآن ربيع قلبي
       </p>

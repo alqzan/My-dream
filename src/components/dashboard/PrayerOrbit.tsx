@@ -93,18 +93,11 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
 
       <div className="relative w-full" style={{ aspectRatio: "100 / 62" }}>
         <svg viewBox={`0 0 100 ${VB_H}`} className="absolute inset-0 w-full h-full overflow-visible">
-          <defs>
-            <linearGradient id="prayerSky" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="var(--gold)" />
-              <stop offset="50%" stopColor="var(--green)" />
-              <stop offset="100%" stopColor="var(--clay)" />
-            </linearGradient>
-          </defs>
           <path d={ARC_PATH} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth="1.4" strokeLinecap="round" />
           <path
             d={ARC_PATH}
             fill="none"
-            stroke="url(#prayerSky)"
+            stroke="var(--gold)"
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeDasharray={`${(prayed / 5) * ARC_LENGTH} 999`}

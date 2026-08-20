@@ -11,10 +11,10 @@ export function SectionSignet({ href }: { href: string }) {
   const Icon = item.icon;
   return (
     <span
-      className={`relative inline-flex items-center justify-center w-9 h-9 rounded-xl shrink-0 ${item.color}`}
+      className={`mdr-signet relative inline-flex items-center justify-center w-9 h-9 rounded-xl shrink-0 ${item.color}`}
       aria-hidden
     >
-      <span className="absolute inset-0 rounded-xl bg-current opacity-[0.13]" />
+      <span className="mdr-signet-wash absolute inset-0 rounded-xl bg-current opacity-[0.13]" />
       <Icon size={18} className="relative" />
     </span>
   );

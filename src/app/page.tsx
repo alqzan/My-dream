@@ -256,14 +256,14 @@ export default function Dashboard() {
       <div className="mdr-home-primary animate-fade-up">
         <HifzReminder />
         <DayDigestCard compact />
-        <Card className="mdr-home-prayer-panel">
-          <PrayerOrbit />
-        </Card>
         <div className="mdr-home-year-countdown">
           <YearProgress pct={yearPct} />
           <RamadanCard />
           <CountdownCard />
         </div>
+        <Card className="mdr-home-prayer-panel">
+          <PrayerOrbit />
+        </Card>
         <PendingBankBanner />
       </div>
 

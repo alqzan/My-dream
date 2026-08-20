@@ -242,7 +242,7 @@ export default function StatsPage() {
           : `${arNum(win.jamaah)} فرضًا في جماعة هذا الشهر — وهو أكثرُ ما يثبت البقيّة.`;
 
   return (
-    <div className="page-shell mdr">
+    <div className="page-shell mdr mdr-stats-page">
       {/* ═══ الحصيلة — منقولةٌ من تصميم مدار ═══
           تُوضع فوق التفاصيل القديمة لا بدلاً منها: هذه قراءةٌ سريعةٌ للحال،
           وتلك أدواتُ تنقيبٍ يحتاجها من أراد التفصيل. */}
@@ -466,4 +466,3 @@ function RecordTrack({ current, best, color }: { current: number; best: number; 
     </div>
   );
 }
-

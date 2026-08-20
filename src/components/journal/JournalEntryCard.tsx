@@ -85,7 +85,7 @@ export function JournalEntryCard({
             )}
             {(entry.mergedFrom?.length ?? 0) > 0 && <MergeChip count={entry.mergedFrom!.length} />}
             {entry.source === "dayOne" && (
-              <span className="text-[10px] bg-purple-50 text-purple-500 px-1.5 py-0.5 rounded-full font-medium shrink-0">
+              <span className="text-[10px] bg-[var(--goldw)] text-[var(--gold)] px-1.5 py-0.5 rounded-full font-medium shrink-0">
                 Day One
               </span>
             )}

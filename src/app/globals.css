@@ -1934,3 +1934,238 @@ body {
   .mdr-home-year-countdown { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); }
   .mdr-home-year-countdown > :only-child { grid-column: 1 / -1; }
 }
+
+/* ===================== نقلٌ شكليٌّ آمن =====================
+   هذه الطبقة تستعير هدوء «التطبيق النهائي» فقط. لا تغيّر أي قيمة أو حدث أو
+   مسار تخزين؛ وظيفتها أن تجعل البطاقات القائمة تبدو من عائلة واحدة. */
+
+/* الورق الهادئ هو خلفية التطبيق في الوضعين؛ لا نحتاج الغيمتين حول الهاتف. */
+body,
+.dark body {
+  background-color: var(--paper);
+  background-image: none;
+}
+
+/* المعيّن/الشارة في رأس الأقسام: علامة صغيرة لا بطاقة ملوّنة. */
+.mdr-signet {
+  color: var(--gold) !important;
+  background: var(--paper2) !important;
+  border: 1px solid var(--gline);
+  border-radius: 999px !important;
+}
+.mdr-signet-wash {
+  background: var(--goldw) !important;
+  border-radius: 999px !important;
+  opacity: 1 !important;
+}
+
+/* بهو اليوم: فصلٌ واضح بين التنبيه والخلاصة وأداة الصلاة. */
+.mdr-home-primary > * {
+  border-radius: 1.35rem !important;
+}
+.mdr-home-primary .mdr-hifz-reminder,
+.mdr-home .mdr-day-digest,
+.mdr-home-prayer-panel,
+.mdr-home-year-countdown .mdr-year-progress {
+  border-width: 1px;
+}
+.mdr-home-year-countdown .mdr-season-card {
+  color: var(--ink) !important;
+  background: var(--paper2) !important;
+  border: 1px solid var(--gline) !important;
+  border-radius: 1.35rem !important;
+}
+.mdr-home-year-countdown .mdr-season-card [class*="text-white"] {
+  color: var(--ink52) !important;
+}
+.mdr-home-year-countdown .mdr-season-card [class*="bg-white/"] {
+  background: var(--goldw) !important;
+}
+.mdr-home-year-countdown .mdr-season-card [class*="text-3xl"] {
+  color: var(--gold) !important;
+}
+.mdr-home-more-body .mdr-insight-card > div {
+  border-radius: 1.1rem;
+}
+
+/* العادات تظل قابلة للإدارة (إضافة/تعديل/تجميد) لكن لا تبدو كلوحةٍ ثانية؛
+   نأخذ من التصميم بطاقةً هادئة وشريطاً واحداً واضحاً. */
+.mdr-home-more-body .mdr-habits {
+  border: 1px solid var(--gline);
+  border-radius: 1.25rem;
+  background: var(--paper2);
+  box-shadow: none !important;
+}
+.mdr-home-more-body .mdr-habits > div:first-child {
+  color: var(--ink) !important;
+  background: var(--paper2) !important;
+  background-image: none !important;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-home-more-body .mdr-habits > div:first-child .opacity-90,
+.mdr-home-more-body .mdr-habits > div:first-child .text-white {
+  color: var(--ink52) !important;
+}
+.mdr-home-more-body .mdr-habits > div:nth-child(2) {
+  background: var(--paper) !important;
+  border-radius: 0 0 1.25rem 1.25rem;
+}
+.mdr-home-more-body .mdr-habits .bg-gradient-to-l,
+.mdr-home-more-body .mdr-habits .bg-gradient-to-br {
+  background-image: none !important;
+}
+.mdr-home-more-body .mdr-habits .text-orange-500,
+.mdr-home-more-body .mdr-habits .text-brand-600,
+.mdr-home-more-body .mdr-habits .text-brand-700 {
+  color: var(--gold) !important;
+}
+.mdr-home-more-body .mdr-habits .bg-brand-50,
+.mdr-home-more-body .mdr-habits .bg-brand-100,
+.mdr-home-more-body .mdr-habits .bg-brand-200 {
+  background: var(--goldw) !important;
+}
+.mdr-home-more-body .mdr-habits .bg-green-100,
+.mdr-home-more-body .mdr-habits .bg-green-200 {
+  background: var(--greenw) !important;
+}
+.mdr-home-more-body .mdr-habits .bg-gray-100,
+.mdr-home-more-body .mdr-habits .bg-gray-50 {
+  background: var(--paper2) !important;
+}
+
+/* القرآن: بطاقة الدعاء/الآية الخضراء الهادئة، مع بقاء تبويبات اليوم/الخريطة/
+   التدريب ومنطق الحفظ كما هو. */
+.mdr-quran-page .mdr-quran-banner {
+  background: linear-gradient(180deg, var(--greenw), var(--paper2) 82%) !important;
+  border-color: color-mix(in srgb, var(--green) 30%, var(--line)) !important;
+  border-radius: 1.35rem !important;
+  box-shadow: none !important;
+}
+.mdr-quran-page .mdr-quran-banner-glow {
+  background: var(--greenw) !important;
+  opacity: 0.4;
+  filter: none;
+}
+.mdr-quran-page .mdr-quran-tabs button.is-active {
+  background: var(--green) !important;
+}
+
+/* المال: الرقم/الأزرار/الملخص فقط في السطح، بألوان ورقية بدلاً من كتلة خضراء. */
+.mdr-finance-page .mdr-finance-balance {
+  color: var(--ink) !important;
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+  border-radius: 1.35rem !important;
+}
+.mdr-finance-page .mdr-finance-balance .text-finance {
+  color: var(--gold) !important;
+}
+.mdr-finance-page .mdr-finance-balance [class*="bg-finance/"] {
+  color: var(--gold) !important;
+  background: var(--goldw) !important;
+}
+.mdr-finance-page .mdr-finance-glance-tile {
+  border-radius: 1.15rem !important;
+  background: var(--paper2) !important;
+}
+.mdr-finance-page .mdr-finance-glance-tile .text-finance {
+  color: var(--gold) !important;
+}
+.mdr-finance-page .mdr-finance-glance-tile .text-gray-300 {
+  color: var(--ink34) !important;
+}
+.mdr-finance-page .mdr-finance-insight-link > div,
+.mdr-finance-page .mdr-finance-now-card {
+  border-radius: 1.35rem !important;
+}
+
+/* المحبرة: الرف هو الواجهة. ألوان أغلفة الكتب تُهدّأ بصرياً فقط؛ الحقول
+   والكتب نفسها والقراءة والحذف تبقى كما كانت. */
+.mdr-book-card {
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+  border-radius: 1.25rem !important;
+  box-shadow: none !important;
+}
+.mdr-book-card-cover {
+  background: var(--paper) !important;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-book-spine {
+  background: var(--ink) !important;
+  box-shadow: none !important;
+  border-radius: 0.3rem 0.15rem 0.15rem 0.3rem !important;
+}
+.mdr-book-spine::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.3rem;
+  top: 0.45rem;
+  height: 1px;
+  background: var(--gold);
+  opacity: 0.75;
+}
+.mdr-book-glyph {
+  filter: grayscale(1);
+  opacity: 0.72;
+}
+.mdr-book-status {
+  color: var(--ink52) !important;
+  background: var(--paper) !important;
+  border: 1px solid var(--line);
+}
+.mdr-book-title { color: var(--ink) !important; }
+.mdr-book-card .h-1\.5 > div { background: var(--gold) !important; }
+
+/* المذكرات والمرفقات: نفس الورق المخطّط ونبرة الذهب الهادئة، من دون لمس
+   content/attachments أو الاستيراد القديم. */
+.mdr-journal-page .mdr-journal-archive,
+.mdr-journal-page .mdr-journal-archive > *,
+.mdr-journal-page .mdr-journal-composer,
+.mdr-journal-page .mdr-journal-composer > * {
+  box-shadow: none;
+}
+.mdr-journal-page .mdr-attachment-card {
+  border-color: var(--gline) !important;
+  background: var(--paper2) !important;
+  border-radius: 1.2rem !important;
+}
+.mdr-journal-page .mdr-attachment-card .bg-white\/80 {
+  background: var(--paper) !important;
+  border-color: var(--line) !important;
+}
+.mdr-journal-page .mdr-attachment-card .bg-red-50 {
+  background: var(--clayw) !important;
+  color: var(--clay) !important;
+}
+.mdr-journal-page .mdr-journal-editor {
+  border-radius: 1.2rem !important;
+  background-color: var(--paper2) !important;
+}
+
+/* الحصيلة: لوحاتُ الأرقام تبقى فوق التفاصيل القديمة، لكن من دون بطاقات
+   بيضاء/ظلال متنافرة. */
+.mdr-stats-page .bg-white,
+.mdr-stats-page .card-shadow {
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+.mdr-stats-page .text-gray-900,
+.mdr-stats-page .text-gray-800,
+.mdr-stats-page .text-gray-700 { color: var(--ink) !important; }
+.mdr-stats-page .text-gray-600,
+.mdr-stats-page .text-gray-500,
+.mdr-stats-page .text-gray-400 { color: var(--ink52) !important; }
+
+@media (max-width: 759px) {
+  .mdr-home-primary,
+  .mdr-finance-glance { gap: 0.7rem; }
+  .mdr-home-primary .mdr-hifz-reminder,
+  .mdr-home .mdr-day-digest,
+  .mdr-home-prayer-panel,
+  .mdr-home-year-countdown .mdr-year-progress,
+  .mdr-home-year-countdown .mdr-season-card,
+  .mdr-finance-page .mdr-finance-balance,
+  .mdr-quran-page .mdr-quran-banner { border-radius: 1.15rem !important; }
+}

@@ -41,9 +41,9 @@ export function JournalAttachments({ attachments }: { attachments?: JournalAttac
   if (!attachments?.length) return null;
 
   return (
-    <section className="rounded-2xl border border-journal/15 bg-journal/[0.04] p-3.5 space-y-2.5" aria-label="ملفات المذكرة">
+    <section className="mdr-attachment-card rounded-2xl border border-journal/15 bg-journal/[0.04] p-3.5 space-y-2.5" aria-label="ملفات المذكرة">
       <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
-        <Paperclip size={15} className="text-journal" />
+        <Paperclip size={15} className="text-[var(--gold)]" />
         ملفات المذكرة
         <span className="text-[11px] font-normal text-gray-400">({attachments.length})</span>
       </div>
@@ -78,14 +78,14 @@ export function JournalAttachments({ attachments }: { attachments?: JournalAttac
                         href={fileUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-journal hover:text-journal/70 press"
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-[var(--gold)] hover:text-[var(--clay)] press"
                       >
                         <ExternalLink size={12} /> فتح PDF
                       </a>
                       <a
                         href={fileUrl}
                         download={filename}
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-journal press"
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-[var(--gold)] press"
                       >
                         <Download size={12} /> تحميل
                       </a>
@@ -96,7 +96,7 @@ export function JournalAttachments({ attachments }: { attachments?: JournalAttac
                       href={previewUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-journal press"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-[var(--gold)] press"
                     >
                       <ExternalLink size={12} /> عرض المعاينة
                     </a>

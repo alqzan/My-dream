@@ -668,7 +668,7 @@ export default function JournalPage() {
                 </span>
               )}
               {viewEntry.source === "dayOne" && (
-                <span className="text-[10px] bg-purple-50 text-purple-500 px-2 py-0.5 rounded-full font-medium">
+                <span className="text-[10px] bg-[var(--goldw)] text-[var(--gold)] px-2 py-0.5 rounded-full font-medium">
                   Day One
                 </span>
               )}

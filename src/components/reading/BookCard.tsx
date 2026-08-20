@@ -25,18 +25,18 @@ export function BookCard({ book, onDelete, onClick }: BookCardProps) {
 
   return (
     <div
-      className="bg-white rounded-2xl border border-gray-100 overflow-hidden card-shadow cursor-pointer"
+      className="mdr-book-card bg-white rounded-2xl border border-gray-100 overflow-hidden card-shadow cursor-pointer"
       onClick={onClick}
     >
       <div
-        className="h-24 flex items-center justify-center relative"
+        className="mdr-book-card-cover h-24 flex items-center justify-center relative"
         style={{ backgroundColor: color + "20" }}
       >
         <div
-          className="w-14 h-20 rounded-lg shadow-md flex items-end justify-center pb-2"
+          className="mdr-book-spine w-14 h-20 rounded-lg shadow-md flex items-end justify-center pb-2"
           style={{ backgroundColor: color }}
         >
-          <span className="text-white text-2xl">📖</span>
+          <span className="mdr-book-glyph text-white text-2xl">📖</span>
         </div>
         {onDelete && (
           <button
@@ -46,14 +46,14 @@ export function BookCard({ book, onDelete, onClick }: BookCardProps) {
             <Trash2 size={13} />
           </button>
         )}
-        <div className={`absolute top-2 right-2 text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusConfig[book.status].bg}`}>
+        <div className={`mdr-book-status absolute top-2 right-2 text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusConfig[book.status].bg}`}>
           {statusConfig[book.status].label}
         </div>
       </div>
 
       <div className="p-3 space-y-2">
         <div>
-          <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{book.title}</h3>
+          <h3 className="mdr-book-title text-sm font-bold text-gray-900 line-clamp-1">{book.title}</h3>
           <p className="text-xs text-gray-400">{book.author}</p>
         </div>
 
