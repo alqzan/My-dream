@@ -319,9 +319,9 @@ export default function JournalPage() {
     // `mdr` على الغلاف كلِّه: أرضيةُ الورق تسري تحت الأرشيف والبحث أيضاً،
     // فلا ينقسم الشعورُ بين نصفٍ منقولٍ ونصفٍ قديم. البطاقاتُ الداخلية تبقى
     // على Tailwind كما هي حتى يأتي دورُها.
-    <div className="page-shell mdr">
+    <div className="page-shell mdr mdr-journal-page">
       {/* ═══ رأسُ الشاشة — منقولٌ من تصميم مدار ═══ */}
-      <div className="mdr" style={{ padding: "0 20px 24px" }}>
+      <div className="mdr mdr-journal-hero" style={{ padding: "0 20px 24px" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "16px 0 0" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 25, fontWeight: 900, lineHeight: 1.25 }}>المذكرات</p>
@@ -348,22 +348,26 @@ export default function JournalPage() {
           {wroteToday ? "أضِف إلى مذكرة اليوم" : "اكتب مذكرة اليوم"}
         </button>
 
-        {/* أدواتٌ ثانوية — الاستيرادُ والذكرى العشوائية باقيان، لا يسقط شيء */}
-        <div style={{ display: "flex", gap: 8, margin: "8px 0 0", flexWrap: "wrap" }}>
-          <MdrButton kind="ghost" onClick={() => setShowImport(true)} style={{ fontSize: 12.5 }}>
-            استيراد Day One
-          </MdrButton>
-          {journalEntries.length > 0 && (
-            <MdrButton kind="ghost" onClick={openRandomMemory} style={{ fontSize: 12.5 }}>
-              ذكرى عشوائية
+        {/* أدواتٌ ثانوية — تبقى كلّها كما هي لكن لا تنافس فعل الكتابة في أول
+            الشاشة. فتحها لا يغيّر أيّ بيانات ولا يطلب استيراداً جديداً. */}
+        <details className="mdr-journal-tools">
+          <summary>أدوات المذكرات{mergeableDays > 0 ? ` · ${daysCount(mergeableDays)} للدمج` : ""}</summary>
+          <div>
+            <MdrButton kind="ghost" onClick={() => setShowImport(true)} style={{ fontSize: 12.5 }}>
+              استيراد Day One
             </MdrButton>
-          )}
-          {mergeableDays > 0 && (
-            <MdrButton kind="gold" onClick={() => setMergeDay("")} style={{ fontSize: 12.5 }}>
-              دمجُ الأيام المكرّرة
-            </MdrButton>
-          )}
-        </div>
+            {journalEntries.length > 0 && (
+              <MdrButton kind="ghost" onClick={openRandomMemory} style={{ fontSize: 12.5 }}>
+                ذكرى عشوائية
+              </MdrButton>
+            )}
+            {mergeableDays > 0 && (
+              <MdrButton kind="gold" onClick={() => setMergeDay("")} style={{ fontSize: 12.5 }}>
+                دمجُ الأيام المكرّرة
+              </MdrButton>
+            )}
+          </div>
+        </details>
 
         {/* سطرٌ سريع — التقاطٌ فوريّ دون فتح المحرّر */}
         <div
@@ -484,6 +488,7 @@ export default function JournalPage() {
       </div>
 
 
+      <div className="mdr-journal-archive">
       <div className="relative animate-fade-up stagger-3">
         <Search size={15} className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400" />
         <input
@@ -492,7 +497,7 @@ export default function JournalPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ابحث في العناوين والنصوص والأسئلة..."
-          className="w-full bg-white border border-gray-200 rounded-xl pr-9 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-journal/30"
+          className="mdr-journal-search w-full bg-white border border-gray-200 rounded-xl pr-9 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-journal/30"
         />
       </div>
 
@@ -500,8 +505,8 @@ export default function JournalPage() {
       <div className="flex gap-2 overflow-x-auto pb-1 animate-fade-up stagger-3">
         <button
           onClick={() => selectYear("الكل")}
-          className={`shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
-            selectedYear === "الكل" ? "bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
+          className={`mdr-filter-chip shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
+            selectedYear === "الكل" ? "is-active bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
           }`}
         >
           الكل
@@ -510,8 +515,8 @@ export default function JournalPage() {
           <button
             key={y}
             onClick={() => selectYear(y)}
-            className={`shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
-              selectedYear === y ? "bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
+            className={`mdr-filter-chip shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
+              selectedYear === y ? "is-active bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
             }`}
           >
             {y}
@@ -519,11 +524,11 @@ export default function JournalPage() {
         ))}
         <button
           onClick={toggleStarredFilter}
-          className={`shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
-            onlyStarred ? "bg-amber-400 text-white border-amber-400" : "bg-white border-gray-200 text-gray-500"
+          className={`mdr-filter-chip shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors ${
+            onlyStarred ? "is-active bg-amber-400 text-white border-amber-400" : "bg-white border-gray-200 text-gray-500"
           }`}
         >
-          ⭐ المفضلة
+          المفضلة
         </button>
       </div>
 
@@ -534,8 +539,8 @@ export default function JournalPage() {
             <button
               key={t}
               onClick={() => selectTag(t)}
-              className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                selectedTag === t ? "bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
+              className={`mdr-filter-chip shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                selectedTag === t ? "is-active bg-journal text-white border-journal" : "bg-white border-gray-200 text-gray-500"
               }`}
             >
               #{t}
@@ -548,7 +553,7 @@ export default function JournalPage() {
         <div className="space-y-4 animate-fade-up stagger-4">
           {filtered.length === 0 && (
             <EmptyState
-              emoji="📓"
+              emoji="•"
               title="لا توجد مذكرات بعد"
               subtitle="ابدأ بكتابة أول مذكرة أو استورد مذكراتك من Day One"
               action={
@@ -598,7 +603,7 @@ export default function JournalPage() {
       ) : (
         <div className="space-y-3 animate-fade-up stagger-4">
           {galleryPhotos.length === 0 ? (
-            <EmptyState emoji="🖼️" title="لا صور بعد" subtitle="الصور المرفقة بمذكراتك تظهر هنا" />
+            <EmptyState emoji="□" title="لا صور بعد" subtitle="الصور المرفقة بمذكراتك تظهر هنا" />
           ) : (
             <>
               <PhotoWall photos={visibleGallery} onOpenEntry={openViewer} />
@@ -614,6 +619,8 @@ export default function JournalPage() {
           )}
         </div>
       )}
+
+      </div>
 
       {/* محرّر المذكرة بملء الشاشة (يدير رقعته الكاملة بنفسه، لا نافذة) */}
       {(showForm || editEntry) && (

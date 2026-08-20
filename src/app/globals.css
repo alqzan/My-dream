@@ -23,12 +23,12 @@
      **الهجرة تدريجية عمداً**: `Card.tsx` وحده اليوم (أكثر الأسطح تكراراً).
      ولا تُحذف قواعدُ `.dark` القائمة قبل أن يهاجر مستهلكوها — حذفُها مبكراً
      يكسر الوضع الليلي في عشرات الشاشات دفعةً واحدة. */
-  --surface: #ffffff;
-  --border-subtle: #f3f4f6; /* = gray-100 */
+  --surface: #fffdf8;
+  --border-subtle: #e9e1d5; /* warm paper line */
   /* أرضيةُ الصفحة نفسها — يحتاجها ما يلتصق أعلى الشاشة (رأس الشهر في الخطّ
      الزمني للمذكرات): سطحٌ شبه معتمٍ يحجب ما يمرّ تحته بلا حافّةٍ لونية
      غريبة. مطابقٌ لـ`background-color` في `body` أدناه، وله نظيرٌ في `.dark`. */
-  --page-bg: #f4eee2;
+  --page-bg: #f5f0e7;
 }
 
 * {
@@ -63,10 +63,9 @@ body {
   min-height: 100vh;
   /* Clean warm cream with two soft, wide washes (gold at the top, a faint
      violet at the bottom) — smooth and airy, no pattern. */
-  background-color: #f4eee2;
+  background-color: #f5f0e7;
   background-image:
-    radial-gradient(130% 85% at 85% -25%, rgba(201, 133, 42, 0.16) 0%, transparent 55%),
-    radial-gradient(120% 75% at 8% 115%, rgba(138, 111, 176, 0.09) 0%, transparent 55%);
+    radial-gradient(130% 85% at 85% -25%, rgba(201, 133, 42, 0.10) 0%, transparent 58%);
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
@@ -145,8 +144,7 @@ body {
   color: #ece2d0;
   background-color: #171009;
   background-image:
-    radial-gradient(130% 85% at 85% -25%, rgba(214, 150, 60, 0.13) 0%, transparent 55%),
-    radial-gradient(120% 75% at 8% 115%, rgba(150, 120, 190, 0.10) 0%, transparent 55%);
+    radial-gradient(130% 85% at 85% -25%, rgba(214, 150, 60, 0.10) 0%, transparent 58%);
 }
 
 .dark .bg-white { background-color: #241c12 !important; }
@@ -277,6 +275,245 @@ body {
   .page-subtitle {
     @apply text-sm text-gray-600 mt-0.5;
   }
+}
+
+/* ===================== مواءمة واجهة مدار ===================== */
+/* هذه الطبقة تضبط الإيقاع البصري فقط. لا تغيّر مخزن البيانات ولا مسارات
+   الحفظ؛ العناصر التي أُخفِيَت بصرياً تبقى وراء «مراجعة» أو «أدوات». */
+.mdr-home {
+  --mdr-home-gap: clamp(0.75rem, 1.7vw, 1.25rem);
+  background: var(--paper);
+  border-inline: 1px solid var(--line);
+  box-shadow: 0 18px 50px rgba(74, 52, 27, 0.06);
+}
+.mdr-home-header {
+  padding-bottom: 0.85rem !important;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-home-instruments {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--mdr-home-gap);
+  align-items: center;
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.2rem 0;
+  border-top: 1px solid var(--line);
+}
+.mdr-home-now {
+  margin-top: 0.2rem;
+}
+.mdr-home-now:empty { display: none; }
+.mdr-home-now > * {
+  margin: 0;
+}
+.mdr-home-now .mdr-insight-card {
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+  box-shadow: none !important;
+}
+.mdr-home-now .mdr-insight-card [class*="bg-quran/"],
+.mdr-home-now .mdr-insight-card [class*="bg-finance/"],
+.mdr-home-now .mdr-insight-card [class*="bg-journal/"],
+.mdr-home-now .mdr-insight-card [class*="bg-red-500/"] {
+  background: var(--goldw) !important;
+}
+.mdr-home-now .mdr-insight-card [class*="text-quran"],
+.mdr-home-now .mdr-insight-card [class*="text-finance"],
+.mdr-home-now .mdr-insight-card [class*="text-journal"],
+.mdr-home-now .mdr-insight-card [class*="text-red-"] {
+  color: var(--gold) !important;
+}
+.mdr-home .bg-white {
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+}
+.mdr-home .card-shadow { box-shadow: none; }
+.mdr-home .mdr-habits > div:first-child {
+  background: var(--ink) !important;
+  background-image: none !important;
+}
+.mdr-home .mdr-habits > div:nth-child(2) {
+  background: var(--paper2) !important;
+  background-image: none !important;
+}
+.mdr-home .mdr-habits .bg-gradient-to-l,
+.mdr-home .mdr-habits .bg-gradient-to-br { background-image: none !important; }
+.mdr-home .mdr-habits .text-orange-500 { color: var(--gold) !important; }
+.mdr-home .mdr-season-card {
+  background: var(--ink) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+.mdr-pending-banner {
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+}
+.mdr-pending-banner .text-finance { color: var(--gold) !important; }
+.mdr-pending-banner .bg-finance\/15 { background: var(--goldw) !important; }
+.mdr-pending-banner .text-gray-500 { color: var(--ink52) !important; }
+.mdr-home-now .bg-white,
+.mdr-home-panel,
+.mdr-home .page-grid .bg-white {
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+.mdr-onboarding {
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+  box-shadow: none !important;
+}
+.mdr-onboarding [class*="bg-prayer/"],
+.mdr-onboarding [class*="bg-finance/"],
+.mdr-onboarding [class*="bg-journal/"],
+.mdr-onboarding [class*="bg-reading/"] {
+  background: var(--goldw) !important;
+}
+.mdr-onboarding [class*="text-prayer"],
+.mdr-onboarding [class*="text-finance"],
+.mdr-onboarding [class*="text-journal"],
+.mdr-onboarding [class*="text-reading"] {
+  color: var(--gold) !important;
+}
+.mdr-onboarding .border-gray-100 { border-color: var(--line) !important; }
+.mdr-home-grid {
+  gap: var(--mdr-home-gap);
+}
+.mdr-home-grid > div {
+  min-width: 0;
+}
+.mdr-group-label h2 { color: var(--ink52) !important; }
+.mdr-group-label > span { background: var(--gline) !important; }
+.mdr-home .text-gray-800,
+.mdr-home .text-gray-700,
+.mdr-home .text-gray-900 {
+  color: var(--ink) !important;
+}
+.mdr-home .text-gray-500,
+.mdr-home .text-gray-400 {
+  color: var(--ink52) !important;
+}
+.mdr-home .bg-gradient-to-l,
+.mdr-home .bg-gradient-to-r {
+  background-image: none !important;
+}
+.mdr-review-links { align-items: stretch; }
+.mdr-review-link {
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--paper2);
+  box-shadow: none;
+}
+.mdr-review-link--green { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.mdr-review-link--gold { border-color: var(--gline); }
+.mdr-review-link-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  color: var(--gold);
+}
+.mdr-review-link--green .mdr-review-link-icon { color: var(--green); }
+.mdr-review-link p { color: inherit; }
+.mdr-review-link p + p { color: var(--ink52); opacity: 1; }
+.mdr-prayer-stats { color: var(--ink52); }
+.mdr-prayer-stats .mdr-diamond { background: currentColor; }
+.mdr-prayer-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  font-size: 0.9em;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mdr-prayer-page {
+  background: var(--paper);
+  border-inline: 1px solid var(--line);
+}
+.mdr-prayer-page > .mdr-prayer-history,
+.mdr-prayer-page > .mdr-prayer-history > * {
+  min-width: 0;
+}
+.mdr-prayer-page .bg-white,
+.mdr-prayer-page .rounded-2xl.bg-white {
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+.mdr-prayer-page .text-gray-400,
+.mdr-prayer-page .text-gray-500 { color: var(--ink52) !important; }
+.mdr .mdr-prayer-history > button {
+  width: 100%;
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+  color: var(--ink) !important;
+}
+.mdr .mdr-prayer-history > button .text-gray-400 { color: var(--ink52) !important; }
+
+.mdr-journal-page {
+  background: var(--paper);
+  border-inline: 1px solid var(--line);
+}
+.mdr-journal-page .mdr-journal-hero {
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-journal-page .mdr-journal-tools {
+  margin-top: 0.75rem;
+}
+.mdr-journal-tools summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
+  color: var(--ink52);
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+.mdr-journal-tools summary::-webkit-details-marker { display: none; }
+.mdr-journal-tools[open] summary { color: var(--gold); border-color: var(--gline); background: var(--goldw); }
+.mdr-journal-tools > div { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.mdr-journal-archive { display: grid; gap: 0.65rem; }
+.mdr-journal-archive .mdr-journal-search {
+  border: 1px solid var(--line) !important;
+  background: var(--paper2) !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+}
+.mdr-journal-archive .mdr-filter-chip {
+  border-color: var(--line) !important;
+  background: transparent !important;
+  color: var(--ink52) !important;
+}
+.mdr-journal-archive .mdr-filter-chip.is-active {
+  border-color: var(--gold) !important;
+  background: var(--gold) !important;
+  color: var(--paper) !important;
+}
+.mdr-journal-archive .text-journal { color: var(--gold) !important; }
+.mdr-journal-archive .bg-journal\/10 { background-color: var(--goldw) !important; }
+.mdr-journal-archive .bg-journal\/\[0\.06\] { background-color: var(--goldw) !important; }
+.mdr-journal-archive .border-journal\/25 { border-color: var(--gline) !important; }
+
+@media (max-width: 639px) {
+  .mdr-home { border-inline: none; box-shadow: none; }
+  .mdr-home-instruments { grid-template-columns: 1fr; gap: 0.5rem; }
+  .mdr-home .page-grid { gap: 0.85rem; }
+  .mdr-review-links { grid-template-columns: 1fr; }
+  .mdr-journal-page { border-inline: none; }
 }
 
 /* ===================== حقول الإدخال على اللمس ===================== */

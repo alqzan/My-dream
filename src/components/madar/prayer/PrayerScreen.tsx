@@ -21,6 +21,7 @@ import {
 } from "@/lib/utils";
 import { arNum, arCount, arClock, arSpan } from "@/lib/madar/format";
 import { Modal } from "@/components/ui/Modal";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { MdrScreen, SectionHead, HeadMeta, Stepper, MdrButton } from "../primitives";
 import { Mihrab } from "./Mihrab";
 import { QiyamPanel } from "./QiyamPanel";
@@ -47,6 +48,7 @@ export function PrayerScreen() {
   const addQadaBacklog = useAppStore((s) => s.addQadaBacklog);
 
   const [statesFor, setStatesFor] = useState<PrayerName | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const todayStr = today();
   const log = prayerLogs.find((l) => l.date === todayStr);
 
@@ -174,8 +176,17 @@ export function PrayerScreen() {
         </MdrButton>
       </div>
 
-      <YearRing logs={prayerLogs} year={Number(todayStr.slice(0, 4))} todayStr={todayStr} />
-      <WeekLog logs={prayerLogs} todayStr={todayStr} />
+      <CollapsibleSection
+        className="mdr-prayer-history"
+        title="السجل اليومي"
+        summary="الأسبوع وحلقة السنة"
+        tone="brand"
+        open={historyOpen}
+        onToggle={() => setHistoryOpen((v) => !v)}
+      >
+        <YearRing logs={prayerLogs} year={Number(todayStr.slice(0, 4))} todayStr={todayStr} />
+        <WeekLog logs={prayerLogs} todayStr={todayStr} />
+      </CollapsibleSection>
 
       <Modal open={statesFor !== null} onClose={() => setStatesFor(null)} title={statesFor ?? ""}>
         <div className="mdr">

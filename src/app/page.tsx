@@ -20,7 +20,6 @@ import { InstallHint } from "@/components/layout/InstallHint";
 import { DailyHabits } from "@/components/dashboard/DailyHabits";
 import { PrayerOrbit } from "@/components/dashboard/PrayerOrbit";
 import { SmartInsights } from "@/components/dashboard/SmartInsights";
-import { HikmaCard } from "@/components/dashboard/HikmaCard";
 import { WeeklyWrap } from "@/components/dashboard/WeeklyWrap";
 import { RamadanCard } from "@/components/dashboard/RamadanCard";
 import { CountdownCard } from "@/components/dashboard/CountdownCard";
@@ -219,14 +218,14 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="page-shell page-shell--wide mdr">
+    <div className="page-shell page-shell--wide mdr mdr-home">
       {celebrate && <Confetti />}
 
       {/* ═══ رأسُ اليوم — منقولٌ من تصميم مدار ═══
           التحيّةُ والتاريخان والمزولةُ والأقواسُ الثلاثة. وما تحتها من طبقاتِ
           الرئيسية باقٍ كما هو: فلكُ السنة والعاداتُ والصلواتُ والبصيرةُ
           والحكمةُ ورمضانُ والمحطّاتُ وحصيلةُ الأسبوع. */}
-      <div style={{ padding: "0 4px" }}>
+      <div className="mdr-home-header" style={{ padding: "0 4px" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "8px 0 0" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 25, fontWeight: 900, lineHeight: 1.25 }}>{getGreeting()}</p>
@@ -245,13 +244,19 @@ export default function Dashboard() {
 
         {!isFirstRun && (
           <>
-            <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
-            <ThreeArcs due={dueNow} arcs={arcSpecs} />
+            <div className="mdr-home-instruments">
+              <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
+              <ThreeArcs due={dueNow} arcs={arcSpecs} />
+            </div>
           </>
         )}
       </div>
 
       {isFirstRun && <OnboardingCard />}
+
+      <div className="mdr-home-now">
+        <SmartInsights showSecondary={false} />
+      </div>
 
       <PendingBankBanner />
 
@@ -265,9 +270,9 @@ export default function Dashboard() {
           عمودٍ في RTL) للوِرد وخلاصة اليوم والصلوات والعادات، و**اليسار** لِما
           يُقرأ لا يُنفَّذ. الشبكةُ الآلية كانت ستوزّعها صفّاً صفّاً فتتفاوت
           الأطوال وتفتح فجواتٍ بين البطاقات. */}
-      <GroupLabel>يومك</GroupLabel>
+      <GroupLabel>مسارُ اليوم</GroupLabel>
 
-      <div className="page-grid">
+      <div className="page-grid mdr-home-grid">
         <div className="space-y-5">
           {!isFirstRun && (
             <div className="animate-fade-up stagger-1 space-y-3">
@@ -276,7 +281,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          <Card className="animate-fade-up stagger-1">
+          <Card className="animate-fade-up stagger-1 mdr-home-panel">
             <PrayerOrbit />
           </Card>
 
@@ -295,9 +300,6 @@ export default function Dashboard() {
             <CountdownCard />
           </div>
 
-          <div className="animate-fade-up stagger-2">
-            <SmartInsights showSecondary={false} />
-          </div>
         </div>
       </div>
 
@@ -325,10 +327,10 @@ export default function Dashboard() {
               quranHifz={quranHifz}
             />
 
-            <div className="grid grid-cols-2 gap-3">
-              <Link href="/finance/insights" className="block">
-                <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#1d5c20] to-[#3d9640] card-shadow press shine h-full">
-                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
+          <div className="grid grid-cols-2 gap-3 mdr-review-links">
+            <Link href="/finance/insights" className="block">
+                <div className="relative overflow-hidden rounded-2xl p-4 mdr-review-link mdr-review-link--green press h-full">
+                  <div className="mdr-review-link-icon">
                     <TrendingDown size={18} />
                   </div>
                   <p className="text-sm font-bold">متابعة الصرف</p>
@@ -336,9 +338,9 @@ export default function Dashboard() {
                   <ChevronLeft size={16} className="absolute top-4 left-3 opacity-70" />
                 </div>
               </Link>
-              <Link href="/stats" className="block">
-                <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-l from-[#5c3d21] to-[#8a5a24] card-shadow press shine h-full">
-                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center mb-2">
+            <Link href="/stats" className="block">
+                <div className="relative overflow-hidden rounded-2xl p-4 mdr-review-link mdr-review-link--gold press h-full">
+                  <div className="mdr-review-link-icon">
                     <BarChart3 size={18} />
                   </div>
                   <p className="text-sm font-bold">إحصائياتك الكاملة</p>
@@ -350,13 +352,12 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-5">
-            <HikmaCard />
             <Card>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-gray-700">
                   {ritualLabels.length ? `سلسلة يومية — ${ritualLabels.join(" + ")}` : "سلسلة يومية"}
                 </span>
-                <span className="text-xs text-gray-400">اضغط أي يوم 👆</span>
+                <span className="text-xs text-gray-400">اضغط أي يوم</span>
               </div>
               <StreakCalendar markedDates={completionDates} color={SECTION_DEEP.brand} onDayClick={setSelectedDay} />
             </Card>
@@ -377,7 +378,7 @@ export default function Dashboard() {
       >
         <Plus size={22} />
       </button>
-      <Modal open={quickExpense} onClose={() => setQuickExpense(false)} title="مصروف سريع 💸">
+      <Modal open={quickExpense} onClose={() => setQuickExpense(false)} title="مصروف سريع">
         <TransactionForm onClose={() => setQuickExpense(false)} />
       </Modal>
     </div>
@@ -396,7 +397,7 @@ const QUICK_STARTS = [
 
 function OnboardingCard() {
   return (
-    <Card className="animate-fade-up">
+    <Card className="animate-fade-up mdr-onboarding">
       <div className="flex items-center gap-2 mb-1.5">
         <BrandMark size={26} />
         <h2 className="text-lg font-bold text-gray-800">ابدأ رحلتك في مدار</h2>

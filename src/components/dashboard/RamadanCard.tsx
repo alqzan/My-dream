@@ -53,7 +53,7 @@ export function RamadanCard() {
   const day = hijriParts(now)?.day ?? null;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-br from-[#3a2a5c] via-[#4a3570] to-[#6b4629] card-shadow shine">
+    <div className="mdr-season-card relative overflow-hidden rounded-2xl p-4 text-white bg-gradient-to-br from-[#3a2a5c] via-[#4a3570] to-[#6b4629] card-shadow shine">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-white/60 font-medium">رمضان مبارك {emoji}</p>

@@ -6,7 +6,7 @@ import {
   computePrayerTimes, getCachedCoords, formatClock, buzz,
 } from "@/lib/utils";
 import { PRAYERS, PRAYER_META, prayerStatusMeta, type PrayerName } from "@/lib/types";
-import { SECTION, GOLD_LIGHT } from "@/lib/palette";
+import { GOLD_LIGHT } from "@/lib/palette";
 
 // A stylised dawn-to-night sky arc — each of the five daily prayers sits at
 // its rough place along the day, echoing the app's orbit motif (مدار).
@@ -81,12 +81,12 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
     <div className={large ? "space-y-3" : "space-y-2"}>
       <div className="flex items-center justify-between">
         <span className={`font-semibold text-gray-700 ${large ? "text-base" : "text-sm"}`}>صلوات اليوم</span>
-        <div className={`flex items-center gap-3 font-medium ${large ? "text-sm" : "text-xs"}`}>
+        <div className={`mdr-prayer-stats flex items-center gap-3 font-medium ${large ? "text-sm" : "text-xs"}`}>
           <span className="flex items-center gap-1 text-amber-600">
-            <span>🔥</span> {streak}
+            <span className="mdr-diamond" style={{ width: 5, height: 5 }} aria-hidden /> {streak}
           </span>
           <span className="flex items-center gap-1 text-prayer">
-            <span>🕌</span> {mosqueStreak}
+            <span className="mdr-diamond" style={{ width: 5, height: 5 }} aria-hidden /> {mosqueStreak}
           </span>
         </div>
       </div>
@@ -95,11 +95,9 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
         <svg viewBox={`0 0 100 ${VB_H}`} className="absolute inset-0 w-full h-full overflow-visible">
           <defs>
             <linearGradient id="prayerSky" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={SECTION.brand} />
-              <stop offset="28%" stopColor="#e8c15a" />
-              <stop offset="50%" stopColor="#4a9fbd" />
-              <stop offset="72%" stopColor="#e0793d" />
-              <stop offset="100%" stopColor="#433a6b" />
+              <stop offset="0%" stopColor="var(--gold)" />
+              <stop offset="50%" stopColor="var(--green)" />
+              <stop offset="100%" stopColor="var(--clay)" />
             </linearGradient>
           </defs>
           <path d={ARC_PATH} fill="none" stroke="currentColor" className="text-gray-200 dark:text-[#3a2e1e]" strokeWidth="1.4" strokeLinecap="round" />
@@ -151,7 +149,7 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
                   borderColor: statusMeta.color,
                 }}
               >
-                {meta.icon}
+                <span aria-hidden className="mdr-prayer-glyph">{prayer.slice(0, 1)}</span>
               </span>
               <span style={textNudge} className={`font-medium whitespace-nowrap ${large ? "text-xs" : "text-[10px]"} ${isNext ? "text-brand-600 font-bold" : "text-gray-500"}`}>
                 {prayer}
@@ -169,11 +167,11 @@ export function PrayerOrbit({ size = "default" }: PrayerOrbitProps) {
       <div className={`text-center pt-1 ${large ? "text-sm" : "text-xs"}`}>
         {prayed === 5 ? (
           <span className="font-bold text-prayer">
-            {mosque === 5 ? "🕌 صليتها كلها بالمسجد اليوم — الله يتقبّل" : "أكملت صلوات اليوم كلها ✨"}
+            {mosque === 5 ? "صليتها كلها بالمسجد اليوم — الله يتقبّل" : "أكملت صلوات اليوم كلها"}
           </span>
         ) : (
           <span className="text-gray-400">
-            {prayed}/5 اليوم{mosque > 0 ? ` · ${mosque} بالمسجد 🕌` : ""}
+            {prayed}/5 اليوم{mosque > 0 ? ` · ${mosque} بالمسجد` : ""}
             {nextPrayer && times ? ` · القادمة ${nextPrayer} ${formatClock(times[nextPrayer])}` : ""}
           </span>
         )}

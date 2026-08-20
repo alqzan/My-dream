@@ -325,7 +325,7 @@ export function DailyHabits() {
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl card-shadow">
+    <div className="mdr-habits relative overflow-hidden rounded-2xl card-shadow">
       {/* Master streak header */}
       <div
         className={cn(
@@ -338,9 +338,7 @@ export function DailyHabits() {
         <div>
           <div className="text-4xl font-bold flex items-center gap-2 tabular-nums">
             <AnimatedNumber value={masterStreak} />
-            <span className={cn("text-2xl", masterStreak > 0 && "animate-flame")}>
-              {masterStreak > 0 ? "🔥" : "💤"}
-            </span>
+            <span className="mdr-diamond" style={{ width: 10, height: 10, background: "currentColor" }} aria-hidden />
           </div>
           <div className="text-sm opacity-90 mt-0.5">
             {masterStreak > 0 ? `يوم متواصل — ${streakLabel}` : "ابدأ سلسلتك اليوم!"}

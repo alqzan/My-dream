@@ -9,7 +9,7 @@ import { ChevronDown } from "lucide-react";
 // كان خاصّاً بصفحة الأموال ثمّ صار مشتركاً معها الرئيسية — `tone` وحدها ما
 // يفرّق: لونُ أيقونة الرأس. الافتراض `finance` فلا تتغيّر صفحة الأموال.
 export function CollapsibleSection({
-  id, title, icon, summary, badge, open, onToggle, tone = "finance", children,
+  id, title, icon, summary, badge, open, onToggle, tone = "finance", className, children,
 }: {
   id?: string;
   title: string;
@@ -19,11 +19,12 @@ export function CollapsibleSection({
   open: boolean;
   onToggle: () => void;
   tone?: "finance" | "brand";
+  className?: string;
   children: React.ReactNode;
 }) {
   const panelId = useId();
   return (
-    <div id={id}>
+    <div id={id} className={className}>
       <button
         type="button"
         aria-expanded={open}

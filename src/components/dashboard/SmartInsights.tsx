@@ -85,7 +85,7 @@ export function SmartInsights({ showSecondary = true }: { showSecondary?: boolea
   const act = (key: string) => setPrefs({ ...actInsight(key) });
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+    <div className="mdr-insight-card bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Compass size={16} className="text-quran" />
