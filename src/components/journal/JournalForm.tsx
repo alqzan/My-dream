@@ -427,7 +427,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           <strong>{date}</strong>
         </div>
         <div className="mdr-journal-context-meta">
-          <span>{initial?.time ? `كُتبت ${initial.time}` : "مذكرة اليوم"}</span>
+          <span>{answering ? "إجابة سؤال اليوم" : initial?.time ? `كُتبت ${initial.time}` : "مذكرة اليوم"}</span>
           <span>{saveState === "saving" ? "يُحفظ…" : saveState === "saved" ? "محفوظ تلقائياً" : "مسودة"}</span>
         </div>
       </div>
@@ -473,30 +473,6 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             <button type="button" onClick={() => shiftDate(1)}>غدًا</button>
           </div>
         </div>
-      </div>
-
-      <div className="mdr-journal-question">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <span className="mdr-journal-eyebrow">سؤال اليوم</span>
-            <p className="mdr-journal-question-text">{question || dailyQuestion(date)}</p>
-          </div>
-          {!answering && (
-            <button
-              type="button"
-              onClick={() => { setAnswering(true); if (!question.trim()) setQuestion(dailyQuestion(date)); }}
-              className="mdr-journal-question-action"
-            >أجب عليه</button>
-          )}
-        </div>
-        {answering && (
-          <input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            aria-label="سؤال المذكرة"
-            className="mdr-journal-question-input"
-          />
-        )}
       </div>
 
       <div>

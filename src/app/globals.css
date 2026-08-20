@@ -844,7 +844,8 @@ body {
 .mdr-reading-tools { margin-top: 1rem; }
 .mdr-reading-tools > summary { color: var(--ink52); }
 
-/* محرر المذكرات: ورقة مسطرة + سؤال اليوم + مرفقات ظاهرة. */
+/* محرر المذكرات: ورقة مسطرة + مرفقات ظاهرة. سؤال اليوم يبقى في صفحة
+   المذكرات الخارجية، ويصل المحرّر كحالة إجابة دون إعادة بطاقة السؤال هنا. */
 .mdr-journal-composer .mdr-journal-context {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem;
   padding: 0.8rem 0.1rem 0.2rem; border-bottom: 1px solid var(--line);
