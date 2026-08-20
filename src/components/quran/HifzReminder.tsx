@@ -22,7 +22,7 @@ export function HifzReminder() {
   return (
     <Link
       href="/quran?tab=hifz"
-      className="flex items-center gap-3 rounded-2xl border border-quran/25 bg-gradient-to-l from-quran/[0.10] to-transparent p-3.5 press"
+      className="mdr-hifz-reminder flex items-center gap-3 rounded-2xl border border-quran/25 bg-gradient-to-l from-quran/[0.10] to-transparent p-3.5 press"
     >
       <span className="w-9 h-9 rounded-xl bg-quran/15 text-quran flex items-center justify-center shrink-0">
         <GraduationCap size={18} />

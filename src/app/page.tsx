@@ -14,7 +14,6 @@ import {
   formatAmount,
 } from "@/lib/utils";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
-import { GroupLabel } from "@/components/ui/GroupLabel";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { InstallHint } from "@/components/layout/InstallHint";
 import { DailyHabits } from "@/components/dashboard/DailyHabits";
@@ -230,10 +229,9 @@ export default function Dashboard() {
     <div className="page-shell page-shell--wide mdr mdr-home">
       {celebrate && <Confetti />}
 
-      {/* ═══ رأسُ اليوم — منقولٌ من تصميم مدار ═══
-          التحيّةُ والتاريخان والمزولةُ والأقواسُ الثلاثة. وما تحتها من طبقاتِ
-          الرئيسية باقٍ كما هو: فلكُ السنة والعاداتُ والصلواتُ والبصيرةُ
-          والحكمةُ ورمضانُ والمحطّاتُ وحصيلةُ الأسبوع. */}
+      {/* ═══ رأسُ اليوم — إيقاع البهو الجديد ═══
+          التحيّة والتاريخ أولاً، ثم خلاصة اليوم وصلواته. القياسات القديمة
+          (المزولة والأقواس) تبقى في درج «المزيد» ولا تزاحم القرار اليومي. */}
       <div className="mdr-home-header" style={{ padding: "0 4px" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "8px 0 0" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -251,69 +249,48 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <YearProgress pct={yearPct} />
-
-        {!isFirstRun && (
-          <div className="mdr-home-instruments" aria-label="إيقاع اليوم">
-            <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
-            <ThreeArcs due={dueNow} arcs={arcSpecs} />
-          </div>
-        )}
       </div>
 
       {isFirstRun && <OnboardingCard />}
 
-      <div className="mdr-home-now">
-        <SmartInsights showSecondary={false} />
+      <div className="mdr-home-primary animate-fade-up">
+        <HifzReminder />
+        <DayDigestCard compact />
+        <Card className="mdr-home-prayer-panel">
+          <PrayerOrbit />
+        </Card>
+        <div className="mdr-home-year-countdown">
+          <YearProgress pct={yearPct} />
+          <RamadanCard />
+          <CountdownCard />
+        </div>
+        <PendingBankBanner />
       </div>
 
-      <PendingBankBanner />
+      {/* ===== التفاصيل الثانوية =====
+          التوصيات والقياسات القديمة وتحرير العادات تبقى متاحةً دون أن
+          تنافس خلاصة اليوم في أول شاشة. */}
+      {!isFirstRun && <details className="mdr-home-more">
+        <summary>المزيد من البهو</summary>
+        <div className="mdr-home-more-body">
+          <SmartInsights showSecondary={false} />
 
-      {/* ===== 1 — يومك =====
-          كلُّ ما يخصّ **اليوم نفسه** ويُلمَس فيه. كانت الرئيسية اثنتي عشرة
-          كتلةً متساوية الوزن البصريّ بلا شيءٍ يقول «هذا الأهمّ» — فطولها
-          3033px على الجوّال، وما يخصّ اليوم مختلطٌ بما يُراجَع مرّةً في الأسبوع.
-          الآن طبقتان مفصولتان بعنوانٍ خفيف (نفس إيقاع صفحة الأموال).
+          <details className="mdr-home-instrument-details">
+            <summary>إيقاع اليوم</summary>
+            <div className="mdr-home-instruments" aria-label="إيقاع اليوم">
+              <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
+              <ThreeArcs due={dueNow} arcs={arcSpecs} />
+            </div>
+          </details>
 
-          وعمودان على الشاشات الكبيرة بتوزيعٍ مقصودٍ لا آليّ: **اليمين** (أوّل
-          عمودٍ في RTL) للوِرد وخلاصة اليوم والصلوات والعادات، و**اليسار** لِما
-          يُقرأ لا يُنفَّذ. الشبكةُ الآلية كانت ستوزّعها صفّاً صفّاً فتتفاوت
-          الأطوال وتفتح فجواتٍ بين البطاقات. */}
-      <GroupLabel>مسارُ اليوم</GroupLabel>
-
-      <div className="page-grid mdr-home-grid">
-        <div className="space-y-5">
-          {!isFirstRun && (
-            <details className="mdr-home-secondary animate-fade-up stagger-1">
-              <summary>ملخّص القرآن</summary>
-              <div className="space-y-3 pt-3">
-                <HifzReminder />
-                <DayDigestCard />
-              </div>
-            </details>
-          )}
-
-          <Card className="animate-fade-up stagger-1 mdr-home-panel">
-            <PrayerOrbit />
-          </Card>
-
-          <div id="daily-habits" className="animate-fade-up stagger-2">
-            <DailyHabits />
-          </div>
+          <details id="daily-habits" className="mdr-home-habits-details">
+            <summary>إدارة العادات</summary>
+            <div className="pt-3">
+              <DailyHabits />
+            </div>
+          </details>
         </div>
-
-        <div className="space-y-5">
-          <div className="animate-fade-up stagger-1">
-            <RamadanCard />
-          </div>
-
-          {/* العدّ التنازلي للأحداث المهمّة — يختفي كلياً حين لا حدثَ معروضاً. */}
-          <div className="animate-fade-up stagger-1">
-            <CountdownCard />
-          </div>
-
-        </div>
-      </div>
+      </details>}
 
       {/* ===== 2 — مراجعة =====
           حصيلةُ الأسبوع وتقويمُ السلسلة والروابط: تُقرأ مرّةً في الأسبوع لا

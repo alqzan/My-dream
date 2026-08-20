@@ -9,8 +9,8 @@ import { SECTION } from "@/lib/palette";
 
 // «خلاصة اليوم» — بطاقةٌ موجزة تجمع الصرف والصلوات والعادات والوِرد والمذكرة
 // والقراءة، مشتقّةً من منطق assistantContext.ts (buildDayDigest). تُشترك في
-// عرضٍ واحد حالة اليوم عبر الأقسام لتذكيرٍ لطيفٍ داخل قسم قرآن.
-export function DayDigestCard() {
+// عرضٍ واحد لحالة اليوم عبر الأقسام؛ يُستخدم في البهو وفي المواضع الثانوية.
+export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
   // منتقٍ لكلّ شريحة يقرؤها `buildDayDigest` بدل الاشتراك بالمتجر كلّه. البطاقة
   // خفيفةٌ في رسمها، لكنّ البانّي يمرّ على المعاملات والمذكرات والسجلّات
   // والنشاط القرآني — فالاشتراك الكامل كان يُعيد هذا كلّه مع أيّ تعديلٍ مهما بَعُد.
@@ -41,7 +41,7 @@ export function DayDigestCard() {
   const overBudget = d.budgetBalance != null && d.budgetBalance < 0;
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white dark:bg-[#241c12] card-shadow p-4">
+    <div className={`mdr-day-digest rounded-2xl border border-gray-100 bg-white dark:bg-[#241c12] card-shadow p-4 ${compact ? "mdr-day-digest--compact" : ""}`}>
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-bold text-gray-800">خلاصة اليوم</span>
         <span className="text-[11px] text-gray-400">{formatDate(today())}</span>
@@ -75,14 +75,22 @@ export function DayDigestCard() {
         )}
         {/* المذكرة — تختفي متى جُمِّدت */}
         {!d.journalFrozen && (
-          <BoolStat icon={<BookMarked size={15} />} color={SECTION.journal} label="المذكرة" done={d.journalWritten} />
+          <BoolStat icon={<BookMarked size={15} />} color={compact ? "#70808a" : SECTION.journal} label="المذكرة" done={d.journalWritten} />
         )}
         {/* القراءة — تختفي متى جُمِّدت */}
-        {!d.readingFrozen && (
+        {!compact && !d.readingFrozen && (
           <BoolStat icon={<BookOpen size={15} />} color={SECTION.reading} label="القراءة" done={d.readingDone} />
         )}
         {/* العادات أو الختمة */}
-        {d.habitsTotal > 0 ? (
+        {compact ? (
+          <Stat
+            icon={<Star size={15} />}
+            color={SECTION.brand}
+            label="العادات"
+            value={`${d.habitsDone}/${d.habitsTotal}`}
+            sub={d.habitsTotal > 0 ? undefined : "أضف عادة"}
+          />
+        ) : d.habitsTotal > 0 ? (
           <Stat icon={<Star size={15} />} color={SECTION.brand} label="العادات" value={`${d.habitsDone}/${d.habitsTotal}`} />
         ) : (
           <Stat icon={<Sprout size={15} />} color={SECTION.quran} label="الختمة" value={`${d.khatmaJuz}/30`} />

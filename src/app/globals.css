@@ -1796,3 +1796,141 @@ body {
 /* أشرطةُ التمرير الأفقية داخل الشاشات المنقولة تُخفى كما في التصميم. */
 .mdr-scroll { scrollbar-width: none; }
 .mdr-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ===================== بهو اليوم — إيقاع الخلاصة ===================== */
+/* السطح الأول يطابق التسلسل الجديد: تنبيهٌ واحد، خلاصةٌ واحدة، ثم أداة
+   الصلوات. كل ما عدا ذلك يبقى خلف «المزيد» كي لا تتحول الصفحة إلى لوحة
+   مؤشرات متنافسة. */
+.mdr-home-primary {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.9rem;
+}
+.mdr-home-primary .mdr-hifz-reminder {
+  color: var(--ink);
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+  background-image: none !important;
+  box-shadow: none;
+}
+.mdr-home-primary .mdr-hifz-reminder .text-gray-800 { color: var(--ink) !important; }
+.mdr-home-primary .mdr-hifz-reminder .text-gray-400 { color: var(--ink52) !important; }
+.mdr-home-primary .mdr-hifz-reminder .text-quran { color: var(--green) !important; }
+.mdr-home-primary .mdr-hifz-reminder [class*="bg-quran/"] { background: var(--greenw) !important; }
+.mdr-home-primary .mdr-hifz-reminder svg { color: var(--green) !important; }
+.mdr-home .mdr-day-digest {
+  border-color: var(--gline) !important;
+  background: var(--paper2) !important;
+  box-shadow: none !important;
+}
+.mdr-home .mdr-day-digest--compact {
+  padding: 1rem;
+}
+.mdr-home .mdr-day-digest--compact > div:first-child {
+  margin-bottom: 0.8rem;
+}
+.mdr-home .mdr-day-digest--compact > div:first-child span:first-child {
+  color: var(--ink) !important;
+  font-size: 0.95rem;
+}
+.mdr-home .mdr-day-digest--compact > div:first-child span:last-child {
+  color: var(--ink52) !important;
+}
+.mdr-home-prayer-panel {
+  padding: 1rem !important;
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+  box-shadow: none !important;
+}
+.mdr-home-year-countdown {
+  display: grid;
+  gap: 0.75rem;
+}
+.mdr-home-year-countdown .mdr-year-progress {
+  margin-top: 0;
+}
+.mdr-home-year-countdown .mdr-season-card,
+.mdr-home-year-countdown > .bg-white {
+  margin-top: 0;
+}
+.mdr-home-more {
+  margin-top: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  background: var(--paper2);
+}
+.mdr-home-more > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.9rem;
+  padding: 0 0.95rem;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+}
+.mdr-home-more > summary::-webkit-details-marker { display: none; }
+.mdr-home-more > summary::after {
+  content: "＋";
+  color: var(--gold);
+  font-size: 1rem;
+  font-weight: 500;
+}
+.mdr-home-more[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.mdr-home-more[open] > summary::after { content: "−"; }
+.mdr-home-more-body {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.8rem;
+}
+.mdr-home-more-body .mdr-insight-card {
+  margin: 0;
+  border-color: var(--gline) !important;
+  background: var(--paper) !important;
+  box-shadow: none !important;
+}
+.mdr-home-more-body .mdr-home-instrument-details,
+.mdr-home-more-body .mdr-home-habits-details {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper);
+}
+.mdr-home-more-body .mdr-home-instrument-details > summary,
+.mdr-home-more-body .mdr-home-habits-details > summary {
+  min-height: 2.8rem;
+  padding: 0 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+.mdr-home-more-body .mdr-home-instrument-details > summary::-webkit-details-marker,
+.mdr-home-more-body .mdr-home-habits-details > summary::-webkit-details-marker { display: none; }
+.mdr-home-more-body .mdr-home-instrument-details > summary::after,
+.mdr-home-more-body .mdr-home-habits-details > summary::after {
+  content: "＋";
+  color: var(--gold);
+  font-size: 0.95rem;
+}
+.mdr-home-more-body .mdr-home-instrument-details[open] > summary,
+.mdr-home-more-body .mdr-home-habits-details[open] > summary { border-bottom: 1px solid var(--line); }
+.mdr-home-more-body .mdr-home-instrument-details[open] > summary::after,
+.mdr-home-more-body .mdr-home-habits-details[open] > summary::after { content: "−"; }
+.mdr-home-more-body .mdr-home-instruments {
+  margin: 0;
+  padding: 0.8rem;
+  border-top: 0;
+}
+
+@media (min-width: 760px) {
+  .mdr-home-year-countdown { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); }
+  .mdr-home-year-countdown > :only-child { grid-column: 1 / -1; }
+}
