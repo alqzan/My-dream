@@ -75,10 +75,18 @@ function journalRecord(entry: JournalEntry, options: AiExportOptions): Record<st
   const photos = entry.photos?.length ?? (entry.photo ? 1 : 0);
   const audios = entry.audios?.length ?? (entry.audio ? 1 : 0);
   const videos = entry.videoRefs?.length ?? 0;
-  const pdfAttachments = (entry.attachmentRefs ?? []).filter((attachment) => attachment.kind === "pdf");
-  const media: Record<string, unknown> = { photos, audios, videos, pdfs: pdfAttachments.length };
+  const attachments = entry.attachmentRefs ?? [];
+  const pdfAttachments = attachments.filter((attachment) => attachment.kind === "pdf");
+  const fileAttachments = attachments.filter((attachment) => attachment.kind !== "pdf");
+  const media: Record<string, unknown> = { photos, audios, videos, attachments: attachments.length, pdfs: pdfAttachments.length, files: fileAttachments.length };
   if (options.includeMediaMetadata) {
     media.pdfs = pdfAttachments.map((attachment) => ({
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      size: attachment.size,
+      status: attachment.status,
+    }));
+    media.files = fileAttachments.map((attachment) => ({
       filename: attachment.filename,
       contentType: attachment.contentType,
       size: attachment.size,

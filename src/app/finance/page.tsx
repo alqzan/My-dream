@@ -302,6 +302,24 @@ export default function FinancePage() {
       <div className="mdr-finance-plan-details">
       <GroupLabel>الخطة المالية</GroupLabel>
 
+      {/* اختصارات سطحية قليلة — لا تستبدل الأقسام ولا تخفي الأصول/الالتزامات؛
+          تربطها فقط من شريط واحد هادئ كما في التصميم المرجعي. */}
+      <nav className="mdr-finance-plan-index" aria-label="اختصارات الخطة المالية">
+        {[
+          ["daily", "اليوم"],
+          ["budgets", "السقوف"],
+          ["shelf", "الرف"],
+          ["recurring", "الالتزامات"],
+          ["assets", "الأصول"],
+          ["reserves", "الاحتياطي"],
+          ["history", "السجل"],
+        ].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => goToSection(id as PlanSectionId | "history")}>
+            {label}
+          </button>
+        ))}
+      </nav>
+
       <CollapsibleSection
         id="daily"
         title="الميزانية اليومية"

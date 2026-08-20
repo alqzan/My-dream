@@ -270,7 +270,7 @@ export default function Dashboard() {
       {/* ===== أدوات البهو =====
           تبقى الأدوات الأساسية ظاهرةً بعد الخلاصة؛ يمكن طيّها عند الحاجة،
           لكن لا ندفنها خلف أكثر من درجٍ مغلق. */}
-      {!isFirstRun && <details className="mdr-home-more" open>
+      <details className="mdr-home-more" open>
         <summary>أدوات البهو</summary>
         <div className="mdr-home-more-body">
           <SmartInsights showSecondary={false} />
@@ -286,11 +286,11 @@ export default function Dashboard() {
           <details id="daily-habits" className="mdr-home-habits-details" open>
             <summary>إدارة العادات</summary>
             <div className="pt-3">
-              <DailyHabits />
+              <DailyHabits compact />
             </div>
           </details>
         </div>
-      </details>}
+      </details>
 
       {/* ===== 2 — مراجعة =====
           حصيلةُ الأسبوع وتقويمُ السلسلة والروابط: تُقرأ مرّةً في الأسبوع لا

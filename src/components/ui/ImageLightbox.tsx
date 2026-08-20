@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppImage } from "./AppImage";
+import { photoEditTransform } from "@/lib/photoEdits";
+import type { JournalPhotoEdit } from "@/lib/types";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
@@ -22,6 +24,7 @@ export function ImageLightbox({
   onClose,
   captions,
   onOpenEntry,
+  imageEdits,
 }: {
   images: string[];
   index: number;
@@ -31,6 +34,8 @@ export function ImageLightbox({
   captions?: (string | undefined)[];
   /** «افتح المذكرة» — يُظهر زراً يقفز من الصورة إلى مذكرتها. */
   onOpenEntry?: (index: number) => void;
+  /** تعديلات عرض غير هدّامة، بمحاذاة `images`، إن وُجدت. */
+  imageEdits?: (JournalPhotoEdit | undefined)[];
 }) {
   const [mounted, setMounted] = useState(false);
   const [i, setI] = useState(index);
@@ -204,7 +209,7 @@ export function ImageLightbox({
           draggable={false}
           className="max-w-full max-h-full object-contain will-change-transform"
           style={{
-            transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+            transform: `${imageEdits?.[i] ? photoEditTransform(imageEdits[i]) : ""} translate(${tx}px, ${ty}px) scale(${scale})`,
             transition: pointers.current.size ? "none" : "transform 0.12s ease-out",
           }}
         />

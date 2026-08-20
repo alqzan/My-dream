@@ -26,15 +26,16 @@ function previewSource(attachment: JournalAttachment): MediaSource[] {
 }
 
 function statusLabel(attachment: JournalAttachment, hasFile: boolean, hasPreview: boolean): string {
-  if (hasFile) return "PDF جاهز للفتح";
+  const typeLabel = attachment.kind === "pdf" ? "PDF" : "الملف";
+  if (hasFile) return `${typeLabel} جاهز للفتح`;
   if (hasPreview) return "معاينة محفوظة من Day One";
   if (attachment.status === "metadataOnly") return "اسم المرفق محفوظ — الملف الأصلي غير مرفوع";
   if (attachment.status === "missing" || attachment.status === "failed") return "تعذّر حفظ الملف الأصلي";
-  return "مرفق PDF";
+  return `مرفق ${typeLabel}`;
 }
 
-/** مكانٌ واحدٌ واضح لملفات PDF داخل المذكرة المفتوحة.
- * يدعم مرفقات Day One القديمة (اسم + معاينة) والمرفقات التي تحمل بايتات PDF
+/** مكانٌ واحدٌ واضح لملفات المذكرة المفتوحة.
+ * يدعم مرفقات Day One القديمة (اسم + معاينة) والمرفقات التي تحمل بايتات فعلية
  * فعلية، ويجلب المرجع عند فتح المذكرة فقط حتى لا نحمّل أرشيف المستخدم كله. */
 export function JournalAttachments({ attachments }: { attachments?: JournalAttachment[] }) {
   useMediaCacheVersion();
@@ -61,7 +62,7 @@ export function JournalAttachments({ attachments }: { attachments?: JournalAttac
               ) : (
                 <div className="w-11 h-14 rounded-lg bg-red-50 text-red-500 flex flex-col items-center justify-center shrink-0">
                   <FileText size={20} />
-                  <span className="text-[8px] font-black mt-0.5">PDF</span>
+                  <span className="text-[8px] font-black mt-0.5">{attachment.kind === "pdf" ? "PDF" : "FILE"}</span>
                 </div>
               )}
 
@@ -80,7 +81,7 @@ export function JournalAttachments({ attachments }: { attachments?: JournalAttac
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-[10px] font-bold text-[var(--gold)] hover:text-[var(--clay)] press"
                       >
-                        <ExternalLink size={12} /> فتح PDF
+                        <ExternalLink size={12} /> فتح الملف
                       </a>
                       <a
                         href={fileUrl}

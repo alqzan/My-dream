@@ -201,7 +201,9 @@ export interface ReadingLog {
  * `hash` هو مرجع الملف الأصلي في مخزن الوسائط، بينما `previewHash` هو
  * معاينة الصورة التي يرسلها مستورد الذكريات لبعض مرفقات Day One القديمة. */
 export interface JournalAttachment {
-  kind: "pdf";
+  /** PDF بقي النوع التاريخي لمرفقات Day One؛ `file` للملفات التي يضيفها
+   * المستخدم الآن (يبقى النوع واسم الملف كما هما ولا تُرمى البايتات). */
+  kind: "pdf" | "file";
   filename?: string;
   hash?: string;
   previewHash?: string;
@@ -210,6 +212,22 @@ export interface JournalAttachment {
   status: string;
   sourceMediaID?: string;
   localData?: string;
+}
+
+/**
+ * تعديلات عرضٍ غير هدّامة لصورة داخل مذكرة.
+ *
+ * الصورة الأصلية ومراجعها لا تتغير أبداً؛ هذه القيم تحفظ فقط طريقة عرضها
+ * (دوران/قلب/تكبير وإزاحة الإطار). لذلك يمكن التراجع عنها أو دمجها بين
+ * الأجهزة من دون إعادة رفع الصورة أو حذف النسخة الأصلية.
+ */
+export interface JournalPhotoEdit {
+  rotation?: 0 | 90 | 180 | 270;
+  scale?: number;
+  offsetX?: number;
+  offsetY?: number;
+  flipX?: boolean;
+  flipY?: boolean;
 }
 
 export interface JournalEntry {
@@ -236,8 +254,8 @@ export interface JournalEntry {
   // غيابه (مراجع أقدم من هذا الحقل) يُسقط الدمج لحقول type/duration كـfallback
   // (راجع mergeRefList في utils.ts).
   videoRefs?: { type?: string; duration?: number; posterHash?: string; sourceMediaID?: string }[];
-  // إشارات مرفقاتٍ غير صورةٍ/صوتٍ/فيديو (مستورد الذكريات) — اليوم PDF فقط،
-  // لكن kind مصفوفةٌ لا حقلٌ ثابت تحسّباً لنوعٍ لاحق. previewHash مرجع هاش R2
+  // إشارات مرفقاتٍ غير صورةٍ/صوتٍ/فيديو (مستورد الذكريات أو ملفات المستخدم).
+  // PDF هو النوع التاريخي، و`file` للملفات العامة. previewHash مرجع هاش R2
   // (kind=photos) لمعاينة أول صفحة إن رُفعت — منفصلٌ عن photoRefs لنفس سبب
   // posterHash أعلاه. status ("uploaded"/"metadataOnly"/"missing"/"failed"،
   // كما وردت من مستورد الذكريات) يُبقي المعرفة بوجود مرفقٍ حتى بلا معاينة.
@@ -269,6 +287,8 @@ export interface JournalEntry {
   // تُبقي مرجعاً لم يُنزَّل بعد على نسخة السحابة (راجع sync.ts).
   photoRefs?: string[];
   audioRefs?: string[];
+  /** تعديلات عرض الصور keyed by content/source key؛ لا تستبدل الصور الأصلية. */
+  photoEdits?: Record<string, JournalPhotoEdit>;
   // ختم آخر تعديل (ms) — يفوز به التعديل الأحدث لهذه المذكرة بعينها في دمج
   // المزامنة، فلا يضيع تعديلٌ حديث على جهاز بسبب ختم مستندٍ أحدث على جهاز آخر.
   updatedAt?: number;

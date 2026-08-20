@@ -65,7 +65,7 @@ const UNSTAMPED_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], rea
   reserves: ["deposits"],
   journalEntries: [
     "photo", "photos", "audio", "audios", "videoRefs", "photoRefs", "audioRefs",
-    "attachmentRefs", "audioMetadataRefs",
+    "attachmentRefs", "audioMetadataRefs", "photoEdits",
   ],
 };
 

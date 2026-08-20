@@ -8,6 +8,7 @@ import { plainTitle } from "@/lib/markdown";
 import { useMediaCacheVersion, resolveMediaSlots } from "@/components/ui/useMedia";
 import { AppImage } from "@/components/ui/AppImage";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { photoEditKey, photoEditTransform } from "@/lib/photoEdits";
 
 // ===================== جدار الصور =====================
 // كان المعرض شبكةَ مربّعاتٍ متطابقة بلا سياق: ألف صورةٍ متساوية، والضغطة تفتح
@@ -100,7 +101,12 @@ export function PhotoWall({
                   aria-label="افتح الصورة"
                 >
                   {url ? (
-                    <AppImage src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    <AppImage
+                      src={url}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-150"
+                      style={{ transform: photoEditTransform(photos[wallIndex].entry.photoEdits?.[photoEditKey(photos[wallIndex].source)]) }}
+                    />
                   ) : (
                     <div className="absolute inset-0 animate-pulse" aria-hidden />
                   )}
@@ -116,6 +122,7 @@ export function PhotoWall({
           images={shown.map((s) => s.url)}
           index={zoom}
           captions={captions}
+          imageEdits={shown.map(({ wallIndex }) => photos[wallIndex].entry.photoEdits?.[photoEditKey(photos[wallIndex].source)])}
           onOpenEntry={(i) => {
             const wallIndex = shown[i]?.wallIndex;
             if (wallIndex === undefined) return;

@@ -73,6 +73,17 @@ function concat<T>(lists: (T[] | undefined)[]): T[] | undefined {
   return out.length ? out : undefined;
 }
 
+/** خرائط تحرير الصور تُوحَّد بالمفتاح؛ لا تُمسّ الصورة الأصلية ولا تُسقط
+ * إعداداً عند دمج مذكرتين في يومٍ واحد. المصدر الأحدث في ترتيب اليوم يفوز
+ * عند تعديل الصورة نفسها أكثر من مرة. */
+function unitePhotoEdits(entries: JournalEntry[]): JournalEntry["photoEdits"] {
+  const out: NonNullable<JournalEntry["photoEdits"]> = {};
+  for (const entry of entries) {
+    for (const [key, edit] of Object.entries(entry.photoEdits ?? {})) out[key] = edit;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** الحقول المحلية التي يضيفها الترطيب الجزئي — تُسقَط بعد الدمج (انظر أعلاه). */
 type OrderFields = { photoOrder?: string[]; audioOrder?: string[] };
 
@@ -115,6 +126,7 @@ export function mergeDayEntries(entries: JournalEntry[], now = Date.now()): Jour
     tags: unite(ordered.map((e) => e.tags)),
     photos: unite(ordered.map((e) => entryPhotos(e))),
     audios: unite(ordered.map((e) => entryAudios(e))),
+    photoEdits: unitePhotoEdits(ordered),
     photoRefs: unite(ordered.map((e) => e.photoRefs)),
     audioRefs: unite(ordered.map((e) => e.audioRefs)),
     videoRefs: concat(ordered.map((e) => e.videoRefs)),
@@ -134,6 +146,7 @@ export function mergeDayEntries(entries: JournalEntry[], now = Date.now()): Jour
   if (!merged.tags?.length) delete merged.tags;
   if (!merged.photos?.length) delete merged.photos;
   if (!merged.audios?.length) delete merged.audios;
+  if (!merged.photoEdits || !Object.keys(merged.photoEdits).length) delete merged.photoEdits;
   if (!merged.photoRefs?.length) delete merged.photoRefs;
   if (!merged.audioRefs?.length) delete merged.audioRefs;
   if (!merged.linkedTransactionIds?.length) delete merged.linkedTransactionIds;

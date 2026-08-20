@@ -46,7 +46,7 @@ export function JournalEntryCard({
     >
       {photoSources.length > 0 && (
         // كلّ الصور في كولاجٍ واحد بدل غلافٍ مقصوصٍ وعدّادٍ يخفي الباقي.
-        <PhotoCollage sources={photoSources} rounded="rounded-none" />
+        <PhotoCollage sources={photoSources} edits={entry.photoEdits} rounded="rounded-none" />
       )}
 
       <div className="p-3.5 space-y-2">

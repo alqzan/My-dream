@@ -5,6 +5,8 @@ import type { MediaSource } from "@/lib/mediaSources";
 import { useMediaCacheVersion, resolveMediaSlots } from "@/components/ui/useMedia";
 import { AppImage } from "@/components/ui/AppImage";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import type { JournalPhotoEdit } from "@/lib/types";
+import { photoEditKey, photoEditTransform } from "@/lib/photoEdits";
 import { Images } from "lucide-react";
 
 // ===================== كولاج صور المذكرة =====================
@@ -24,11 +26,12 @@ interface TileGridProps {
   /** البايتات المحلولة بمحاذاة `sources` — يحلّها المكوّن الأب مرّةً واحدة. */
   slots: (string | null)[];
   onTile?: (indexInSources: number) => void;
+  edits?: Record<string, JournalPhotoEdit>;
   rounded: string;
   className: string;
 }
 
-function TileGrid({ sources, slots, onTile, rounded, className }: TileGridProps) {
+function TileGrid({ sources, slots, onTile, edits, rounded, className }: TileGridProps) {
   const layout = collageLayout(sources.length);
   if (!layout.tiles.length) return null;
 
@@ -57,7 +60,8 @@ function TileGrid({ sources, slots, onTile, rounded, className }: TileGridProps)
               <AppImage
                 src={url}
                 alt=""
-                className={`w-full h-full object-cover ${onTile ? "cursor-zoom-in" : ""}`}
+                className={`w-full h-full object-cover transition-transform duration-150 ${onTile ? "cursor-zoom-in" : ""}`}
+                style={{ transform: photoEditTransform(edits?.[photoEditKey(sources[tile.index])]) }}
                 onClick={
                   onTile
                     ? (e) => {
@@ -92,10 +96,12 @@ function TileGrid({ sources, slots, onTile, rounded, className }: TileGridProps)
 /** معاينةٌ صامتة داخل بطاقة القائمة — لا تبتلع الضغطة ولا تفتح عارضاً. */
 export function PhotoCollage({
   sources,
+  edits,
   className = "",
   rounded = "rounded-2xl",
 }: {
   sources: MediaSource[];
+  edits?: Record<string, JournalPhotoEdit>;
   className?: string;
   rounded?: string;
 }) {
@@ -106,6 +112,7 @@ export function PhotoCollage({
     <TileGrid
       sources={sources}
       slots={resolveMediaSlots(drawn)}
+      edits={edits}
       rounded={rounded}
       className={className}
     />
@@ -113,7 +120,7 @@ export function PhotoCollage({
 }
 
 /** كلّ صور المذكرة المفتوحة: كولاجٌ لكل أربع، وعارضٌ واحدٌ يمرّ عليها جميعاً. */
-export function EntryPhotos({ sources }: { sources: MediaSource[] }) {
+export function EntryPhotos({ sources, edits }: { sources: MediaSource[]; edits?: Record<string, JournalPhotoEdit> }) {
   const [zoom, setZoom] = useState<number | null>(null);
   useMediaCacheVersion();
   if (!sources.length) return null;
@@ -122,11 +129,13 @@ export function EntryPhotos({ sources }: { sources: MediaSource[] }) {
   // العارض يُرقّم **الحاضر فقط**؛ الخريطة تترجم فهرس المصدر إلى فهرسٍ داخله،
   // وإلّا فتحت بلاطةٌ صورةً أخرى حين تتأخّر بايتاتُ صورةٍ قبلها.
   const shown: string[] = [];
+  const shownSources: MediaSource[] = [];
   const zoomIndexOf = new Map<number, number>();
   slots.forEach((url, i) => {
     if (url === null) return;
     zoomIndexOf.set(i, shown.length);
     shown.push(url);
+    shownSources.push(sources[i]);
   });
 
   const chunks: { start: number; sources: MediaSource[] }[] = [];
@@ -141,6 +150,7 @@ export function EntryPhotos({ sources }: { sources: MediaSource[] }) {
           key={chunk.start}
           sources={chunk.sources}
           slots={slots.slice(chunk.start, chunk.start + chunk.sources.length)}
+          edits={edits}
           rounded="rounded-2xl"
           className=""
           onTile={(i) => {
@@ -150,7 +160,12 @@ export function EntryPhotos({ sources }: { sources: MediaSource[] }) {
         />
       ))}
       {zoom !== null && (
-        <ImageLightbox images={shown} index={zoom} onClose={() => setZoom(null)} />
+        <ImageLightbox
+          images={shown}
+          index={zoom}
+          imageEdits={shownSources.map((source) => edits?.[photoEditKey(source)])}
+          onClose={() => setZoom(null)}
+        />
       )}
     </div>
   );
