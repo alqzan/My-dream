@@ -4,12 +4,12 @@ import type { NavItem } from "./nav";
 
 const ICON = (() => null) as unknown as NavItem["icon"];
 const ITEMS: NavItem[] = [
-  { href: "/", icon: ICON, label: "الرئيسية", color: "c", tint: "t" },
+  { href: "/", icon: ICON, label: "اليوم", color: "c", tint: "t" },
   { href: "/prayers", icon: ICON, label: "الصلاة", color: "c", tint: "t" },
   { href: "/journal", icon: ICON, label: "المذكرات", color: "c", tint: "t" },
-  { href: "/finance", icon: ICON, label: "الأموال", color: "c", tint: "t" },
+  { href: "/finance", icon: ICON, label: "المال", color: "c", tint: "t" },
   { href: "/reading", icon: ICON, label: "القراءة", color: "c", tint: "t" },
-  { href: "/quran", icon: ICON, label: "قرآن", color: "c", tint: "t" },
+  { href: "/quran", icon: ICON, label: "القرآن", color: "c", tint: "t" },
   { href: "/stats", icon: ICON, label: "الإحصائيات", color: "c", tint: "t" },
 ];
 
@@ -25,7 +25,7 @@ describe("sanitizeNavPrefs", () => {
   it(`caps the result at ${MAX_PRIMARY_ITEMS} items`, () => {
     const out = sanitizeNavPrefs(["/", "/prayers", "/journal", "/finance", "/reading"], ITEMS);
     expect(out).toHaveLength(MAX_PRIMARY_ITEMS);
-    expect(out).toEqual(["/", "/prayers", "/journal", "/finance"]);
+    expect(out).toEqual(["/", "/prayers", "/journal", "/finance", "/reading"]);
   });
 
   it("returns an empty array for an empty input", () => {
@@ -34,22 +34,22 @@ describe("sanitizeNavPrefs", () => {
 });
 
 describe("resolveNav", () => {
-  it("defaults to every item, unchanged order, no overflow, when there is no saved preference", () => {
+  it("defaults to the approved five doors when there is no saved preference", () => {
     const { primary, overflow } = resolveNav(ITEMS, null);
-    expect(primary).toEqual(ITEMS);
-    expect(overflow).toEqual([]);
+    expect(primary.map((i) => i.href)).toEqual(["/quran", "/reading", "/", "/journal", "/finance"]);
+    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/stats"]);
   });
 
   it("defaults the same way for an empty saved preference", () => {
     const { primary, overflow } = resolveNav(ITEMS, []);
-    expect(primary).toEqual(ITEMS);
-    expect(overflow).toEqual([]);
+    expect(primary.map((i) => i.href)).toEqual(["/quran", "/reading", "/", "/journal", "/finance"]);
+    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/stats"]);
   });
 
   it("defaults the same way when every saved href is stale/invalid", () => {
     const { primary, overflow } = resolveNav(ITEMS, ["/gone", "/also-gone"]);
-    expect(primary).toEqual(ITEMS);
-    expect(overflow).toEqual([]);
+    expect(primary.map((i) => i.href)).toEqual(["/quran", "/reading", "/", "/journal", "/finance"]);
+    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/stats"]);
   });
 
   it("honors a valid customization: chosen items in the saved order, the rest as overflow in original order", () => {

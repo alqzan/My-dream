@@ -14,10 +14,11 @@ import { usePending } from "@/lib/pending";
 // even while the app is already open (the old one-shot load ran only on launch,
 // so a purchase made mid-session never appeared until the next relaunch).
 // Unreadable messages are surfaced for manual review; only confirmed noise is
-// cleared silently. Closing with X keeps the items so the home banner can
-// reopen; approving/discarding clears everything from the cloud inbox.
+// cleared silently. New items never force a modal over the page: the banner
+// opens review deliberately. Closing with X keeps the items so it can reopen;
+// approving/discarding clears everything from the cloud inbox.
 export function PendingInboxWatcher() {
-  const { items, reviewing, setItems, openReview, closeReview, clear } = usePending();
+  const { items, reviewing, setItems, closeReview, clear } = usePending();
 
   // Latest inbox snapshot + guards, read inside the (stable) drain closure.
   const latestRef = useRef<InboxItem[]>([]);
@@ -64,16 +65,13 @@ export function PendingInboxWatcher() {
         await Promise.all(noise.map((it) => deleteInboxItem(it.id).catch(() => {})));
       }
       const toReview = [...readable, ...unreadable];
-      if (toReview.length) {
-        setItems(toReview, count);
-        openReview();
-      }
+      if (toReview.length) setItems(toReview, count);
     } catch {
       /* offline — the listener re-fires on reconnect */
     } finally {
       busyRef.current = false;
     }
-  }, [setItems, openReview]);
+  }, [setItems]);
 
   useEffect(() => {
     if (!isFirebaseEnabled || !getSyncSpace()) return;

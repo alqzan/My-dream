@@ -244,7 +244,7 @@ export default function FinancePage() {
         <div>
           <div className="flex items-center gap-2.5">
             <SectionSignet href="/finance" />
-            <h1 className="page-title">الأموال</h1>
+            <h1 className="page-title">المال</h1>
           </div>
           <p className="page-subtitle">{transactions.length} معاملة</p>
         </div>

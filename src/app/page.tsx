@@ -7,7 +7,6 @@ import {
   toDateStr,
   formatDate,
   hijriDate,
-  yearProgress,
   getPrayerLog,
   countDayPrayers,
   quranActivityDates,
@@ -110,21 +109,11 @@ export default function Dashboard() {
   // يقرآن تناقضاً لا معلومة. الوصفُ يقول ما تحت الطيّ بلا أن يزاحم.
   const reviewSummary = "حصيلة أسبوعك وتقويم سلسلتك";
 
-  const hasTodayJournal = journalEntries.some((e) => e.date === todayStr);
-  const hasTodayReading = readingLogs.some((l) => l.date === todayStr);
   const allDoneToday = completionDates.includes(todayStr);
 
-  // «أقمار اليوم» — today's done-state for each daily domain, reusing the
-  // exact predicates the domain widgets use (PrayerOrbit / DailyHabits), so
-  // the moons on YearOrbit never drift from the real trackers.
-  const hasTodayPrayer = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed > 0;
-  const hasTodayHabit = habits.some((h) => !frozen.has(h.id) && h.logs.includes(todayStr));
-  // قمر «الوِرد» يُضاء بأيّ نشاطٍ قرآني اليوم (حفظ/مراجعة/تدبّر/ختمة/ورد) تماماً
-  // كبطاقة «وِرد اليوم» و«خلاصة اليوم» — لا بنقرة الوِرد اليدوية وحدها، وإلا بقي
-  // القمر مطفأً رغم إتمام الوِرد عبر الحفظ أو التدبّر.
+  // مؤشر القرآن في قوس اليوم يعتمد أيّ نشاطٍ قرآني (حفظ/مراجعة/تدبّر/ختمة/ورد)
+  // تماماً كبطاقة «وِرد اليوم» و«خلاصة اليوم» — لا بنقرة الوِرد اليدوية وحدها.
   const hasTodayWird = quranDates.has(todayStr);
-  const hasHifzPlan = !!quranHifz?.plan;
-  const hasTodayHifz = (quranHifz?.sessions ?? []).some((s) => s.date === todayStr);
 
   /* ═══ ما تحتاجه المزولةُ والأقواسُ الثلاثة ═══ */
 
@@ -229,8 +218,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  const yearPct = yearProgress();
-
   return (
     <div className="page-shell page-shell--wide mdr">
       {celebrate && <Confetti />}
@@ -254,28 +241,14 @@ export default function Dashboard() {
               <span style={{ color: "var(--ink52)" }}>{formatDate(todayStr)}</span>
             </p>
           </div>
-          {/* **فلكُ السنة في الترويسة لا تحت الأقواس.** كان صفّاً يتيماً أسفلَ
-              رأس اليوم: عنوانٌ في جهةٍ وحلقةٌ في الأخرى وفراغٌ بينهما، ولا
-              يخصّ اليومَ أصلاً حتى يُقحَم في وسطه. مكانُه مع التاريخ — كلاهما
-              يقول «أين أنت من الزمن»، والشمسةُ الزخرفية لا تقول شيئاً. */}
-          <YearOrbit
-            pct={yearPct}
-            prayer={hasTodayPrayer}
-            journal={hasTodayJournal}
-            reading={hasTodayReading}
-            habits={hasTodayHabit}
-            wird={hasTodayWird}
-            hifz={hasHifzPlan ? hasTodayHifz : null}
-            journalFrozen={frozen.has("core:journal")}
-            readingFrozen={frozen.has("core:reading")}
-            wirdFrozen={frozen.has("core:wird")}
-            habitsShown={habits.length === 0 || habits.some((h) => !frozen.has(h.id))}
-          />
         </div>
 
-        <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
-
-        <ThreeArcs due={dueNow} arcs={arcSpecs} />
+        {!isFirstRun && (
+          <>
+            <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
+            <ThreeArcs due={dueNow} arcs={arcSpecs} />
+          </>
+        )}
       </div>
 
       {isFirstRun && <OnboardingCard />}
@@ -323,14 +296,7 @@ export default function Dashboard() {
           </div>
 
           <div className="animate-fade-up stagger-2">
-            <HikmaCard />
-          </div>
-
-          {/* «بوصلة مدار» تبقى **خارج** الطيّ عمداً: توصياتها قابلةٌ للتنفيذ
-              الآن (خذ نسخةً احتياطية، انتبه لسقفٍ يوشك) — وطيُّها يدفن تنبيهاً
-              يُفترض أن يُرى. المطويُّ هو ما يُقرأ للمراجعة لا ما يُطلب فعلاً. */}
-          <div className="animate-fade-up stagger-3">
-            <SmartInsights />
+            <SmartInsights showSecondary={false} />
           </div>
         </div>
       </div>
@@ -384,6 +350,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-5">
+            <HikmaCard />
             <Card>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-gray-700">

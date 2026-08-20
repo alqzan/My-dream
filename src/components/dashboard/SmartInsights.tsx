@@ -24,7 +24,7 @@ const TONE_SOFT: Record<InsightTone, string> = {
 };
 const SNOOZE_LABEL: Record<SnoozeOption, string> = { today: "اليوم", tomorrow: "غداً", week: "أسبوع" };
 
-export function SmartInsights() {
+export function SmartInsights({ showSecondary = true }: { showSecondary?: boolean }) {
   // منتقٍ لكلّ شريحة بدل الاشتراك بالحالة كلّها (الأخيرة تُعيد الرسم مع أيّ
   // تعديلٍ في المتجر مهما بَعُد عن هذه البطاقة).
   const transactions = useAppStore((s) => s.transactions);
@@ -98,7 +98,7 @@ export function SmartInsights() {
       <PrimaryCard ins={primary} onSnooze={snooze} onDismiss={dismiss} onAct={act} />
 
       {/* توصيتان ثانويتان عند الحاجة */}
-      {secondary.length > 0 && (
+      {showSecondary && secondary.length > 0 && (
         <div className="space-y-1.5 pt-0.5">
           {secondary.map((ins) => (
             <SecondaryRow key={ins.dedupeKey} ins={ins} onDismiss={dismiss} onAct={act} />

@@ -6,6 +6,7 @@ import { DataHealthCard } from "@/components/settings/DataHealthCard";
 import { NavCustomizeCard } from "@/components/settings/NavCustomizeCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
+import { AiExportCard } from "@/components/settings/AiExportCard";
 import { BrandMark } from "@/components/layout/BrandMark";
 // الإصدار من مصدره الوحيد (src/lib/version.ts) — لا رقمَ مكتوباً بيدٍ هنا يتخلّف
 // عن package.json. الرقم = عدد التعديلات الجوهرية منذ أوّل نسخة مستقرة.
@@ -31,6 +32,9 @@ export default function SettingsPage() {
       </div>
       <div className="animate-fade-up stagger-1">
         <BackupCard />
+      </div>
+      <div className="animate-fade-up stagger-2">
+        <AiExportCard />
       </div>
       <div className="animate-fade-up stagger-2">
         <DataHealthCard />

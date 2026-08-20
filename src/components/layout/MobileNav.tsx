@@ -28,9 +28,9 @@ export function MobileNav() {
   const { primary, overflow } = resolveNav(NAV_ITEMS, prefs);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // "المزيد" only exists once the owner has actually customized the bar
-  // (overflow.length > 0) — an untouched device keeps every section directly
-  // in the bar exactly as before (resolveNav's documented default).
+  // The approved default puts five everyday doors in the bar and keeps the
+  // remaining sections behind «المزيد». A device-local customization can
+  // reorder or choose a different subset without deleting any route.
   const tabs = overflow.length ? [...primary, { more: true as const }] : primary;
   const count = tabs.length;
   const activeIndex = primary.findIndex((item) => normPath(item.href) === pathname);

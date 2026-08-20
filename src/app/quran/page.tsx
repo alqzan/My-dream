@@ -43,7 +43,7 @@ export default function QuranPage() {
       <div className="animate-fade-up">
         <div className="flex items-center gap-2.5">
           <SectionSignet href="/quran" />
-          <h1 className="page-title">قرآن</h1>
+          <h1 className="page-title">القرآن</h1>
         </div>
         <p className="page-subtitle">التدبّر، الحفظ، والمصحف</p>
       </div>

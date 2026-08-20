@@ -6,14 +6,13 @@
 // never synced, never part of AppData, absent = today's unchanged behavior.
 import type { NavItem } from "./nav";
 
-export const MAX_PRIMARY_ITEMS = 4;
+export const MAX_PRIMARY_ITEMS = 5;
 export const NAV_PREFS_STORAGE_KEY = "madar-nav-prefs";
+export const DEFAULT_PRIMARY_HREFS = ["/quran", "/reading", "/", "/journal", "/finance"] as const;
 
 export interface ResolvedNav {
-  /** Items to show directly, in the owner's chosen order. Equals every
-   *  NAV_ITEMS entry, in their original order, when there is no saved
-   *  preference — the default, unchanged experience for every existing
-   *  device until it customizes. */
+  /** Items to show directly, in the owner's chosen order. With no saved
+   *  preference this is the approved five-door default. */
   primary: NavItem[];
   /** Everything else, original relative order preserved — nothing here is
    *  deleted or hidden from the app, only moved behind "المزيد". Empty
@@ -40,15 +39,17 @@ export function sanitizeNavPrefs(hrefs: string[], items: NavItem[]): string[] {
   return out;
 }
 
-/** `null`/empty/all-invalid prefs → default: every item, unchanged order, no
- *  overflow. A non-empty, sanitized preference reorders `primary` to match
- *  the saved order exactly and moves every remaining item into `overflow`
- *  (original NAV_ITEMS relative order, not alphabetical or anything new). */
+/** null/empty/all-invalid prefs → the approved five-door default. A
+ *  non-empty, sanitized preference reorders primary to match the saved order
+ *  exactly and moves every remaining item into overflow (original NAV_ITEMS
+ *  relative order, not alphabetical or anything new). */
 export function resolveNav(items: NavItem[], savedHrefs: string[] | null): ResolvedNav {
   const prefs = sanitizeNavPrefs(savedHrefs ?? [], items);
-  if (!prefs.length) return { primary: items, overflow: [] };
+  const selected = prefs.length ? prefs : sanitizeNavPrefs([...DEFAULT_PRIMARY_HREFS], items);
   const byHref = new Map(items.map((i) => [i.href, i]));
-  const primary = prefs.map((h) => byHref.get(h)!).filter(Boolean);
+  const primary = (selected.length ? selected : items.slice(0, MAX_PRIMARY_ITEMS).map((i) => i.href))
+    .map((h) => byHref.get(h)!)
+    .filter(Boolean);
   const primarySet = new Set(primary.map((i) => i.href));
   const overflow = items.filter((i) => !primarySet.has(i.href));
   return { primary, overflow };

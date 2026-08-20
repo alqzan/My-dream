@@ -6,10 +6,10 @@ import { loadNavPrefs, saveNavPrefs, clearNavPrefs, sanitizeNavPrefs, MAX_PRIMAR
 import { showToast } from "@/components/ui/UndoToast";
 import { LayoutGrid, ArrowUp, ArrowDown, Plus, X, RotateCcw } from "lucide-react";
 
-// «تخصيص التنقّل» (§14 المرحلة 5): حتى 4 أقسامٍ أساسية تظهر مباشرةً في الشريط
+// «تخصيص التنقّل»: حتى 5 أقسامٍ أساسية تظهر مباشرةً في الشريط
 // الجانبي وشريط الجوّال، والباقي تحت «المزيد» — بلا حذف أي قسم ولا بيانات.
-// جهازٌ لم يلمس هذه البطاقة يبقى يرى كل الأقسام كما كانت دائماً (resolveNav's
-// default). التغيير يحتاج إعادة تحميل الصفحة ليسري — نفس نمط بطاقة مفتاح
+// الجهاز غير المخصص يأخذ خمسة أبواب التصميم افتراضيًا. التغيير يحتاج إعادة
+// تحميل الصفحة ليسري — نفس نمط بطاقة مفتاح
 // المزامنة (SyncKeyCard) بالضبط.
 export function NavCustomizeCard() {
   const [selected, setSelected] = useState<string[]>(() => loadNavPrefs() ?? []);
@@ -45,7 +45,7 @@ export function NavCustomizeCard() {
   function reset() {
     clearNavPrefs();
     setSelected([]);
-    showToast("عاد التنقّل للوضع الافتراضي — كل الأقسام ظاهرة مباشرةً", "success");
+    showToast("عاد التنقّل للوضع الافتراضي — خمسة أبواب والباقي تحت المزيد", "success");
     location.reload();
   }
 
