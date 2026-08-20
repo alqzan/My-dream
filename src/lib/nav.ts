@@ -26,7 +26,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   // الرئيسية والإحصائيات لا قسمَ لهما، فيأخذان لون العلامة نفسه. (كانت
   // الرئيسية `text-gray-700` — لونٌ محايد لا يقرأ «نشِطاً» في شريطٍ سفليّ.)
-  { href: "/", icon: LayoutDashboard, label: "اليوم", color: "text-brand-600", tint: "bg-brand-500/15" },
+  { href: "/", icon: LayoutDashboard, label: "البهو", color: "text-brand-600", tint: "bg-brand-500/15" },
   { href: "/prayers", icon: MosqueIcon, label: "الصلاة", color: "text-prayer", tint: "bg-prayer/10" },
   { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-journal", tint: "bg-journal/10" },
   { href: "/finance", icon: Wallet, label: "المال", color: "text-finance", tint: "bg-finance/10" },

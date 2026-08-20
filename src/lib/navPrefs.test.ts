@@ -4,7 +4,7 @@ import type { NavItem } from "./nav";
 
 const ICON = (() => null) as unknown as NavItem["icon"];
 const ITEMS: NavItem[] = [
-  { href: "/", icon: ICON, label: "اليوم", color: "c", tint: "t" },
+  { href: "/", icon: ICON, label: "البهو", color: "c", tint: "t" },
   { href: "/prayers", icon: ICON, label: "الصلاة", color: "c", tint: "t" },
   { href: "/journal", icon: ICON, label: "المذكرات", color: "c", tint: "t" },
   { href: "/finance", icon: ICON, label: "المال", color: "c", tint: "t" },
