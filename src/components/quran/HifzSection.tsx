@@ -33,14 +33,16 @@ const RECALL_TITLE: Record<Exclude<CoachKind, "memorize">, string> = {
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
 const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
 
-export function HifzSection({ onRead }: { onRead?: (surah: number) => void } = {}) {
+export type HifzView = "today" | "map" | "drill";
+
+export function HifzSection({ onRead, view = "today" }: { onRead?: (surah: number) => void; view?: HifzView } = {}) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [text, setText] = useState<string[] | null>(null);
   useEffect(() => { loadAyahText().then(setText); }, []);
 
   if (!h.plan) return <PlanSetup onStart={store.startHifzPlan} />;
-  return <HifzDashboard text={text} onRead={onRead} />;
+  return <HifzDashboard text={text} onRead={onRead} view={view} />;
 }
 
 // ---------------- إعداد الخطة ----------------
@@ -123,7 +125,7 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
 }
 
 // ---------------- لوحة الحفظ ----------------
-function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (surah: number) => void }) {
+function HifzDashboard({ text, onRead, view }: { text: string[] | null; onRead?: (surah: number) => void; view: HifzView }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
@@ -139,6 +141,9 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (sura
   const hasSession = plan.steps.length > 0;
   const hasMemorized = h.frontierId >= (h.plan?.startId ?? 1);
   const wirdDoneToday = h.sessions.some((x) => x.date === todayStr);
+  const showToday = view === "today";
+  const showMap = view === "map";
+  const showDrill = view === "drill";
 
   // اختبرني الآن: وجهٌ يُرجَّح بطول العهد والتعثّر (لا عشوائيٌّ بحت).
   const startTest = () => {
@@ -153,9 +158,14 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (sura
   };
 
   return (
-    <div className="space-y-4">
+    <div className={`mdr-hifz-dashboard mdr-hifz-dashboard--${view} space-y-4`}>
+      <div className="mdr-quran-kpis" aria-label="ملخص الحفظ">
+        <div><strong>{plan.steps.filter((s) => s.kind === "due").length}</strong><span>أوجه المراجعة</span></div>
+        <div><strong>{plan.steps.filter((s) => s.kind === "memorize").length}</strong><span>آيات جديدة</span></div>
+        <div><strong>{plan.steps.filter((s) => s.kind === "drill").length}</strong><span>مواضع اختبار</span></div>
+      </div>
       {/* 1) جلسة اليوم — المدخل الوحيد لعمل اليوم (سبق + مراجعة + اختبار أخطاء) */}
-      {hasSession ? (
+      {(showToday || showDrill) && hasSession ? (
         <>
           <TodaySessionCard onStart={(resume) => setFlow({ resume })} />
           {/* أتممتَ وردك لكن بقيت مراجعة؟ يبقى بابُ الزيادة مفتوحاً */}
@@ -168,12 +178,12 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (sura
             </button>
           )}
         </>
-      ) : prog.done ? (
+      ) : (showToday || showDrill) && prog.done ? (
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 text-center">
           <p className="text-sm font-bold text-quran">🎉 أتممت خطتك حتى آخر المصحف — تقبّل الله</p>
           <p className="text-xs text-gray-500 mt-1">يمكنك بدء خطة جديدة من «مؤشّر الحفظ ← خطة جديدة».</p>
         </div>
-      ) : (
+      ) : showToday ? (
         /* لا شيء مستحقٌّ اليوم: خِتامٌ صريح، وما بعده *بطلبك* لا اقتراحاً دائماً.
            كانت البطاقة تعود بعد إتمام الجلسة فلا يتبيّن للمستخدم أنّه أنهى
            يومه — راجع drillsToday وcoveredToday. */
@@ -194,14 +204,14 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (sura
             )}
           </div>
         </div>
-      )}
+      ) : null}
 
       {flow && text && (
         <TodaySessionFlow text={text} resume={flow.resume} onClose={() => setFlow(null)} />
       )}
 
       {/* 2) زيادة الحفظ خارج الجلسة — تُفتح بالطلب لا بالعرض الدائم */}
-      {showMore && portion && (
+      {showToday && showMore && portion && (
         <div className="rounded-2xl border border-quran/25 bg-quran/[0.06] p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Sprout size={15} className="text-quran" />
@@ -230,7 +240,7 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (sura
 
       {/* 3) اختبرني الآن — بطلبك متى شئت. يُخفى في حال «أتممت اليوم» لأنّ بطاقة
              الخِتام تعرض «جلسة مراجعة» أصلاً، فلا نزحم الشاشة بزرّين لعملٍ واحد. */}
-      {hasSession && hasMemorized && text && (
+      {showDrill && hasSession && hasMemorized && text && (
         <button
           onClick={startTest}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-semibold press"
@@ -240,26 +250,28 @@ function HifzDashboard({ text, onRead }: { text: string[] | null; onRead?: (sura
       )}
 
       {/* 4) أخطائي — عرضٌ لمواضع التعثّر مع اختبارٍ عليها */}
-      <MistakesPanel />
+      {showDrill && <MistakesPanel />}
 
       {/* 5) شدّة التمرين — الإعداد الوحيد في القسم */}
       <IntensityCard />
 
       {/* 6) خريطة الحفظ — لوحة كاملة: المحفوظ، المتقن، المحتاج للمراجعة، والضعف */}
-      <HifzMap
-        text={text}
-        onReview={(p) => setCoach({ portion: p, mode: "recall", kind: "review" })}
-        onRead={onRead}
-      />
+      {showMap && (
+        <HifzMap
+          text={text}
+          onReview={(p) => setCoach({ portion: p, mode: "recall", kind: "review" })}
+          onRead={onRead}
+        />
+      )}
 
       {/* 7) حصيلة الأسبوع القرآنية — تقريرٌ موجز وخطوة الأسبوع القادم */}
-      <QuranWeekReport />
+      {showMap && <QuranWeekReport />}
 
       {/* 8) سجل الحفظ والمراجعة — تعديل/حذف/تراجع مع إعادة حساب الجبهة */}
-      <HifzLog />
+      {showMap && <HifzLog />}
 
       {/* 9) رسم تقدّم الحفظ عبر الزمن */}
-      <HifzChart />
+      {showMap && <HifzChart />}
 
       {coach && text && (
         <HifzCoach

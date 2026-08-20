@@ -81,14 +81,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
-  // «إضافات» — صور/صوت/وسوم/شعور مطويّة لإبقاء سطح الكتابة صافياً، وتُفتح تلقائياً
-  // عند تعديل مذكرةٍ فيها إضافات أصلاً.
-  const [showExtras, setShowExtras] = useState(
-    Boolean(
-      initial?.photos?.length || initial?.photo || initial?.audios?.length || initial?.audio ||
-      initial?.attachmentRefs?.length || initial?.tags?.length || initial?.mood
-    )
-  );
+  // المرفقات جزءٌ مرئي من ورقة الكتابة في التصميم الجديد. تبقى حالة الطيّ
+  // اختيارية لمن يريد مساحةً أنظف، لكن لا تُخفى تلقائياً كي لا يضيع وجود PDF.
+  const [showExtras, setShowExtras] = useState(true);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Always points at the latest handleDone so the mount-time keydown/effect
@@ -192,6 +187,13 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   }
   function removeTag(t: string) {
     setTags((prev) => prev.filter((x) => x !== t));
+  }
+
+  function shiftDate(days: number) {
+    const d = parseDate(date);
+    d.setDate(d.getDate() + days);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setDate(iso);
   }
 
   // Persist the current state — create the entry on first save, update it
@@ -419,12 +421,23 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
       {/* المحتوى — يمرّر داخل الشاشة */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
         <div className="max-w-2xl mx-auto w-full space-y-4 px-4 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="mdr-journal-context" aria-label="سياق المذكرة">
+        <div>
+          <span>تتحدث عن</span>
+          <strong>{date}</strong>
+        </div>
+        <div className="mdr-journal-context-meta">
+          <span>{initial?.time ? `كُتبت ${initial.time}` : "مذكرة اليوم"}</span>
+          <span>{saveState === "saving" ? "يُحفظ…" : saveState === "saved" ? "محفوظ تلقائياً" : "مسودة"}</span>
+        </div>
+      </div>
+
       {/* العنوان — كبير وغامق في الأعلى */}
       <div>
         <input
           value={title}
           onChange={(e) => setTitle(expandTimeCommand(e.target.value))}
-          placeholder="عنوان اليوم ✨"
+          placeholder="عنوان المذكرة"
           aria-label="عنوان المذكرة"
           dir="auto"
           className="w-full text-xl font-black border-0 border-b-2 border-[var(--line)] focus:border-[var(--gold)] bg-transparent px-1 py-2 focus:outline-none placeholder:text-gray-300 placeholder:font-bold"
@@ -454,14 +467,36 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             onChange={(e) => setDate(e.target.value)}
             className="flex-1 border border-[var(--line)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gline)]"
           />
-          <button
-            type="button"
-            onClick={() => setDate(today())}
-            className="shrink-0 rounded-xl border border-[var(--line)] px-3 py-2 text-xs font-bold text-[var(--ink52)] hover:border-[var(--gline)] press"
-          >
-            اليوم
-          </button>
+          <div className="mdr-journal-date-actions">
+            <button type="button" onClick={() => setDate(today())} className="is-active">اليوم</button>
+            <button type="button" onClick={() => shiftDate(-1)}>أمس</button>
+            <button type="button" onClick={() => shiftDate(1)}>غدًا</button>
+          </div>
         </div>
+      </div>
+
+      <div className="mdr-journal-question">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <span className="mdr-journal-eyebrow">سؤال اليوم</span>
+            <p className="mdr-journal-question-text">{question || dailyQuestion(date)}</p>
+          </div>
+          {!answering && (
+            <button
+              type="button"
+              onClick={() => { setAnswering(true); if (!question.trim()) setQuestion(dailyQuestion(date)); }}
+              className="mdr-journal-question-action"
+            >أجب عليه</button>
+          )}
+        </div>
+        {answering && (
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            aria-label="سؤال المذكرة"
+            className="mdr-journal-question-input"
+          />
+        )}
       </div>
 
       <div>
@@ -502,7 +537,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             onChange={(e) => setContent(expandTimeCommand(e.target.value))}
             placeholder="اكتب مذكرتك هنا…"
             aria-label="نص المذكرة"
-            className="w-full min-h-[220px] block bg-transparent px-4 py-3.5 text-[15px] leading-loose focus:outline-none resize-none"
+            className="w-full min-h-[260px] block bg-transparent px-4 py-3.5 text-[15px] leading-loose focus:outline-none resize-none mdr-journal-lined-paper"
             dir="auto"
           />
         </div>
@@ -515,12 +550,12 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         </div>
       </div>
 
-      {/* إضافات — تُطوى لتبقى الكتابة في الصدارة، وتُفتح عند الحاجة */}
+      {/* إضافات — صور وPDF وصوت ووسوم، تبقى محفوظةً في نفس حقول المذكرة */}
       <div>
         <button
           type="button"
           onClick={() => setShowExtras((v) => !v)}
-          className="w-full flex items-center gap-2 text-xs font-bold text-gray-500 py-2 press"
+          className="w-full flex items-center gap-2 text-xs font-bold text-gray-500 py-2 press mdr-journal-attachments-toggle"
         >
           <Paperclip size={14} className="text-[var(--gold)]" />
           المرفقات
@@ -532,7 +567,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           <ChevronDown size={15} className={`ms-auto transition-transform ${showExtras ? "rotate-180" : ""}`} />
         </button>
         {showExtras && (
-          <div className="space-y-4 mt-2">
+          <div className="space-y-4 mt-2 mdr-journal-attachments">
       {/* الصور: من الكاميرا أو الاستديو، حتى 6 صور — تُضغط تلقائياً */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">
@@ -711,7 +746,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 aria-pressed={mood === m.value}
                 className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border press transition-colors ${mood === m.value ? "border-[var(--gold)] bg-[var(--goldw)]" : "border-gray-200 dark:border-transparent bg-white dark:bg-[#241c12]"}`}
               >
-                <span className="text-xl leading-none">{m.emoji}</span>
+                <span className={`mdr-mood-diamond ${mood === m.value ? "is-active" : ""}`} aria-hidden="true" />
                 <span className={`text-[9px] ${mood === m.value ? "text-[var(--gold)] font-bold" : "text-gray-400"}`}>{m.label}</span>
               </button>
             ))}

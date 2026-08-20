@@ -28,7 +28,9 @@ export const NAV_ITEMS: NavItem[] = [
   // الرئيسية `text-gray-700` — لونٌ محايد لا يقرأ «نشِطاً» في شريطٍ سفليّ.)
   { href: "/", icon: LayoutDashboard, label: "البهو", color: "text-brand-600", tint: "bg-brand-500/15" },
   { href: "/prayers", icon: MosqueIcon, label: "الصلاة", color: "text-prayer", tint: "bg-prayer/10" },
-  { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-journal", tint: "bg-journal/10" },
+  // المذكرات تتبع ورق/حبر مدار في الشريط أيضاً؛ لا لون بنفسجي يقطع الهوية
+  // الهادئة، مع بقاء كل حقول المزاج والبيانات كما هي.
+  { href: "/journal", icon: BookMarked, label: "المذكرات", color: "text-brand-600", tint: "bg-brand-500/15" },
   { href: "/finance", icon: Wallet, label: "المال", color: "text-finance", tint: "bg-finance/10" },
   // «المحبرة» لا «القراءة»: الباب صار مسارَ معرفةٍ (مصدرٌ ← فائدةٌ ← سؤالٌ ←
   // تطبيق) والكتبُ رفٌّ داخله، لا العكس. المسار `/reading` كما هو فلا تنكسر

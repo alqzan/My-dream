@@ -254,16 +254,10 @@ export default function Dashboard() {
         <YearProgress pct={yearPct} />
 
         {!isFirstRun && (
-          <details className="mdr-home-instrument-details">
-            <summary>
-              <span>إيقاع اليوم</span>
-              <span>المزولة والأقواس</span>
-            </summary>
-            <div className="mdr-home-instruments">
-              <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
-              <ThreeArcs due={dueNow} arcs={arcSpecs} />
-            </div>
-          </details>
+          <div className="mdr-home-instruments" aria-label="إيقاع اليوم">
+            <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
+            <ThreeArcs due={dueNow} arcs={arcSpecs} />
+          </div>
         )}
       </div>
 

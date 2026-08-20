@@ -17,6 +17,7 @@ import { CycleCurve } from "@/components/madar/mal/CycleCurve";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceGlance } from "@/components/finance/FinanceGlance";
+import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { GroupLabel } from "@/components/ui/GroupLabel";
 import Link from "next/link";
@@ -96,6 +97,7 @@ export default function FinancePage() {
     () => defaultPlanOpen({ budgetAttention: false, negativeBalance: false, installmentOverdue: false })
   );
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
+  const [financeView, setFinanceView] = useState<"cycle" | "now">("cycle");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -239,7 +241,7 @@ export default function FinancePage() {
   }
 
   return (
-    <div className="page-shell mdr-finance-page">
+    <div className={`page-shell mdr-finance-page ${financeView === "now" ? "is-now" : ""}`}>
       <div className="flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
@@ -260,32 +262,44 @@ export default function FinancePage() {
         </div>
       </div>
 
-      {/* ===== 1 — نظرة اليوم ===== */}
-      <FinanceGlance overview={overview} categories={categories} onGo={goToSection} />
-
-      <div className="mdr-finance-salary">
-        <SalaryBanner />
+      <div className="mdr-finance-tabs" role="tablist" aria-label="واجهة المال">
+        <button type="button" role="tab" aria-selected={financeView === "cycle"} className={financeView === "cycle" ? "is-active" : ""} onClick={() => setFinanceView("cycle")}>الدورة</button>
+        <button type="button" role="tab" aria-selected={financeView === "now"} className={financeView === "now" ? "is-active" : ""} onClick={() => setFinanceView("now")}>الآن</button>
       </div>
 
-
-      <Link href="/finance/insights" className="block animate-fade-up mdr-finance-insight-link">
-        <div className="relative overflow-hidden rounded-2xl p-3.5 press">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
-                <TrendingDown size={18} />
-              </div>
-              <div>
-                <p className="text-sm font-bold">متابعة الصرف</p>
-                <p className="text-xs opacity-80 mt-0.5">أسبوعي · شهري · سنوي — أرقامك وتحليلك التلقائي</p>
+      {financeView === "cycle" ? (
+        <div className="mdr-finance-cycle-surface">
+          <FinanceGlance overview={overview} categories={categories} onGo={goToSection} />
+          <div className="mdr-finance-salary"><SalaryBanner /></div>
+          <Link href="/finance/insights" className="block animate-fade-up mdr-finance-insight-link">
+            <div className="relative overflow-hidden rounded-2xl p-3.5 press">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center"><TrendingDown size={18} /></div>
+                  <div><p className="text-sm font-bold">متابعة الصرف</p><p className="text-xs opacity-80 mt-0.5">أسبوعي · شهري · سنوي — أرقامك وتحليلك التلقائي</p></div>
+                </div>
+                <ChevronLeft size={18} className="opacity-70" />
               </div>
             </div>
-            <ChevronLeft size={18} className="opacity-70" />
+          </Link>
+        </div>
+      ) : (
+        <div className="mdr-finance-now-surface">
+          <PendingBankBanner />
+          <div className="mdr-finance-now-card">
+            <span className="mdr-finance-eyebrow">مراجعة سريعة</span>
+            <h2>ما الذي يحتاج قرارك الآن؟</h2>
+            <p>أضف مصروفًا أو افتح السجل؛ التفاصيل تبقى في الخطة والسجل أدناه.</p>
+            <div className="mdr-finance-now-actions">
+              <Button onClick={() => setShowForm(true)} className="bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--ink)]"><Plus size={15} /> أضف مصروفًا</Button>
+              <button type="button" onClick={() => goToSection("history")}>افتح السجل <ChevronLeft size={15} /></button>
+            </div>
           </div>
         </div>
-      </Link>
+      )}
 
       {/* ===== 2 — الخطة المالية ===== */}
+      <div className="mdr-finance-plan-details">
       <GroupLabel>الخطة المالية</GroupLabel>
 
       <CollapsibleSection
@@ -442,6 +456,7 @@ export default function FinancePage() {
           <ReserveFunds />
         </Card>
       </CollapsibleSection>
+      </div>
 
       {/* ===== 3 — السجل ===== */}
       <div id="history" className="space-y-3">

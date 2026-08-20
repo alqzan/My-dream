@@ -636,7 +636,8 @@ body {
 .mdr-journal-composer [class*="border-journal"] { border-color: var(--gline) !important; }
 .mdr-journal-composer .mdr-journal-date-row input { background: var(--paper2); color: var(--ink); }
 
-/* القرآن: لا لون إضافي ولا شريط تبويبات؛ اللافتة والخطوة الحالية هما المدخل. */
+/* القرآن: الأخضر يخصّ الحفظ فقط، والتبويبات الثلاثة تفصل اليوم عن المذاكرة
+   والخريطة دون فتح مسارات التدبر أو المصحف في الواجهة الأساسية. */
 .mdr-quran-hifz-only > .text-quran {
   color: var(--green) !important;
 }
@@ -676,6 +677,227 @@ body {
   left: 1rem;
   bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
   z-index: 40;
+}
+
+/* ===================== المطابقة النهائية للتصميم ===================== */
+/* هذه القواعد تعيد ترتيب السطح المرئي فقط؛ المكوّنات التي تحتها ما زالت
+   تستعمل نفس مخازن مدار ونفس أحداث الحفظ/المزامنة. */
+
+/* القرآن: ثلاثة أبواب واضحة، وبطاقة اليوم هي نقطة البدء الوحيدة. */
+.mdr-quran-page {
+  --quran-paper: var(--paper2);
+  background: var(--paper);
+  border-inline: 1px solid var(--line);
+}
+.mdr-quran-header {
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-quran-page .page-title { color: var(--ink) !important; }
+.mdr-quran-page .page-subtitle { color: var(--ink52) !important; }
+.mdr-quran-page .bg-gradient-to-b,
+.mdr-quran-page .bg-gradient-to-l,
+.mdr-quran-page .bg-gradient-to-r { background-image: none !important; }
+.mdr-quran-page .bg-white,
+.mdr-quran-page .dark\:bg-\[\#241c12\] { background: var(--paper2) !important; }
+.mdr-quran-page .text-gray-800,
+.mdr-quran-page .text-gray-900,
+.mdr-quran-page .text-gray-700 { color: var(--ink) !important; }
+.mdr-quran-page .text-gray-500,
+.mdr-quran-page .text-gray-600,
+.mdr-quran-page .text-gray-400 { color: var(--ink52) !important; }
+.mdr-quran-page .text-quran { color: var(--green) !important; }
+.mdr-quran-page .bg-quran { background-color: var(--green) !important; }
+.mdr-quran-page [class*="border-quran"] { border-color: color-mix(in srgb, var(--green) 30%, var(--line)) !important; }
+.mdr-quran-page [class*="bg-quran/"] { background-color: var(--greenw) !important; }
+.mdr-quran-page .rounded-2xl { border-radius: 1.25rem; }
+.mdr-quran-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  background: var(--paper2);
+}
+.mdr-quran-tabs button {
+  min-height: 2.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 0.85rem;
+  color: var(--ink52);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mdr-quran-tabs button.is-active { color: var(--paper); background: var(--ink); }
+.mdr-quran-path-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+.mdr-quran-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid var(--gline);
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, var(--greenw), transparent);
+}
+.mdr-quran-kpis > div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.55rem 0.3rem;
+  text-align: center;
+  border-inline-start: 1px solid var(--line);
+}
+.mdr-quran-kpis > div:last-child { border-inline-start: 0; }
+.mdr-quran-kpis strong { color: var(--green); font-size: 1.25rem; line-height: 1; }
+.mdr-quran-kpis span { color: var(--ink52); font-size: 0.65rem; }
+.mdr-quran-page .mdr-hifz-dashboard > .space-y-4 > :first-child,
+.mdr-quran-page .mdr-hifz-dashboard > .space-y-4 > :first-child { margin-top: 0; }
+.mdr-quran-page .hifz-step-card,
+.mdr-quran-page .hifz-drill-card,
+.mdr-quran-page .hifz-result-screen { background: var(--paper2); border-color: var(--line); box-shadow: none; }
+.mdr-quran-page .mdr-quran-kpis + .rounded-2xl { background: var(--paper2); box-shadow: none; }
+
+/* المال: دورة/الآن فوق الصفحة، والأصول والالتزامات تبقى تحت الخطة لا تسرق
+   الانتباه من الرقم والقرار. */
+.mdr-finance-page { background: var(--paper); border-inline: 1px solid var(--line); }
+.mdr-finance-page .page-title { color: var(--ink) !important; }
+.mdr-finance-page .page-subtitle { color: var(--ink52) !important; }
+.mdr-finance-tabs {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(7rem, 1fr));
+  gap: 0.25rem;
+  width: min(100%, 17rem);
+  margin-top: 0.75rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper2);
+}
+.mdr-finance-tabs button {
+  min-height: 2.4rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--ink52);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.mdr-finance-tabs button.is-active { color: var(--paper); background: var(--ink); }
+.mdr-finance-cycle-surface,
+.mdr-finance-now-surface { display: grid; gap: 0.75rem; }
+.mdr-finance-plan-details { display: grid; gap: 1.05rem; }
+.mdr-finance-page.is-now .mdr-finance-plan-details { display: none; }
+.mdr-finance-now-card {
+  padding: 1rem;
+  border: 1px solid var(--gline);
+  border-radius: 1.25rem;
+  background: var(--paper2);
+}
+.mdr-finance-eyebrow { color: var(--gold); font-size: 0.72rem; font-weight: 900; }
+.mdr-finance-now-card h2 { margin-top: 0.35rem; color: var(--ink); font-size: 1.15rem; font-weight: 900; }
+.mdr-finance-now-card p { margin-top: 0.3rem; color: var(--ink52); font-size: 0.78rem; line-height: 1.8; }
+.mdr-finance-now-actions { display: flex; align-items: center; gap: 0.55rem; margin-top: 0.8rem; }
+.mdr-finance-now-actions > button:last-child {
+  display: inline-flex; align-items: center; gap: 0.25rem; min-height: 2.5rem;
+  padding: 0 0.75rem; border: 1px solid var(--line); border-radius: 0.8rem;
+  background: transparent; color: var(--ink72); font: inherit; font-size: 0.75rem; font-weight: 800; cursor: pointer;
+}
+.mdr-finance-page .mdr-pending-banner { background: var(--paper2) !important; border-color: var(--gline) !important; }
+.mdr-finance-page .mdr-group-label h2 { color: var(--ink52) !important; }
+.mdr-finance-page .bg-white,
+.mdr-finance-page .card-shadow { background: var(--paper2) !important; border-color: var(--line) !important; box-shadow: none !important; }
+
+/* المحبرة: الرفّ هو البطل؛ الإحصاءات وأدوات الجلسة تصبح سطرًا ودرجًا. */
+.mdr-mihbara-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  color: var(--ink52);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.mdr-mihbara-summary .mdr-diamond { width: 4px; height: 4px; background: var(--gold); }
+.mdr-mihbara-shelf { margin-top: 0.55rem; }
+.mdr-mihbara-shelf .mdr-section-head { border-bottom-color: var(--line); }
+.mdr-mihbara-filters button { border-color: var(--line) !important; }
+.mdr-mihbara-books > * { min-width: 0; }
+.mdr-reading-tools { margin-top: 1rem; }
+.mdr-reading-tools > summary { color: var(--ink52); }
+
+/* محرر المذكرات: ورقة مسطرة + سؤال اليوم + مرفقات ظاهرة. */
+.mdr-journal-composer .mdr-journal-context {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem;
+  padding: 0.8rem 0.1rem 0.2rem; border-bottom: 1px solid var(--line);
+}
+.mdr-journal-context > div:first-child { display: grid; gap: 0.2rem; }
+.mdr-journal-context span { color: var(--ink52); font-size: 0.68rem; }
+.mdr-journal-context strong { color: var(--ink); font-size: 1rem; }
+.mdr-journal-context-meta { display: grid; gap: 0.15rem; text-align: left; }
+.mdr-journal-context-meta span:last-child { color: var(--gold); }
+.mdr-journal-composer .mdr-journal-date-row input { background: var(--paper2) !important; color: var(--ink) !important; }
+.mdr-journal-date-actions { display: flex; gap: 0.25rem; }
+.mdr-journal-date-actions button {
+  min-height: 2.4rem; padding: 0 0.65rem; border: 1px solid var(--line); border-radius: 0.7rem;
+  background: transparent; color: var(--ink52); font: inherit; font-size: 0.68rem; font-weight: 800; cursor: pointer;
+}
+.mdr-journal-date-actions button.is-active { border-color: var(--gline); background: var(--goldw); color: var(--gold); }
+.mdr-journal-eyebrow { display: block; color: var(--gold); font-size: 0.68rem; font-weight: 900; }
+.mdr-journal-question {
+  padding: 0.85rem 0.9rem; border: 1px solid var(--line); border-radius: 1.15rem; background: var(--paper2);
+}
+.mdr-journal-question-text { margin-top: 0.25rem; color: var(--ink); font-size: 0.85rem; line-height: 1.75; }
+.mdr-journal-question-action {
+  flex: none; min-height: 2.2rem; padding: 0 0.7rem; border: 1px solid var(--gline); border-radius: 0.75rem;
+  background: var(--goldw); color: var(--gold); font: inherit; font-size: 0.7rem; font-weight: 900; cursor: pointer;
+}
+.mdr-journal-question-input { width: 100%; margin-top: 0.6rem; padding: 0.55rem 0; border: 0; border-bottom: 1px solid var(--gline); background: transparent; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; }
+.mdr-journal-editor { border-color: var(--gline) !important; background: var(--paper2) !important; }
+.mdr-journal-lined-paper {
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 31px, var(--line) 32px) !important;
+  background-size: 100% 32px !important;
+  line-height: 32px !important;
+  padding-top: 0.4rem !important;
+}
+.mdr-journal-attachments-toggle { border-top: 1px solid var(--line); color: var(--ink72) !important; }
+.mdr-journal-attachments { padding: 0.75rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper2); }
+.mdr-journal-composer .border-gray-200,
+.mdr-journal-composer .border-gray-100 { border-color: var(--line) !important; }
+.mdr-journal-composer .bg-white { background: var(--paper) !important; }
+.mdr-journal-composer .text-purple-500,
+.mdr-journal-composer [class*="text-purple"] { color: var(--gold) !important; }
+.mdr-journal-composer .bg-purple-50,
+.mdr-journal-composer [class*="bg-purple"] { background: var(--goldw) !important; }
+.mdr-mood-diamond { width: 0.75rem; height: 0.75rem; transform: rotate(45deg); border: 1px solid var(--line); background: var(--paper2); }
+.mdr-mood-diamond.is-active { border-color: var(--gold); background: var(--gold); }
+
+@media (max-width: 639px) {
+  .mdr-quran-page, .mdr-finance-page { border-inline: 0; }
+  .mdr-finance-tabs { width: 100%; }
+  .mdr-journal-date-row > .flex { align-items: stretch; flex-direction: column; }
+  .mdr-journal-date-actions { width: 100%; }
+  .mdr-journal-date-actions button { flex: 1; }
+  .mdr-finance-now-actions { align-items: stretch; flex-direction: column; }
+  .mdr-finance-now-actions > button:last-child { justify-content: center; }
 }
 @media (min-width: 1024px) {
   .fab {

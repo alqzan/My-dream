@@ -82,10 +82,9 @@ export function PendingInboxWatcher() {
     return unsub;
   }, [drain]);
 
-  // When a review closes, catch anything that landed while it was open.
-  useEffect(() => {
-    if (!reviewing) void drain();
-  }, [reviewing, drain]);
+  // الإغلاق قرارٌ يدوي: لا نعيد فتح النافذة ولا نعيد تصريف اللقطة القديمة
+  // بمجرد الضغط على ×. يبقى العدد في البانر، ويُعاد التصريف فقط عندما تصل
+  // لقطة جديدة من الصندوق أو يفتح المستخدم المراجعة بنفسه.
 
   if (!reviewing) return null;
   return (

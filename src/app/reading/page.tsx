@@ -80,17 +80,12 @@ export default function ReadingPage() {
           <span className="mdr-star" style={{ width: 24, height: 24 }} />
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, margin: "14px 0 0" }}>
-          {[
-            { n: "كتاب", v: arNum(books.length), c: "var(--gold)" },
-            { n: "خُتِم", v: arNum(booksFinished), c: "var(--green)" },
-            { n: "صفحةً قرأت", v: arNum(totalPagesRead), c: "var(--blue)" },
-          ].map((t) => (
-            <div key={t.n} style={{ padding: "13px 10px", border: "1px solid var(--line)", borderRadius: 18, background: "var(--paper2)", textAlign: "center" }}>
-              <span style={{ display: "block", fontSize: 18, fontWeight: 900, color: t.c }}>{t.v}</span>
-              <span style={{ display: "block", marginTop: 4, fontSize: 10.5, color: "var(--ink52)" }}>{t.n}</span>
-            </div>
-          ))}
+        <div className="mdr-mihbara-summary" aria-label="ملخص الرف">
+          <span>{arNum(books.length)} كتاب</span>
+          <span className="mdr-diamond" />
+          <span>{arNum(booksFinished)} مكتمل</span>
+          <span className="mdr-diamond" />
+          <span>{arNum(totalPagesRead)} صفحة مقروءة</span>
         </div>
 
         <div className="mdr-mihbara-shelf">
@@ -112,7 +107,7 @@ export default function ReadingPage() {
               marginBottom={12}
             />
 
-            <div className="flex gap-2 overflow-x-auto pb-1 mdr-scroll">
+            <div className="flex gap-2 overflow-x-auto pb-1 mdr-scroll mdr-mihbara-filters">
               {(["الكل", "أقرأ", "أنهيت", "أريد_قراءة"] as FilterStatus[]).map((f) => (
                 <button
                   key={f}
@@ -144,7 +139,7 @@ export default function ReadingPage() {
                 />
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" style={{ marginTop: 14 }}>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mdr-mihbara-books" style={{ marginTop: 14 }}>
                 {filtered.map((book) => (
                   <BookCard key={book.id} book={book} onDelete={deleteBook} onClick={() => setEditBook(book)} />
                 ))}
