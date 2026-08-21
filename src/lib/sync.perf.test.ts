@@ -347,6 +347,42 @@ describe("saveUserData — الوسيط الذي في R2 لا يُرفع ثان�
     expect(putUploads()).toHaveLength(1);
   });
 
+  it("رفض قراءة manifest الجديد يعود للمسار القديم دون إسقاط الحفظ", async () => {
+    const h = await photoHash(dataUrl);
+    const main = mainDoc({ mediaManifestVersion: 2, mediaManifestMode: "sharded" });
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
+      const parts = ref.__doc ?? [];
+      if (parts.includes("mediaManifest")) {
+        throw Object.assign(new Error("rules do not cover mediaManifest"), {
+          code: "permission-denied",
+        });
+      }
+      return main;
+    });
+    await sync.readCloudMain("space-inline-fallback");
+
+    const entry = { id: "e-inline", date: "2026-01-10", content: "a", photos: [dataUrl] };
+    const res = await sync.saveUserData(
+      "space-inline-fallback",
+      appData([entry as unknown as JournalEntry])
+    );
+
+    expect(res.mediaComplete).toBe(true);
+    expect(mediaManifestWrites()).toHaveLength(0);
+    const mainWrite = setDocMock.mock.calls.find((c) => {
+      const parts = (c[0] as { __doc?: unknown[] })?.__doc ?? [];
+      return parts.length === 3;
+    });
+    const payload = mainWrite![1] as {
+      mediaManifestMode?: string;
+      mediaManifestVersion?: number;
+      photoManifest?: string[];
+    };
+    expect(payload.mediaManifestMode).toBe("inline");
+    expect(payload.mediaManifestVersion).toBe(1);
+    expect(payload.photoManifest).toEqual([h]);
+  });
+
   it("ينقل manifest قديمًا كبيرًا إلى 256 shard ولا يعيده إلى المستند الرئيسي", async () => {
     const hashes = Array.from({ length: 5000 }, (_, i) => {
       const prefix = (i % 256).toString(16).padStart(2, "0");
