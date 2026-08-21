@@ -62,6 +62,7 @@ import { IndicDigits } from "@/components/layout/IndicDigits";
 import { SyncProvider } from "@/components/sync/SyncProvider";
 import { PendingInboxWatcher } from "@/components/finance/PendingInboxWatcher";
 import { RecurringRunner } from "@/components/finance/RecurringRunner";
+import { PrayerReminderWatcher } from "@/components/prayer/PrayerReminderWatcher";
 
 export const metadata: Metadata = {
   title: "مدار — مساحتك الشخصية",
@@ -124,6 +125,7 @@ export default function RootLayout({
               <UndoToast />
               <UpdatePrompt />
               <PendingInboxWatcher />
+              <PrayerReminderWatcher />
               <RecurringRunner />
               <AppBadge />
               <MilestoneWatcher />
