@@ -2884,7 +2884,6 @@ button.mdr-summary-habit-row { cursor: pointer; }
   .mdr-summary-arc-art { height: 4.4rem; }
   .mdr-weekly-summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
 /* ===================== بهو مدار — الهوية الأصلية ===================== */
 /* هذه الطبقة تخص البهو وحده: مزولة مدار وأقواسه القديمة أولاً، ثم تذكيرات
    قصيرة تفتح الأقسام. لا تُنشئ سطحاً ثانياً ينافس صفحات التطبيق. */
