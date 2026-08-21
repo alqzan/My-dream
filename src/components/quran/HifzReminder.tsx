@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ } from "@/lib/types";
 import { today } from "@/lib/utils";
 import { hifzTodo } from "@/lib/quran/schedule";
-import { GraduationCap, ChevronLeft } from "lucide-react";
+import { BookOpenText, ChevronLeft, Sparkles } from "lucide-react";
 
 // تذكيرٌ لطيف في الرئيسية بورد الحفظ أو المراجعة المستحقّة اليوم — يظهر فقط حين
 // تكون هناك خطة حفظ وعملٌ متبقٍّ، ويختفي بمجرّد إنجازه. يفتح تبويب الحفظ مباشرةً.
@@ -14,24 +14,31 @@ export function HifzReminder() {
   if (!hifz.plan || (!needWird && !needReview)) return null;
 
   const msg = needWird && needReview
-    ? "ورد الحفظ ومراجعتك بانتظارك اليوم"
+    ? "وردك ومراجعتك ينتظرانك اليوم"
     : needWird
-    ? "ورد الحفظ اليوم بانتظارك"
-    : "لديك مراجعة حفظٍ مستحقّة اليوم";
+    ? "وردك اليوم ينتظرك"
+    : "مراجعتك القرآنية جاهزة";
+  const detail = needWird && needReview
+    ? "حفظٌ جديد ثم مراجعةٌ قصيرة"
+    : needWird
+    ? "خطوةٌ هادئة قبل أن ينتهي يومك"
+    : "أكمل ما حان موعده من المحفوظ";
 
   return (
     <Link
       href="/quran?tab=hifz"
-      className="mdr-hifz-reminder flex items-center gap-3 rounded-2xl border border-quran/25 bg-gradient-to-l from-quran/[0.10] to-transparent p-3.5 press"
+      className="mdr-hifz-reminder press"
     >
-      <span className="w-9 h-9 rounded-xl bg-quran/15 text-quran flex items-center justify-center shrink-0">
-        <GraduationCap size={18} />
+      <span className="mdr-hifz-reminder-mark" aria-hidden="true">
+        <BookOpenText size={19} />
+        <Sparkles size={10} className="mdr-hifz-reminder-spark" />
       </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-gray-800">{msg}</div>
-        <div className="text-[11px] text-gray-400">اضغط للحفظ الموجّه والمراجعة</div>
+      <div className="mdr-hifz-reminder-copy">
+        <span className="mdr-hifz-reminder-kicker">ورد القرآن</span>
+        <strong>{msg}</strong>
+        <small>{detail}</small>
       </div>
-      <ChevronLeft size={18} className="text-quran shrink-0" />
+      <span className="mdr-hifz-reminder-action">ابدأ <ChevronLeft size={16} /></span>
     </Link>
   );
 }
