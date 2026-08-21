@@ -85,7 +85,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // on the next save so a concurrent write (another device) is caught by the
   // transaction (RevisionConflictError) instead of silently overwriting it.
   const lastRevisionRef = useRef<number>(0);
-  const failNotified = useRef(false); // toast only once per failure streak
+  const saveFailNotified = useRef(false); // toast only once per save failure streak
+  const listenerFailNotified = useRef(false); // toast only once per listener failure streak
 
   const hydrate = useAppStore((s) => s.hydrate);
   const snapshot = useAppStore((s) => s.snapshot);
@@ -117,8 +118,56 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setLastSyncedAt(Date.now());
     };
 
+    // Firestore's error callback terminates that listener. Keep a generation
+    // number for each subscription and retry it with backoff; without this a
+    // transient/terminal listener error leaves the UI in a stale "متزامن" or
+    // "دون اتصال" state forever until the app is relaunched.
+    let snapRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapRetryAttempt = 0;
+    let snapGeneration = 0;
+    let snapEventSeq = 0;
+    let startSnap: () => void = () => {};
+
+    const clearSnapRetry = () => {
+      if (snapRetryTimer) {
+        clearTimeout(snapRetryTimer);
+        snapRetryTimer = null;
+      }
+    };
+
+    const syncErrorMessage = (error: unknown): string => {
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code ?? "")
+          : "";
+      return code
+        ? `انقطع اتصال المزامنة (${code}) — سيُعاد الاتصال`
+        : "انقطع اتصال المزامنة — سيُعاد الاتصال";
+    };
+
+    const markConnectionHealthy = () => {
+      snapRetryAttempt = 0;
+      listenerFailNotified.current = false;
+    };
+
+    const scheduleSnapRetry = (error: unknown) => {
+      if (cancelled || snapRetryTimer) return;
+      setStatus("offline");
+      if (!listenerFailNotified.current) {
+        listenerFailNotified.current = true;
+        showToast(syncErrorMessage(error), "warning");
+      }
+      const delay = Math.min(1_500 * 2 ** snapRetryAttempt, 30_000);
+      snapRetryAttempt = Math.min(snapRetryAttempt + 1, 5);
+      snapRetryTimer = setTimeout(() => {
+        snapRetryTimer = null;
+        startSnap();
+      }, delay);
+    };
+
     // مستمعُ إخفاءِ الصفحة (يُسجَّل بعد بناء جدولة الحفظ أدناه) — يُنظَّف مع الأثر.
     let unsubFlush: () => void = () => {};
+    let unsubNetwork: () => void = () => {};
 
     (async () => {
       // ===== انتظر ترطيب المتجر من IndexedDB قبل أيّ قرار مزامنة =====
@@ -326,14 +375,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const saver = createSaveScheduler({
         save: () =>
           pushLocal().then((mediaComplete) => {
-            failNotified.current = false;
+            saveFailNotified.current = false;
             setMediaPending(!mediaComplete);
             markSynced(mediaComplete);
           }),
         onError: () => {
           setStatus("offline");
-          if (!failNotified.current) {
-            failNotified.current = true;
+          if (!saveFailNotified.current) {
+            saveFailNotified.current = true;
             showToast("فشلت المزامنة — سيُعاد المحاولة", "warning");
           }
         },
@@ -363,64 +412,107 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       };
 
       // 2) Live updates coming from the owner's other devices.
-      unsubSnap = subscribeUserMain(space, (read) => {
-        if (!read) return;
-        // Receiving a snapshot at all means we're connected — clear any
-        // lingering "offline" state even when there's nothing new to apply.
-        markSynced();
-        const state = useAppStore.getState();
-        // نتبنّى اللقطة إذا: ختمُها أحدث، **أو ارتفع revision عن آخر ما تبنّيناه**
-        // (كتابةٌ حقيقية من جهازٍ آخر لا تعتمد على ساعته — وهذا ما كان يُسقِط
-        // *تعديل عنصرٍ قائم* من جهازٍ ساعته متأخّرة)، أو فيها محتوى لم نره.
-        // القرار نفسه في `decideAdoptCloud` (مختبَر وحدةً).
-        //
-        // **القرار على المستند الرئيس وحده** (`read.main`) — بلا تنزيل الshards.
-        // كلُّ إشعارٍ كان ينزّل كامل المذكرات **قبل** أن يُسأل هذا الشرط، بما فيه
-        // صدى كتابتنا نحن، فكان كلُّ حفظٍ يجرّ تنزيلاً كاملاً يُرمى فوراً. ومذكرةٌ
-        // كُتبت على جهازٍ آخر لا تفوتنا: كلّ حفظٍ يمرّ بمعاملةٍ ترفع `revision`،
-        // فشرطُ المراجعة يلتقطها ولو تأخّر ختمُ ساعة ذلك الجهاز.
-        if (!shouldAdoptCloud({
-          cloudLastUpdated: read.main.lastUpdated,
-          localLastUpdated: state.lastUpdated,
-          cloudRevision: read.main.revision,
-          lastRevision: lastRevisionRef.current,
-          hasUnseen: cloudHasUnseen(read.main, state),
-        })) return;
-        (async () => {
-          try {
-            const cloudMain = await read.full();
-            const local = snapshot();
-            // Does THIS device hold changes the incoming cloud snapshot lacks?
-            // (reverse of cloudHasUnseen). If so, the merge below will contain
-            // data the cloud doesn't have yet, so we must push the union back —
-            // the guarded hydrate won't trigger the store subscription itself.
-            const localHasUnpushed = cloudHasUnseen(local, cloudMain);
-            // Merge, so unsynced local edits aren't overwritten by the incoming
-            // cloud snapshot (cloud is newer here, so it wins per-item conflicts).
-            // بمراجع السحابة كما هي — ثمّ نرطّب الناتج للعرض. والحارس نفسه:
-            // تنزيلُ صور اللقطة الواردة يستغرق، وتعديلٌ يقع أثناءه يبقى.
-            const mark = editSeqRef.current;
-            const { display } = await adoptCloudSnapshot({
-              snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
-            });
-            applyingRemoteRef.current = true;
-            hydrate(display);
-            setTimeout(() => {
-              applyingRemoteRef.current = false;
-            }, 0);
-            lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
-            lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
-            markSynced();
-            // Converge the cloud: push the merged union up so the entry that
-            // lived only here reaches the other devices. Guarded by
-            // localHasUnpushed so two idle devices don't ping-pong saves — ومعه
-            // تعديلٌ وقع أثناء التبنّي (بلعه الحارس فلم يره الاشتراك حفظاً).
-            if (localHasUnpushed || editSeqRef.current !== mark) saver.schedule();
-          } catch {
-            setStatus("offline");
+      // A Firestore listener can terminate through its error callback. Recreate
+      // it with backoff, and invalidate any in-flight shard/media hydration when
+      // a newer listener generation or snapshot supersedes it.
+      const handleSnapshotFailure = (generation: number, error: unknown) => {
+        if (cancelled || generation !== snapGeneration) return;
+        unsubSnap();
+        unsubSnap = () => {};
+        scheduleSnapRetry(error);
+      };
+
+      startSnap = () => {
+        if (cancelled) return;
+        clearSnapRetry();
+        unsubSnap();
+        unsubSnap = () => {};
+        const generation = ++snapGeneration;
+        unsubSnap = subscribeUserMain(space, (read, error) => {
+          if (cancelled || generation !== snapGeneration) return;
+          if (error) {
+            handleSnapshotFailure(generation, error);
+            return;
           }
-        })();
-      });
+          if (!read) return;
+
+          markConnectionHealthy();
+          const event = ++snapEventSeq;
+          const state = useAppStore.getState();
+          // نتبنّى اللقطة إذا: ختمُها أحدث، **أو ارتفع revision عن آخر ما تبنّيناه**
+          // (كتابةٌ حقيقية من جهازٍ آخر لا تعتمد على ساعته — وهذا ما كان يُسقِط
+          // *تعديل عنصرٍ قائم* من جهازٍ ساعته متأخّرة)، أو فيها محتوى لم نره.
+          // القرار نفسه في `decideAdoptCloud` (مختبَر وحدةً).
+          //
+          // **القرار على المستند الرئيس وحده** (`read.main`) — بلا تنزيل الshards.
+          if (!shouldAdoptCloud({
+            cloudLastUpdated: read.main.lastUpdated,
+            localLastUpdated: state.lastUpdated,
+            cloudRevision: read.main.revision,
+            lastRevision: lastRevisionRef.current,
+            hasUnseen: cloudHasUnseen(read.main, state),
+          })) {
+            // This snapshot is already represented locally; no second-stage
+            // read is needed, so it is safe to report a clean connection.
+            markSynced();
+            return;
+          }
+
+          // Do not report "متزامن" here. The main document arrived, but the
+          // journal shards and media refs still have to be read and merged.
+          setStatus("syncing");
+          (async () => {
+            try {
+              const cloudMain = await read.full();
+              if (cancelled || generation !== snapGeneration || event !== snapEventSeq) return;
+              const local = snapshot();
+              // Does THIS device hold changes the incoming cloud snapshot lacks?
+              // If so, the merge below will contain data the cloud doesn't have
+              // yet, so we must push the union back.
+              const localHasUnpushed = cloudHasUnseen(local, cloudMain);
+              const mark = editSeqRef.current;
+              const { display } = await adoptCloudSnapshot({
+                snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
+              });
+              if (cancelled || generation !== snapGeneration || event !== snapEventSeq) return;
+              applyDisplay(display);
+              lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
+              lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
+              markConnectionHealthy();
+              // Only now — after the full read/merge/hydration — claim success.
+              markSynced();
+              // Converge the cloud: push the merged union up so the entry that
+              // lived only here reaches the other devices. Guarded by
+              // localHasUnpushed so two idle devices don't ping-pong saves.
+              if (localHasUnpushed || editSeqRef.current !== mark) saver.schedule();
+            } catch (error) {
+              if (cancelled || generation !== snapGeneration || event !== snapEventSeq) return;
+              handleSnapshotFailure(generation, error);
+            }
+          })();
+        });
+      };
+
+      startSnap();
+
+      // Browser connectivity events make recovery immediate instead of waiting
+      // for the next exponential retry slot. Restarting is safe: the generation
+      // guard discards any completion from the previous listener.
+      const onOnline = () => {
+        if (cancelled) return;
+        clearSnapRetry();
+        snapRetryAttempt = 0;
+        startSnap();
+      };
+      const onOffline = () => {
+        if (!cancelled) setStatus("offline");
+      };
+      window.addEventListener("online", onOnline);
+      window.addEventListener("offline", onOffline);
+      unsubNetwork = () => {
+        window.removeEventListener("online", onOnline);
+        window.removeEventListener("offline", onOffline);
+      };
 
       // (٣) دفعُ التعديلات المحلّية مؤجَّلاً: الاشتراك سُجّل في أوّل الأثر أعلاه،
       //     وقد صار `saverRef` جاهزاً الآن فيجدول كلُّ تعديلٍ حفظَه من نفسه.
@@ -431,6 +523,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setRemoteMediaFetcher(null);
       unsubStore();
       unsubSnap();
+      clearSnapRetry();
+      unsubNetwork();
       unsubFlush();
       saverRef.current?.dispose();
       saverRef.current = null;

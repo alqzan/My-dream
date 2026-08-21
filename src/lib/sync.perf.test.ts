@@ -15,6 +15,7 @@ const getDocsMock = vi.fn(async () => ({ docs: [], forEach: () => {} }));
 const deleteDocMock = vi.fn(async () => {});
 // المستمع الحيّ: نحتفظ بردّ النداء لنُطلقه يدوياً في الاختبار.
 let onSnapshotNext: ((snap: unknown) => void) | null = null;
+let onSnapshotError: ((error: unknown) => void) | null = null;
 
 vi.mock("firebase/firestore", () => ({
   doc: (...args: unknown[]) => ({ __doc: args }),
@@ -23,9 +24,10 @@ vi.mock("firebase/firestore", () => ({
   setDoc: (...a: unknown[]) => setDocMock(...(a as [])),
   getDocs: (...a: unknown[]) => getDocsMock(...(a as [])),
   deleteDoc: (...a: unknown[]) => deleteDocMock(...(a as [])),
-  onSnapshot: (_ref: unknown, next: (snap: unknown) => void) => {
+  onSnapshot: (_ref: unknown, next: (snap: unknown) => void, error?: (error: unknown) => void) => {
     onSnapshotNext = next;
-    return () => { onSnapshotNext = null; };
+    onSnapshotError = error ?? null;
+    return () => { onSnapshotNext = null; onSnapshotError = null; };
   },
   runTransaction: async (_db: unknown, fn: (txn: unknown) => Promise<unknown>) =>
     fn({
@@ -168,6 +170,20 @@ describe("readCloudMain — القراءة على مرحلتين", () => {
     // صدى كتابتنا نحن يمرّ من هنا في كلّ حفظ — فلو نزّل الshards لصار كلُّ حفظٍ
     // تنزيلاً كاملاً للمكتبة يُرمى فور اتّخاذ القرار.
     expect(getDocsMock).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it("يمرّر خطأ المستمع للمنادي بدل إسقاطه كأنه مستند مفقود", async () => {
+    let received: { read: unknown; error: unknown } | null = null;
+    const unsub = sync.subscribeUserMain("space", (read, error) => {
+      received = { read, error };
+    });
+
+    const failure = Object.assign(new Error("permission denied"), { code: "permission-denied" });
+    onSnapshotError!(failure);
+
+    expect(received?.read).toBeNull();
+    expect(received?.error).toBe(failure);
     unsub();
   });
 });

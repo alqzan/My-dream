@@ -926,7 +926,7 @@ export async function loadUserMain(uid: string): Promise<(AppData & CloudMediaMe
 // shards and hydrate. Returns an unsubscribe function.
 export function subscribeUserMain(
   uid: string,
-  cb: (read: CloudRead | null) => void
+  cb: (read: CloudRead | null, error?: unknown) => void
 ): () => void {
   if (!db) return () => {};
   // Every save writes the main doc (its lastUpdated bumps on any edit, journal
@@ -946,7 +946,7 @@ export function subscribeUserMain(
       if (!snap.exists()) return cb(null);
       cb(cloudRead(uid, snap.data() as AppData & CloudMediaMeta));
     },
-    () => cb(null)
+    (error) => cb(null, error)
   );
 }
 
