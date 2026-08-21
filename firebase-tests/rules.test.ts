@@ -157,6 +157,7 @@ describe("firestore.rules — media manifest shards (userData/{space}/mediaManif
     await assertSucceeds(ref.set(shard));
     await assertSucceeds(ref.get());
     await assertSucceeds(ref.update({ hashes: [PHOTO_HASH, "abcdefabcdefabcdefabcdefabcdefab"] }));
+    await assertFails(ref.update({ hashes: [PHOTO_HASH] }));
     await assertSucceeds(
       clientFirestore().collection("userData").doc(REAL_SPACE).collection("mediaManifest").get()
     );

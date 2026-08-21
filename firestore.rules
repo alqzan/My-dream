@@ -57,7 +57,7 @@ service cloud.firestore {
     // Media hashes are sharded by kind + the first two hash characters. The
     // exact shape prevents a cached client from writing a free-form document
     // into this collection; hashes are immutable references and are therefore
-    // unioned by the app, never deleted.
+      // unioned by the app, never deleted.
     function isCurrentMediaManifest() {
       let d = request.resource.data;
       return d.keys().hasAll(['kind', 'hashes', 'writerVersion'])
@@ -99,7 +99,10 @@ service cloud.firestore {
       // object look missing on another device.
       match /mediaManifest/{shardId} {
         allow get, list: if isSpace(space);
-        allow create, update: if isSpace(space) && isCurrentMediaManifest();
+        allow create: if isSpace(space) && isCurrentMediaManifest();
+        allow update: if isSpace(space)
+          && isCurrentMediaManifest()
+          && request.resource.data.hashes.hasAll(resource.data.hashes);
         allow delete: if false;
       }
 
