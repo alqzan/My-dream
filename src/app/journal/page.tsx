@@ -702,7 +702,7 @@ export default function JournalPage() {
               </div>
             )}
             {/* كلّ الصور في كولاجاتٍ متتابعة — والضغطة تفتح العارض عليها */}
-            <EntryPhotos sources={viewPhotoSources} />
+            <EntryPhotos sources={viewPhotoSources} edits={viewEntry.photoEdits} />
             <JournalAttachments attachments={viewEntry.attachmentRefs} />
             {viewAudios.map((a, i) => (
               // eslint-disable-next-line jsx-a11y/media-has-caption

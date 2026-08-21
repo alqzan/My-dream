@@ -97,6 +97,21 @@ describe("نسخة PDF الاحتياطية — الملف نفسه لا الا�
     expect(out.allEmbedded).toBe(false);
   });
 
+  it("يضمّن الملف العام بنفس مسار PDF ولا يسقط اسمه أو نوعه", async () => {
+    const data = withEntry({
+      id: "j2c",
+      date: "2026-08-20",
+      content: "مذكرة بملف",
+      attachmentRefs: [{ kind: "file", filename: "مخطط.docx", hash: "docx-hash", contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", status: "uploaded" }],
+    });
+    const bytes = "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,AAAA";
+    const out = await embedAllMedia(data, () => {}, async (hash) => hash === "docx-hash" ? bytes : null);
+    expect(out.data.journalEntries[0].attachmentRefs?.[0]).toMatchObject({ kind: "file", filename: "مخطط.docx", localData: bytes });
+    expect(out.counts.attachments).toBe(1);
+    expect(out.counts.attachmentFiles).toBe(1);
+    expect(out.allEmbedded).toBe(true);
+  });
+
   it("الدمج بعد الاستعادة يُغني المرجع القديم ببايتات PDF ولا يكرر المرفق", () => {
     const local = withEntry({
       id: "j3",

@@ -545,6 +545,14 @@ export function mergeEntryMedia(base: JournalEntry, other: JournalEntry): Journa
   if (audioMetadataRefs && refListChanged(base.audioMetadataRefs, audioMetadataRefs)) {
     out = { ...out, audioMetadataRefs };
   }
+  // تعديلات عرض الصور مستقلة عن النص وعن البايتات الأصلية. اتّحادها keyed by
+  // source key يمنع جهازاً أضاف تدويراً لصورة من إسقاط تعديلٍ آخر لصورة أخرى؛
+  // وإن عُدّلت الصورة نفسها على الجهازين فنسخة `other` (الأحدث في مسار
+  // الدمج) تغلب بلا مساس بالمصدر الأصلي.
+  const photoEdits = { ...(base.photoEdits ?? {}), ...(other.photoEdits ?? {}) };
+  if (Object.keys(photoEdits).length && JSON.stringify(photoEdits) !== JSON.stringify(base.photoEdits ?? {})) {
+    out = { ...out, photoEdits };
+  }
   return out as JournalEntry;
 }
 

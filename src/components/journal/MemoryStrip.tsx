@@ -62,7 +62,7 @@ export function MemoryStrip({
             <button
               key={m.id}
               onClick={() => onOpen(m)}
-              className="relative shrink-0 w-40 h-52 rounded-2xl overflow-hidden snap-start text-start press card-shadow"
+              className="relative shrink-0 w-[11rem] h-[8rem] sm:w-[12rem] sm:h-[8.75rem] rounded-2xl overflow-hidden snap-start text-start press card-shadow"
               style={hasCover ? undefined : { backgroundImage: GRADIENTS[i % GRADIENTS.length] }}
             >
               {hasCover &&

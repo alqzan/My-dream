@@ -74,6 +74,17 @@ describe("mergeDayEntries — بلا فقد", () => {
     expect(m.photoRefs).toEqual(["h1", "h2"]);
     expect(m.audioRefs).toEqual(["s1"]);
   });
+
+  it("يحفظ تحرير الصور لكل مصدر عند دمج يومين من الكتابة", () => {
+    const m = mergeDayEntries([
+      e({ id: "a", time: "08:00", photoRefs: ["h1"], photoEdits: { "photos:h1": { rotation: 90 } } }),
+      e({ id: "b", time: "09:00", photoRefs: ["h2"], photoEdits: { "photos:h2": { scale: 1.4 } } }),
+    ])!;
+    expect(m.photoEdits).toEqual({
+      "photos:h1": { rotation: 90 },
+      "photos:h2": { scale: 1.4 },
+    });
+  });
 });
 
 describe("mergeDayEntries — بلا غموض", () => {

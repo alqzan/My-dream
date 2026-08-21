@@ -58,7 +58,7 @@ function WeekRing({
   const gap = 0.16;
   const seg = 1 - gap;
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
+    <div className="mdr-week-ring relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} className="absolute inset-0">
         {week.map((d, i) => {
           const kept = weekKept.has(d);
@@ -160,7 +160,7 @@ function HabitArc({ done, total }: { done: number; total: number }) {
   const frac = total > 0 ? done / total : 0;
   const tip = arcPoint(178 - frac * 176);
   return (
-    <div className="flex flex-col items-center shrink-0">
+    <div className="mdr-habit-arc flex flex-col items-center shrink-0">
       <div className="relative w-[52px]">
         <svg viewBox="0 0 48 28" className="w-full block overflow-visible">
           <defs>
@@ -201,7 +201,7 @@ function HabitArc({ done, total }: { done: number; total: number }) {
 // prayer) shown as tiles alongside the habits the owner adds. Core tiles open
 // their page; custom tiles toggle done. Replaces the separate streak card,
 // prayer orbit, and habit tracker so the day lives in one nice place.
-export function DailyHabits() {
+export function DailyHabits({ compact = false }: { compact?: boolean } = {}) {
   // منتقٍ لكلّ شريحة بدل الاشتراك بالحالة كلّها. الأفعال مراجعُها ثابتة فلا
   // تُسبّب إعادة رسمٍ بذاتها.
   const habits = useAppStore((s) => s.habits);
@@ -325,11 +325,11 @@ export function DailyHabits() {
   }
 
   return (
-    <div className="mdr-habits relative overflow-hidden rounded-2xl card-shadow">
+    <div className={cn("mdr-habits relative overflow-hidden rounded-2xl card-shadow", compact && "mdr-habits--quiet")}>
       {/* Master streak header */}
       <div
         className={cn(
-          "flex items-center justify-between p-4 pb-3 text-white",
+          "mdr-habits-head flex items-center justify-between p-4 pb-3 text-white",
           masterStreak > 0 || allDone
             ? "bg-gradient-to-br from-[#a85a2c] via-[#c0842b] to-[#dca63f] shine"
             : "bg-gradient-to-br from-[#8a7a62] to-[#b3a48a] dark:from-[#453b2c] dark:to-[#5a5040]"
@@ -348,7 +348,7 @@ export function DailyHabits() {
       </div>
 
       {/* White panel: rituals + habits in one grid */}
-      <div className="bg-white/95 dark:bg-[#241c12]/95 backdrop-blur rounded-t-2xl p-3 space-y-3">
+      <div className="mdr-habits-body bg-white/95 dark:bg-[#241c12]/95 backdrop-blur rounded-t-2xl p-3 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-700">عاداتي اليوم</span>
@@ -450,14 +450,14 @@ export function DailyHabits() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="mdr-habits-grid grid grid-cols-2 gap-2.5">
           {/* Core rituals — tap opens their page */}
           {activeCore.map((c) => (
             <Link
               key={c.href}
               href={c.href}
               className={cn(
-                "relative rounded-2xl border p-3 text-right press transition-all duration-300 block",
+                "mdr-habit-card relative rounded-2xl border p-3 text-right press transition-all duration-300 block",
                 c.done ? "card-shadow" : "bg-white border-gray-200 hover:border-gray-300"
               )}
               style={c.done ? { borderColor: c.color + "66", background: `linear-gradient(135deg, ${c.color}1f, ${c.color}0a)` } : undefined}
@@ -482,7 +482,7 @@ export function DailyHabits() {
             // الزرّ (إتمام الوِرد) والرابط شقيقان، وللرابط هدف لمسٍ 44px.
             <div
               className={cn(
-                "relative rounded-2xl border transition-all duration-300",
+                "mdr-habit-card relative rounded-2xl border transition-all duration-300",
                 wirdDone ? "card-shadow" : "bg-white border-gray-200 hover:border-gray-300"
               )}
               style={wirdDone ? { borderColor: "#1b6b4c66", background: "linear-gradient(135deg, #1b6b4c1f, #1b6b4c0a)" } : undefined}
@@ -533,7 +533,7 @@ export function DailyHabits() {
                   toggleHabitLog(habit.id, todayStr);
                 }}
                 className={cn(
-                  "relative rounded-2xl border p-3 text-right press transition-all duration-300",
+                  "mdr-habit-card relative rounded-2xl border p-3 text-right press transition-all duration-300",
                   done ? "card-shadow" : "bg-white border-gray-200 hover:border-gray-300"
                 )}
                 style={done ? { borderColor: color + "66", background: `linear-gradient(135deg, ${color}1f, ${color}0a)` } : undefined}

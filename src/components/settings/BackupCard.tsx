@@ -37,20 +37,21 @@ async function embedIfRemote(url: string | undefined, cache: Map<string, string>
   }
 }
 
-type ResolvePdfBytes = (hash: string) => Promise<string | null>;
+type ResolveAttachmentBytes = (hash: string) => Promise<string | null>;
 
-// Inline every remote photo/voice-note **and every retrievable PDF** across all
-// entries. PDF bytes normally live behind a content hash (IndexedDB/R2), not in
-// the journal document itself; without this pass an apparently complete backup
-// carried only the filename/hash and could not open the file on a fresh device.
+// Inline every remote photo/voice-note **and every retrievable attachment** across
+// all entries. Attachment bytes normally live behind a content hash
+// (IndexedDB/R2), not in the journal document itself; without this pass an
+// apparently complete backup carried only the filename/hash and could not open
+// the file on a fresh device.
 // Reports progress by entry so a large archive never looks frozen.
 export async function embedAllMedia(
   data: AppData,
   onProgress: (done: number, total: number) => void,
-  resolvePdfBytes?: ResolvePdfBytes
+  resolveAttachmentBytes?: ResolveAttachmentBytes
 ): Promise<{ data: AppData; allEmbedded: boolean; counts: BackupCounts }> {
   const cache = new Map<string, string>();
-  const pdfCache = new Map<string, Promise<string | null>>();
+  const attachmentCache = new Map<string, Promise<string | null>>();
   let allEmbedded = true;
   const check = (v: string | undefined) => {
     if (v && /^https?:\/\//.test(v)) allEmbedded = false;
@@ -69,18 +70,18 @@ export async function embedAllMedia(
     check(audio);
     const attachmentRefs = e.attachmentRefs
       ? await Promise.all(e.attachmentRefs.map(async (attachment) => {
-          if (attachment.kind !== "pdf" || attachment.localData?.startsWith("data:")) return attachment;
-          if (!attachment.hash || !resolvePdfBytes) {
+          if (attachment.localData?.startsWith("data:")) return attachment;
+          if (!attachment.hash || !resolveAttachmentBytes) {
             allEmbedded = false;
             return attachment;
           }
-          let pending = pdfCache.get(attachment.hash);
+          let pending = attachmentCache.get(attachment.hash);
           if (!pending) {
             // A single unavailable/corrupt local media record must not abort the
             // whole backup or leave the export button spinning forever. Keep its
             // reference, mark the file incomplete, and make that explicit later.
-            pending = resolvePdfBytes(attachment.hash).catch(() => null);
-            pdfCache.set(attachment.hash, pending);
+            pending = resolveAttachmentBytes(attachment.hash).catch(() => null);
+            attachmentCache.set(attachment.hash, pending);
           }
           const localData = await pending;
           if (!localData?.startsWith("data:")) {
@@ -104,10 +105,11 @@ export async function embedAllMedia(
   const embeddedData = { ...data, journalEntries };
   const counts = countItems(embeddedData);
   if (counts.pdfFiles < counts.pdfs) allEmbedded = false;
+  if (counts.attachmentFiles < counts.attachments) allEmbedded = false;
   return { data: embeddedData, allEmbedded, counts };
 }
 
-// Backup file format version (3 = PDF bytes + explicit PDF completeness count;
+// Backup file format version (3 = attachment bytes + explicit completeness count;
 // 2 = metadata/counts/checksum; 1/absent = legacy flat AppData). All remain
 // restorable because the payload itself is still the same flat AppData shape.
 const BACKUP_VERSION = 3;
@@ -129,6 +131,8 @@ export interface BackupCounts {
   readingLogs: number;
   photos: number;
   audios: number;
+  attachments: number;
+  attachmentFiles: number;
   pdfs: number;
   pdfFiles: number;
 }
@@ -147,6 +151,8 @@ function hashString(s: string): string {
 function countItems(d: AppData): BackupCounts {
   let photos = 0;
   let audios = 0;
+  let attachments = 0;
+  let attachmentFiles = 0;
   let pdfs = 0;
   let pdfFiles = 0;
   for (const e of d.journalEntries) {
@@ -156,9 +162,10 @@ function countItems(d: AppData): BackupCounts {
     photos += e.photos?.length ?? (e.photo ? 1 : 0);
     audios += e.audios?.length ?? (e.audio ? 1 : 0);
     for (const attachment of e.attachmentRefs ?? []) {
-      if (attachment.kind !== "pdf") continue;
-      pdfs++;
-      if (attachment.localData?.startsWith("data:")) pdfFiles++;
+      attachments++;
+      if (attachment.localData?.startsWith("data:")) attachmentFiles++;
+      if (attachment.kind === "pdf") pdfs++;
+      if (attachment.kind === "pdf" && attachment.localData?.startsWith("data:")) pdfFiles++;
     }
   }
   return {
@@ -168,6 +175,8 @@ function countItems(d: AppData): BackupCounts {
     readingLogs: d.readingLogs.length,
     photos,
     audios,
+    attachments,
+    attachmentFiles,
     pdfs,
     pdfFiles,
   };
@@ -276,8 +285,8 @@ export function BackupCard() {
     setExporting({ done: 0, total: raw.journalEntries.length });
     const space = getSyncSpace();
     const mediaKey = getMediaAuthKey() ?? space;
-    const resolvePdfBytes: ResolvePdfBytes = async (hash) => {
-      // Local first: a device-only PDF must still enter its backup even when
+    const resolveAttachmentBytes: ResolveAttachmentBytes = async (hash) => {
+      // Local first: a device-only attachment must still enter its backup even when
       // sync is disabled. Only fall back to R2 when this device has its key.
       const local = await getLocalInlineMedia(hash);
       if (local) return local;
@@ -287,7 +296,7 @@ export function BackupCard() {
     const { data, allEmbedded, counts } = await embedAllMedia(
       raw,
       (done, total) => setExporting({ done, total }),
-      resolvePdfBytes
+      resolveAttachmentBytes
     );
     // Wrap with a self-describing __meta block (version, date, counts, and a
     // checksum over the data) so a restore can preview and integrity-check it.
@@ -312,10 +321,10 @@ export function BackupCard() {
     a.download = `madar-backup-${today()}${useEnc ? "-مشفّر" : ""}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    const missingPdfs = counts.pdfs - counts.pdfFiles;
-    if (missingPdfs > 0) {
+    const missingAttachments = counts.attachments - counts.attachmentFiles;
+    if (missingAttachments > 0) {
       showToast(
-        `صُدّرت النسخة، لكن ${missingPdfs} من ملفات PDF بقيت مراجع فقط — افتح مدار على جهاز تظهر فيه الملفات ثم أعد التصدير${useEnc ? "، واحفظ كلمة المرور" : ""}`,
+        `صُدّرت النسخة، لكن ${missingAttachments} من المرفقات بقيت مراجع فقط — افتح مدار على جهاز تظهر فيه الملفات ثم أعد التصدير${useEnc ? "، واحفظ كلمة المرور" : ""}`,
         "warning"
       );
     } else if (useEnc) {
@@ -509,11 +518,12 @@ export function BackupCard() {
                 <span>سجلات قراءة: {pendingMeta.counts.readingLogs}</span>
                 <span>صور: {pendingMeta.counts.photos}</span>
                 <span>أصوات: {pendingMeta.counts.audios}</span>
+                <span>مرفقات كاملة: {pendingMeta.counts.attachmentFiles}/{pendingMeta.counts.attachments}</span>
                 <span>PDF كاملة: {pendingMeta.counts.pdfFiles}/{pendingMeta.counts.pdfs}</span>
               </div>
-              {pendingMeta.counts.pdfFiles < pendingMeta.counts.pdfs && (
+              {pendingMeta.counts.attachmentFiles < pendingMeta.counts.attachments && (
                 <p className="text-[11px] text-amber-600 mt-2 leading-relaxed">
-                  ⚠️ بعض ملفات PDF في هذه النسخة مراجع فقط وليست ملفات كاملة. الدمج آمن، لكن لا تعتمد عليها وحدها لنقل تلك الملفات.
+                  ⚠️ بعض المرفقات في هذه النسخة مراجع فقط وليست ملفات كاملة. الدمج آمن، لكن لا تعتمد عليها وحدها لنقل تلك الملفات.
                 </p>
               )}
               {pendingMeta.integrity === "mismatch" && (

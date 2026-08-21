@@ -2068,6 +2068,164 @@ body,
   border-radius: 1.15rem !important;
   background: var(--paper2) !important;
 }
+
+/* العادات في البهو: نسخة خفيفة من نفس ورق التصميم النهائي. تبقى كل
+   النقرات والإدارة والتجميد كما هي، لكن كتلة اللون والحلقات الكبيرة لا تنافس
+   نسبة السنة والعدّ التنازلي. */
+.mdr-habits--quiet {
+  border-color: var(--gline) !important;
+  background: var(--paper2) !important;
+}
+.mdr-habits--quiet .mdr-habits-head {
+  min-height: 4.1rem;
+  padding: 0.75rem 0.9rem !important;
+  background: var(--paper2) !important;
+  background-image: none !important;
+  color: var(--ink) !important;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-habits--quiet .mdr-habits-head .text-4xl {
+  font-size: 1.65rem;
+  line-height: 1;
+}
+.mdr-habits--quiet .mdr-habits-head .mdr-habit-arc {
+  transform: scale(0.82);
+  transform-origin: center;
+}
+.mdr-habits--quiet .mdr-habits-body {
+  padding: 0.75rem !important;
+  background: var(--paper) !important;
+}
+.mdr-habits--quiet .mdr-habits-grid {
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+.mdr-habits--quiet .mdr-habit-card {
+  min-height: 3.5rem;
+  padding: 0.55rem 0.65rem !important;
+  border-color: var(--line) !important;
+  background: var(--paper2) !important;
+  box-shadow: none !important;
+}
+.mdr-habits--quiet .mdr-habit-card[style] {
+  border-color: var(--line) !important;
+  background: var(--paper2) !important;
+}
+.mdr-habits--quiet .mdr-week-ring {
+  transform: scale(0.82);
+  transform-origin: right center;
+  margin-inline-end: -0.35rem;
+}
+.mdr-habits--quiet .mdr-habit-card .text-gray-700,
+.mdr-habits--quiet .mdr-habit-card .text-gray-400 { color: var(--ink52) !important; }
+.mdr-habits--quiet .mdr-habits-body > .h-1\.5 { background: var(--line) !important; }
+.mdr-habits--quiet .mdr-habits-body > .h-1\.5 > div {
+  background: var(--gold) !important;
+}
+.mdr-habits--quiet .mdr-habits-body .bg-gradient-to-l,
+.mdr-habits--quiet .mdr-habits-body .bg-gradient-to-br {
+  background-image: none !important;
+}
+.mdr-habits--quiet .mdr-habits-body > div:last-child {
+  background: var(--goldw) !important;
+  border-color: var(--gline) !important;
+  color: var(--gold) !important;
+}
+
+/* محرر المذكرة: بلاطات الصور والمرفقات تتبع الرفّ الورقي، مع مساحة واضحة
+   لرفع عدة وسائط وتحرير كل صورة من دون صبغ الواجهة بالبنفسجي. */
+.mdr-journal-composer .mdr-journal-photo-tile {
+  overflow: hidden;
+  min-height: 6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.95rem;
+  background: var(--paper2);
+}
+.mdr-journal-composer .mdr-journal-photo-tile > img,
+.mdr-journal-composer .mdr-journal-photo-tile > div {
+  border-radius: 0.85rem;
+}
+.mdr-journal-composer .mdr-journal-attachments {
+  border-color: var(--line);
+  background: var(--paper);
+}
+.mdr-journal-composer .mdr-journal-attachments label,
+.mdr-journal-composer .mdr-journal-attachments > div > label {
+  border-color: var(--line) !important;
+  background: var(--paper2);
+}
+.mdr-journal-composer .mdr-journal-attachments label:hover,
+.mdr-journal-composer .mdr-journal-attachments > div > label:hover {
+  border-color: var(--gline) !important;
+  background: var(--goldw);
+}
+.mdr-journal-composer .mdr-journal-attachments .bg-white {
+  background: var(--paper2) !important;
+  border-color: var(--line) !important;
+}
+.mdr-journal-composer .mdr-journal-editor textarea {
+  color: var(--ink);
+  caret-color: var(--gold);
+}
+
+/* سطح المال: سطر هادئ للرصيد وأزرار قليلة واضحة، مع إبقاء الأقسام والبيانات
+   التفصيلية خلفها كما هي. */
+.mdr-finance-page .mdr-finance-glance,
+.mdr-finance-page .mdr-finance-salary {
+  gap: 0.65rem;
+}
+.mdr-finance-page .mdr-finance-balance,
+.mdr-finance-page .mdr-finance-glance-tile {
+  box-shadow: none !important;
+}
+.mdr-finance-page .mdr-finance-insight-link > div,
+.mdr-finance-page .mdr-finance-now-card {
+  border-color: var(--line) !important;
+  background: var(--paper2) !important;
+  box-shadow: none !important;
+}
+.mdr-finance-plan-index {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.1rem 0 0.35rem;
+  scrollbar-width: none;
+}
+.mdr-finance-plan-index::-webkit-scrollbar { display: none; }
+.mdr-finance-plan-index button {
+  flex: none;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper2);
+  color: var(--ink52);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mdr-finance-plan-index button:hover,
+.mdr-finance-plan-index button:focus-visible {
+  border-color: var(--gline);
+  background: var(--goldw);
+  color: var(--gold);
+  outline: none;
+}
+
+/* القرآن: اللون الأخضر يبقى علامة الحفظ والدعاء فقط، أما المساحة فتبقى
+   ورقية مثل شاشة «الحفظ» في التصميم المرجعي. */
+.mdr-quran-page .mdr-quran-banner,
+.mdr-quran-page .mdr-quran-kpis,
+.mdr-quran-page .hifz-step-card,
+.mdr-quran-page .hifz-drill-card,
+.mdr-quran-page .hifz-result-screen {
+  box-shadow: none !important;
+}
+.mdr-quran-page .mdr-quran-banner h1,
+.mdr-quran-page .mdr-quran-banner strong {
+  color: var(--green) !important;
+}
 .mdr-finance-page .mdr-finance-glance-tile .text-finance {
   color: var(--gold) !important;
 }
