@@ -374,6 +374,11 @@ interface CloudMediaMeta {
   photoManifest?: string[];
   audioManifest?: string[];
   mediaManifestVersion?: number;
+  // `inline` is a compatibility escape hatch for an existing Firebase
+  // project whose production rules predate the sharded `mediaManifest`
+  // subcollection. It is written only after that path explicitly returns
+  // permission-denied; normal/current projects remain on `sharded`.
+  mediaManifestMode?: "inline" | "sharded";
   mediaProvider?: string;
   // Monotonic write counter on the main doc, bumped in saveUserData's
   // transaction. Absent on legacy docs (treated as 0). The provider reads it to
@@ -409,6 +414,7 @@ let mediaManifestNeedsAudioBackfill = false;
 // sync space/version; resetting this cache for every read made a harmless text
 // or prayer edit scan every media shard again.
 let mediaManifestContext = "";
+let mediaManifestMode: "inline" | "sharded" = "sharded";
 
 function mediaManifestShardId(kind: MediaKind, hash: string): string {
   const prefix = hash.slice(0, 2).toLowerCase();
@@ -468,19 +474,32 @@ function resetMediaManifestState(): void {
   mediaManifestContext = "";
 }
 
+function isPermissionDeniedError(err: unknown): boolean {
+  return !!(
+    err &&
+    typeof err === "object" &&
+    "code" in err &&
+    String((err as { code?: unknown }).code ?? "") === "permission-denied"
+  );
+}
+
 function seedKnownMedia(uid: string, main: CloudMediaMeta): void {
   // A pre-R2 manifest only claimed Firebase Storage objects. Never treat those
   // hashes as present in R2 or the migration could report a false success.
   const isR2 = main.mediaProvider === MEDIA_PROVIDER;
   const version = Number(main.mediaManifestVersion ?? 1);
+  const requestedMode = main.mediaManifestMode === "inline" ? "inline" : "sharded";
   const legacyPhotos = new Set(isR2 ? (main.photoManifest ?? []) : []);
   const legacyAudios = new Set(isR2 ? (main.audioManifest ?? []) : []);
 
   // v2 writes deliberately omit the legacy arrays. For that normal case the
   // provider/version/space tuple is a stable cache identity. A legacy document
   // is always reseeded until its first successful save migrates it to v2.
-  const context = `${uid}:${isR2 ? MEDIA_PROVIDER : main.mediaProvider ?? ""}:${version}`;
-  if (version === MEDIA_MANIFEST_VERSION && isR2 && mediaManifestContext === context) {
+  const context = `${uid}:${isR2 ? MEDIA_PROVIDER : main.mediaProvider ?? ""}:${version}:${requestedMode}`;
+  if (
+    ((version === MEDIA_MANIFEST_VERSION && isR2) || requestedMode === "inline") &&
+    mediaManifestContext === context
+  ) {
     return;
   }
 
@@ -488,6 +507,7 @@ function seedKnownMedia(uid: string, main: CloudMediaMeta): void {
   knownCloudAudioHashes = new Set(legacyAudios);
   resetMediaManifestState();
   mediaManifestContext = context;
+  mediaManifestMode = requestedMode;
   pendingLegacyPhotoManifest = legacyPhotos;
   pendingLegacyAudioManifest = legacyAudios;
   mediaManifestNeedsPhotoBackfill = isR2 && version !== MEDIA_MANIFEST_VERSION;
@@ -956,6 +976,7 @@ export async function readCloudMain(uid: string): Promise<CloudRead | null> {
   if (!snap.exists()) {
     knownCloudHashes = new Set();
     knownCloudAudioHashes = new Set();
+    mediaManifestMode = "sharded";
     resetMediaManifestState();
     shardSignatures = new Map();
     return null;
@@ -1437,11 +1458,24 @@ export async function saveUserData(
   // snapshot before deciding which local data URLs need an upload. On a first
   // save after an older session this may touch many prefix shards, but it still
   // avoids downloading unrelated archives on ordinary text edits.
-  if (!forceMediaReupload) {
-    await Promise.all([
-      loadMediaManifestShardsForRefs(uid, "photos", photoRefs),
-      loadMediaManifestShardsForRefs(uid, "audios", audioRefs),
-    ]);
+  //
+  // Some existing Firebase projects still have the pre-sharding rules live in
+  // production. A denied read of the new subcollection is not a reason to
+  // lose the whole save: switch this space to the bounded legacy manifest in
+  // the main document, which those rules already allow. The mode marker below
+  // makes that fallback persistent so every later save avoids the denied path.
+  let useInlineManifest = mediaManifestMode === "inline";
+  if (!forceMediaReupload && !useInlineManifest) {
+    try {
+      await Promise.all([
+        loadMediaManifestShardsForRefs(uid, "photos", photoRefs),
+        loadMediaManifestShardsForRefs(uid, "audios", audioRefs),
+      ]);
+    } catch (err) {
+      if (!isPermissionDeniedError(err)) throw err;
+      useInlineManifest = true;
+      mediaManifestMode = "inline";
+    }
     for (const hash of [...newPhotos.keys()]) {
       if (knownCloudHashes.has(hash)) newPhotos.delete(hash);
     }
@@ -1480,8 +1514,20 @@ export async function saveUserData(
       : []),
     ...audioUpload.newlyUploaded,
   ]);
-  await writeMediaManifestShards(uid, "photos", photoManifestAdds);
-  await writeMediaManifestShards(uid, "audios", audioManifestAdds);
+  if (!useInlineManifest) {
+    try {
+      await writeMediaManifestShards(uid, "photos", photoManifestAdds);
+      await writeMediaManifestShards(uid, "audios", audioManifestAdds);
+    } catch (err) {
+      if (!isPermissionDeniedError(err)) throw err;
+      // A project may allow reads on this collection but still have the old
+      // write rules. The same inline fallback is safe in that case; any shard
+      // transactions that completed remain additive and are simply ignored by
+      // this space after the mode marker is written.
+      useInlineManifest = true;
+      mediaManifestMode = "inline";
+    }
+  }
   mediaManifestNeedsPhotoBackfill = false;
   mediaManifestNeedsAudioBackfill = false;
   pendingLegacyPhotoManifest = new Set();
@@ -1492,6 +1538,17 @@ export async function saveUserData(
   // find the sharded manifest.
   await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
   const honestMain = { ...main };
+  if (useInlineManifest) {
+    // The main document is already bounded by Firestore's 1MiB limit. Keep the
+    // fallback additive and truthful by carrying every reference currently in
+    // the journal, plus hashes known from a previous inline manifest. This is
+    // safe for the existing archive (well below the limit); if it ever grows
+    // too large Firestore will reject it rather than silently dropping data.
+    honestMain.mediaManifestMode = "inline";
+    honestMain.mediaManifestVersion = 1;
+    honestMain.photoManifest = [...new Set([...knownCloudHashes, ...photoRefs])].sort();
+    honestMain.audioManifest = [...new Set([...knownCloudAudioHashes, ...audioRefs])].sort();
+  }
   warnIfDocSizeNearLimit(honestMain);
 
   // 3) Write the main doc through a transaction that bumps a monotonic
