@@ -335,10 +335,11 @@ describe("saveUserData — a tombstoned photo is never pushed back", () => {
 
     const mainCall = setDocMock.mock.calls.find(
       (c) => Array.isArray((c[0] as { __doc?: unknown[] })?.__doc) &&
-             !((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal")
+             !((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal") &&
+             !((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("mediaManifest")
     );
-    const mainDoc = mainCall![1] as { photoManifest: string[] };
-    expect(mainDoc.photoManifest).not.toContain(HASH_B);
+    expect(mainCall).toBeDefined();
+    expect((mainCall![1] as { photoManifest?: string[] }).photoManifest).toBeUndefined();
   });
 });
 
@@ -392,14 +393,14 @@ describe("saveUserData — a surviving ref is never orphaned", () => {
     const savedEntry = written.find((x) => x.id === "e1")!;
     expect(savedEntry.photoRefs).toEqual([HASH_A]);
 
-    // And the main-doc manifest carries the hash, so inventory won't call it broken.
-    const mainCall = setDocMock.mock.calls.find(
+    // And the sharded manifest carries the hash, so inventory won't call it broken.
+    const manifestCall = setDocMock.mock.calls.find(
       (c) => Array.isArray((c[0] as { __doc?: unknown[] })?.__doc) &&
-             !((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("journal")
+             ((c[0] as { __doc: unknown[] }).__doc as unknown[]).includes("mediaManifest")
     );
-    expect(mainCall).toBeDefined();
-    const mainDoc = mainCall![1] as { photoManifest: string[] };
-    expect(mainDoc.photoManifest).toContain(HASH_A);
+    expect(manifestCall).toBeDefined();
+    const manifestDoc = manifestCall![1] as { hashes: string[] };
+    expect(manifestDoc.hashes).toContain(HASH_A);
   });
 });
 

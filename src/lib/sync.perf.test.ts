@@ -103,6 +103,12 @@ const journalWrites = () =>
     return parts.includes("journal");
   });
 
+const mediaManifestWrites = () =>
+  setDocMock.mock.calls.filter((c) => {
+    const parts = (c[0] as { __doc?: unknown[] })?.__doc ?? [];
+    return parts.includes("mediaManifest");
+  });
+
 const putUploads = () =>
   (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
     (c) => typeof c[0] === "string" && (c[0] as string).includes("/v1/media/put")
@@ -291,7 +297,12 @@ describe("saveUserData — الوسيط الذي في R2 لا يُرفع ثان�
 
   it("هاشٌ في المانيفست → صفرُ عمليات رفع، والمرجع باقٍ", async () => {
     const h = await photoHash(dataUrl);
-    getDocMock.mockResolvedValue(mainDoc({ photoManifest: [h], audioManifest: [] }));
+    const main = mainDoc({ photoManifest: [h], audioManifest: [] });
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) =>
+      (ref.__doc ?? []).includes("mediaManifest")
+        ? { exists: () => false }
+        : main
+    );
     await sync.readCloudMain("space"); // يزرع knownCloudHashes من المانيفست
 
     const entry = { id: "e1", date: "2026-01-10", content: "a", photos: [dataUrl] };
@@ -306,12 +317,48 @@ describe("saveUserData — الوسيط الذي في R2 لا يُرفع ثان�
   });
 
   it("هاشٌ ليس في المانيفست → يُرفع مرّةً واحدة", async () => {
-    getDocMock.mockResolvedValue(mainDoc({ photoManifest: [], audioManifest: [] }));
+    const main = mainDoc({ photoManifest: [], audioManifest: [] });
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) =>
+      (ref.__doc ?? []).includes("mediaManifest")
+        ? { exists: () => false }
+        : main
+    );
     await sync.readCloudMain("space");
 
     const entry = { id: "e1", date: "2026-01-10", content: "a", photos: [dataUrl] };
     await sync.saveUserData("space", appData([entry as unknown as JournalEntry]));
 
     expect(putUploads()).toHaveLength(1);
+  });
+
+  it("ينقل manifest قديمًا كبيرًا إلى 256 shard ولا يعيده إلى المستند الرئيسي", async () => {
+    const hashes = Array.from({ length: 5000 }, (_, i) => {
+      const prefix = (i % 256).toString(16).padStart(2, "0");
+      return `${prefix}${i.toString(16).padStart(30, "0")}`;
+    });
+    const main = mainDoc({ photoManifest: hashes, audioManifest: [] });
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) =>
+      (ref.__doc ?? []).includes("mediaManifest")
+        ? { exists: () => false }
+        : main
+    );
+
+    await sync.readCloudMain("space");
+    await sync.saveUserData("space", appData([]));
+
+    expect(mediaManifestWrites()).toHaveLength(256);
+    for (const call of mediaManifestWrites()) {
+      const payload = call[1] as { kind: string; hashes: string[]; writerVersion: number };
+      expect(payload.kind).toBe("photos");
+      expect(payload.writerVersion).toBe(1);
+      expect(payload.hashes.length).toBeGreaterThan(0);
+    }
+    const mainWrite = setDocMock.mock.calls.find((c) => {
+      const parts = (c[0] as { __doc?: unknown[] })?.__doc ?? [];
+      return parts.length === 3;
+    });
+    const payload = mainWrite![1] as { photoManifest?: string[]; mediaManifestVersion: number };
+    expect(payload.photoManifest).toBeUndefined();
+    expect(payload.mediaManifestVersion).toBe(2);
   });
 });

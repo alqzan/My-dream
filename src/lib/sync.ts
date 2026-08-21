@@ -262,6 +262,9 @@ export function subscribeInbox(cb: (items: InboxItem[]) => void): () => void {
 // Saves only add confirmed objects; automatic deletion is intentionally absent.
 let knownCloudHashes = new Set<string>();
 let knownCloudAudioHashes = new Set<string>();
+// `reuploadAllMedia` intentionally bypasses the manifest cache so it can
+// perform its explicit repair pass. Normal saves keep the lazy shard reads.
+let forceMediaReupload = false;
 
 // Presigned URLs expire, so cache them only while they still have a safe amount
 // of life left. Legacy Firebase download URLs use Infinity during migration.
@@ -329,8 +332,12 @@ interface CloudEntry extends Omit<JournalEntry, "photo" | "photos" | "audio" | "
 
 const MEDIA_PROVIDER = "r2-v1";
 interface CloudMediaMeta {
+  // Legacy v1 manifests lived on the main document. They remain readable so
+  // an older account can be migrated without losing a single reference, but
+  // current writes use the sharded manifest below instead.
   photoManifest?: string[];
   audioManifest?: string[];
+  mediaManifestVersion?: number;
   mediaProvider?: string;
   // Monotonic write counter on the main doc, bumped in saveUserData's
   // transaction. Absent on legacy docs (treated as 0). The provider reads it to
@@ -338,12 +345,172 @@ interface CloudMediaMeta {
   revision?: number;
 }
 
+// Firestore caps one document at 1MiB. Keeping every media hash in the main
+// document worked for small libraries but eventually made the *next* text
+// edit fail once enough photos had been added. The v2 manifest spreads hashes
+// over 256 deterministic documents per kind. With SHA-256-derived 32-character
+// hashes this leaves a very large safety margin even for hundreds of thousands
+// of photos, while still allowing a save to read only the shards it needs.
+const MEDIA_MANIFEST_SUB = "mediaManifest";
+const MEDIA_MANIFEST_VERSION = 2;
+const MEDIA_MANIFEST_WRITER_VERSION = 1;
+const MEDIA_MANIFEST_READ_CONCURRENCY = 4;
+const MEDIA_MANIFEST_WRITE_CONCURRENCY = 4;
+
+interface CloudMediaManifestShard {
+  kind: MediaKind;
+  hashes: string[];
+  writerVersion: number;
+}
+
+let loadedMediaManifestShards = new Set<string>();
+let pendingLegacyPhotoManifest = new Set<string>();
+let pendingLegacyAudioManifest = new Set<string>();
+let mediaManifestNeedsPhotoBackfill = false;
+let mediaManifestNeedsAudioBackfill = false;
+
+function mediaManifestShardId(kind: MediaKind, hash: string): string {
+  const prefix = hash.slice(0, 2).toLowerCase();
+  return `${kind}-${/^[0-9a-f]{2}$/.test(prefix) ? prefix : "other"}`;
+}
+
+function mediaManifestShardKey(kind: MediaKind, shardId: string): string {
+  return `${kind}:${shardId}`;
+}
+
+function normalizedManifestHashes(values: unknown): string[] {
+  if (!Array.isArray(values) || values.some((h) => typeof h !== "string" || !h)) {
+    throw new Error("invalid media manifest shard");
+  }
+  return [...new Set(values)].sort();
+}
+
+function parseMediaManifestShard(
+  data: Record<string, unknown>,
+  expectedKind: MediaKind
+): string[] {
+  if (
+    data.kind !== expectedKind ||
+    data.writerVersion !== MEDIA_MANIFEST_WRITER_VERSION
+  ) {
+    throw new Error("invalid media manifest shard");
+  }
+  return normalizedManifestHashes(data.hashes);
+}
+
+function groupMediaManifestHashes(
+  kind: MediaKind,
+  hashes: Iterable<string>
+): Map<string, string[]> {
+  const grouped = new Map<string, Set<string>>();
+  for (const hash of hashes) {
+    if (!hash) continue;
+    const shardId = mediaManifestShardId(kind, hash);
+    let bucket = grouped.get(shardId);
+    if (!bucket) {
+      bucket = new Set<string>();
+      grouped.set(shardId, bucket);
+    }
+    bucket.add(hash);
+  }
+  return new Map(
+    [...grouped].map(([shardId, bucket]) => [shardId, [...bucket].sort()])
+  );
+}
+
+function resetMediaManifestState(): void {
+  loadedMediaManifestShards = new Set();
+  pendingLegacyPhotoManifest = new Set();
+  pendingLegacyAudioManifest = new Set();
+  mediaManifestNeedsPhotoBackfill = false;
+  mediaManifestNeedsAudioBackfill = false;
+}
+
 function seedKnownMedia(main: CloudMediaMeta): void {
   // A pre-R2 manifest only claimed Firebase Storage objects. Never treat those
   // hashes as present in R2 or the migration could report a false success.
   const isR2 = main.mediaProvider === MEDIA_PROVIDER;
-  knownCloudHashes = new Set(isR2 ? (main.photoManifest ?? []) : []);
-  knownCloudAudioHashes = new Set(isR2 ? (main.audioManifest ?? []) : []);
+  const legacyPhotos = new Set(isR2 ? (main.photoManifest ?? []) : []);
+  const legacyAudios = new Set(isR2 ? (main.audioManifest ?? []) : []);
+  knownCloudHashes = new Set(legacyPhotos);
+  knownCloudAudioHashes = new Set(legacyAudios);
+  resetMediaManifestState();
+  pendingLegacyPhotoManifest = legacyPhotos;
+  pendingLegacyAudioManifest = legacyAudios;
+  const version = Number(main.mediaManifestVersion ?? 1);
+  mediaManifestNeedsPhotoBackfill = isR2 && version !== MEDIA_MANIFEST_VERSION;
+  mediaManifestNeedsAudioBackfill = isR2 && version !== MEDIA_MANIFEST_VERSION;
+}
+
+// Read only the deterministic shards that contain hashes in the current
+// snapshot. A device with a small edit therefore does not download the whole
+// archive; a first migration naturally touches the shards represented by its
+// local references. A permission or schema error is propagated deliberately so
+// the caller never proceeds while its knowledge of cloud media is incomplete.
+async function loadMediaManifestShardsForRefs(
+  uid: string,
+  kind: MediaKind,
+  hashes: Iterable<string>
+): Promise<void> {
+  if (!db) return;
+  const database = db;
+  const pending = [...new Set([...hashes].filter(Boolean))]
+    .map((hash) => mediaManifestShardId(kind, hash))
+    .filter((shardId) => !loadedMediaManifestShards.has(mediaManifestShardKey(kind, shardId)));
+  const shardIds = [...new Set(pending)];
+  await mapWithConcurrency(shardIds, MEDIA_MANIFEST_READ_CONCURRENCY, async (shardId) => {
+    const snap = await getDoc(doc(database, COLLECTION, uid, MEDIA_MANIFEST_SUB, shardId));
+    if (snap.exists()) {
+      const hashesInShard = parseMediaManifestShard(
+        snap.data() as Record<string, unknown>,
+        kind
+      );
+      for (const hash of hashesInShard) {
+        if (kind === "photos") knownCloudHashes.add(hash);
+        else knownCloudAudioHashes.add(hash);
+      }
+    }
+    loadedMediaManifestShards.add(mediaManifestShardKey(kind, shardId));
+  });
+}
+
+// Merge additions into each manifest shard transactionally. No deletion path
+// exists: a stale device can only union hashes, never erase a file another
+// device still references. If a transaction fails, R2 uploads remain intact
+// and the next save retries the manifest write safely.
+async function writeMediaManifestShards(
+  uid: string,
+  kind: MediaKind,
+  additions: Iterable<string>
+): Promise<void> {
+  if (!db) return;
+  const database = db;
+  const grouped = groupMediaManifestHashes(kind, additions);
+  await mapWithConcurrency([...grouped], MEDIA_MANIFEST_WRITE_CONCURRENCY, async ([shardId, hashes]) => {
+    const merged = await runTransaction(database, async (txn) => {
+      const ref = doc(database, COLLECTION, uid, MEDIA_MANIFEST_SUB, shardId);
+      const snap = await txn.get(ref);
+      let remote: string[] = [];
+      if (snap.exists()) {
+        remote = parseMediaManifestShard(snap.data() as Record<string, unknown>, kind);
+      }
+      const mergedHashes = [...new Set([...remote, ...hashes])].sort();
+      if (!snap.exists() || JSON.stringify(remote) !== JSON.stringify(mergedHashes)) {
+        const payload: CloudMediaManifestShard = {
+          kind,
+          hashes: mergedHashes,
+          writerVersion: MEDIA_MANIFEST_WRITER_VERSION,
+        };
+        txn.set(ref, payload, { merge: false });
+      }
+      return mergedHashes;
+    });
+    for (const hash of merged) {
+      if (kind === "photos") knownCloudHashes.add(hash);
+      else knownCloudAudioHashes.add(hash);
+    }
+    loadedMediaManifestShards.add(mediaManifestShardKey(kind, shardId));
+  });
 }
 
 // ===================== Journal sharding =====================
@@ -591,8 +758,7 @@ async function prepareForCloud(
         // الشرط `!known.has(h)` هو بيت القصيد: بعد الترطيب تصير كلّ صورةٍ في
         // المتجر `data:`، فبلا هذا الحارس كان كلُّ حفظ يعيد رفع **كامل** وسائط
         // الجهاز إلى R2 — ميغابايتاتٌ على كل تعديل نصّي، وهي السبب الأول لبطء
-        // المزامنة. المانيفست (`photoManifest`) هو ما يثبت وجودها، ويُقرأ من
-        // المستند الرئيس في كلّ جلسة؛ ولإجبار رفعٍ كامل ثمّة `reuploadAllMedia`
+        // المزامنة. المانيفست المجزّأ هو ما يثبت وجودها؛ ولإجبار رفعٍ كامل ثمّة `reuploadAllMedia`
         // (تُفرّغ المجموعتين أولاً) للإصلاح عند شكٍّ في ضياع ملف.
         newMap.set(h, it);
         void localMediaPut(h, it); // keep our own bytes locally → never re-fetch
@@ -665,14 +831,23 @@ async function prepareForCloud(
       return out;
     })
   );
-  // Strip journalEntries out of the main doc — they go to shards instead.
-  const { journalEntries: _omitJournal, ...dataNoJournal } = data;
+  // Strip journalEntries and legacy inline manifests out of the main doc. The
+  // journal and media manifest each have their own bounded shard collection;
+  // omitting the old arrays here is what removes the 1MiB growth trap while
+  // still allowing seedKnownMedia() to migrate an older document on its next
+  // save.
+  const {
+    journalEntries: _omitJournal,
+    photoManifest: _omitPhotoManifest,
+    audioManifest: _omitAudioManifest,
+    mediaManifestVersion: _omitMediaManifestVersion,
+    ...dataNoJournal
+  } = data as AppData & CloudMediaMeta;
   return {
     main: {
       ...dataNoJournal,
-      photoManifest: [...photoRefs],
-      audioManifest: [...audioRefs],
       mediaProvider: MEDIA_PROVIDER,
+      mediaManifestVersion: MEDIA_MANIFEST_VERSION,
     },
     cloudJournal: journalEntries,
     newPhotos,
@@ -684,8 +859,9 @@ async function prepareForCloud(
 
 // ===================== القراءة على مرحلتين (المستند الرئيس ثمّ الshards) ====
 // كلّ ما تحتاجه أسئلةُ «هل تحرّكت السحابة؟» (`lastUpdated` و`revision`
-// و`photoManifest`) يعيش في **المستند الرئيس وحده**. أمّا الshards فهي كلّ
-// المذكرات — ميغابايتات عند مكتبة Day One كبيرة.
+// و`mediaManifestVersion`) يعيش في **المستند الرئيس وحده**. أمّا المذكرات
+// وهاشات الوسائط فتعيش في مجموعتي shards مستقلتين، فلا ينمو السجل الرئيسي مع
+// عدد الصور.
 //
 // كان كلُّ حفظ وكلُّ إشعارٍ من المستمع الحيّ ينزّل **المجموعة كاملة** قبل أن
 // يسأل السؤال أصلاً: تعديلٌ واحد على مصروف = تنزيلُ كامل المذكرات مرّتين أو
@@ -719,15 +895,16 @@ function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
   };
 }
 
-// The main doc alone — one document read, no journal shards. Seeds the
-// known-hash cache from the manifest so a save that follows doesn't re-upload
-// media that's already in R2.
+// The main doc alone — one document read, no journal/media shards. Seeds the
+// legacy v1 hash cache; a following save lazily reads only the v2 shards that
+// its current references can touch, so media already in R2 is not re-uploaded.
 export async function readCloudMain(uid: string): Promise<CloudRead | null> {
   if (!db) return null;
   const snap = await getDoc(doc(db, COLLECTION, uid));
   if (!snap.exists()) {
     knownCloudHashes = new Set();
     knownCloudAudioHashes = new Set();
+    resetMediaManifestState();
     shardSignatures = new Map();
     return null;
   }
@@ -1198,6 +1375,23 @@ export async function saveUserData(
   const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } =
     await prepareForCloud(data, knownCloudHashes, knownCloudAudioHashes);
 
+  // A v2 manifest is intentionally lazy: load the shards touched by this
+  // snapshot before deciding which local data URLs need an upload. On a first
+  // save after an older session this may touch many prefix shards, but it still
+  // avoids downloading unrelated archives on ordinary text edits.
+  if (!forceMediaReupload) {
+    await Promise.all([
+      loadMediaManifestShardsForRefs(uid, "photos", photoRefs),
+      loadMediaManifestShardsForRefs(uid, "audios", audioRefs),
+    ]);
+    for (const hash of [...newPhotos.keys()]) {
+      if (knownCloudHashes.has(hash)) newPhotos.delete(hash);
+    }
+    for (const hash of [...newAudios.keys()]) {
+      if (knownCloudAudioHashes.has(hash)) newAudios.delete(hash);
+    }
+  }
+
   // 1) Upload new media to R2 first. Text-only edits have none, so this is
   //    a no-op and stays fast.
   const photoUpload = await syncMediaToR2(uid, "photos", newPhotos, knownCloudHashes, mediaKey);
@@ -1206,16 +1400,36 @@ export async function saveUserData(
   knownCloudAudioHashes = audioUpload.uploaded;
   const uploadError = photoUpload.error ?? audioUpload.error;
 
-  // 2) Write the journal shards (only the ones that changed) — this is what
-  //    keeps the journal off the 1MB single-doc cap. Then write the main doc
-  //    (no journal inline) with a manifest of only what actually reached the
-  //    cloud, so any media that didn't upload is retried on the next save.
+  // 2) Write the media manifest shards and journal shards. The manifest is
+  //    additive and includes legacy v1 hashes plus hashes confirmed uploaded
+  //    (or already present in a loaded v2 shard). A failed upload is absent, so
+  //    the next save retries it instead of claiming it is safe.
+  const photoManifestAdds = new Set<string>([
+    ...pendingLegacyPhotoManifest,
+    ...(mediaManifestNeedsPhotoBackfill
+      ? [...photoRefs].filter((hash) => knownCloudHashes.has(hash))
+      : []),
+    ...[...photoRefs].filter((hash) => photoUpload.uploaded.has(hash)),
+  ]);
+  const audioManifestAdds = new Set<string>([
+    ...pendingLegacyAudioManifest,
+    ...(mediaManifestNeedsAudioBackfill
+      ? [...audioRefs].filter((hash) => knownCloudAudioHashes.has(hash))
+      : []),
+    ...[...audioRefs].filter((hash) => audioUpload.uploaded.has(hash)),
+  ]);
+  await writeMediaManifestShards(uid, "photos", photoManifestAdds);
+  await writeMediaManifestShards(uid, "audios", audioManifestAdds);
+  mediaManifestNeedsPhotoBackfill = false;
+  mediaManifestNeedsAudioBackfill = false;
+  pendingLegacyPhotoManifest = new Set();
+  pendingLegacyAudioManifest = new Set();
+
+  // Keep the journal off the 1MB single-doc cap. The main document carries no
+  // growing media arrays; the v2 version marker tells a future client where to
+  // find the sharded manifest.
   await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
-  const honestMain = {
-    ...main,
-    photoManifest: [...knownCloudHashes],
-    audioManifest: [...knownCloudAudioHashes],
-  };
+  const honestMain = { ...main };
   warnIfDocSizeNearLimit(honestMain);
 
   // 3) Write the main doc through a transaction that bumps a monotonic
@@ -1285,7 +1499,13 @@ export async function reuploadAllMedia(
 ): Promise<MediaInventory> {
   knownCloudHashes = new Set();
   knownCloudAudioHashes = new Set();
-  const result = await saveUserData(uid, data, undefined, mediaKey);
+  forceMediaReupload = true;
+  let result: SaveResult;
+  try {
+    result = await saveUserData(uid, data, undefined, mediaKey);
+  } finally {
+    forceMediaReupload = false;
+  }
   const inventory = await inventoryMedia(uid, data, mediaKey);
   // Carry the concrete upload failure reason (if any) to the UI, so a failed
   // re-upload names its cause instead of a generic "check your connection".
