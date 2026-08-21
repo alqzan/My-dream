@@ -147,6 +147,37 @@ describe("firestore.rules — journal shards (userData/{space}/journal/{shardId}
   });
 });
 
+describe("firestore.rules — media manifest shards (userData/{space}/mediaManifest/{shardId})", () => {
+  const PHOTO_HASH = "0123456789abcdef0123456789abcdef";
+
+  it("allows the matching space to create, read, update and list a shard", async () => {
+    const ref = clientFirestore()
+      .collection("userData").doc(REAL_SPACE).collection("mediaManifest").doc("photos-01");
+    const shard = { kind: "photos", hashes: [PHOTO_HASH], writerVersion: 1 };
+    await assertSucceeds(ref.set(shard));
+    await assertSucceeds(ref.get());
+    await assertSucceeds(ref.update({ hashes: [PHOTO_HASH, "abcdefabcdefabcdefabcdefabcdefab"] }));
+    await assertSucceeds(
+      clientFirestore().collection("userData").doc(REAL_SPACE).collection("mediaManifest").get()
+    );
+  });
+
+  it("rejects a different space, malformed shapes, and deletion", async () => {
+    const good = { kind: "photos", hashes: [PHOTO_HASH], writerVersion: 1 };
+    const own = clientFirestore()
+      .collection("userData").doc(REAL_SPACE).collection("mediaManifest").doc("photos-01");
+    await assertFails(
+      clientFirestore().collection("userData").doc(OTHER_SPACE)
+        .collection("mediaManifest").doc("photos-01").set(good)
+    );
+    await assertFails(own.set({ kind: "photos", hashes: [PHOTO_HASH] }));
+    await assertFails(own.set({ kind: "photos", hashes: [PHOTO_HASH], writerVersion: 2 }));
+    await assertFails(own.set({ ...good, extra: true }));
+    await assertFails(own.set({ ...good, kind: "unknown" }));
+    await assertFails(own.delete());
+  });
+});
+
 describe("firestore.rules — bank-SMS inbox (userData/{space}/inbox/{itemId})", () => {
   it("accepts a minimal valid item (text only)", async () => {
     await assertSucceeds(
