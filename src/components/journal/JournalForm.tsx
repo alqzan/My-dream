@@ -338,7 +338,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     [content, date]
   );
 
-  const MAX_PHOTOS = 12;
+  const MAX_PHOTOS = 30;
   const MAX_ATTACHMENTS = 10;
   const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
   const MAX_AUDIO_FILE_BYTES = 32 * 1024 * 1024;
@@ -608,7 +608,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         </button>
         {showExtras && (
           <div className="space-y-4 mt-2 mdr-journal-attachments">
-      {/* الصور: من الكاميرا أو الاستديو، حتى 12 صورة — تُضغط تلقائياً. تعرض
+      {/* الصور: من الكاميرا أو الاستديو، حتى 30 صورة — تُضغط تلقائياً. تعرض
           أيضاً مراجع Day One/السحابة الموجودة كي لا تبدو كأنها اختفت عند
           تعديل مذكرة قديمة. */}
       <div>

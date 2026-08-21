@@ -7,6 +7,7 @@ import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Photo } from "@/components/ui/Photo";
 import { skyView, entryVoice, silentDates, type MonthCluster, type EntryVoice } from "@/lib/memorySky";
+import { MOOD_SKY } from "@/lib/memoryDome";
 import type { JournalEntry } from "@/lib/types";
 import { ChevronRight, X, PenLine } from "lucide-react";
 
@@ -64,6 +65,7 @@ interface Star {
   r: number; // visible star radius (viewBox units)
   o: number; // brightness (opacity)
   gold: boolean; // starred → gold, else pale white
+  color: string; // mood tint from the final design
   halo: boolean; // photo or starred → soft glow
   voice: EntryVoice; // نصّ / بلا كلمات (صورة أو صوت) / خالية
   delay: number; // twinkle stagger
@@ -185,6 +187,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
       return {
         entry, x, y, r, o, voice,
         gold: starred,
+        color: MOOD_SKY[entry.mood ?? 3] ?? MOOD_SKY[3],
         halo: starred || hasPhoto,
         delay: hashFrac(key, 0x2a) * 3.6,
       };
@@ -202,7 +205,16 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
       // الهالاتُ وتصير السماءُ ضباباً أبيضَ لا نجوماً. السماءُ تُقرأ بتباعُد
       // نقاطها لا بسعتها.
       const size = 1.1 + Math.min(0.9, Math.log2(c.count + 1) * 0.26);
-      return { cluster: c, x, y, size };
+      // اللونُ العام للكوكبة هو أكثرُ مزاجٍ تكراراً فيها؛ لا نغيّر البيانات
+      // ولا نحتاج إلى حسابٍ جديد عند الرسم، لكن السماءَ تصير أصدقَ من نقاطٍ
+      // بيضاء متشابهة كما في التصميم المرجعي.
+      const moodCounts = new Map<number, number>();
+      for (const entry of c.entries) {
+        const mood = entry.mood ?? 3;
+        moodCounts.set(mood, (moodCounts.get(mood) ?? 0) + 1);
+      }
+      const mood = [...moodCounts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 3;
+      return { cluster: c, x, y, size, color: MOOD_SKY[mood] ?? MOOD_SKY[3] };
     });
   }, [clusters]);
 
@@ -242,7 +254,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
   // الكوكبات عند تجاوز الحدّ (>120 مذكرة).
   if (entries.length === 0) {
     return (
-      <div className="rounded-2xl overflow-hidden card-shadow" style={SKY_BG}>
+      <div className="mdr-memory-sky rounded-2xl overflow-hidden card-shadow" style={SKY_BG}>
         <div className="px-4 py-2">
           <EmptyState
             emoji="✦"
@@ -255,7 +267,7 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
   }
 
   return (
-    <div className="relative rounded-2xl overflow-hidden card-shadow" style={SKY_BG}>
+    <div className="mdr-memory-sky relative rounded-2xl overflow-hidden card-shadow" style={SKY_BG}>
       {/* عنوان خافت أعلى اليمين — خط ثُمانية (serif) */}
       <div className="absolute top-3 right-4 z-10 text-right">
         <p className="text-[13px] font-bold text-[#e8c99a] leading-tight">
@@ -347,10 +359,10 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
               onKeyDown={(e) => onNodeKey(e, () => { setOpenMonth(c.cluster.key); setPreview(null); })}
               style={{ cursor: "pointer" }}
             >
-              <circle cx={c.x} cy={c.y} r={c.size * 1.5} fill="url(#skyHalo)" opacity={0.26} />
+              <circle cx={c.x} cy={c.y} r={c.size * 1.5} fill={c.color} opacity={0.13} />
               {/* عنقودٌ صغير من النجيمات يوحي بكوكبة */}
               {[[0, 0], [0.8, -0.6], [-0.7, 0.5], [0.6, 0.8], [-0.9, -0.4]].map(([dx, dy], k) => (
-                <circle key={k} cx={c.x + dx * c.size} cy={c.y + dy * c.size} r={c.size * (k === 0 ? 0.5 : 0.3)} fill="#fdfbf5" opacity={0.9 - k * 0.12} />
+                <circle key={k} cx={c.x + dx * c.size} cy={c.y + dy * c.size} r={c.size * (k === 0 ? 0.5 : 0.3)} fill={c.color} opacity={0.92 - k * 0.12} />
               ))}
               {i === focusIdx && <circle cx={c.x} cy={c.y} r={c.size * 3} fill="none" stroke="#f4d488" strokeOpacity="0.8" strokeWidth="0.5" />}
               <circle cx={c.x} cy={c.y} r={Math.max(4, c.size * 3)} fill="transparent" />
@@ -397,8 +409,8 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
                   مصمت — تُقرأ من السماء دون فتحها. */}
               <circle
                 cx={st.x} cy={st.y} r={st.voice === "text" ? st.r : st.r + 0.35}
-                fill={st.voice === "text" ? (st.gold ? "#f4d488" : "#fdfbf5") : "none"}
-                stroke={st.voice === "text" ? undefined : st.gold ? "#f4d488" : "#cfe3ff"}
+                fill={st.voice === "text" ? (st.gold ? "#f4d488" : st.color) : "none"}
+                stroke={st.voice === "text" ? undefined : st.gold ? "#f4d488" : st.color}
                 strokeWidth={st.voice === "text" ? undefined : 0.42}
                 className={reduceMotion ? undefined : "sky-star"}
                 style={reduceMotion ? { opacity: st.o } : ({ "--star-o": st.o, animationDelay: `${st.delay}s` } as React.CSSProperties)}
@@ -507,4 +519,6 @@ export function MemorySky({ entries, memories, onOpen, onPickDate, todayStr }: M
 const SKY_BG: React.CSSProperties = {
   background:
     "radial-gradient(120% 90% at 50% 100%, #2a1c47 0%, #1c1435 42%, #0f0a1f 74%, #080510 100%)",
+  border: "1px solid rgba(232,201,154,.16)",
+  boxShadow: "0 16px 36px rgba(8,5,16,.16), inset 0 0 0 1px rgba(255,255,255,.025)",
 };
