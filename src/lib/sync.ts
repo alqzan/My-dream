@@ -149,6 +149,42 @@ export function describeUploadError(err: unknown): string {
   return `تعذّر الرفع إلى R2 — تحقق من CORS للـbucket أو الاتصال (${detail})`;
 }
 
+// Firestore errors used to be collapsed into the same generic toast as an R2
+// upload failure. That made a rules/key problem indistinguishable from a
+// temporary outage. Keep the detail short and code-based (never include a path
+// or credential) so the owner can tell us what the save request was rejected
+// for while the scheduler continues its normal backoff.
+export function describeSyncError(err: unknown): string {
+  const code =
+    err && typeof err === "object" && "code" in err
+      ? String((err as { code?: unknown }).code ?? "")
+      : "";
+  switch (code) {
+    case "permission-denied":
+      return "رفض Firestore المزامنة (permission-denied) — راجع قواعد الوصول";
+    case "unauthenticated":
+      return "رفض Firestore المزامنة (unauthenticated) — تحقق من مفتاح المزامنة";
+    case "failed-precondition":
+      return "تعذّرت المزامنة (failed-precondition) — راجع فهرس/إعداد Firestore";
+    case "resource-exhausted":
+      return "تعذّرت المزامنة (resource-exhausted) — تجاوزت السحابة حدّها مؤقتًا";
+    case "deadline-exceeded":
+      return "انتهت مهلة Firestore (deadline-exceeded) — سيُعاد المحاولة";
+    case "unavailable":
+      return "Firestore غير متاح الآن (unavailable) — سيُعاد المحاولة";
+    case "aborted":
+      return "تعارض متزامن في Firestore (aborted) — سيُعاد المحاولة";
+    case "already-exists":
+      return "تعذّرت المزامنة (already-exists) — سيُعاد المحاولة";
+    case "invalid-argument":
+      return "رفض Firestore البيانات (invalid-argument) — راجع آخر تعديل";
+    case "":
+      return "فشلت المزامنة — سيُعاد المحاولة";
+    default:
+      return `فشلت المزامنة (${code}) — سيُعاد المحاولة`;
+  }
+}
+
 async function mediaGateway<T>(
   syncKey: string,
   path: string,
@@ -368,6 +404,11 @@ let pendingLegacyPhotoManifest = new Set<string>();
 let pendingLegacyAudioManifest = new Set<string>();
 let mediaManifestNeedsPhotoBackfill = false;
 let mediaManifestNeedsAudioBackfill = false;
+// The live listener and the save path both read the main document repeatedly.
+// Keep the manifest knowledge across those reads when they describe the same
+// sync space/version; resetting this cache for every read made a harmless text
+// or prayer edit scan every media shard again.
+let mediaManifestContext = "";
 
 function mediaManifestShardId(kind: MediaKind, hash: string): string {
   const prefix = hash.slice(0, 2).toLowerCase();
@@ -424,20 +465,31 @@ function resetMediaManifestState(): void {
   pendingLegacyAudioManifest = new Set();
   mediaManifestNeedsPhotoBackfill = false;
   mediaManifestNeedsAudioBackfill = false;
+  mediaManifestContext = "";
 }
 
-function seedKnownMedia(main: CloudMediaMeta): void {
+function seedKnownMedia(uid: string, main: CloudMediaMeta): void {
   // A pre-R2 manifest only claimed Firebase Storage objects. Never treat those
   // hashes as present in R2 or the migration could report a false success.
   const isR2 = main.mediaProvider === MEDIA_PROVIDER;
+  const version = Number(main.mediaManifestVersion ?? 1);
   const legacyPhotos = new Set(isR2 ? (main.photoManifest ?? []) : []);
   const legacyAudios = new Set(isR2 ? (main.audioManifest ?? []) : []);
+
+  // v2 writes deliberately omit the legacy arrays. For that normal case the
+  // provider/version/space tuple is a stable cache identity. A legacy document
+  // is always reseeded until its first successful save migrates it to v2.
+  const context = `${uid}:${isR2 ? MEDIA_PROVIDER : main.mediaProvider ?? ""}:${version}`;
+  if (version === MEDIA_MANIFEST_VERSION && isR2 && mediaManifestContext === context) {
+    return;
+  }
+
   knownCloudHashes = new Set(legacyPhotos);
   knownCloudAudioHashes = new Set(legacyAudios);
   resetMediaManifestState();
+  mediaManifestContext = context;
   pendingLegacyPhotoManifest = legacyPhotos;
   pendingLegacyAudioManifest = legacyAudios;
-  const version = Number(main.mediaManifestVersion ?? 1);
   mediaManifestNeedsPhotoBackfill = isR2 && version !== MEDIA_MANIFEST_VERSION;
   mediaManifestNeedsAudioBackfill = isR2 && version !== MEDIA_MANIFEST_VERSION;
 }
@@ -879,7 +931,7 @@ export interface CloudRead {
 }
 
 function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
-  seedKnownMedia(main);
+  seedKnownMedia(uid, main);
   let pending: Promise<AppData & CloudMediaMeta> | null = null;
   return {
     main,
@@ -1309,8 +1361,9 @@ async function syncMediaToR2(
   toUpload: Map<string, string>,
   known: Set<string>,
   mediaKey: string = uid
-): Promise<{ uploaded: Set<string>; error?: string }> {
+): Promise<{ uploaded: Set<string>; newlyUploaded: Set<string>; error?: string }> {
   const uploaded = new Set(known);
+  const newlyUploaded = new Set<string>();
   // حارسٌ ثانٍ بجانب حارس `prepareForCloud`: لا نرفع أبداً هاشاً يثبت المانيفست
   // وجودَه في R2. (المحتوى معنونٌ بالهاش، فالوجود يعني التطابق.)
   const queue = [...toUpload].filter(([hash]) => !known.has(hash));
@@ -1325,6 +1378,7 @@ async function syncMediaToR2(
       try {
         await uploadMediaToR2(mediaKey, sub, hash, dataUrl);
         uploaded.add(hash);
+        newlyUploaded.add(hash);
         urlCache.delete(hash);
       } catch (err) {
         // Continue other files. The honest manifest below excludes this hash,
@@ -1336,7 +1390,11 @@ async function syncMediaToR2(
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
-  return { uploaded, error: firstError === undefined ? undefined : describeUploadError(firstError) };
+  return {
+    uploaded,
+    newlyUploaded,
+    error: firstError === undefined ? undefined : describeUploadError(firstError),
+  };
 }
 
 // Result of a save. `mediaComplete` is false when some referenced photo/voice
@@ -1409,14 +1467,18 @@ export async function saveUserData(
     ...(mediaManifestNeedsPhotoBackfill
       ? [...photoRefs].filter((hash) => knownCloudHashes.has(hash))
       : []),
-    ...[...photoRefs].filter((hash) => photoUpload.uploaded.has(hash)),
+    // `uploaded` intentionally includes every hash already known in memory so
+    // mediaComplete can be answered cheaply. Only hashes uploaded in THIS
+    // call need to be added to the manifest; adding all known refs made every
+    // ordinary save transactionally rewrite all touched manifest shards.
+    ...photoUpload.newlyUploaded,
   ]);
   const audioManifestAdds = new Set<string>([
     ...pendingLegacyAudioManifest,
     ...(mediaManifestNeedsAudioBackfill
       ? [...audioRefs].filter((hash) => knownCloudAudioHashes.has(hash))
       : []),
-    ...[...audioRefs].filter((hash) => audioUpload.uploaded.has(hash)),
+    ...audioUpload.newlyUploaded,
   ]);
   await writeMediaManifestShards(uid, "photos", photoManifestAdds);
   await writeMediaManifestShards(uid, "audios", audioManifestAdds);
