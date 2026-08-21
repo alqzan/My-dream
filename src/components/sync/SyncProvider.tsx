@@ -21,6 +21,7 @@ import {
   lastShardLoadOk,
   fetchInlineMedia,
   RevisionConflictError,
+  describeSyncError,
 } from "@/lib/sync";
 import { setRemoteMediaFetcher } from "@/lib/mediaCache";
 import { useAppStore } from "@/lib/store";
@@ -379,11 +380,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             setMediaPending(!mediaComplete);
             markSynced(mediaComplete);
           }),
-        onError: () => {
+        onError: (error) => {
           setStatus("offline");
           if (!saveFailNotified.current) {
             saveFailNotified.current = true;
-            showToast("فشلت المزامنة — سيُعاد المحاولة", "warning");
+            showToast(describeSyncError(error), "warning");
           }
         },
       });
