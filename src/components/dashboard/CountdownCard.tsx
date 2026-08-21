@@ -36,7 +36,7 @@ export function CountdownCard() {
   if (shown.length === 0) return null;
 
   return (
-    <div className="bg-white dark:bg-[#241c12] rounded-2xl card-shadow border border-gray-100 dark:border-transparent p-4">
+    <div className="mdr-home-countdown bg-white dark:bg-[#241c12] rounded-2xl card-shadow border border-gray-100 dark:border-transparent p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <CalendarClock size={16} className="text-brand-600" />
