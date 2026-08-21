@@ -14,17 +14,22 @@ import { usePending } from "@/lib/pending";
 // even while the app is already open (the old one-shot load ran only on launch,
 // so a purchase made mid-session never appeared until the next relaunch).
 // Unreadable messages are surfaced for manual review; only confirmed noise is
-// cleared silently. New items never force a modal over the page: the banner
-// opens review deliberately. Closing with X keeps the items so it can reopen;
+// cleared silently. A genuinely new item opens the review sheet immediately;
+// closing with X keeps the items so the banner can reopen them, while
 // approving/discarding clears everything from the cloud inbox.
 export function PendingInboxWatcher() {
-  const { items, reviewing, setItems, closeReview, clear } = usePending();
+  const { items, reviewing, setItems, openReview, closeReview, clear } = usePending();
 
   // Latest inbox snapshot + guards, read inside the (stable) drain closure.
   const latestRef = useRef<InboxItem[]>([]);
   const busyRef = useRef(false);
   const reviewingRef = useRef(reviewing);
   reviewingRef.current = reviewing;
+  // IDs already surfaced to the owner. Keeping this local guard means closing
+  // the sheet does not immediately reopen it for the same cloud snapshot, but
+  // a genuinely new bank message still opens the sheet without waiting for the
+  // home screen banner.
+  const surfacedIdsRef = useRef<Set<string>>(new Set());
 
   const drain = useCallback(async () => {
     // Never disturb an in-progress review: approve/discard deletes exactly the
@@ -33,7 +38,10 @@ export function PendingInboxWatcher() {
     // the sheet closes (the reviewing→false effect below re-runs drain).
     if (reviewingRef.current || busyRef.current) return;
     const inbox = latestRef.current;
-    if (!inbox.length) return;
+    if (!inbox.length) {
+      surfacedIdsRef.current.clear();
+      return;
+    }
     busyRef.current = true;
     try {
       // Idempotency: an Automation retry (flaky network reply, relaunch) can
@@ -65,13 +73,23 @@ export function PendingInboxWatcher() {
         await Promise.all(noise.map((it) => deleteInboxItem(it.id).catch(() => {})));
       }
       const toReview = [...readable, ...unreadable];
-      if (toReview.length) setItems(toReview, count);
+      if (toReview.length) {
+        const fresh = toReview.some((it) => !surfacedIdsRef.current.has(it.id));
+        surfacedIdsRef.current = new Set(toReview.map((it) => it.id));
+        setItems(toReview, count);
+        // استعادة السلوك السابق: المصروف الوارد آلياً يفتح نافذة المراجعة
+        // فوراً. لا نعيد فتح نفس اللقطة بعد الضغط على «إغلاق»؛ فقط عنصر جديد
+        // أو عنصر بقي معلّقاً أثناء مراجعةٍ سابقة يفتحها.
+        if (fresh) openReview();
+      } else {
+        surfacedIdsRef.current.clear();
+      }
     } catch {
       /* offline — the listener re-fires on reconnect */
     } finally {
       busyRef.current = false;
     }
-  }, [setItems]);
+  }, [openReview, setItems]);
 
   useEffect(() => {
     if (!isFirebaseEnabled || !getSyncSpace()) return;
@@ -82,9 +100,11 @@ export function PendingInboxWatcher() {
     return unsub;
   }, [drain]);
 
-  // الإغلاق قرارٌ يدوي: لا نعيد فتح النافذة ولا نعيد تصريف اللقطة القديمة
-  // بمجرد الضغط على ×. يبقى العدد في البانر، ويُعاد التصريف فقط عندما تصل
-  // لقطة جديدة من الصندوق أو يفتح المستخدم المراجعة بنفسه.
+  // إذا وصل مصرفٌ جديد أثناء فتح النافذة، تُعاد قراءة اللقطة بعد الإغلاق؛
+  // حارسُ IDs أعلاه يفتحها فقط إن كان فيها عنصر لم نعرضه بعد.
+  useEffect(() => {
+    if (!reviewing) void drain();
+  }, [reviewing, drain]);
 
   if (!reviewing) return null;
   return (
