@@ -1628,7 +1628,7 @@ export const useAppStore = create<AppStore>()(
           };
         }),
 
-      setPrayerStatus: (date, prayer, status) =>
+      setPrayerStatus: (date, prayer, status) => {
         set((s) => {
           const existing = s.prayerLogs.find((l) => l.date === date);
           if (existing) {
@@ -1639,9 +1639,14 @@ export const useAppStore = create<AppStore>()(
             };
           }
           return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: status } }] };
-        }),
+        });
+        // تسجيل الصلاة هو مصدر قرارٍ مباشر للمطالبة؛ أفرغ اللقطة فوراً حتى
+        // لا تعود نافذة التذكير بحالةٍ قديمة إذا أُعيد فتح التطبيق قبل مهلة
+        // تجميع IndexedDB العامة (١٢٠٠ms).
+        void persistedIdbStorage.flush();
+      },
 
-      cyclePrayerStatus: (date, prayer) =>
+      cyclePrayerStatus: (date, prayer) => {
         set((s) => {
           const order: PrayerStatus[] = ["لم", "منفردة", "جماعة"];
           const existing = s.prayerLogs.find((l) => l.date === date);
@@ -1655,7 +1660,9 @@ export const useAppStore = create<AppStore>()(
             };
           }
           return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
-        }),
+        });
+        void persistedIdbStorage.flush();
+      },
 
       // مُساعدٌ واحدٌ لكلّ ما يُكتب على يوم صلاةٍ خارج الخمس: يُنشئ اليومَ إن
       // لم يكن، ويُبقي بقيّةَ حقوله. الختمُ يتكفّل به غلافُ `set`.
