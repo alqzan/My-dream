@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { BookMarked, BookOpen, Check, ChevronLeft, Flame, Sprout } from "lucide-react";
+import { BookMarked, BookOpen, Check, ChevronLeft, Flame, Hourglass, Sprout } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { buildDayDigest } from "@/lib/assistantContext";
 import { arNum } from "@/lib/madar/format";
@@ -15,7 +15,6 @@ interface PeekSpec {
   key: string;
   href: string;
   label: string;
-  hint: string;
   color: string;
   wash: string;
   icon: ReactNode;
@@ -24,7 +23,7 @@ interface PeekSpec {
 }
 
 function streakText(days: number): string {
-  return `ستريك ${arNum(days)} يوم`;
+  return arNum(days);
 }
 
 function PeekRow({ peek }: { peek: PeekSpec }) {
@@ -40,15 +39,19 @@ function PeekRow({ peek }: { peek: PeekSpec }) {
       <span className="mdr-lobby-peek-icon" aria-hidden="true">{peek.icon}</span>
       <span className="mdr-lobby-peek-copy">
         <strong>{peek.label}</strong>
-        <small>{peek.hint}</small>
+      </span>
+      <span className="mdr-lobby-peek-meta">
         {peek.streak && peek.streak.days >= 2 && (
-          <span className="mdr-lobby-peek-streak">
+          <span className="mdr-lobby-peek-streak" aria-label={`سلسلة ${streakText(peek.streak.days)} أيام${peek.streak.graceDay ? "، مهلة يوم واحد" : ""}`}>
             <Flame size={12} strokeWidth={2.4} aria-hidden="true" />
-            {streakText(peek.streak.days)}{peek.streak.graceDay ? " · باقي اليوم" : ""}
+            {streakText(peek.streak.days)}
+            {peek.streak.graceDay && <Hourglass className="mdr-lobby-peek-grace" size={11} strokeWidth={2.3} aria-hidden="true" />}
           </span>
         )}
+        <span className={cn("mdr-lobby-peek-status", peek.done && "is-done")} aria-label={peek.done ? "تم" : "غير منجز"}>
+          {peek.done ? <Check size={13} strokeWidth={3} /> : <span aria-hidden="true" />}
+        </span>
       </span>
-      {peek.done && <span className="mdr-lobby-peek-value" aria-label="تم"><Check size={13} strokeWidth={3} /></span>}
       <ChevronLeft className="mdr-lobby-peek-chevron" size={16} aria-hidden="true" />
     </Link>
   );
@@ -114,8 +117,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     {
       key: "quran",
       href: "/quran",
-      label: digest.wirdDone ? "وردك مقروء اليوم" : "ما قريت وردك اليوم",
-      hint: digest.wirdDone ? "أحسنت، واصل على نفس الخط" : "افتح القرآن واقرأ وردك الآن",
+      label: digest.wirdDone ? "الورد مقروء" : "الورد لم يُقرأ",
       color: SECTION.brand,
       wash: "#f6ecd9",
       icon: <Sprout size={18} strokeWidth={1.9} />,
@@ -125,8 +127,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     {
       key: "prayer",
       href: "/prayers",
-      label: missingPrayers === 1 ? "باقي صلاة ما سجلتها" : missingPrayers ? `باقي ${arNum(missingPrayers)} صلوات ما سجلتها` : "صلواتك مسجلة اليوم",
-      hint: missingPrayers ? "سجلها قبل ما يخلص اليوم" : "أحسنت، يومك مكتمل",
+      label: missingPrayers ? `صلوات اليوم · باقي ${arNum(missingPrayers)}` : "صلوات اليوم مكتملة",
       color: SECTION.prayer,
       wash: "#e2efeb",
       icon: <MosqueIcon size={18} />,
@@ -135,8 +136,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     {
       key: "journal",
       href: "/journal",
-      label: digest.journalWritten ? "مذكرتك مكتوبة اليوم" : "ما كتبت مذكرتك اليوم",
-      hint: digest.journalWritten ? "جميل، خلك قريب من يومك" : "اكتب سطرًا واحدًا الآن",
+      label: digest.journalWritten ? "المذكرة مكتوبة" : "المذكرة لم تُكتب",
       color: SECTION.journal,
       wash: "#eee9f4",
       icon: <BookMarked size={17} strokeWidth={1.9} />,
@@ -146,8 +146,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     {
       key: "reading",
       href: "/reading",
-      label: digest.readingDone ? "سجلت قراءة اليوم" : "ما سجلت قراءة اليوم",
-      hint: digest.readingDone ? "خطوتك محسوبة" : "افتح المحبرة وسجل خطوتك",
+      label: digest.readingDone ? "القراءة مسجّلة" : "القراءة لم تُسجّل",
       color: SECTION.reading,
       wash: "#f5e9e2",
       icon: <BookOpen size={17} strokeWidth={1.9} />,
@@ -192,16 +191,20 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
             >
               <span className="mdr-lobby-peek-icon" aria-hidden="true">{habit.icon || "⭐"}</span>
               <span className="mdr-lobby-peek-copy">
-                <strong>{done ? `أنجزت ${habit.name} اليوم` : `ما أنجزت ${habit.name} اليوم`}</strong>
-                <small>{done ? "ممتاز، استمر" : "اضغط هنا بعد ما تخلصها"}</small>
+                <strong>{done ? `${habit.name} منجزة` : `${habit.name} لم تُنجز`}</strong>
+              </span>
+              <span className="mdr-lobby-peek-meta">
                 {streak.days >= 2 && (
-                  <span className="mdr-lobby-peek-streak">
+                  <span className="mdr-lobby-peek-streak" aria-label={`سلسلة ${streakText(streak.days)} أيام${streak.graceDay ? "، مهلة يوم واحد" : ""}`}>
                     <Flame size={12} strokeWidth={2.4} aria-hidden="true" />
-                    {streakText(streak.days)}{streak.graceDay ? " · باقي اليوم" : ""}
+                    {streakText(streak.days)}
+                    {streak.graceDay && <Hourglass className="mdr-lobby-peek-grace" size={11} strokeWidth={2.3} aria-hidden="true" />}
                   </span>
                 )}
+                <span className={cn("mdr-lobby-peek-status", done && "is-done")} aria-label={done ? "تم" : "غير منجز"}>
+                  {done ? <Check size={13} strokeWidth={3} /> : <span aria-hidden="true" />}
+                </span>
               </span>
-              {done && <span className="mdr-lobby-peek-value" aria-label="تم"><Check size={13} strokeWidth={3} /></span>}
               <span className="mdr-lobby-peek-chevron mdr-lobby-peek-chevron--dot" aria-hidden="true" />
             </button>
           );
