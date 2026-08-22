@@ -3207,6 +3207,25 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-lobby-peek-copy small {
   font-size: 0.65rem;
 }
+.mdr-lobby-peek-streak {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+  color: var(--peek-color, var(--gold));
+  font-size: 0.57rem;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.mdr-lobby-peek.is-pending {
+  border-color: color-mix(in srgb, var(--peek-color, var(--gold)) 22%, var(--line));
+  background: color-mix(in srgb, var(--peek-color, var(--gold)) 3%, var(--paper2));
+}
+.mdr-lobby-peek.is-pending .mdr-lobby-peek-copy strong {
+  color: color-mix(in srgb, var(--peek-color, var(--clay)) 72%, var(--ink));
+}
 .mdr-lobby-peek-value {
   min-width: 1.35rem;
 }
@@ -3223,4 +3242,92 @@ button.mdr-summary-habit-row { cursor: pointer; }
 }
 .mdr-lobby-peek--habit {
   min-height: 3.8rem;
+}
+
+/* نافذة الصلاة تتبع إيقاع نافذة مراجعة المصاريف: شريط حالة، سؤال واضح،
+   ثم أفعال كبيرة يمكن لمسها بسرعة. */
+.mdr-prayer-reminder {
+  display: grid;
+  gap: 0.72rem;
+  direction: rtl;
+  color: var(--ink);
+}
+.mdr-prayer-reminder-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--green) 22%, var(--line));
+  border-radius: 0.95rem;
+  background: color-mix(in srgb, var(--green) 7%, var(--paper2));
+  color: var(--green);
+}
+.mdr-prayer-reminder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: none;
+  border-radius: 0.76rem;
+  background: var(--greenw);
+}
+.mdr-prayer-reminder-banner-copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.mdr-prayer-reminder-banner-copy strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+.mdr-prayer-reminder-banner-copy small {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24rem;
+  color: var(--ink52);
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+.mdr-prayer-reminder-question {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.82rem 0.88rem;
+  border: 1px solid var(--line);
+  border-radius: 0.95rem;
+  background: var(--paper2);
+}
+.mdr-prayer-reminder-question strong {
+  font-size: 1rem;
+  font-weight: 950;
+}
+.mdr-prayer-reminder-question span {
+  color: var(--ink52);
+  font-size: 0.63rem;
+  line-height: 1.7;
+}
+.mdr-prayer-reminder-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.mdr-prayer-reminder-actions button:first-child {
+  background: var(--green) !important;
+}
+.mdr-prayer-reminder-later {
+  min-height: 2.65rem;
+  border: 0;
+  border-radius: 0.82rem;
+  background: transparent;
+  color: var(--ink52);
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 850;
+}
+.mdr-prayer-reminder-later:hover,
+.mdr-prayer-reminder-later:focus-visible {
+  background: var(--paper2);
+  color: var(--ink);
+  outline: none;
 }

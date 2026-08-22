@@ -115,7 +115,7 @@ export default function Dashboard() {
       label: "القرآن",
       big: quranDates.has(todayStr) ? "تمَّ" : hifzDueCount ? arNum(hifzDueCount) : "—",
       unit: quranDates.has(todayStr) ? "وِردك اليوم" : hifzDueCount ? "للمراجعة" : "وِرد اليوم",
-      sub: quranDates.has(todayStr) ? "أحسنت" : "اقرأ وردك",
+      sub: quranDates.has(todayStr) ? "وردك مقروء" : "ما قريت وردك",
       ratio: quranDates.has(todayStr)
         ? 1
         : hifzDueCount

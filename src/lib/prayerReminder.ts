@@ -32,7 +32,10 @@ export function duePrayerReminders(
     if (!(adhanAt instanceof Date) || !Number.isFinite(adhanAt.getTime())) return [];
     const remindAt = new Date(adhanAt.getTime() + delayMs);
     const status = log?.prayers[prayer];
-    if (nowMs < remindAt.getTime() || (status && status !== "لم")) return [];
+    // أي حالةٍ موجودة غير «لم» تعني أن المستخدم حسم الصلاة — حتى لو كانت
+    // «فائتة» أو «قضاء». لا نعتمد على truthiness هنا حتى لا تعود مطالبة سجلٍ
+    // قديم يحمل قيمةً فارغةً أو غير متوقعة.
+    if (nowMs < remindAt.getTime() || (status !== undefined && status !== "لم")) return [];
     return [{
       date,
       prayer,

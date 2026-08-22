@@ -3,12 +3,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { BookMarked, BookOpen, Check, ChevronLeft, Sprout } from "lucide-react";
+import { BookMarked, BookOpen, Check, ChevronLeft, Flame, Sprout } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { buildDayDigest } from "@/lib/assistantContext";
 import { arNum } from "@/lib/madar/format";
 import { SECTION } from "@/lib/palette";
-import { buzz, cn, today } from "@/lib/utils";
+import { buzz, cn, graceStreak, quranActivityDates, today, type GraceStreak } from "@/lib/utils";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 
 interface PeekSpec {
@@ -20,13 +20,18 @@ interface PeekSpec {
   wash: string;
   icon: ReactNode;
   done: boolean;
+  streak?: GraceStreak;
+}
+
+function streakText(days: number): string {
+  return `ستريك ${arNum(days)} يوم`;
 }
 
 function PeekRow({ peek }: { peek: PeekSpec }) {
   return (
     <Link
       href={peek.href}
-      className={cn("mdr-lobby-peek press", peek.done && "is-done")}
+      className={cn("mdr-lobby-peek press", peek.done ? "is-done" : "is-pending")}
       style={{
         ["--peek-color" as string]: peek.color,
         ["--peek-wash" as string]: peek.wash,
@@ -36,6 +41,12 @@ function PeekRow({ peek }: { peek: PeekSpec }) {
       <span className="mdr-lobby-peek-copy">
         <strong>{peek.label}</strong>
         <small>{peek.hint}</small>
+        {peek.streak && peek.streak.days >= 2 && (
+          <span className="mdr-lobby-peek-streak">
+            <Flame size={12} strokeWidth={2.4} aria-hidden="true" />
+            {streakText(peek.streak.days)}{peek.streak.graceDay ? " · باقي اليوم" : ""}
+          </span>
+        )}
       </span>
       {peek.done && <span className="mdr-lobby-peek-value" aria-label="تم"><Check size={13} strokeWidth={3} /></span>}
       <ChevronLeft className="mdr-lobby-peek-chevron" size={16} aria-hidden="true" />
@@ -61,6 +72,14 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
   const toggleHabitLog = useAppStore((s) => s.toggleHabitLog);
 
   const todayStr = today();
+  const wirdStreak = useMemo(
+    () => graceStreak([...quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma })]),
+    [quranWird, quranHifz, quranReflections, quranKhatma]
+  );
+  const journalStreak = useMemo(
+    () => graceStreak(journalEntries.map((entry) => entry.date)),
+    [journalEntries]
+  );
   const digest = useMemo(
     () => buildDayDigest({
       transactions,
@@ -95,18 +114,19 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     {
       key: "quran",
       href: "/quran",
-      label: digest.wirdDone ? "وردك اكتمل" : "اقرأ وردك",
-      hint: digest.wirdDone ? "أحسنت، واصل اليوم" : "لا تنس وردك اليوم",
+      label: digest.wirdDone ? "وردك مقروء اليوم" : "ما قريت وردك اليوم",
+      hint: digest.wirdDone ? "أحسنت، واصل على نفس الخط" : "افتح القرآن واقرأ وردك الآن",
       color: SECTION.brand,
       wash: "#f6ecd9",
       icon: <Sprout size={18} strokeWidth={1.9} />,
       done: digest.wirdDone,
+      streak: wirdStreak,
     },
     {
       key: "prayer",
       href: "/prayers",
-      label: missingPrayers ? `فيه ${arNum(missingPrayers)} صلوات ما تسجلت` : "صلواتك مكتملة",
-      hint: missingPrayers ? "سجل صلاتك قبل ما يخلص اليوم" : "أحسنت، يومك مكتمل",
+      label: missingPrayers === 1 ? "باقي صلاة ما سجلتها" : missingPrayers ? `باقي ${arNum(missingPrayers)} صلوات ما سجلتها` : "صلواتك مسجلة اليوم",
+      hint: missingPrayers ? "سجلها قبل ما يخلص اليوم" : "أحسنت، يومك مكتمل",
       color: SECTION.prayer,
       wash: "#e2efeb",
       icon: <MosqueIcon size={18} />,
@@ -115,18 +135,19 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     {
       key: "journal",
       href: "/journal",
-      label: "مذكرة اليوم",
-      hint: digest.journalWritten ? "تم حفظها اليوم" : "دون فكرة أو ملاحظة سريعة",
+      label: digest.journalWritten ? "مذكرتك مكتوبة اليوم" : "ما كتبت مذكرتك اليوم",
+      hint: digest.journalWritten ? "جميل، خلك قريب من يومك" : "اكتب سطرًا واحدًا الآن",
       color: SECTION.journal,
       wash: "#eee9f4",
       icon: <BookMarked size={17} strokeWidth={1.9} />,
       done: digest.journalWritten,
+      streak: journalStreak,
     },
     {
       key: "reading",
       href: "/reading",
-      label: "المحبرة",
-      hint: digest.readingDone ? "خطوتك محسوبة اليوم" : "اكتب ما يجول في خاطرك",
+      label: digest.readingDone ? "سجلت قراءة اليوم" : "ما سجلت قراءة اليوم",
+      hint: digest.readingDone ? "خطوتك محسوبة" : "افتح المحبرة وسجل خطوتك",
       color: SECTION.reading,
       wash: "#f5e9e2",
       icon: <BookOpen size={17} strokeWidth={1.9} />,
@@ -150,13 +171,15 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
         {peeks.map((peek) => <PeekRow key={peek.key} peek={peek} />)}
 
         {customHabits.map((habit) => {
-          const done = habit.logs.includes(todayStr);
+          const logs = habit.logs ?? [];
+          const done = logs.includes(todayStr);
+          const streak = graceStreak(logs);
           const color = habit.color || SECTION.brand;
           return (
             <button
               key={habit.id}
               type="button"
-              className={cn("mdr-lobby-peek mdr-lobby-peek--habit press", done && "is-done")}
+              className={cn("mdr-lobby-peek mdr-lobby-peek--habit press", done ? "is-done" : "is-pending")}
               style={{
                 ["--peek-color" as string]: color,
                 ["--peek-wash" as string]: `${color}16`,
@@ -169,8 +192,14 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
             >
               <span className="mdr-lobby-peek-icon" aria-hidden="true">{habit.icon || "⭐"}</span>
               <span className="mdr-lobby-peek-copy">
-                <strong>{habit.name}</strong>
-                <small>{done ? "اكتملت اليوم" : "تذكيرك اليومي"}</small>
+                <strong>{done ? `أنجزت ${habit.name} اليوم` : `ما أنجزت ${habit.name} اليوم`}</strong>
+                <small>{done ? "ممتاز، استمر" : "اضغط هنا بعد ما تخلصها"}</small>
+                {streak.days >= 2 && (
+                  <span className="mdr-lobby-peek-streak">
+                    <Flame size={12} strokeWidth={2.4} aria-hidden="true" />
+                    {streakText(streak.days)}{streak.graceDay ? " · باقي اليوم" : ""}
+                  </span>
+                )}
               </span>
               {done && <span className="mdr-lobby-peek-value" aria-label="تم"><Check size={13} strokeWidth={3} /></span>}
               <span className="mdr-lobby-peek-chevron mdr-lobby-peek-chevron--dot" aria-hidden="true" />
