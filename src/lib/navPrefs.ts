@@ -1,31 +1,25 @@
-// Device-local navigation customization (Phase 5 — UI simplification without
-// removing functionality). Pure logic, no localStorage/window here — the
-// component owns reading/writing storage, this module only resolves NAV_ITEMS
-// against a saved preference and validates what gets saved. Mirrors the
-// existing pattern of device-only UI prefs (insightPrefs.ts, readPrefs.ts):
-// never synced, never part of AppData, absent = today's unchanged behavior.
 import type { NavItem } from "./nav";
 
-export const MAX_PRIMARY_ITEMS = 5;
+// تفضيلات التنقّل محلية لهذا الجهاز فقط، ولا تمسّ بيانات الأقسام أو المزامنة.
 export const NAV_PREFS_STORAGE_KEY = "madar-nav-prefs";
-export const DEFAULT_PRIMARY_HREFS = ["/quran", "/reading", "/", "/journal", "/finance"] as const;
 
-export interface ResolvedNav {
-  /** Items to show directly, in the owner's chosen order. With no saved
-   *  preference this is the approved five-door default. */
-  primary: NavItem[];
-  /** Everything else, original relative order preserved — nothing here is
-   *  deleted or hidden from the app, only moved behind "المزيد". Empty
-   *  whenever there's no active customization. */
-  overflow: NavItem[];
+// البهو أولاً، ثم بقية الأبواب في قائمة واحدة. يستطيع المستخدم تغييرها كاملةً.
+export const DEFAULT_NAV_HREFS = ["/", "/quran", "/reading", "/journal", "/finance", "/prayers", "/stats"] as const;
+
+export interface SavedNavPrefs {
+  visible: string[];
+  /** تفضيل قديم كان يعني «الأبواب الأساسية» لا الإخفاء. */
+  legacy?: boolean;
 }
 
-/** Keeps only hrefs that exist in `items`, drops duplicates (keeping the
- *  first occurrence), and caps the result at MAX_PRIMARY_ITEMS — the
- *  invariant a saved preference must always satisfy. Used both to validate
- *  input coming out of localStorage (which could be stale after an item was
- *  renamed/removed, or hand-edited) and to validate a new selection before
- *  saving it. */
+export interface ResolvedNav {
+  /** الأبواب الظاهرة مباشرةً بالترتيب الذي اختاره المستخدم. */
+  visible: NavItem[];
+  /** أبواب أخفاها المستخدم من التنقّل فقط، ولا تزال صفحاتها موجودة. */
+  hidden: NavItem[];
+}
+
+/** ينظف روابط التفضيل من الروابط القديمة والتكرار، من دون حدّ عددي. */
 export function sanitizeNavPrefs(hrefs: string[], items: NavItem[]): string[] {
   const valid = new Set(items.map((i) => i.href));
   const out: string[] = [];
@@ -34,37 +28,55 @@ export function sanitizeNavPrefs(hrefs: string[], items: NavItem[]): string[] {
     if (!valid.has(href) || seen.has(href)) continue;
     seen.add(href);
     out.push(href);
-    if (out.length >= MAX_PRIMARY_ITEMS) break;
   }
   return out;
 }
 
-/** null/empty/all-invalid prefs → the approved five-door default. A
- *  non-empty, sanitized preference reorders primary to match the saved order
- *  exactly and moves every remaining item into overflow (original NAV_ITEMS
- *  relative order, not alphabetical or anything new). */
-export function resolveNav(items: NavItem[], savedHrefs: string[] | null): ResolvedNav {
-  const prefs = sanitizeNavPrefs(savedHrefs ?? [], items);
-  const selected = prefs.length ? prefs : sanitizeNavPrefs([...DEFAULT_PRIMARY_HREFS], items);
-  const byHref = new Map(items.map((i) => [i.href, i]));
-  const primary = (selected.length ? selected : items.slice(0, MAX_PRIMARY_ITEMS).map((i) => i.href))
-    .map((h) => byHref.get(h)!)
-    .filter(Boolean);
-  const primarySet = new Set(primary.map((i) => i.href));
-  const overflow = items.filter((i) => !primarySet.has(i.href));
-  return { primary, overflow };
+function defaultHrefs(items: NavItem[]): string[] {
+  return sanitizeNavPrefs([...DEFAULT_NAV_HREFS], items);
 }
 
-// ---- localStorage wrapper (component-only; the functions above stay pure) ----
-// Mirrors insightPrefs.ts's loadPrefs/savePrefs shape. `null` return/absence
-// is the documented "no customization yet" default resolveNav() expects.
-export function loadNavPrefs(): string[] | null {
+/**
+ * يحلّ القائمة النهائية. التفضيل القديم (مصفوفة روابط) يُرحّل بإبقاء بقية
+ * الأبواب ظاهرة بعد اختياراته؛ الإخفاء لا يبدأ إلا مع صيغة التفضيل الجديدة.
+ */
+export function resolveNav(items: NavItem[], saved: SavedNavPrefs | string[] | null): ResolvedNav {
+  const legacy = Array.isArray(saved) || Boolean(saved?.legacy);
+  const raw = Array.isArray(saved) ? saved : saved?.visible ?? [];
+  const sanitized = sanitizeNavPrefs(raw, items);
+  const selected = sanitized.length
+    ? legacy
+      ? [...sanitized, ...items.filter((item) => !sanitized.includes(item.href)).map((item) => item.href)]
+      : sanitized
+    : defaultHrefs(items);
+  const byHref = new Map(items.map((i) => [i.href, i]));
+  const visible = selected.map((href) => byHref.get(href)).filter((item): item is NavItem => Boolean(item));
+  const visibleSet = new Set(visible.map((item) => item.href));
+  const hidden = items.filter((item) => !visibleSet.has(item.href));
+  return { visible, hidden };
+}
+
+// ---- localStorage wrapper (component-only) ----
+export function loadNavPrefs(): SavedNavPrefs | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(NAV_PREFS_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) && parsed.every((v) => typeof v === "string") ? parsed : null;
+    // الصيغة القديمة: كانت تحدد خمسة أبواب أساسية، ولم تكن تقصد إخفاء البقية.
+    if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
+      return { visible: parsed, legacy: true };
+    }
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "visible" in parsed &&
+      Array.isArray(parsed.visible) &&
+      parsed.visible.every((v) => typeof v === "string")
+    ) {
+      return { visible: parsed.visible };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -73,7 +85,8 @@ export function loadNavPrefs(): string[] | null {
 export function saveNavPrefs(hrefs: string[], items: NavItem[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(NAV_PREFS_STORAGE_KEY, JSON.stringify(sanitizeNavPrefs(hrefs, items)));
+    const visible = sanitizeNavPrefs(hrefs, items);
+    window.localStorage.setItem(NAV_PREFS_STORAGE_KEY, JSON.stringify({ version: 2, visible }));
   } catch {
     /* تخزينٌ ممتلئ/محظور — التفضيل جهازيّ غير حرج، يبقى الافتراض */
   }
