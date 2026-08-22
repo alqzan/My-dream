@@ -300,7 +300,9 @@ export function BenefitList({
 
 /* ─────────────────────── مقاعدُ الرفّ ─────────────────────── */
 
-/** مقعدٌ لكلّ كتابٍ خُتم، والخالي يبقى خالياً — أصدقُ من شريطِ تقدّمٍ يوهم. */
+const SHELF_COLORS = ["#8b6f47", "#6f8063", "#9d665b", "#6c708d", "#b08a4b", "#7b6d5b"];
+
+/** كتابٌ مرئيّ لكلّ ختمة؛ المقاعدُ الفارغة تبقى مساحةً صادقةً للكتاب القادم. */
 export function ShelfSeats({ books, year, goal }: { books: Book[]; year: number; goal: number }) {
   const { filled, goal: seats } = shelfSeats(books, year, goal);
   if (seats === 0) return null;
@@ -309,36 +311,53 @@ export function ShelfSeats({ books, year, goal }: { books: Book[]; year: number;
     .slice(0, seats);
 
   return (
-    <div style={{ margin: "16px 0 0" }}>
+    <div className="mdr-reading-shelf-display" style={{ margin: "16px 0 0" }}>
       <SectionHead
-        title="مقاعدُ الرفِّ هذا العام"
+        title="رفُّك هذا العام"
         trailing={<HeadMeta>{arNum(filled)} من {arNum(seats)}</HeadMeta>}
         marginTop={0}
         marginBottom={12}
       />
-      <div style={{ display: "flex", gap: 4, alignItems: "flex-end", height: 74 }}>
-        {Array.from({ length: seats }, (_, i) => {
-          const b = finished[i];
-          // عرضُ الكعب من عدد صفحات الكتاب — الرفُّ يحكي عن ثِقَل ما قرأت.
-          const w = b ? Math.min(3, Math.max(1, Math.round(b.totalPages / 220))) : 1;
-          return (
-            <span
-              key={i}
-              title={b ? `${b.title} · ${arNum(b.totalPages)} صفحة` : "مقعدٌ خالٍ"}
-              style={{
-                flex: b ? w : 1,
-                height: b ? "100%" : 22,
-                borderRadius: "3px 3px 0 0",
-                background: b ? "var(--gold)" : "transparent",
-                border: `1px solid ${b ? "var(--gold)" : "var(--line)"}`,
-                opacity: b ? 0.85 : 1,
-              }}
-            />
-          );
-        })}
+      <div className="mdr-reading-shelf-frame">
+        <div className="mdr-reading-shelf-note">
+          <span>الكتب التي أنهيتها</span>
+          <span>{filled ? `${arNum(filled)} كتاب` : "رفّك ينتظر أول كتاب"}</span>
+        </div>
+        <div className="mdr-reading-shelf-books" role="list" aria-label="كتب الرف المكتملة">
+          {Array.from({ length: seats }, (_, i) => {
+            const b = finished[i];
+            const color = b?.coverColor ?? SHELF_COLORS[i % SHELF_COLORS.length];
+            return (
+              <div
+                key={b?.id ?? `empty-${i}`}
+                className={`mdr-reading-shelf-item ${b ? "is-filled" : "is-empty"}`}
+                role="listitem"
+                title={b ? `${b.title} · ${arNum(b.totalPages)} صفحة` : "مكانٌ لكتابٍ جديد"}
+              >
+                <div
+                  className="mdr-reading-shelf-book"
+                  style={b ? { backgroundColor: color } : undefined}
+                  aria-label={b ? b.title : `المكان ${arNum(i + 1)}`}
+                >
+                  {b ? (
+                    <>
+                      <span className="mdr-reading-shelf-book-mark" />
+                      <strong>{b.title}</strong>
+                      <small>{arNum(b.totalPages)} ص</small>
+                    </>
+                  ) : (
+                    <span className="mdr-reading-shelf-empty-mark">+</span>
+                  )}
+                </div>
+                <span className="mdr-reading-shelf-book-label">{b ? b.title : `المكان ${arNum(i + 1)}`}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mdr-reading-shelf-board" />
       </div>
       <p style={{ margin: "9px 0 0", fontSize: 11, color: "var(--ink34)" }}>
-        المكانُ الخالي يبقى خاليًا حتى تختم.
+        كل كتابٍ يختمه يترك اسمه على الرف.
       </p>
     </div>
   );

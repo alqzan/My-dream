@@ -33,10 +33,11 @@ export function BookCard({ book, onDelete, onClick }: BookCardProps) {
         style={{ backgroundColor: color + "20" }}
       >
         <div
-          className="mdr-book-spine w-14 h-20 rounded-lg shadow-md flex items-end justify-center pb-2"
+          className="mdr-book-spine rounded-lg"
           style={{ backgroundColor: color }}
         >
-          <span className="mdr-book-glyph text-white text-2xl">📖</span>
+          <span className="mdr-book-glyph">{book.title}</span>
+          <span className="mdr-book-author">{book.author || "مدار"}</span>
         </div>
         {onDelete && (
           <button

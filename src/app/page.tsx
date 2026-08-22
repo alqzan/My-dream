@@ -200,7 +200,10 @@ export default function Dashboard() {
         transactions={transactions}
         journalEntries={journalEntries}
         readingLogs={readingLogs}
-        quranHifz={quranHifz}
+        prayerLogs={prayerLogs}
+        habits={habits}
+        frozenHabits={frozenHabits}
+        quranActivity={quranDates}
       />
 
       <button
