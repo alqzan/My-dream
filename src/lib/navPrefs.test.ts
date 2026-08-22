@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeNavPrefs, resolveNav, MAX_PRIMARY_ITEMS } from "./navPrefs";
+import { DEFAULT_NAV_HREFS, resolveNav, sanitizeNavPrefs } from "./navPrefs";
 import type { NavItem } from "./nav";
 
 const ICON = (() => null) as unknown as NavItem["icon"];
@@ -13,62 +13,55 @@ const ITEMS: NavItem[] = [
   { href: "/stats", icon: ICON, label: "الإحصائيات", color: "c", tint: "t" },
 ];
 
+const hrefs = (items: NavItem[]) => items.map((item) => item.href);
+
 describe("sanitizeNavPrefs", () => {
-  it("drops hrefs that don't exist in the current nav", () => {
+  it("drops hrefs that do not exist in the current nav", () => {
     expect(sanitizeNavPrefs(["/", "/not-a-real-page"], ITEMS)).toEqual(["/"]);
   });
 
-  it("drops duplicates, keeping the first occurrence", () => {
-    expect(sanitizeNavPrefs(["/finance", "/finance", "/"], ITEMS)).toEqual(["/finance", "/"]);
+  it("drops duplicates without capping the full list", () => {
+    expect(sanitizeNavPrefs(["/finance", "/finance", "/", "/quran", "/stats"], ITEMS)).toEqual([
+      "/finance",
+      "/",
+      "/quran",
+      "/stats",
+    ]);
   });
 
-  it(`caps the result at ${MAX_PRIMARY_ITEMS} items`, () => {
-    const out = sanitizeNavPrefs(["/", "/prayers", "/journal", "/finance", "/reading"], ITEMS);
-    expect(out).toHaveLength(MAX_PRIMARY_ITEMS);
-    expect(out).toEqual(["/", "/prayers", "/journal", "/finance", "/reading"]);
-  });
-
-  it("returns an empty array for an empty input", () => {
+  it("returns an empty array for empty input", () => {
     expect(sanitizeNavPrefs([], ITEMS)).toEqual([]);
   });
 });
 
 describe("resolveNav", () => {
-  it("defaults to the approved five doors when there is no saved preference", () => {
-    const { primary, overflow } = resolveNav(ITEMS, null);
-    expect(primary.map((i) => i.href)).toEqual(["/quran", "/reading", "/", "/journal", "/finance"]);
-    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/stats"]);
+  it("shows the complete list by default with the lobby first", () => {
+    const { visible, hidden } = resolveNav(ITEMS, null);
+    expect(hrefs(visible)).toEqual([...DEFAULT_NAV_HREFS]);
+    expect(hidden).toEqual([]);
   });
 
-  it("defaults the same way for an empty saved preference", () => {
-    const { primary, overflow } = resolveNav(ITEMS, []);
-    expect(primary.map((i) => i.href)).toEqual(["/quran", "/reading", "/", "/journal", "/finance"]);
-    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/stats"]);
+  it("keeps the complete list for an old five-door preference", () => {
+    const { visible, hidden } = resolveNav(ITEMS, ["/quran", "/reading", "/", "/journal", "/finance"]);
+    expect(hrefs(visible)).toEqual(["/quran", "/reading", "/", "/journal", "/finance", "/prayers", "/stats"]);
+    expect(hidden).toEqual([]);
   });
 
-  it("defaults the same way when every saved href is stale/invalid", () => {
-    const { primary, overflow } = resolveNav(ITEMS, ["/gone", "/also-gone"]);
-    expect(primary.map((i) => i.href)).toEqual(["/quran", "/reading", "/", "/journal", "/finance"]);
-    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/stats"]);
+  it("honors a new preference as a visible order and allows hidden sections", () => {
+    const { visible, hidden } = resolveNav(ITEMS, { visible: ["/", "/finance", "/quran"] });
+    expect(hrefs(visible)).toEqual(["/", "/finance", "/quran"]);
+    expect(hrefs(hidden)).toEqual(["/prayers", "/journal", "/reading", "/stats"]);
   });
 
-  it("honors a valid customization: chosen items in the saved order, the rest as overflow in original order", () => {
-    const { primary, overflow } = resolveNav(ITEMS, ["/finance", "/", "/quran"]);
-    expect(primary.map((i) => i.href)).toEqual(["/finance", "/", "/quran"]);
-    // original relative order of NAV_ITEMS preserved for the leftovers —
-    // not the save order, not alphabetical.
-    expect(overflow.map((i) => i.href)).toEqual(["/prayers", "/journal", "/reading", "/stats"]);
+  it("drops stale entries while preserving the chosen order", () => {
+    const { visible, hidden } = resolveNav(ITEMS, { visible: ["/gone", "/finance", "/quran"] });
+    expect(hrefs(visible)).toEqual(["/finance", "/quran"]);
+    expect(hrefs(hidden)).toEqual(["/", "/prayers", "/journal", "/reading", "/stats"]);
   });
 
-  it("never drops a section: primary + overflow together always cover every NAV_ITEMS href exactly once", () => {
-    const { primary, overflow } = resolveNav(ITEMS, ["/quran", "/reading"]);
-    const all = [...primary, ...overflow].map((i) => i.href).sort();
-    expect(all).toEqual(ITEMS.map((i) => i.href).sort());
-  });
-
-  it("a partially-stale saved preference keeps only the valid entries, in their saved order", () => {
-    const { primary, overflow } = resolveNav(ITEMS, ["/gone", "/finance", "/quran"]);
-    expect(primary.map((i) => i.href)).toEqual(["/finance", "/quran"]);
-    expect(overflow.map((i) => i.href)).toEqual(["/", "/prayers", "/journal", "/reading", "/stats"]);
+  it("falls back to the complete default when a saved preference is empty", () => {
+    const { visible, hidden } = resolveNav(ITEMS, { visible: [] });
+    expect(hrefs(visible)).toEqual([...DEFAULT_NAV_HREFS]);
+    expect(hidden).toEqual([]);
   });
 });

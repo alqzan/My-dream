@@ -2,7 +2,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
 import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
@@ -36,9 +35,7 @@ export function Sidebar() {
   // Read once on mount — a saved preference change reloads the page (same
   // pattern as SyncKeyCard), so this never needs to react live.
   const [prefs] = useState(() => loadNavPrefs());
-  const { primary, overflow } = resolveNav(NAV_ITEMS, prefs);
-  const onOverflowPage = overflow.some((item) => normPath(item.href) === pathname);
-  const [moreOpen, setMoreOpen] = useState(onOverflowPage);
+  const { visible } = resolveNav(NAV_ITEMS, prefs);
 
   return (
     // ارتفاعٌ **بالضبط** بمقدار المساحة المرئية، لا `min-h-screen`: العنصر `fixed`
@@ -71,32 +68,9 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
-        {primary.map((item) => (
+        {visible.map((item) => (
           <NavLink key={item.href} item={item} active={normPath(item.href) === pathname} />
         ))}
-
-        {/* «المزيد» يحفظ أبواباً ثانويةً خارج المسار اليومي؛ التخصيص الجهازي
-            يستطيع إعادة ترتيبها أو نقل أبوابٍ أخرى إليه، من دون حذف أي طريق. */}
-        {overflow.length > 0 && (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setMoreOpen((v) => !v)}
-              aria-expanded={moreOpen}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl min-h-[44px] text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
-            >
-              <MoreHorizontal size={18} />
-              <span className="text-sm">المزيد</span>
-            </button>
-            {moreOpen && (
-              <div className="space-y-1 mt-0.5">
-                {overflow.map((item) => (
-                  <NavLink key={item.href} item={item} active={normPath(item.href) === pathname} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </nav>
       {/* حشوٌ سفليّ بمنطقة الأمان وحدها: القائمة تنتهي فوق مؤشّر الهوم لا تحته. */}
       <div className="shrink-0 pb-[env(safe-area-inset-bottom,0px)]" />
