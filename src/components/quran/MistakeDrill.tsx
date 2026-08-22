@@ -51,7 +51,7 @@ export function MistakeDrill({
   }
 
   return (
-    <div className="hifz-drill-card max-w-lg mx-auto space-y-4">
+    <div className="hifz-drill-card hifz-immersive-card space-y-4">
       <div className="hifz-drill-heading flex items-center gap-2 flex-wrap">
         <Target size={16} className="text-amber-600" />
         <span className="text-base font-bold text-gray-800 dark:text-gray-100">اختبار موضع خطأ</span>
@@ -83,7 +83,6 @@ export function MistakeDrill({
         spotlightId={ayahId}
         context={wholeAyah && !revealed ? "shape" : "text"}
         leadId={leadOnPage(ayahId)}
-        maxHeight={330}
         hidden={wholeAyah ? () => !revealed : undefined}
         className="hifz-mushaf-stage"
         // الطمس يقع على الكلمة في **سطرها** من الوجه: تبقى بعرضها تماماً وقد
@@ -162,7 +161,7 @@ export function MistakeDrillModal({
           <X size={20} />
         </button>
       </div>
-      <div className="hifz-drill-body flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
+      <div className="hifz-drill-body flex-1 overflow-y-auto px-4 pt-6 pb-8 w-full">
         {result ? (
           <div className="text-center space-y-4 pt-6">
             <div className="w-16 h-16 mx-auto rounded-full bg-quran/10 flex items-center justify-center">
