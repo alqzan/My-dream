@@ -388,6 +388,46 @@ export function calcStreak(dates: string[]): number {
   return streak;
 }
 
+export interface GraceStreak {
+  /** عدد الأيام المنجزة التي ما زالت ضمن السلسلة الحالية. */
+  days: number;
+  /** اليوم الحالي لم يُنجز بعد، لكن يومًا واحدًا فقط يفصل السلسلة عن اليوم. */
+  graceDay: boolean;
+}
+
+// ستريك البهو له مهلة يوم واحد: غيابٌ واحد لا يمحو السلسلة، أما غياب يومين
+// متتاليين فيكسرها. ولا نسمّي إنجازًا منفردًا «ستريك» حتى لا تظهر شارة كبيرة
+// على أول يوم فقط. هذه قاعدة عرضٍ للبهو، لذلك أبقينا calcStreak القديمة كما هي
+// للإحصاءات والمكوّنات التي تعتمد تعريفها الصارم.
+export function graceStreak(dates: string[], asOf = new Date()): GraceStreak {
+  const day = toDateStr(asOf);
+  const logged = new Set(
+    dates.filter((date) => isValidDateKey(date) && date <= day)
+  );
+  const cursor = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate());
+  let missed = 0;
+  let days = 0;
+
+  while (true) {
+    if (logged.has(toDateStr(cursor))) {
+      days += 1;
+      cursor.setDate(cursor.getDate() - 1);
+      continue;
+    }
+    if (missed === 0) {
+      missed = 1;
+      cursor.setDate(cursor.getDate() - 1);
+      continue;
+    }
+    break;
+  }
+
+  return {
+    days,
+    graceDay: missed === 1 && !logged.has(day) && days > 0,
+  };
+}
+
 // Longest run of consecutive days in the given dates (all-time best).
 export function longestStreak(dates: string[]): number {
   if (!dates.length) return 0;

@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { PrayerStatus } from "@/lib/types";
+import type { PrayerName, PrayerStatus } from "@/lib/types";
 import { computePrayerTimes, getCachedCoords, getPrayerLog, parseDate, today, formatClock } from "@/lib/utils";
 import { duePrayerReminders, type PrayerReminderCandidate } from "@/lib/prayerReminder";
 import { Modal } from "@/components/ui/Modal";
 import { MdrButton } from "@/components/madar/primitives";
 import { arClock } from "@/lib/madar/format";
 import { usePending } from "@/lib/pending";
+import { Clock3 } from "lucide-react";
+import { MosqueIcon } from "@/components/icons/MosqueIcon";
 
 const STORAGE_KEY = "madar-prayer-reminders-v1";
 const SNOOZE_MS = 30 * 60 * 1000;
@@ -55,6 +57,10 @@ export function PrayerReminderWatcher() {
   const setPrayerStatus = useAppStore((s) => s.setPrayerStatus);
   const bankReviewing = usePending((s) => s.reviewing);
   const snoozesRef = useRef<SnoozeMap>({});
+  // The store update is synchronous, but React may render the old selector
+  // snapshot once more while a reminder is being answered. Keep the answer
+  // local too, so that race cannot reopen the same sheet in this session.
+  const answeredTokensRef = useRef<Set<string>>(new Set());
   const [hydrated, setHydrated] = useState(() => useAppStore.persist.hasHydrated());
   const [candidate, setCandidate] = useState<PrayerReminderCandidate | null>(null);
 
@@ -86,7 +92,10 @@ export function PrayerReminderWatcher() {
     // يعيد الأثر نفسه الحساب فتظهر مطالبة الصلاة إن بقيت مستحقة.
     const next = bankReviewing
       ? null
-      : due.find((item) => (snoozesRef.current[item.token] ?? 0) <= current.getTime()) ?? null;
+      : due.find((item) =>
+          !answeredTokensRef.current.has(item.token) &&
+          (snoozesRef.current[item.token] ?? 0) <= current.getTime()
+        ) ?? null;
     // Keep the same candidate object while its sheet is open; this avoids
     // resetting the modal's focus every minute.
     setCandidate((previous) => previous?.token === next?.token ? previous : next);
@@ -106,8 +115,33 @@ export function PrayerReminderWatcher() {
     };
   }, [hydrated, refresh]);
 
+  // A prayer can also be logged from the main prayer screen while this sheet
+  // is open. Close immediately when its store value becomes recorded; waiting
+  // for the 30-second timer made the prompt feel as if it ignored the user.
+  useEffect(() => {
+    if (!candidate) return;
+    const status = getPrayerLog(prayerLogs, candidate.date)?.prayers[candidate.prayer];
+    if (status !== undefined && status !== "لم") {
+      answeredTokensRef.current.add(candidate.token);
+      setCandidate(null);
+    }
+  }, [candidate, prayerLogs]);
+
+  // If the owner later clears a prayer back to «لم» from the prayer screen,
+  // release the session guard so a genuinely unanswered prayer can be asked
+  // about again. A recorded answer remains guarded.
+  useEffect(() => {
+    for (const token of answeredTokensRef.current) {
+      const date = token.slice(0, 10);
+      const prayer = token.slice(11) as PrayerName;
+      const status = getPrayerLog(prayerLogs, date)?.prayers[prayer];
+      if (status === undefined || status === "لم") answeredTokensRef.current.delete(token);
+    }
+  }, [prayerLogs]);
+
   function answer(status: Extract<PrayerStatus, "جماعة" | "منفردة">) {
     if (!candidate) return;
+    answeredTokensRef.current.add(candidate.token);
     setPrayerStatus(candidate.date, candidate.prayer, status);
     const next = { ...snoozesRef.current };
     delete next[candidate.token];
@@ -124,30 +158,40 @@ export function PrayerReminderWatcher() {
     setCandidate(null);
   }
 
-  const title = candidate ? `تسجيل ${candidate.prayer}` : "تسجيل الصلاة";
+  const title = candidate ? `تذكير ${candidate.prayer}` : "تذكير الصلاة";
 
   return (
-    <Modal open={!!candidate} onClose={later} title={title}>
+    <Modal open={!!candidate} onClose={later} title={title} className="mdr-prayer-reminder-modal">
       {candidate && (
-        <div className="space-y-4 text-center">
-          <div className="space-y-1.5">
-            <p className="text-base font-bold text-gray-900">هل صلّيت {candidate.prayer}؟</p>
-            <p className="text-xs text-gray-500">مرّت ٣٠ دقيقة على الأذان — {prayerLabel(candidate)}.</p>
+        <div className="mdr-prayer-reminder">
+          <div className="mdr-prayer-reminder-banner">
+            <span className="mdr-prayer-reminder-icon" aria-hidden="true"><MosqueIcon size={20} /></span>
+            <span className="mdr-prayer-reminder-banner-copy">
+              <strong>تذكير الصلاة</strong>
+              <small><Clock3 size={12} aria-hidden="true" /> مرّت ٣٠ دقيقة على الأذان</small>
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+
+          <div className="mdr-prayer-reminder-question">
+            <strong>هل صلّيت {candidate.prayer}؟</strong>
+            <span>{prayerLabel(candidate)} — سجّلها عشان ما تتكرر المطالبة.</span>
+          </div>
+
+          <div className="mdr-prayer-reminder-actions">
             <MdrButton kind="ink" onClick={() => answer("جماعة")} style={{ width: "100%" }}>
-              جماعة
+              صليتها جماعة
             </MdrButton>
             <MdrButton kind="ghost" onClick={() => answer("منفردة")} style={{ width: "100%" }}>
-              مفرد
+              صليتها مفرد
             </MdrButton>
           </div>
+
           <button
             type="button"
             onClick={later}
-            className="text-xs font-semibold text-gray-400 underline underline-offset-4 press"
+            className="mdr-prayer-reminder-later press"
           >
-            ذكّرني لاحقًا
+            ذكّرني بعد ٣٠ دقيقة
           </button>
         </div>
       )}
