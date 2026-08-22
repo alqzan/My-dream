@@ -235,7 +235,7 @@ function StepView({
     isMemorize ? onMemorize(portion, r) : step.kind === "test" ? onTest(portion, r) : onReview(portion, r);
 
   return (
-    <div className="hifz-step-card max-w-lg mx-auto space-y-4">
+    <div className="hifz-step-card hifz-immersive-card space-y-4">
       <div className="hifz-step-heading flex items-center gap-2 flex-wrap">
         {icon}
         <span className="text-base font-bold text-gray-800 dark:text-gray-100">{meta.title}</span>
@@ -264,7 +264,6 @@ function StepView({
           context="shape"
           leadId={leadOnPage(portion.fromId)}
           hidden={() => true}
-          maxHeight={280}
           className="hifz-mushaf-stage"
         />
       )}
@@ -325,7 +324,7 @@ function ResultStat({ label, value }: { label: string; value: number }) {
 // ورد اليوم يُعرض في وجهه من المصحف لا مقتطعاً في صندوق: تراه حيث ستراه في
 // المصحف الورقيّ، فتبدأ الذاكرة التصويرية عملها من أوّل نظرة.
 function PortionBlock({ text, portion }: { text: string[]; portion: Portion }) {
-  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={320} className="hifz-mushaf-stage" />;
+  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" />;
 }
 
 function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {

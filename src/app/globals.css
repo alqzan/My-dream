@@ -1586,7 +1586,25 @@ body {
   letter-spacing: 0.01em;
 }
 .hifz-mushaf-stage {
-  margin-inline: -0.1rem;
+  width: min(100%, 66rem);
+  margin-inline: auto;
+}
+.hifz-coach-body,
+.hifz-session-body,
+.hifz-drill-body {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+.hifz-coach-content,
+.hifz-session-body > .hifz-immersive-card,
+.hifz-drill-body > .hifz-immersive-card {
+  width: min(100%, 66rem);
+  max-width: none;
+  margin-inline: auto;
+}
+.hifz-immersive-card {
+  max-width: none !important;
 }
 .hifz-coach-shell .mushaf-leaf-page,
 .hifz-session-shell .mushaf-leaf-page,
@@ -3161,6 +3179,67 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-home-legacy-visuals button:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 3px;
+}
+.mdr-three-arcs {
+  width: min(100%, 44rem);
+  margin-inline: auto !important;
+  align-items: start;
+}
+.mdr-three-arc-button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  overflow: visible;
+}
+.mdr-three-arc-visual {
+  position: relative;
+  display: block;
+  width: min(100%, 11.5rem);
+  max-width: 100%;
+}
+.mdr-three-arc-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.mdr-three-arc-value {
+  position: absolute;
+  inset-inline: 0;
+  top: 52%;
+  display: block;
+  transform: translateY(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+.mdr-three-arc-value > span {
+  display: block;
+  max-width: 60%;
+  margin-inline: auto;
+  overflow: hidden;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+.mdr-three-arc-value small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--ink52);
+  font-size: 0.625rem;
+}
+.mdr-three-arc-label {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.mdr-three-arc-sub {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--ink52);
+  font-size: 0.66rem;
+  line-height: 1.25;
 }
 
 .mdr-home-primary .mdr-hifz-reminder {

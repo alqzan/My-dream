@@ -149,7 +149,7 @@ export function HifzCoach({
           <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
           {/* الآية مُبرَزةٌ في وجهها والباقي خافت: تحفظها وأنت ترى أين تقع من
               الوجه — لا مقتطعةً في صندوق. */}
-          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} maxHeight={330} className="hifz-mushaf-stage" />
+          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} className="hifz-mushaf-stage" />
           <div className="mt-3"><MutashabihatAlert portion={{ fromId: cur.id, toId: cur.id }} compact /></div>
           <RepsDots reps={reps} target={repTarget} />
           <button
@@ -184,7 +184,6 @@ export function HifzCoach({
             context={revealed ? "text" : "shape"}
             leadId={leadOnPage(cur.id)}
             hidden={() => !revealed}
-            maxHeight={330}
             className="hifz-mushaf-stage"
           />
           <div className="flex gap-2 mt-4">
@@ -220,7 +219,7 @@ function Shell({
           <div className="h-full bg-quran transition-all duration-500" style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
         </div>
       )}
-      <div className="hifz-coach-body flex-1 overflow-y-auto px-4 pt-8 pb-6 max-w-lg w-full mx-auto">
+      <div className="hifz-coach-body flex-1 overflow-y-auto px-4 pt-6 pb-8 w-full">
         <div className="hifz-coach-content">{children}</div>
       </div>
     </div>
