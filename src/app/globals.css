@@ -2237,43 +2237,240 @@ body,
   border-radius: 1.35rem !important;
 }
 
-/* المحبرة: الرف هو الواجهة. ألوان أغلفة الكتب تُهدّأ بصرياً فقط؛ الحقول
-   والكتب نفسها والقراءة والحذف تبقى كما كانت. */
+/* المحبرة: الرف هو الواجهة. الكتاب يظهر ككتابٍ له غلافٌ واسم، لا كبطاقة
+   رمادية صغيرة؛ النماذج وسجل القراءة تبقى كما هي. */
 .mdr-book-card {
   background: var(--paper2) !important;
   border-color: var(--line) !important;
-  border-radius: 1.25rem !important;
-  box-shadow: none !important;
+  border-radius: 1.15rem !important;
+  box-shadow: 0 0.7rem 1.6rem rgba(66, 45, 25, 0.06) !important;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.mdr-book-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1rem 2rem rgba(66, 45, 25, 0.1) !important;
 }
 .mdr-book-card-cover {
-  background: var(--paper) !important;
+  position: relative;
+  min-height: 12.25rem;
+  padding: 1.05rem 0.7rem 1.15rem;
+  align-items: flex-end !important;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.75), transparent 42%),
+    var(--paper) !important;
   border-bottom: 1px solid var(--line);
 }
+.mdr-book-card-cover::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.7rem;
+  bottom: 0.65rem;
+  height: 0.32rem;
+  border-radius: 999px;
+  background: var(--gline);
+  box-shadow: 0 0.35rem 0 var(--line);
+}
 .mdr-book-spine {
+  position: relative;
+  z-index: 1;
+  width: min(68%, 7rem) !important;
+  height: 9.65rem !important;
+  padding: 1rem 0.65rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between !important;
   background: var(--ink) !important;
-  box-shadow: none !important;
-  border-radius: 0.3rem 0.15rem 0.15rem 0.3rem !important;
+  box-shadow: -0.35rem 0.55rem 0 rgba(55, 37, 22, 0.18), inset 0.38rem 0 rgba(255, 255, 255, 0.12) !important;
+  border-radius: 0.3rem 0.12rem 0.12rem 0.3rem !important;
+  transform: rotate(-1.2deg);
+}
+.mdr-book-spine::before {
+  content: "";
+  position: absolute;
+  inset: 0.48rem 0.42rem;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 0.1rem;
 }
 .mdr-book-spine::after {
   content: "";
   position: absolute;
-  inset-inline: 0.3rem;
-  top: 0.45rem;
+  inset-inline: 0.7rem;
+  bottom: 1.85rem;
   height: 1px;
-  background: var(--gold);
-  opacity: 0.75;
+  background: rgba(255, 255, 255, 0.65);
 }
 .mdr-book-glyph {
-  filter: grayscale(1);
-  opacity: 0.72;
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  overflow: hidden;
+  color: #fffaf0 !important;
+  font-size: 0.72rem !important;
+  font-weight: 900;
+  line-height: 1.55;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  filter: none;
+  opacity: 1;
+}
+.mdr-book-spine::marker { display: none; }
+.mdr-book-card .mdr-book-author {
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-width: 100%;
+  color: rgba(255, 250, 240, 0.76) !important;
+  font-size: 0.5rem;
+  line-height: 1.4;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mdr-book-status {
-  color: var(--ink52) !important;
-  background: var(--paper) !important;
+  z-index: 2;
+  color: var(--ink) !important;
+  background: rgba(255, 253, 248, 0.9) !important;
   border: 1px solid var(--line);
+  box-shadow: 0 0.2rem 0.5rem rgba(66, 45, 25, 0.08);
 }
 .mdr-book-title { color: var(--ink) !important; }
 .mdr-book-card .h-1\.5 > div { background: var(--gold) !important; }
+
+/* رفّ الكتب المكتملة: كعوب واسماء حقيقية مع مقاعد خفيفة للكتب القادمة. */
+.mdr-reading-shelf-frame {
+  position: relative;
+  padding: 0.78rem 0.72rem 0.72rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1.15rem;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(201, 133, 42, 0.09), transparent 38%),
+    var(--paper2);
+}
+.mdr-reading-shelf-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  color: var(--ink52);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+.mdr-reading-shelf-note span:last-child { color: var(--gold); }
+.mdr-reading-shelf-books {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.45rem;
+  min-height: 10.9rem;
+  margin-top: 0.65rem;
+  padding: 0.35rem 0.25rem 0.65rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gline) transparent;
+}
+.mdr-reading-shelf-item {
+  display: flex;
+  flex: 0 0 4.7rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 4.7rem;
+}
+.mdr-reading-shelf-item:nth-child(3n + 1) .mdr-reading-shelf-book { transform: rotate(-1.6deg); }
+.mdr-reading-shelf-item:nth-child(3n + 2) .mdr-reading-shelf-book { transform: rotate(1deg); }
+.mdr-reading-shelf-book {
+  position: relative;
+  display: flex;
+  width: 3.35rem;
+  height: 7.6rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 0.38rem;
+  overflow: hidden;
+  border-radius: 0.32rem 0.12rem 0.12rem 0.32rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: -0.24rem 0.35rem 0 rgba(55, 37, 22, 0.12), inset 0.28rem 0 rgba(255, 255, 255, 0.18);
+}
+.mdr-reading-shelf-book::before {
+  content: "";
+  position: absolute;
+  inset: 0.42rem 0.34rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 0.1rem;
+}
+.mdr-reading-shelf-book-mark {
+  position: absolute;
+  top: 0.52rem;
+  width: 1.05rem;
+  height: 0.18rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+}
+.mdr-reading-shelf-book strong,
+.mdr-reading-shelf-book small {
+  position: relative;
+  z-index: 1;
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: #fffaf0;
+  text-align: center;
+  -webkit-box-orient: vertical;
+}
+.mdr-reading-shelf-book strong {
+  font-size: 0.56rem;
+  font-weight: 900;
+  line-height: 1.6;
+  -webkit-line-clamp: 4;
+}
+.mdr-reading-shelf-book small {
+  margin-top: 0.45rem;
+  color: rgba(255, 250, 240, 0.75);
+  font-size: 0.46rem;
+  font-weight: 800;
+}
+.mdr-reading-shelf-book-label {
+  display: -webkit-box;
+  width: 100%;
+  min-height: 1.65rem;
+  overflow: hidden;
+  color: var(--ink72);
+  font-size: 0.57rem;
+  font-weight: 800;
+  line-height: 1.45;
+  text-align: center;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.mdr-reading-shelf-item.is-empty .mdr-reading-shelf-book {
+  height: 4.2rem;
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+}
+.mdr-reading-shelf-item.is-empty .mdr-reading-shelf-book::before { border-color: var(--line); }
+.mdr-reading-shelf-empty-mark {
+  color: var(--ink34);
+  font-size: 1.3rem;
+  font-weight: 400;
+}
+.mdr-reading-shelf-board {
+  height: 0.42rem;
+  margin: 0 0.1rem;
+  border-radius: 0.16rem;
+  background: linear-gradient(180deg, var(--gline), var(--gold));
+  box-shadow: 0 0.32rem 0 rgba(93, 62, 32, 0.12);
+}
 
 /* المذكرات والمرفقات: نفس الورق المخطّط ونبرة الذهب الهادئة، من دون لمس
    content/attachments أو الاستيراد القديم. */
@@ -2871,6 +3068,8 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-weekly-metric--reading { --metric-color: var(--clay); }
 .mdr-weekly-metric--quran { --metric-color: var(--green); }
 .mdr-weekly-metric--finance { --metric-color: var(--gold); }
+.mdr-weekly-metric--prayer { --metric-color: var(--clay); }
+.mdr-weekly-metric--daily { --metric-color: var(--gold); }
 .mdr-weekly-summary-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; margin-top: 0.75rem; color: var(--ink52); font-size: 0.56rem; font-weight: 700; }
 .mdr-weekly-dots { display: flex; flex: none; gap: 0.24rem; direction: rtl; }
 .mdr-weekly-dots span { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--line); }
