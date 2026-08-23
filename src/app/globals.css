@@ -3657,3 +3657,294 @@ button.mdr-summary-habit-row { cursor: pointer; }
   color: var(--ink);
   outline: none;
 }
+
+/* ===================== المال — الدورة الواضحة ===================== */
+/* الترتيب المعتمد: منحنى الصرف، ثم حالة الدورة، ثم دوائر السقوف. كل ما بعده
+   أدواتٌ حقيقية مطويّة؛ لا تبويبات إحصاءات/إدارة مكررة ولا بطاقات تتنافس. */
+.mdr-finance-page.page-shell--wide {
+  width: min(100%, 70rem);
+  background: transparent;
+  border-inline: 0;
+}
+.mdr-finance-header { gap: 1rem; }
+.mdr-finance-header .page-title { font-size: clamp(1.85rem, 4vw, 2.45rem); }
+.mdr-finance-header > div:last-child { flex-wrap: wrap; justify-content: flex-end; }
+.mdr-finance-tabs {
+  display: inline-flex;
+  width: auto;
+  min-width: 12.5rem;
+  margin-top: 0;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--paper2) 78%, transparent);
+}
+.mdr-finance-tabs button { min-width: 6rem; border-radius: 0.68rem; }
+.mdr-finance-tabs button.is-active {
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 0.65rem 1.5rem -1.15rem rgba(66, 45, 25, 0.55);
+}
+.mdr-finance-dashboard { display: grid; gap: 1rem; }
+.mdr-finance-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1.35rem;
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  box-shadow: 0 1.4rem 3.25rem -2.8rem rgba(69, 44, 17, 0.55);
+}
+.mdr-finance-curve-panel,
+.mdr-finance-cycle-panel,
+.mdr-finance-budgets-panel { padding: 1.25rem 1.3rem; }
+.mdr-finance-panel-head,
+.mdr-finance-budgets-head,
+.mdr-finance-cycle-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.mdr-finance-kicker,
+.mdr-finance-eyebrow {
+  display: block;
+  color: var(--gold);
+  font-size: 0.66rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+.mdr-finance-panel h2,
+.mdr-finance-now-card h2 {
+  margin: 0.24rem 0 0;
+  color: var(--ink);
+  font-size: 1.18rem;
+  font-weight: 950;
+  line-height: 1.35;
+}
+.mdr-finance-panel-head p,
+.mdr-finance-section-title p {
+  margin: 0.32rem 0 0;
+  color: var(--ink52);
+  font-size: 0.7rem;
+  line-height: 1.65;
+}
+.mdr-finance-period {
+  flex: none;
+  padding: 0.42rem 0.58rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  color: var(--ink52);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+.mdr-finance-curve-box {
+  margin-top: 1rem;
+  padding: 0.75rem 0.7rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.95rem;
+  background: var(--paper2);
+}
+.mdr-finance-curve-box svg { display: block; width: 100%; height: 10.25rem; overflow: visible; }
+.mdr-finance-curve-labels,
+.mdr-finance-curve-legend,
+.mdr-finance-curve-foot,
+.mdr-finance-curve-foot p,
+.mdr-finance-curve-foot a {
+  display: flex;
+  align-items: center;
+}
+.mdr-finance-curve-labels { justify-content: space-between; gap: 0.75rem; margin-top: 0.35rem; color: var(--ink34); font-size: 0.61rem; }
+.mdr-finance-curve-legend { flex-wrap: wrap; gap: 0.8rem; margin-top: 0.65rem; color: var(--ink52); font-size: 0.64rem; }
+.mdr-finance-curve-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.mdr-finance-curve-legend i { display: inline-block; width: 1.15rem; }
+.mdr-finance-curve-legend .is-plan { border-top: 1.5px dashed var(--gold); }
+.mdr-finance-curve-legend .is-spend { height: 2px; }
+.mdr-finance-curve-foot { justify-content: space-between; gap: 1rem; margin-top: 0.7rem; }
+.mdr-finance-curve-foot p { gap: 0.4rem; margin: 0; color: var(--green); font-size: 0.7rem; font-weight: 900; }
+.mdr-finance-curve-foot p.is-over { color: var(--clay); }
+.mdr-finance-curve-foot p i { width: 0.4rem; height: 0.4rem; background: currentColor; transform: rotate(45deg); }
+.mdr-finance-curve-foot a { gap: 0.3rem; color: var(--gold); font-size: 0.68rem; font-weight: 900; }
+.mdr-finance-empty-curve {
+  display: flex;
+  width: 100%;
+  min-height: 6rem;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--gline);
+  border-radius: 0.95rem;
+  background: var(--goldw);
+  color: var(--gold);
+  text-align: right;
+}
+.mdr-finance-empty-curve span { display: grid; flex: 1; gap: 0.15rem; }
+.mdr-finance-empty-curve strong { color: var(--ink); font-size: 0.82rem; }
+.mdr-finance-empty-curve small { color: var(--ink52); font-size: 0.65rem; }
+
+.mdr-finance-cycle-state { display: inline-flex; align-items: center; gap: 0.38rem; color: var(--green); font-size: 0.68rem; font-weight: 950; }
+.mdr-finance-cycle-state.is-over { color: var(--clay); }
+.mdr-finance-cycle-state i { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: currentColor; box-shadow: 0 0 0 0.22rem color-mix(in srgb, currentColor 12%, transparent); }
+.mdr-finance-available {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.mdr-finance-available strong { display: block; color: var(--green); font-size: clamp(1.75rem, 4vw, 2.45rem); font-weight: 950; line-height: 1; }
+.mdr-finance-available.is-negative strong { color: var(--clay); }
+.mdr-finance-available span { display: block; margin-top: 0.28rem; color: var(--ink52); font-size: 0.64rem; }
+.mdr-finance-cycle-track { position: relative; height: 0.42rem; margin-top: 1rem; overflow: hidden; border-radius: 999px; background: var(--line); }
+.mdr-finance-cycle-track span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
+.mdr-finance-cycle-track i { position: absolute; top: 50%; width: 0.7rem; height: 0.7rem; border: 2px solid var(--paper); border-radius: 50%; background: var(--gold); transform: translate(50%, -50%); }
+.mdr-finance-cycle-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--line);
+}
+.mdr-finance-cycle-metrics > * { min-width: 0; padding: 0.75rem 0.68rem; border: 0; background: var(--paper); text-align: right; }
+.mdr-finance-cycle-metrics span { display: block; color: var(--ink52); font-size: 0.61rem; }
+.mdr-finance-cycle-metrics strong { display: block; overflow: hidden; margin-top: 0.28rem; color: var(--ink); font-size: 0.78rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-finance-projection {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--gline);
+  border-radius: 0.85rem;
+  background: var(--goldw);
+}
+.mdr-finance-projection.is-negative { border-color: color-mix(in srgb, var(--clay) 35%, var(--line)); background: var(--clayw); }
+.mdr-finance-projection-mark { color: var(--gold); font-size: 1rem; }
+.mdr-finance-projection > div { display: grid; flex: 1; min-width: 0; gap: 0.14rem; }
+.mdr-finance-projection strong { color: var(--ink); font-size: 0.73rem; }
+.mdr-finance-projection span { color: var(--ink52); font-size: 0.6rem; }
+.mdr-finance-projection button { min-height: 2.25rem; padding: 0 0.65rem; border: 0; border-radius: 0.65rem; background: var(--ink); color: var(--paper); font: inherit; font-size: 0.62rem; font-weight: 900; }
+.mdr-finance-next-commitment {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 2.85rem;
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: transparent;
+  text-align: right;
+}
+.mdr-finance-next-commitment span { color: var(--ink52); font-size: 0.6rem; }
+.mdr-finance-next-commitment strong { overflow: hidden; color: var(--ink); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-finance-next-commitment b { color: var(--gold); font-size: 0.64rem; white-space: nowrap; }
+.mdr-finance-discipline { margin-top: 1rem; }
+.mdr-finance-discipline-head { display: flex; align-items: center; gap: 0.48rem; }
+.mdr-finance-discipline-head > i { width: 0.38rem; height: 0.38rem; background: var(--gold); transform: rotate(45deg); }
+.mdr-finance-discipline-head h3 { margin: 0; color: var(--ink); font-size: 0.68rem; font-weight: 950; letter-spacing: 0.05em; }
+.mdr-finance-discipline-head > span { flex: 1; height: 1px; background: var(--line); }
+.mdr-finance-discipline-head strong { color: var(--gold); font-size: 0.72rem; }
+.mdr-finance-discipline-bars { display: flex; align-items: flex-end; gap: 0.2rem; height: 2.15rem; margin-top: 0.58rem; }
+.mdr-finance-discipline-bars i { flex: 1; min-width: 0.16rem; background: var(--gold); }
+.mdr-finance-discipline-bars i.is-over { background: var(--clay); }
+.mdr-finance-discipline p { margin: 0.42rem 0 0; color: var(--ink34); font-size: 0.61rem; }
+
+.mdr-finance-section-title { display: flex; align-items: center; gap: 0.55rem; }
+.mdr-finance-section-title > span { display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid var(--gline); border-radius: 0.65rem; background: var(--goldw); color: var(--gold); }
+.mdr-finance-section-title h2 { margin: 0; }
+.mdr-finance-budgets-head > strong { color: var(--green); font-size: 0.66rem; white-space: nowrap; }
+.mdr-finance-budgets-head > strong.is-near { color: var(--gold); }
+.mdr-finance-budgets-head > strong.is-over { color: var(--clay); }
+.mdr-finance-budget-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.2rem 0.75rem; margin-top: 1.25rem; }
+.mdr-finance-budget-item { min-width: 0; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: center; }
+.mdr-finance-budget-ring {
+  position: relative;
+  display: block;
+  width: min(7.3rem, 100%);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  border-radius: 50%;
+  background: conic-gradient(from -90deg, var(--ring-tone) 0 var(--ring-progress), var(--line) var(--ring-progress) 100%);
+}
+.mdr-finance-budget-ring::before { content: ""; position: absolute; inset: 0.5rem; border-radius: 50%; background: var(--paper); }
+.mdr-finance-budget-ring::after { content: ""; position: absolute; inset: 0.85rem; border: 1px solid var(--gline); border-radius: 50%; }
+.mdr-finance-budget-ring > span { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; gap: 0.08rem; }
+.mdr-finance-budget-ring strong { overflow: hidden; max-width: 5rem; color: var(--ink); font-size: clamp(0.72rem, 1.7vw, 0.96rem); font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-finance-budget-ring small { color: var(--ring-tone); font-size: 0.6rem; font-weight: 950; }
+.mdr-finance-budget-name { display: block; overflow: hidden; margin-top: 0.58rem; font-size: 0.72rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-finance-budget-item > small { display: block; overflow: hidden; margin-top: 0.2rem; color: var(--ink52); font-size: 0.58rem; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-finance-budget-empty { width: 100%; min-height: 4.5rem; margin-top: 1rem; border: 1px dashed var(--gline); border-radius: 0.85rem; background: var(--goldw); color: var(--gold); font: inherit; font-size: 0.7rem; font-weight: 900; }
+.mdr-finance-budget-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 1.05rem; padding-top: 0.75rem; border-top: 1px solid var(--line); color: var(--ink52); font-size: 0.62rem; }
+.mdr-finance-budget-foot button { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 2.35rem; padding: 0 0.68rem; border: 1px solid var(--line); border-radius: 0.7rem; background: transparent; color: var(--gold); font: inherit; font-size: 0.63rem; font-weight: 950; }
+
+.mdr-finance-tools {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+}
+.mdr-finance-plan-details { display: grid; gap: 0; }
+.mdr-finance-page.is-now .mdr-finance-tools { display: none; }
+.mdr-finance-tool + .mdr-finance-tool,
+.mdr-finance-plan-details + .mdr-finance-tool { border-top: 1px solid var(--line); }
+.mdr-finance-tool > button:first-child {
+  min-height: 3.65rem;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.mdr-finance-tool > button:first-child:hover,
+.mdr-finance-tool > button:first-child:focus-visible { background: var(--goldw) !important; outline: none; }
+.mdr-finance-tool > button:first-child > span:first-child { color: var(--gold) !important; }
+.mdr-finance-tool > div:not([hidden]) { margin-top: 0 !important; padding: 0 0.85rem 0.9rem; }
+.mdr-finance-tool > div:not([hidden]) > .bg-white,
+.mdr-finance-tool > div:not([hidden]) > .card-shadow { border-radius: 0.95rem !important; }
+
+.mdr-finance-now-card { padding: 1.15rem; }
+.mdr-finance-now-heading { display: flex; align-items: flex-start; justify-content: space-between; }
+.mdr-finance-now-card .mdr-pending-banner { margin-top: 1rem; border-radius: 0.9rem !important; }
+.mdr-finance-now-actions { padding: 0.85rem; border: 1px dashed var(--gline); border-radius: 0.9rem; background: var(--goldw); }
+.mdr-finance-now-actions > button { min-height: 2.6rem; border-radius: 0.75rem !important; }
+
+@media (max-width: 980px) {
+  .mdr-finance-budget-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 759px) {
+  .mdr-finance-page.page-shell--wide { padding-top: 1rem; }
+  .mdr-finance-header { align-items: center; }
+  .mdr-finance-header .page-subtitle { display: none; }
+  .mdr-finance-header > div:last-child { gap: 0.35rem; }
+  .mdr-finance-header > div:last-child button { min-height: 2.45rem; padding-inline: 0.62rem; font-size: 0.7rem; }
+  .mdr-finance-tabs { display: flex; width: 100%; }
+  .mdr-finance-tabs button { flex: 1; }
+  .mdr-finance-curve-panel,
+  .mdr-finance-cycle-panel,
+  .mdr-finance-budgets-panel { padding: 1rem 0.9rem; }
+  .mdr-finance-panel-head { align-items: center; }
+  .mdr-finance-panel-head p { max-width: 15rem; }
+  .mdr-finance-period { display: none; }
+  .mdr-finance-curve-box { padding-inline: 0.45rem; }
+  .mdr-finance-curve-box svg { height: 8.65rem; }
+  .mdr-finance-curve-labels { font-size: 0.55rem; }
+  .mdr-finance-curve-foot { align-items: flex-start; }
+  .mdr-finance-cycle-top { align-items: flex-start; }
+  .mdr-finance-available strong { font-size: 1.65rem; }
+  .mdr-finance-cycle-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mdr-finance-projection { align-items: flex-start; flex-wrap: wrap; }
+  .mdr-finance-projection button { width: 100%; }
+  .mdr-finance-next-commitment { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .mdr-finance-next-commitment b { grid-column: 2; }
+  .mdr-finance-next-commitment svg { grid-column: 3; grid-row: 1 / span 2; }
+  .mdr-finance-budget-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem 0.55rem; }
+  .mdr-finance-budget-ring { width: min(6.6rem, 100%); }
+  .mdr-finance-budget-foot { align-items: flex-start; flex-direction: column; }
+  .mdr-finance-budget-foot button { width: 100%; justify-content: center; }
+  .mdr-finance-tool > button:first-child { padding-inline: 0.8rem; }
+  .mdr-finance-tool > button:first-child > div span:last-child { font-size: 0.65rem; }
+}

@@ -13,14 +13,11 @@ import { ReserveFunds } from "@/components/finance/ReserveFunds";
 import { InstallmentPlans } from "@/components/finance/InstallmentPlans";
 import { Assets } from "@/components/finance/Assets";
 import { Shelf } from "@/components/madar/mal/Shelf";
-import { CycleCurve } from "@/components/madar/mal/CycleCurve";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
-import { FinanceGlance } from "@/components/finance/FinanceGlance";
+import { FinanceCycleDashboard } from "@/components/finance/FinanceCycleDashboard";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
-import { GroupLabel } from "@/components/ui/GroupLabel";
-import Link from "next/link";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -28,8 +25,8 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { Transaction, ShelfItem } from "@/lib/types";
-import { Plus, Smartphone, Repeat, Tags, TrendingDown, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package, Hourglass } from "lucide-react";
-import { getCategoryInfo, normalizeArabic, formatAmount, formatDateShort, today, uid } from "@/lib/utils";
+import { Plus, Smartphone, Repeat, Tags, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package, Hourglass } from "lucide-react";
+import { getCategoryInfo, normalizeArabic, formatAmount, today, uid } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
@@ -37,6 +34,7 @@ import {
 import { assetsOverview } from "@/lib/assets";
 import { spendWindow, nextSalaryDate } from "@/lib/budgetCycle";
 import { buildCycleCurve } from "@/lib/cycleCurve";
+import { budgetStatuses } from "@/lib/budgetStatus";
 import { waitingItems, savedTotal, isRipe } from "@/lib/shelf";
 import { showUndo } from "@/components/ui/UndoToast";
 
@@ -97,6 +95,7 @@ export default function FinancePage() {
     () => defaultPlanOpen({ budgetAttention: false, negativeBalance: false, installmentOverdue: false })
   );
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [financeView, setFinanceView] = useState<"cycle" | "now">("cycle");
 
   useEffect(() => {
@@ -129,6 +128,7 @@ export default function FinancePage() {
     const saved = readSavedSections();
     const hash = window.location.hash.slice(1);
     const hashSection = planSectionFromHash(hash);
+    if (hash === "history") setHistoryOpen(true);
     // بلا تفضيلٍ محفوظ نفتح ما يحتاج انتباهاً فعلاً (قسطٌ فائت ← سقفٌ متجاوَز ←
     // الميزانية اليومية). القيم تُقرأ من مرجعٍ (ref) فيبقى الأثر لمرّة الوصول
     // وحدها ولا يُقحم قيماً متغيّرة في اعتماديّاته.
@@ -198,12 +198,25 @@ export default function FinancePage() {
     () => budgetAlerts(budgets, transactions, categories, monthlyIncome, cycleStart),
     [budgets, transactions, categories, monthlyIncome, cycleStart]
   );
+  // لو بدأت الميزانية اليومية في منتصف دورة الراتب فلا يجوز للمنحنى أن يمنح
+  // بدلاً عن الأيام التي سبقت إنشاءها. السقوف تظل على دورة الراتب كاملة؛ هذا
+  // التصحيح خاص بخط الميزانية اليومية وحده.
+  const curveStart = useMemo(
+    () => dailyBudget?.startDate && /^\d{4}-\d{2}-\d{2}$/.test(cycleStart) && dailyBudget.startDate > cycleStart
+      ? dailyBudget.startDate
+      : cycleStart,
+    [dailyBudget?.startDate, cycleStart]
+  );
   // منحنى الدورة: صرفٌ تراكميٌّ فوق خطِّ الخطّة من الراتب إلى الراتب. يُقاس
   // ببدلِ الميزانية اليومية و`dailyShare` نفسِهما، فلا تعطي الشاشةُ الواحدة
   // رقمين متناقضين — وبلا ميزانيةٍ يومية لا يُرسم أصلاً (لا خطَّ يُقاس عليه).
   const cycleCurve = useMemo(
-    () => buildCycleCurve(dailyBudget, transactions, cycleStart, nextSalaryDate(salaryDay ?? 27, today()), today()),
-    [dailyBudget, transactions, cycleStart, salaryDay]
+    () => buildCycleCurve(dailyBudget, transactions, curveStart, nextSalaryDate(salaryDay ?? 27, today()), today()),
+    [dailyBudget, transactions, curveStart, salaryDay]
+  );
+  const budgetRows = useMemo(
+    () => budgetStatuses(budgets, transactions, categories, monthlyIncome, cycleStart),
+    [budgets, transactions, categories, monthlyIncome, cycleStart]
   );
   // ما يستحقّ الفتح عند أوّل زيارةٍ بلا تفضيلٍ محفوظ — في مرجعٍ يُقرأ داخل تأثير
   // الوصول (لا يُعاد تشغيله مع كل تغيّر رقم).
@@ -234,6 +247,8 @@ export default function FinancePage() {
   function goToSection(id: PlanSectionId | "history") {
     if ((PLAN_SECTIONS as readonly string[]).includes(id)) {
       setOpenSections((prev) => ({ ...prev, [id]: true }));
+    } else if (id === "history") {
+      setHistoryOpen(true);
     }
     setTimeout(() => {
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -241,8 +256,8 @@ export default function FinancePage() {
   }
 
   return (
-    <div className={`page-shell mdr-finance-page ${financeView === "now" ? "is-now" : ""}`}>
-      <div className="flex items-center justify-between animate-fade-up">
+    <div className={`page-shell page-shell--wide mdr-finance-page ${financeView === "now" ? "is-now" : ""}`}>
+      <div className="mdr-finance-header flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
             <SectionSignet href="/finance" />
@@ -269,87 +284,64 @@ export default function FinancePage() {
 
       {financeView === "cycle" ? (
         <div className="mdr-finance-cycle-surface">
-          <FinanceGlance overview={overview} categories={categories} onGo={goToSection} />
+          <FinanceCycleDashboard
+            curve={cycleCurve}
+            overview={overview}
+            categories={categories}
+            budgetRows={budgetRows}
+            onGo={goToSection}
+          />
           <div className="mdr-finance-salary"><SalaryBanner /></div>
-          <Link href="/finance/insights" className="block animate-fade-up mdr-finance-insight-link">
-            <div className="relative overflow-hidden rounded-2xl p-3.5 press">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center"><TrendingDown size={18} /></div>
-                  <div><p className="text-sm font-bold">متابعة الصرف</p><p className="text-xs opacity-80 mt-0.5">أسبوعي · شهري · سنوي — أرقامك وتحليلك التلقائي</p></div>
-                </div>
-                <ChevronLeft size={18} className="opacity-70" />
-              </div>
-            </div>
-          </Link>
         </div>
       ) : (
         <div className="mdr-finance-now-surface">
-          <PendingBankBanner />
           <div className="mdr-finance-now-card">
-            <span className="mdr-finance-eyebrow">مراجعة سريعة</span>
-            <h2>ما الذي يحتاج قرارك الآن؟</h2>
-            <p>أضف مصروفًا أو افتح السجل؛ التفاصيل تبقى في الخطة والسجل أدناه.</p>
+            <div className="mdr-finance-now-heading">
+              <div>
+                <span className="mdr-finance-eyebrow">الآن</span>
+                <h2>العمليات التي تنتظر قرارك</h2>
+                <p>راجع رسائل البنك، أو أضف مصروفًا لم يصل تلقائيًا.</p>
+              </div>
+            </div>
+            <PendingBankBanner />
             <div className="mdr-finance-now-actions">
               <Button onClick={() => setShowForm(true)} className="bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--ink)]"><Plus size={15} /> أضف مصروفًا</Button>
-              <button type="button" onClick={() => goToSection("history")}>افتح السجل <ChevronLeft size={15} /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFinanceView("cycle");
+                  goToSection("history");
+                }}
+              >
+                افتح السجل <ChevronLeft size={15} />
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ===== 2 — الخطة المالية ===== */}
+      {/* كل أدوات المال الأصلية باقية، لكنها تُجمع في قائمةٍ هادئة بعد الملخص. */}
+      <div className="mdr-finance-tools">
       <div className="mdr-finance-plan-details">
-      <GroupLabel>الخطة المالية</GroupLabel>
-
-      {/* اختصارات سطحية قليلة — لا تستبدل الأقسام ولا تخفي الأصول/الالتزامات؛
-          تربطها فقط من شريط واحد هادئ كما في التصميم المرجعي. */}
-      <nav className="mdr-finance-plan-index" aria-label="اختصارات الخطة المالية">
-        {[
-          ["daily", "اليوم"],
-          ["budgets", "السقوف"],
-          ["shelf", "الرف"],
-          ["recurring", "الالتزامات"],
-          ["assets", "الأصول"],
-          ["reserves", "الاحتياطي"],
-          ["history", "السجل"],
-        ].map(([id, label]) => (
-          <button key={id} type="button" onClick={() => goToSection(id as PlanSectionId | "history")}>
-            {label}
-          </button>
-        ))}
-      </nav>
 
       <CollapsibleSection
         id="daily"
-        title="الميزانية اليومية"
+        title="ضبط الميزانية اليومية"
         icon={<Wallet size={16} />}
+        className="mdr-finance-tool"
         open={openSections.daily}
         onToggle={() => toggleSection("daily")}
         summary={overview.hasBudget ? `المتاح ${formatAmount(overview.availableToday)} ر.س` : "غير محدّدة"}
         badge={overview.hasBudget && overview.availableToday < 0 ? <AlertBadge>سالب</AlertBadge> : undefined}
       >
         <DailyBudgetCard />
-        {/* منحنى الدورة **تحت رقمِه لا فوق الصفحة**: هو صورةُ الرصيد المتراكم
-            نفسِه — «متى انحرفت» بدل «كم رصيدك». كان كتلةً في رأس الشاشة تُزيح
-            أدواتِ المال كلَّها تحتها، وهي أوّلُ ما يُفتح لأجله البابُ أصلاً. */}
-        {cycleCurve && (
-          <Card>
-            <div className="mdr">
-              <CycleCurve
-                curve={cycleCurve}
-                startLabel={`الراتب · ${formatDateShort(cycleCurve.start)}`}
-                endLabel={`الراتب التالي · ${formatDateShort(cycleCurve.end)}`}
-              />
-            </div>
-          </Card>
-        )}
       </CollapsibleSection>
 
       <CollapsibleSection
         id="budgets"
-        title="سقوف التصنيفات"
+        title="إدارة سقوف الإنفاق"
         icon={<Gauge size={16} />}
+        className="mdr-finance-tool"
         open={openSections.budgets}
         onToggle={() => toggleSection("budgets")}
         summary={
@@ -378,6 +370,7 @@ export default function FinancePage() {
         id="shelf"
         title="الرفّ"
         icon={<Hourglass size={16} />}
+        className="mdr-finance-tool"
         open={openSections.shelf}
         onToggle={() => toggleSection("shelf")}
         summary={shelfSummary.text}
@@ -403,6 +396,7 @@ export default function FinancePage() {
         id="recurring"
         title="المتكررة والقادم"
         icon={<Repeat size={16} />}
+        className="mdr-finance-tool"
         open={openSections.recurring}
         onToggle={() => toggleSection("recurring")}
         summary={
@@ -427,6 +421,7 @@ export default function FinancePage() {
         id="installments"
         title="الأقساط"
         icon={<CalendarClock size={16} />}
+        className="mdr-finance-tool"
         open={openSections.installments}
         onToggle={() => toggleSection("installments")}
         summary={
@@ -449,6 +444,7 @@ export default function FinancePage() {
         id="assets"
         title="الأصول"
         icon={<Package size={16} />}
+        className="mdr-finance-tool"
         open={openSections.assets}
         onToggle={() => toggleSection("assets")}
         summary={
@@ -466,6 +462,7 @@ export default function FinancePage() {
         id="reserves"
         title="الاحتياطيات"
         icon={<Landmark size={16} />}
+        className="mdr-finance-tool"
         open={openSections.reserves}
         onToggle={() => toggleSection("reserves")}
         summary={overview.hasReserves ? `${formatAmount(overview.reservesTotal)} ر.س` : "لا احتياطي بعد"}
@@ -476,10 +473,17 @@ export default function FinancePage() {
       </CollapsibleSection>
       </div>
 
-      {/* ===== 3 — السجل ===== */}
-      <div id="history" className="space-y-3">
-        <GroupLabel>السجل</GroupLabel>
-
+      {/* السجل الكامل باقٍ كما هو، لكنه لا يملأ الصفحة قبل أن يطلبه المستخدم. */}
+      <CollapsibleSection
+        id="history"
+        title="آخر العمليات"
+        icon={<Search size={16} />}
+        className="mdr-finance-tool"
+        open={historyOpen}
+        onToggle={() => setHistoryOpen((open) => !open)}
+        summary={byMonth.length ? `${formatAmount(byMonth.length)} عملية · ${formatAmount(overview.monthSpend)} ر.س هذا الشهر` : "لا عمليات هذا الشهر"}
+      >
+      <div className="space-y-3">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -561,6 +565,8 @@ export default function FinancePage() {
             )}
           </div>
         )}
+      </div>
+      </CollapsibleSection>
       </div>
 
       <Modal
