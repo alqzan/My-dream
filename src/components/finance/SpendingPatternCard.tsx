@@ -10,7 +10,7 @@ const LUX = "cat-luxuries";
 // Finance identity palette for the instrument — green (أساسي) + gold (كمالي).
 // No teal (teal belongs to prayer only). The category defs still supply the
 // icons/labels; only the two-arc gauge is fixed to the section palette.
-const ESS_COLOR = "#3d9640"; // finance green — the necessary spend
+const ESS_COLOR = "var(--theme-accent)"; // necessary spend follows the selected theme
 const LUX_COLOR = "#c9852a"; // brand gold — the discretionary spend
 const GOLD_LINE = "#e8b15a"; // thin warm gold line-work (frame · needle · marks)
 

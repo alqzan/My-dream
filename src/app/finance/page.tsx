@@ -36,6 +36,13 @@ import { spendWindow, nextSalaryDate } from "@/lib/budgetCycle";
 import { buildCycleCurve } from "@/lib/cycleCurve";
 import { budgetStatuses } from "@/lib/budgetStatus";
 import { waitingItems, savedTotal, isRipe } from "@/lib/shelf";
+import {
+  readFinanceDisplayVisibility,
+  saveFinanceDisplayVisibility,
+  isFinanceDisplayVisible,
+  type FinanceDisplayId,
+  type FinanceDisplayVisibility,
+} from "@/lib/financePreferences";
 import { showUndo } from "@/components/ui/UndoToast";
 
 // شارة تحذيرٍ حمراء صغيرة لرأس قسمٍ مطويّ (تبقى ظاهرةً دون فتحه).
@@ -45,10 +52,10 @@ function AlertBadge({ children }: { children: ReactNode }) {
   );
 }
 
-// شارةُ «نضج» — خضراء لا حمراء: هذا ليس خطراً، بل إذنٌ بالحكم بعد أن هدأتَ.
+// شارةُ «نضج» — بلون الثيم لا بلون تحذيرٍ مستقل: هذا إذنٌ بالحكم بعد أن هدأتَ.
 function RipeBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="shrink-0 text-[10px] font-bold text-white bg-emerald-600 rounded-full px-2 py-0.5">{children}</span>
+    <span className="shrink-0 text-[10px] font-bold text-white bg-finance rounded-full px-2 py-0.5">{children}</span>
   );
 }
 
@@ -97,6 +104,21 @@ export default function FinancePage() {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [financeView, setFinanceView] = useState<"cycle" | "now">("cycle");
+  const [financeVisibility, setFinanceVisibility] = useState<FinanceDisplayVisibility>({});
+  const [financeVisibilityReady, setFinanceVisibilityReady] = useState(false);
+
+  useEffect(() => {
+    setFinanceVisibility(readFinanceDisplayVisibility());
+    setFinanceVisibilityReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (financeVisibilityReady) saveFinanceDisplayVisibility(financeVisibility);
+  }, [financeVisibility, financeVisibilityReady]);
+
+  function isFinanceSectionVisible(id: FinanceDisplayId): boolean {
+    return isFinanceDisplayVisible(financeVisibility, id);
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -112,6 +134,17 @@ export default function FinancePage() {
       window.history.replaceState(null, "", clean);
     }
   }, []);
+
+  // إن وصل رابطٌ عميق إلى قسم أخفاه المستخدم، نعيد إظهاره لهذا الوصول فقط؛
+  // لا يتحول الرابط إلى شاشة فارغة ولا نغيّر تفضيله المحفوظ بلا طلب.
+  useEffect(() => {
+    if (!financeVisibilityReady) return;
+    const hash = window.location.hash.slice(1);
+    const id = hash === "history" ? "history" : planSectionFromHash(hash);
+    if (id && !isFinanceDisplayVisible(financeVisibility, id as FinanceDisplayId)) {
+      setFinanceVisibility((current) => ({ ...current, [id as FinanceDisplayId]: true }));
+    }
+  }, [financeVisibility, financeVisibilityReady]);
 
   // الروابط العميقة + التفضيل المحفوظ: ‎?open=add|recurring|categories‎ تفتح
   // النافذة، و‎#daily/#budgets/#recurring/#installments/#reserves/#history‎ تفتح القسم المطويّ
@@ -245,6 +278,9 @@ export default function FinancePage() {
 
   // ينتقل «نظرة اليوم» أو رابطٌ عميق إلى قسمٍ: يفتحه (إن كان قابلاً للطيّ) ثمّ يمرّر.
   function goToSection(id: PlanSectionId | "history") {
+    if (!isFinanceSectionVisible(id as FinanceDisplayId)) {
+      setFinanceVisibility((current) => ({ ...current, [id as FinanceDisplayId]: true }));
+    }
     if ((PLAN_SECTIONS as readonly string[]).includes(id)) {
       setOpenSections((prev) => ({ ...prev, [id]: true }));
     } else if (id === "history") {
@@ -290,8 +326,9 @@ export default function FinancePage() {
             categories={categories}
             budgetRows={budgetRows}
             onGo={goToSection}
+            visible={isFinanceSectionVisible}
           />
-          <div className="mdr-finance-salary"><SalaryBanner /></div>
+          {isFinanceSectionVisible("daily") && <div className="mdr-finance-salary"><SalaryBanner /></div>}
         </div>
       ) : (
         <div className="mdr-finance-now-surface">
@@ -324,7 +361,7 @@ export default function FinancePage() {
       <div className="mdr-finance-tools">
       <div className="mdr-finance-plan-details">
 
-      <CollapsibleSection
+      {isFinanceSectionVisible("daily") && <CollapsibleSection
         id="daily"
         title="ضبط الميزانية اليومية"
         icon={<Wallet size={16} />}
@@ -335,9 +372,9 @@ export default function FinancePage() {
         badge={overview.hasBudget && overview.availableToday < 0 ? <AlertBadge>سالب</AlertBadge> : undefined}
       >
         <DailyBudgetCard />
-      </CollapsibleSection>
+      </CollapsibleSection>}
 
-      <CollapsibleSection
+      {isFinanceSectionVisible("budgets") && <CollapsibleSection
         id="budgets"
         title="إدارة سقوف الإنفاق"
         icon={<Gauge size={16} />}
@@ -361,12 +398,12 @@ export default function FinancePage() {
           <Tags size={16} className="text-finance" />
           تصنيفاتي
         </button>
-      </CollapsibleSection>
+      </CollapsibleSection>}
 
       {/* «الرفّ»: تأخيرُ الحكم ثلاثين يوماً — لا يمنع شراءً، يؤجّله حتى تهدأ
           الشهوة. ما تُرِكَ يُجمع ثمنُه في «وفَّرت» **اشتقاقاً** من العناصر
           المتروكة لا بعدّادٍ يتراكم (عدّادٌ يخسر زيادةً عند الدمج بين جهازين). */}
-      <CollapsibleSection
+      {isFinanceSectionVisible("shelf") && <CollapsibleSection
         id="shelf"
         title="الرفّ"
         icon={<Hourglass size={16} />}
@@ -390,9 +427,9 @@ export default function FinancePage() {
             />
           </div>
         </Card>
-      </CollapsibleSection>
+      </CollapsibleSection>}
 
-      <CollapsibleSection
+      {isFinanceSectionVisible("recurring") && <CollapsibleSection
         id="recurring"
         title="المتكررة والقادم"
         icon={<Repeat size={16} />}
@@ -415,9 +452,9 @@ export default function FinancePage() {
             إدارة المصاريف المتكررة
           </button>
         </Card>
-      </CollapsibleSection>
+      </CollapsibleSection>}
 
-      <CollapsibleSection
+      {isFinanceSectionVisible("installments") && <CollapsibleSection
         id="installments"
         title="الأقساط"
         icon={<CalendarClock size={16} />}
@@ -438,9 +475,9 @@ export default function FinancePage() {
         <Card>
           <InstallmentPlans />
         </Card>
-      </CollapsibleSection>
+      </CollapsibleSection>}
 
-      <CollapsibleSection
+      {isFinanceSectionVisible("assets") && <CollapsibleSection
         id="assets"
         title="الأصول"
         icon={<Package size={16} />}
@@ -456,9 +493,9 @@ export default function FinancePage() {
         <Card>
           <Assets />
         </Card>
-      </CollapsibleSection>
+      </CollapsibleSection>}
 
-      <CollapsibleSection
+      {isFinanceSectionVisible("reserves") && <CollapsibleSection
         id="reserves"
         title="الاحتياطيات"
         icon={<Landmark size={16} />}
@@ -470,11 +507,11 @@ export default function FinancePage() {
         <Card>
           <ReserveFunds />
         </Card>
-      </CollapsibleSection>
+      </CollapsibleSection>}
       </div>
 
       {/* السجل الكامل باقٍ كما هو، لكنه لا يملأ الصفحة قبل أن يطلبه المستخدم. */}
-      <CollapsibleSection
+      {isFinanceSectionVisible("history") && <CollapsibleSection
         id="history"
         title="آخر العمليات"
         icon={<Search size={16} />}
@@ -566,7 +603,7 @@ export default function FinancePage() {
           </div>
         )}
       </div>
-      </CollapsibleSection>
+      </CollapsibleSection>}
       </div>
 
       <Modal

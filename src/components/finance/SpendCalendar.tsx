@@ -68,7 +68,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
           const isFuture = date > todayStr;
           const barHeight = spent > 0 ? Math.max(4, Math.round((spent / maxSpend) * 20)) : 0;
           const barColor = dailyBudget
-            ? (dailyShareByDate.get(date) ?? 0) > dailyBudget.amount ? "#e05555" : "#3d9640"
+            ? (dailyShareByDate.get(date) ?? 0) > dailyBudget.amount ? "#e05555" : "var(--theme-accent)"
             : "#e17b6e";
           return (
             <button

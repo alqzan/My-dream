@@ -33,7 +33,7 @@ export function FinancePace({ budgets, transactions, categories, monthlyIncome, 
 
   const over = remaining < 0;
   const tight = !over && dailyAllowance < averagePace * 0.5;
-  const color = over ? "#e05555" : tight ? "#e07b39" : "#3d9640";
+  const color = over ? "#e05555" : tight ? "#e07b39" : "var(--theme-accent)";
   const bg = over ? "bg-red-50" : tight ? "bg-orange-50" : "bg-finance/5";
 
   return (

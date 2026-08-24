@@ -18,6 +18,7 @@ import { arNum, arPct } from "@/lib/madar/format";
 import { formatAmount, formatDateShort, getCategoryInfo } from "@/lib/utils";
 
 type GoTarget = "daily" | "budgets" | "recurring" | "installments" | "reserves" | "history";
+type SummaryId = "curve" | "cycle" | "budgets";
 
 interface FinanceCycleDashboardProps {
   curve: CycleCurve | null;
@@ -25,6 +26,7 @@ interface FinanceCycleDashboardProps {
   categories: FinanceCategoryDef[];
   budgetRows: BudgetStatus[];
   onGo: (target: GoTarget) => void;
+  visible?: (id: SummaryId) => boolean;
 }
 
 type RingStyle = CSSProperties & {
@@ -49,9 +51,10 @@ export function FinanceCycleDashboard({
   categories,
   budgetRows,
   onGo,
+  visible = () => true,
 }: FinanceCycleDashboardProps) {
   const geometry = curve ? curveGeometry(curve) : null;
-  const tone = curve?.over ? "var(--clay)" : "var(--green)";
+  const tone = curve?.over ? "var(--clay)" : "var(--theme-accent)";
   const bars = curve ? disciplineDays(curve) : [];
   const score = curve ? disciplineScore(curve) : null;
   const projected = curve
@@ -67,7 +70,7 @@ export function FinanceCycleDashboard({
 
   return (
     <div className="mdr-finance-dashboard animate-fade-up">
-      <section className="mdr-finance-panel mdr-finance-curve-panel" aria-labelledby="finance-curve-title">
+      {visible("curve") && <section className="mdr-finance-panel mdr-finance-curve-panel" aria-labelledby="finance-curve-title">
         <div className="mdr-finance-panel-head">
           <div>
             <span className="mdr-finance-kicker">منحنى الصرف</span>
@@ -123,9 +126,9 @@ export function FinanceCycleDashboard({
             <ChevronLeft size={18} />
           </button>
         )}
-      </section>
+      </section>}
 
-      <section className="mdr-finance-panel mdr-finance-cycle-panel" aria-labelledby="finance-cycle-title">
+      {visible("cycle") && <section className="mdr-finance-panel mdr-finance-cycle-panel" aria-labelledby="finance-cycle-title">
         <div className="mdr-finance-cycle-top">
           <div>
             <span className={`mdr-finance-cycle-state ${curve?.over ? "is-over" : ""}`}><i />{curve?.over ? "يحتاج مراجعة" : overview.hasBudget ? "ضمن المسار" : "غير محدد"}</span>
@@ -191,9 +194,9 @@ export function FinanceCycleDashboard({
             <p>{arNum(score.within)} من {arNum(score.of)} يومًا داخل البدل</p>
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="mdr-finance-panel mdr-finance-budgets-panel" aria-labelledby="finance-budgets-title">
+      {visible("budgets") && <section className="mdr-finance-panel mdr-finance-budgets-panel" aria-labelledby="finance-budgets-title">
         <div className="mdr-finance-budgets-head">
           <div className="mdr-finance-section-title">
             <span><Gauge size={16} /></span>
@@ -208,7 +211,7 @@ export function FinanceCycleDashboard({
           <div className="mdr-finance-budget-grid">
             {budgetRows.map((row) => {
               const info = getCategoryInfo(categories, row.category);
-              const toneForRow = row.state === "over" ? "var(--clay)" : row.state === "near" ? "var(--gold)" : info.color;
+              const toneForRow = row.state === "over" ? "var(--clay)" : "var(--theme-accent)";
               const style: RingStyle = {
                 "--ring-tone": toneForRow,
                 "--ring-progress": `${Math.min(100, Math.max(0, row.pct))}%`,
@@ -234,7 +237,7 @@ export function FinanceCycleDashboard({
           <span>المبالغ من دورة مدار الحالية وتُحدّث مع كل مصروف.</span>
           <button type="button" onClick={() => onGo("budgets")}>تعديل السقوف <ChevronLeft size={14} /></button>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

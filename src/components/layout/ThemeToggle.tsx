@@ -121,6 +121,7 @@ export function ThemeApplier() {
         "--theme-accent-line": tokens.accentLine,
         "--theme-positive": tokens.positive,
         "--theme-positive-soft": tokens.positiveSoft,
+        "--finance": tokens.accent,
       };
       Object.entries(variables).forEach(([name, value]) => root.style.setProperty(name, value));
       syncThemeColor(tokens.pageBg);

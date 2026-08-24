@@ -10,10 +10,9 @@ import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X } 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
 
-// حدّ ذهبي رفيع كأخوات الأداة (PrayerOrbit/مدار السنة)؛ الرصيد الصحّي أخضر ماليّ،
-// والمستنفد أحمر — بلا فيروزي في المصاريف.
-const GOLD = "#c9852a";
-const GOLD_TIP = "#e8b15a";
+// حدٌّ رفيع بلون الثيم؛ الرصيد المتوفر يتبع اللون نفسه، والمستنفد أحمر.
+const GOLD = "var(--theme-accent)";
+const GOLD_TIP = "var(--theme-accent-strong)";
 const DRAINED = "#e05555";
 
 function prefersReducedMotion(): boolean {
@@ -33,7 +32,7 @@ function firstGrapheme(value: string): string {
 
 // الاحتياطي: قافلةٌ من الأهداف تسير على خيطٍ ذهبي — كل هدف قُرصٌ دائري يمتلئ
 // بنسبة (الرصيد ÷ الهدف)، وأيقونته راكبةٌ على مدار القرص نحو غايتها في الأعلى.
-// أخضرُ ما دام ممتلئاً، أحمرُ حين ينفد/يسلب. اضغط الهدف لتفتح تعبئته/سحبه في
+// بلون الثيم ما دام ممتلئاً، وأحمر حين ينفد/يسلب. اضغط الهدف لتفتح تعبئته/سحبه في
 // مكانه (نفس منطق الإيداع/السحب القديم — بلا حساب جديد).
 export function ReserveFunds() {
   const { reserves, transactions, addReserve, deleteReserve, addReserveDeposit } = useAppStore();
@@ -78,8 +77,11 @@ export function ReserveFunds() {
           <div className="relative flex gap-1.5 w-max min-w-full">
             {/* خيط القافلة الذهبي يمرّ خلف الأقراص */}
             <div
-              className="pointer-events-none absolute inset-x-2 h-px bg-gradient-to-l from-transparent via-[#c9852a]/45 to-transparent"
-              style={{ top: Math.round(DIAL * 0.72) }}
+              className="pointer-events-none absolute inset-x-2 h-px"
+              style={{
+                top: Math.round(DIAL * 0.72),
+                background: "linear-gradient(to left, transparent, var(--theme-accent-line), transparent)",
+              }}
             />
             {reserves.map((fund) => (
               <FundDial
@@ -144,7 +146,7 @@ function FundDial({
       onClick={onTap}
       className={cn(
         "relative z-10 shrink-0 w-[82px] flex flex-col items-center gap-1 rounded-2xl px-1 py-1.5 press transition-colors",
-        active && "bg-[#c9852a]/[0.06] ring-1 ring-[#c9852a]/30"
+        active && "bg-finance/5 ring-1 ring-finance/30"
       )}
       aria-pressed={active}
       aria-label={`${fund.name} — ${formatAmount(balance)} ريال${hasTarget ? ` · ${pct}٪ من الهدف` : ""}`}
@@ -152,12 +154,6 @@ function FundDial({
     >
       <div className="relative" style={{ width: DIAL, height: DIAL }}>
         <svg width={DIAL} height={DIAL} className="overflow-visible">
-          <defs>
-            <linearGradient id="reserveGreen" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#5cb85f" />
-              <stop offset="100%" stopColor="#2f7a33" />
-            </linearGradient>
-          </defs>
           <g style={{ transform: "rotate(-90deg)", transformOrigin: "50% 50%" }}>
             {/* مسار القرص */}
             <circle
@@ -186,7 +182,7 @@ function FundDial({
                 cy={DIAL / 2}
                 r={R}
                 fill="none"
-                stroke="url(#reserveGreen)"
+                stroke={GOLD}
                 strokeWidth={STROKE}
                 strokeLinecap="round"
                 strokeDasharray={`${on} ${CIRC - on}`}
@@ -211,7 +207,7 @@ function FundDial({
               cx={dotX}
               cy={dotY}
               r={3}
-              fill={done ? "#2f7a33" : GOLD_TIP}
+              fill={done ? GOLD : GOLD_TIP}
               stroke="#fff"
               strokeWidth={1.2}
               style={prefersReducedMotion() ? undefined : { transition: "cx 1.2s cubic-bezier(0.16,1,0.3,1), cy 1.2s cubic-bezier(0.16,1,0.3,1)" }}
@@ -232,7 +228,7 @@ function FundDial({
       <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate max-w-full leading-tight">
         {fund.name}
       </span>
-      <span className={cn("text-[11px] font-bold tabular-nums leading-none", healthy ? "text-green-700 dark:text-green-400" : "text-red-500")}>
+      <span className={cn("text-[11px] font-bold tabular-nums leading-none", healthy ? "text-finance" : "text-red-500")}>
         {formatAmount(balance)}
       </span>
       <span
@@ -295,7 +291,7 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
       className={cn(
         "rounded-2xl border p-3 space-y-2.5 animate-fade-up",
         healthy
-          ? "border-green-200 bg-gradient-to-br from-green-50/80 to-emerald-50/40 dark:from-green-500/10 dark:to-transparent dark:border-green-500/20"
+          ? "border-finance/25 bg-finance/5"
           : "border-red-200 bg-gradient-to-br from-red-50/80 to-rose-50/40 dark:from-red-500/10 dark:to-transparent dark:border-red-500/20"
       )}
     >
@@ -312,13 +308,13 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
             <span
               className={cn(
                 "text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0",
-                healthy ? "bg-green-100 text-green-700 dark:bg-green-500/20" : "bg-red-100 text-red-600 dark:bg-red-500/20"
+                healthy ? "bg-finance/10 text-finance" : "bg-red-100 text-red-600 dark:bg-red-500/20"
               )}
             >
               {healthy ? "متوفر" : "مستنفد"}
             </span>
           </div>
-          <div className={cn("text-lg font-bold tabular-nums mt-0.5", healthy ? "text-green-700 dark:text-green-400" : "text-red-500")}>
+          <div className={cn("text-lg font-bold tabular-nums mt-0.5", healthy ? "text-finance" : "text-red-500")}>
             {formatAmount(balance)} <span className="text-[10px] font-normal text-gray-400">ر.س</span>
           </div>
         </div>
@@ -334,7 +330,7 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
               className="h-full rounded-full transition-all duration-700"
               style={{
                 width: `${Math.max(0, Math.min(100, Math.round((balance / fund.target!) * 100)))}%`,
-                backgroundColor: healthy ? "#3d9640" : DRAINED,
+                backgroundColor: healthy ? "var(--theme-accent)" : DRAINED,
               }}
             />
           </div>
@@ -355,7 +351,7 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
         />
         <button
           onClick={() => move(1)}
-          className="flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-100 dark:bg-green-500/20 rounded-lg px-2.5 press shrink-0"
+          className="flex items-center gap-1 text-[11px] font-bold text-finance bg-finance/10 rounded-lg px-2.5 press shrink-0"
         >
           <ArrowDownToLine size={12} /> تعبئة
         </button>

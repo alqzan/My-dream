@@ -205,7 +205,7 @@ function PlanCard({
         <div className="h-1.5 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden mt-2">
           <div
             className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${s.pct}%`, backgroundColor: s.overdue > 0 ? "#e05555" : "#3d9640" }}
+            style={{ width: `${s.pct}%`, backgroundColor: s.overdue > 0 ? "#e05555" : "var(--theme-accent)" }}
           />
         </div>
 
@@ -554,7 +554,7 @@ function PlanForm({ initial, onDone }: { initial?: InstallmentPlan; onDone: () =
         </div>
         {down > 0 && !initial && (
           <label className="flex items-start gap-2 text-[10px] text-gray-500 leading-relaxed">
-            <input type="checkbox" checked={recordDown} onChange={(e) => setRecordDown(e.target.checked)} className="mt-0.5 accent-[var(--finance,#3d9640)]" />
+            <input type="checkbox" checked={recordDown} onChange={(e) => setRecordDown(e.target.checked)} className="mt-0.5 accent-[var(--theme-accent)]" />
             <span>سجّلها مصروفاً بتاريخها ({formatAmount(down)} ر.س) — أزِل العلامة إن كنتَ سجّلتَها بنفسك.</span>
           </label>
         )}

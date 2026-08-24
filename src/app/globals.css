@@ -1743,15 +1743,22 @@ body {
   --ink: #241d16;
   --ink72: rgba(36, 29, 22, 0.72);
   --ink52: rgba(36, 29, 22, 0.62);
-  --ink34: rgba(36, 29, 22, 0.62);
+  --ink34: rgba(36, 29, 22, 0.34);
   --line: rgba(36, 29, 22, 0.13);
   --gline: rgba(185, 134, 47, 0.34);
   --gold: #87551d;
+  --finance: #87551d;
+  --theme-accent: #87551d;
+  --theme-accent-strong: #87551d;
+  --theme-accent-soft: rgba(185, 134, 47, 0.13);
+  --theme-accent-line: rgba(185, 134, 47, 0.34);
+  --theme-positive: #87551d;
+  --theme-positive-soft: rgba(185, 134, 47, 0.13);
   --clay: #c15a34;
-  --green: #1c6350;
+  --green: #87551d;
   --blue: #3f6f8f;
   --clayw: rgba(193, 90, 52, 0.13);
-  --greenw: rgba(28, 99, 80, 0.13);
+  --greenw: rgba(185, 134, 47, 0.13);
   --bluew: rgba(63, 111, 143, 0.13);
   --goldw: rgba(185, 134, 47, 0.13);
 }
@@ -1766,11 +1773,18 @@ body {
   --line: rgba(240, 230, 211, 0.14);
   --gline: rgba(211, 162, 77, 0.3);
   --gold: #d3a24d;
+  --finance: #d3a24d;
+  --theme-accent: #d3a24d;
+  --theme-accent-strong: #ecc078;
+  --theme-accent-soft: rgba(223, 174, 94, 0.15);
+  --theme-accent-line: rgba(211, 162, 77, 0.3);
+  --theme-positive: #d3a24d;
+  --theme-positive-soft: rgba(223, 174, 94, 0.15);
   --clay: #dd7d55;
-  --green: #4f9c85;
+  --green: #d3a24d;
   --blue: #7ea9c7;
   --clayw: rgba(217, 118, 76, 0.16);
-  --greenw: rgba(79, 179, 146, 0.16);
+  --greenw: rgba(223, 174, 94, 0.15);
   --bluew: rgba(111, 168, 198, 0.16);
   --goldw: rgba(223, 174, 94, 0.15);
 }
@@ -4000,6 +4014,7 @@ html[data-madar-palette] [class*="focus:ring-quran"]:focus,
 html[data-madar-palette] [class*="focus:ring-journal"]:focus,
 html[data-madar-palette] [class*="focus:ring-reading"]:focus,
 html[data-madar-palette] [class*="focus:ring-prayer"]:focus { --tw-ring-color: var(--theme-accent) !important; }
+html[data-madar-palette] [class*="ring-finance"] { --tw-ring-color: var(--theme-accent-line) !important; }
 
 html[data-madar-palette] .mdr,
 html[data-madar-palette] .mdr-finance-page { background-color: var(--paper); color: var(--ink); }
@@ -4008,6 +4023,33 @@ html[data-madar-palette] .border-gray-100,
 html[data-madar-palette] .border-gray-200 { border-color: var(--border-subtle) !important; }
 html.dark[data-madar-palette] .bg-gray-50 { background-color: color-mix(in srgb, var(--paper2) 82%, var(--paper)) !important; }
 html.dark[data-madar-palette] .bg-gray-100 { background-color: color-mix(in srgb, var(--paper2) 92%, var(--ink)) !important; }
+
+/* اللون الأخضر القديم كان جزءاً من شاشات المال قبل الثيمات. نربط أدواته
+   القديمة باللون المختار حتى لا يظهر أخضر منفصل داخل ثيم مدار الذهبي، مع إبقاء
+   الأحمر/الطيني لحالات التجاوز والتحذير. */
+html[data-madar-palette] [class~="text-green-400"],
+html[data-madar-palette] [class~="text-green-500"],
+html[data-madar-palette] [class~="text-green-600"],
+html[data-madar-palette] [class~="text-green-700"],
+html[data-madar-palette] [class~="text-emerald-400"],
+html[data-madar-palette] [class~="text-emerald-500"],
+html[data-madar-palette] [class~="text-emerald-600"],
+html[data-madar-palette] [class~="text-emerald-700"] { color: var(--theme-accent) !important; }
+html[data-madar-palette] [class~="bg-green-500"],
+html[data-madar-palette] [class~="bg-green-600"],
+html[data-madar-palette] [class~="bg-emerald-500"],
+html[data-madar-palette] [class~="bg-emerald-600"] { background-color: var(--theme-accent) !important; }
+html[data-madar-palette] [class~="bg-green-50"],
+html[data-madar-palette] [class~="bg-green-100"],
+html[data-madar-palette] [class~="bg-green-200"],
+html[data-madar-palette] [class~="bg-emerald-50"],
+html[data-madar-palette] [class~="bg-emerald-100"] { background-color: var(--theme-accent-soft) !important; }
+html[data-madar-palette] [class*="bg-green-"][class*="/"],
+html[data-madar-palette] [class*="bg-emerald-"][class*="/"] { background-color: var(--theme-accent-soft) !important; }
+html[data-madar-palette] [class*="border-green-"],
+html[data-madar-palette] [class*="border-emerald-"] { border-color: var(--theme-accent-line) !important; }
+html[data-madar-palette] [class*="from-green-"],
+html[data-madar-palette] [class*="to-emerald-"] { --tw-gradient-from: var(--theme-accent-soft) !important; --tw-gradient-to: transparent !important; }
 
 .mdr-theme-card { overflow: hidden; }
 .mdr-theme-card-head { display: flex; align-items: flex-start; gap: 0.65rem; }
@@ -4040,6 +4082,36 @@ html.dark[data-madar-palette] .bg-gray-100 { background-color: color-mix(in srgb
 .mdr-theme-select { width: 100%; min-height: 2.7rem; border: 1px solid var(--line); border-radius: 0.8rem; background: var(--paper2); color: var(--ink); padding: 0 0.7rem; font: inherit; font-size: 0.75rem; outline: none; }
 .mdr-theme-reset { margin-top: 0.55rem; border: 0; background: transparent; color: var(--theme-accent); font: inherit; font-size: 0.7rem; font-weight: 900; cursor: pointer; }
 .mdr-theme-note { margin: 0.8rem 0 0; padding: 0.6rem 0.7rem; border: 1px solid var(--gline); background: var(--goldw); color: var(--ink52); font-size: 0.67rem; line-height: 1.7; }
+.mdr-finance-display-card { overflow: hidden; }
+.mdr-finance-display-group { margin-top: 1rem; }
+.mdr-finance-display-list { display: grid; gap: 0.45rem; }
+.mdr-finance-display-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 3.35rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--paper2);
+  color: var(--ink);
+  text-align: right;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.18s ease;
+}
+.mdr-finance-display-row:hover { border-color: var(--theme-accent-line); }
+.mdr-finance-display-row.is-visible { border-color: var(--theme-accent-line); background: var(--theme-accent-soft); }
+.mdr-finance-display-row.is-hidden { opacity: 0.68; }
+.mdr-finance-display-icon { display: grid; place-items: center; flex: none; width: 1.8rem; height: 1.8rem; border-radius: 0.62rem; background: var(--surface); color: var(--theme-accent); }
+.mdr-finance-display-row.is-hidden .mdr-finance-display-icon { color: var(--ink34); }
+.mdr-finance-display-copy { display: grid; min-width: 0; flex: 1; gap: 0.14rem; }
+.mdr-finance-display-copy strong { color: var(--ink); font-size: 0.75rem; line-height: 1.2; }
+.mdr-finance-display-copy small { overflow: hidden; color: var(--ink52); font-size: 0.64rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-finance-display-state { flex: none; color: var(--theme-accent); font-size: 0.64rem; font-weight: 900; }
+.mdr-finance-display-row.is-hidden .mdr-finance-display-state { color: var(--ink34); }
+.mdr-finance-display-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.85rem; color: var(--ink52); font-size: 0.68rem; }
 
 @media (max-width: 520px) {
   .mdr-theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

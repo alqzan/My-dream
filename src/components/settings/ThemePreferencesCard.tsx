@@ -98,7 +98,7 @@ export function ThemePreferencesCard() {
             className="mdr-theme-reset inline-flex items-center gap-1.5"
             onClick={() => MADAR_SECTION_KEYS.forEach((section) => setSectionPalette(section, null))}
           >
-            <RotateCcw size={12} /> إعادة كل الأقسام للون العام
+            <RotateCcw size={12} /> توحيد كل الأقسام على اللون العام
           </button>
         )}
       </div>
@@ -107,4 +107,3 @@ export function ThemePreferencesCard() {
     </Card>
   );
 }
-
