@@ -20,6 +20,7 @@ import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifz
 import { normalizeMerchant } from "./bankParser";
 import { persistedIdbStorage } from "./idbStorage";
 import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, suggestPlanLink } from "./installments";
+import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
 // wrapper) so cloud sync can't resurrect a removed item from another device.
@@ -38,6 +39,11 @@ const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
   "lastSalaryConfirm", "frozenHabits", "budgetWindow", "quranKhatma",
 ] as const;
+
+// These preferences are persisted on the device but deliberately excluded
+// from AppData/snapshot, so changing them must not make the cloud think the
+// user's finance or journal data changed.
+const DEVICE_LOCAL_FIELDS = ["theme", "themePalette", "sectionPalettes"] as const;
 
 // حقول تقدّم الختمة (قراءةُ اليوم) — يقابلها `dailyPageGoal` وحده كتفضيلٍ شخصيّ
 // له طابعه المستقل، فضبطُ الهدف لا يُلغي تقدّماً سُجّل على الجهاز الآخر ولا العكس.
@@ -336,8 +342,15 @@ interface AppStore extends AppData {
 
   // Theme (device-local). "auto" follows the sun: dark from المغرب
   // (sunset) until sunrise, light through the day.
-  theme: "light" | "dark" | "auto";
+  theme: ThemeMode;
   toggleTheme: () => void;
+  setThemeMode: (theme: ThemeMode) => void;
+  // اللون أيضاً تفضيلٌ جهازيّ: لا يدخل snapshot ولا يُرفع إلى السحابة. يمكن
+  // اختيار لون عام، ثمّ استثناء قسمٍ واحدٍ بلونٍ مستقل من الإعدادات.
+  themePalette: AccentPalette;
+  sectionPalettes: Partial<Record<MadarSectionKey, AccentPalette>>;
+  setThemePalette: (palette: AccentPalette) => void;
+  setSectionPalette: (section: MadarSectionKey, palette: AccentPalette | null) => void;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -350,9 +363,10 @@ export const useAppStore = create<AppStore>()(
     // discarded). A genuine no-op (an action that returns `{}`, e.g.
     // runRecurring with nothing due — which fires on every app open) is
     // skipped entirely, so merely opening the app doesn't bump the timestamp
-    // and cause needless cloud churn. `hydrate` and `toggleTheme` deliberately
-    // use `rawSet`: hydrate must keep the cloud's own timestamp, and the theme
-    // is a device-local preference that should not trigger a cloud push.
+    // and cause needless cloud churn. `hydrate` deliberately uses `rawSet` to
+    // keep the cloud's own timestamp; device-local theme fields use this same
+    // wrapper but are excluded from the timestamp change below, allowing the
+    // persist middleware to save them without creating a cloud edit.
     const set: typeof rawSet = ((partial, replace) => {
       const prev = get();
       const next = typeof partial === "function"
@@ -396,7 +410,12 @@ export const useAppStore = create<AppStore>()(
         }
       }
 
-      const patch: Record<string, unknown> = { ...next, lastUpdated: new Date().toISOString() };
+      const onlyDeviceLocal = Object.keys(next).every((key) =>
+        (DEVICE_LOCAL_FIELDS as readonly string[]).includes(key)
+      );
+      const patch: Record<string, unknown> = onlyDeviceLocal
+        ? { ...next }
+        : { ...next, lastUpdated: new Date().toISOString() };
 
       // Per-item edit stamps: every id-keyed item this change ADDED or MODIFIED
       // gets `updatedAt = now`. Without it the merge could only compare the
@@ -583,14 +602,38 @@ export const useAppStore = create<AppStore>()(
       deletedMedia: {},
       fieldUpdatedAt: {},
       theme: "auto",
+      themePalette: "madar",
+      sectionPalettes: {},
       lastUpdated: new Date().toISOString(),
 
-      // Cycles auto → light → dark → auto. Uses rawSet: the theme is a
-      // device-local preference and must not bump lastUpdated / push to cloud.
+      // Cycles auto → light → dark → auto. It persists locally, while the
+      // wrapper excludes this device-only field from lastUpdated/cloud data.
       toggleTheme: () =>
-        rawSet((s) => ({
-          theme: s.theme === "auto" ? "light" : s.theme === "light" ? "dark" : "auto",
-        })),
+        set((s) => {
+          const theme = s.theme === "auto" ? "light" : s.theme === "light" ? "dark" : "auto";
+          saveThemePreferences({ theme, palette: s.themePalette, sectionPalettes: s.sectionPalettes });
+          return { theme };
+        }),
+      setThemeMode: (theme) =>
+        set((s) => {
+          saveThemePreferences({ theme, palette: s.themePalette, sectionPalettes: s.sectionPalettes });
+          return { theme };
+        }),
+      setThemePalette: (palette) =>
+        set((s) => {
+          const themePalette = isAccentPalette(palette) ? palette : "madar";
+          saveThemePreferences({ theme: s.theme, palette: themePalette, sectionPalettes: s.sectionPalettes });
+          return { themePalette };
+        }),
+      setSectionPalette: (section, palette) =>
+        set((s) => {
+          if (!MADAR_SECTION_KEYS.includes(section)) return {};
+          const next = { ...(s.sectionPalettes ?? {}) };
+          if (palette && isAccentPalette(palette)) next[section] = palette;
+          else delete next[section];
+          saveThemePreferences({ theme: s.theme, palette: s.themePalette, sectionPalettes: next });
+          return { sectionPalettes: next };
+        }),
 
       addJournalEntry: (entry) =>
         set((s) => ({
@@ -2150,7 +2193,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 15,
+      version: 16,
       // التخزين المؤجَّل لا الخام: كلّ تعديلٍ كان يُسلسل المتجر كاملاً ويكتبه
       // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
       // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.
@@ -2236,6 +2279,24 @@ export const useAppStore = create<AppStore>()(
             ...state,
             reserves: state.reserves ?? [],
             theme: "auto",
+          };
+        }
+
+        // v16 adds device-local accent palettes. The current warm palette is
+        // the safe default, while valid choices survive a future migration.
+        if (version < 16) {
+          const rawSections = state.sectionPalettes;
+          const sectionPalettes = rawSections && typeof rawSections === "object"
+            ? Object.fromEntries(
+                Object.entries(rawSections as Record<string, unknown>).filter(([key, value]) =>
+                  MADAR_SECTION_KEYS.includes(key as MadarSectionKey) && isAccentPalette(value)
+                )
+              )
+            : {};
+          state = {
+            ...state,
+            themePalette: isAccentPalette(state.themePalette) ? state.themePalette : "madar",
+            sectionPalettes,
           };
         }
 

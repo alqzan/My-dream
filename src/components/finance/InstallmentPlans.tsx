@@ -159,7 +159,7 @@ function PlanCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border p-3 space-y-2.5",
+        "mdr-finance-installment-card rounded-2xl border p-3 space-y-2.5",
         closed
           ? "border-gray-100 bg-gray-50 dark:bg-white/5"
           : s.overdue > 0

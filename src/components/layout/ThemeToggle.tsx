@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { sunTimes, getCachedCoords, GEO_KEY } from "@/lib/utils";
+import { sectionFromPath, readThemePreferences, tokensFor } from "@/lib/theme";
 import { Moon, Sun, SunMoon } from "lucide-react";
 
 // Is it currently "night" — i.e. after المغرب (sunset) or before sunrise?
@@ -18,8 +20,7 @@ function isNightNow(): boolean {
 // (يدوياً أو تلقائياً مع المغرب) كان يرى شريط حالةٍ كريمياً فوق ترويسةٍ داكنة —
 // أوضح خللٍ في توازن أعلى الشاشة. نكتب اللون الفعلي في كل وسوم theme-color
 // فيطابق الشريطُ الترويسةَ في الحالتين.
-function syncThemeColor(dark: boolean) {
-  const color = dark ? "#171009" : "#f4eee2";
+function syncThemeColor(color: string) {
   document
     .querySelectorAll('meta[name="theme-color"]')
     .forEach((m) => m.setAttribute("content", color));
@@ -30,11 +31,31 @@ function syncThemeColor(dark: boolean) {
 // the flip happens live without a reload.
 export function ThemeApplier() {
   const theme = useAppStore((s) => s.theme);
+  const themePalette = useAppStore((s) => s.themePalette);
+  const sectionPalettes = useAppStore((s) => s.sectionPalettes);
+  const setThemeMode = useAppStore((s) => s.setThemeMode);
+  const setThemePalette = useAppStore((s) => s.setThemePalette);
+  const setSectionPalette = useAppStore((s) => s.setSectionPalette);
+  const pathname = usePathname();
   const [, setTick] = useState(0);
   // Tracks the last-applied dark state so we only ease the colour change on an
   // actual flip (not on the first paint, and not on every minute-tick that
   // leaves the theme unchanged).
   const wasDark = useRef<boolean | null>(null);
+
+  // The visual preferences are deliberately device-local. Restore them from
+  // the small local preference record after hydration; finance/journal data
+  // continues to use the normal store and cloud snapshot untouched.
+  useEffect(() => {
+    const saved = readThemePreferences();
+    if (saved.theme && saved.theme !== theme) setThemeMode(saved.theme);
+    if (saved.palette && saved.palette !== themePalette) setThemePalette(saved.palette);
+    Object.entries(saved.sectionPalettes ?? {}).forEach(([section, palette]) => {
+      if (palette && sectionPalettes?.[section as keyof typeof sectionPalettes] !== palette) {
+        setSectionPalette(section as keyof typeof sectionPalettes, palette);
+      }
+    });
+  }, [sectionPalettes, setSectionPalette, setThemeMode, setThemePalette, theme, themePalette]);
 
   // Ask for the real location once (silently) so sunset matches the user's
   // city; the cheap fallback is Riyadh.
@@ -61,6 +82,9 @@ export function ThemeApplier() {
     let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
     function apply() {
       const dark = theme === "dark" || (theme === "auto" && isNightNow());
+      const section = sectionFromPath(pathname || "/");
+      const palette = sectionPalettes?.[section] ?? themePalette;
+      const tokens = tokensFor(palette, dark);
       // Ease the colour change only on a genuine flip — skip the very first
       // apply (wasDark === null) so the initial paint doesn't animate.
       const flipping = wasDark.current !== null && wasDark.current !== dark;
@@ -71,7 +95,35 @@ export function ThemeApplier() {
         cleanupTimer = setTimeout(() => root.classList.remove("theme-transition"), 700);
       }
       root.classList.toggle("dark", dark);
-      syncThemeColor(dark);
+      root.dataset.madarPalette = palette;
+      root.dataset.madarSection = section;
+      const variables: Record<string, string> = {
+        "--page-bg": tokens.pageBg,
+        "--surface": tokens.surface,
+        "--border-subtle": tokens.borderSubtle,
+        "--paper": tokens.paper,
+        "--paper2": tokens.paper2,
+        "--ink": tokens.ink,
+        "--ink72": tokens.ink72,
+        "--ink52": tokens.ink52,
+        "--ink34": tokens.ink34,
+        "--line": tokens.line,
+        "--gold": tokens.accent,
+        "--gline": tokens.accentLine,
+        "--goldw": tokens.accentSoft,
+        "--green": tokens.positive,
+        "--greenw": tokens.positiveSoft,
+        "--clay": tokens.clay,
+        "--blue": tokens.blue,
+        "--theme-accent": tokens.accent,
+        "--theme-accent-strong": tokens.accentStrong,
+        "--theme-accent-soft": tokens.accentSoft,
+        "--theme-accent-line": tokens.accentLine,
+        "--theme-positive": tokens.positive,
+        "--theme-positive-soft": tokens.positiveSoft,
+      };
+      Object.entries(variables).forEach(([name, value]) => root.style.setProperty(name, value));
+      syncThemeColor(tokens.pageBg);
       wasDark.current = dark;
     }
     apply();
@@ -81,7 +133,7 @@ export function ThemeApplier() {
       clearInterval(id);
       if (cleanupTimer) clearTimeout(cleanupTimer);
     };
-  }, [theme]);
+  }, [theme, themePalette, sectionPalettes, pathname]);
 
   return null;
 }

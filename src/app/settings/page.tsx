@@ -7,6 +7,7 @@ import { NavCustomizeCard } from "@/components/settings/NavCustomizeCard";
 import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
 import { AiExportCard } from "@/components/settings/AiExportCard";
+import { ThemePreferencesCard } from "@/components/settings/ThemePreferencesCard";
 import { BrandMark } from "@/components/layout/BrandMark";
 // الإصدار من مصدره الوحيد (src/lib/version.ts) — لا رقمَ مكتوباً بيدٍ هنا يتخلّف
 // عن package.json. الرقم = عدد التعديلات الجوهرية منذ أوّل نسخة مستقرة.
@@ -26,6 +27,9 @@ export default function SettingsPage() {
       {/* مرساةُ الرابط القادم من بطاقة الرئيسية (/settings#events). */}
       <div id="events" className="animate-fade-up stagger-1 scroll-mt-20">
         <EventsCard />
+      </div>
+      <div className="animate-fade-up stagger-1">
+        <ThemePreferencesCard />
       </div>
       <div className="animate-fade-up stagger-1">
         <BudgetWindowCard />
