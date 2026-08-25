@@ -52,6 +52,29 @@ html {
   scroll-padding-top: 4.5rem;
 }
 
+/* حقول مدار عربية افتراضيًا. Safari لا يضمن أن حقلًا فارغًا سيرث RTL من
+   الصفحة، فيظهر المؤشر والنص من اليسار بلا سبب. الأرقام والتواريخ تبقى
+   بترتيبها الحسابي، مع محاذاتها إلى جهة النص العربية. */
+html[dir="rtl"] body { direction: rtl; }
+html[dir="rtl"] :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+  textarea,
+  select,
+  [contenteditable="true"]
+) {
+  direction: rtl;
+  text-align: start;
+  unicode-bidi: plaintext;
+}
+html[dir="rtl"] :where(
+  input[type="number"],
+  input[inputmode="numeric"],
+  input[inputmode="decimal"]
+) {
+  direction: ltr;
+  text-align: end;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
@@ -3473,7 +3496,7 @@ button.mdr-summary-habit-row { cursor: pointer; }
   border-radius: 1.28rem;
   background: var(--paper2);
   box-shadow: 0 0.35rem 0.9rem rgba(74, 52, 27, 0.035);
-  direction: ltr;
+  direction: rtl;
   text-align: right;
 }
 .mdr-lobby-peek:hover,
@@ -3567,7 +3590,7 @@ button.mdr-summary-habit-row { cursor: pointer; }
   flex: none;
   align-items: center;
   gap: 0.38rem;
-  direction: ltr;
+  direction: rtl;
 }
 .mdr-lobby-peek-streak {
   justify-content: center;

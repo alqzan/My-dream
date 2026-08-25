@@ -105,7 +105,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className={`${thamaniah.variable} ${amiriQuran.variable} ${amiriQuranMushaf.variable}`}>
-      <body>
+      <body dir="rtl">
         <ClientOnly>
           <SWRegister bp={bp} />
           <ViewportWatcher />

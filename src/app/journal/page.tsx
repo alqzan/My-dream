@@ -383,7 +383,8 @@ export default function JournalPage() {
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addQuickLine(); } }}
             placeholder="سطرٌ سريع… خاطرة، امتنان، أو ملاحظة"
             aria-label="سطر سريع"
-            dir="auto"
+            lang="ar"
+            dir="rtl"
             style={{
               flex: 1, minWidth: 0, background: "transparent", border: "none",
               outline: "none", fontSize: 13.5, minHeight: 40, fontFamily: "inherit", color: "var(--ink)",
@@ -710,7 +711,8 @@ export default function JournalPage() {
             ))}
             <div
               className="prose-journal text-[15px] leading-loose text-gray-800 min-h-[160px]"
-              dir="auto"
+              lang="ar"
+              dir="rtl"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(viewEntry.content) }}
             />
             {viewIndex !== null && filtered.length > 1 && (

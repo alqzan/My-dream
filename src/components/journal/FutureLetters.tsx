@@ -240,7 +240,8 @@ export function FutureLetters() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="عنوان الرسالة (اختياري)"
-              dir="auto"
+              lang="ar"
+              dir="rtl"
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-journal/40"
             />
             <textarea
@@ -248,7 +249,8 @@ export function FutureLetters() {
               onChange={(e) => setContent(e.target.value)}
               rows={7}
               placeholder="عزيزي أنا المستقبلي..."
-              dir="auto"
+              lang="ar"
+              dir="rtl"
               className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-journal/40 resize-none"
             />
             <div>

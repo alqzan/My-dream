@@ -153,7 +153,7 @@ export function Shelf({
 
       {open ? (
         <div style={{ marginTop: 16, border: "1px solid var(--gline)", borderRadius: 18, background: "var(--paper2)", padding: 15 }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ما الذي تشتهيه؟" dir="auto" style={field} />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ما الذي تشتهيه؟" lang="ar" dir="rtl" style={field} />
           <input
             value={price}
             onChange={(e) => setPrice(e.target.value)}
@@ -165,7 +165,8 @@ export function Shelf({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="لماذا تريده؟ (السببُ نصفُ الحكم)"
-            dir="auto"
+            lang="ar"
+            dir="rtl"
             style={{ ...field, marginTop: 12 }}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>

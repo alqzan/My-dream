@@ -503,7 +503,8 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           onChange={(e) => setTitle(expandTimeCommand(e.target.value))}
           placeholder="عنوان المذكرة"
           aria-label="عنوان المذكرة"
-          dir="auto"
+          lang="ar"
+          dir="rtl"
           className="w-full text-xl font-black border-0 border-b-2 border-[var(--line)] focus:border-[var(--gold)] bg-transparent px-1 py-2 focus:outline-none placeholder:text-gray-300 placeholder:font-bold"
         />
         {!title && titleIdeas.length > 0 && (
@@ -529,6 +530,8 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            lang="ar"
+            dir="rtl"
             className="flex-1 border border-[var(--line)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gline)]"
           />
           <div className="mdr-journal-date-actions">
@@ -578,7 +581,8 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             placeholder="اكتب مذكرتك هنا…"
             aria-label="نص المذكرة"
             className="w-full min-h-[260px] block bg-transparent px-4 py-3.5 text-[15px] leading-loose focus:outline-none resize-none mdr-journal-lined-paper"
-            dir="auto"
+            lang="ar"
+            dir="rtl"
           />
         </div>
         <div className="flex justify-end mt-1 h-3">

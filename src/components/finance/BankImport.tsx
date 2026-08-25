@@ -96,7 +96,8 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
           rows={7}
           placeholder={'الصق رسائلك هنا، مثال:\n\nشراء بقيمة 150.00 ريال من ماكدونالدز 30/06/2026\n\nشراء بقيمة 95.00 ريال من محطة وقود 29/06/2026\n\nإيداع راتب 12000 ريال'}
           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40 resize-none"
-          dir="auto"
+          lang="ar"
+          dir="rtl"
         />
       </div>
       <div>

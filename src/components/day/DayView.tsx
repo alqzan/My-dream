@@ -179,7 +179,8 @@ export function DayView({ date, onClose }: DayViewProps) {
                   )}
                   <div
                     className="prose-journal text-sm text-gray-700 leading-relaxed line-clamp-6"
-                    dir="auto"
+                    lang="ar"
+                    dir="rtl"
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.content) }}
                   />
                 </div>

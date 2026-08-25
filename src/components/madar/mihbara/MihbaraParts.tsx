@@ -102,7 +102,8 @@ export function BenefitCapture({
         onChange={(e) => setText(e.target.value)}
         rows={2}
         placeholder="الفائدةُ بعبارتك أنت لا بعبارة الكتاب"
-        dir="auto"
+        lang="ar"
+        dir="rtl"
         style={{
           width: "100%", boxSizing: "border-box", background: "transparent",
           border: "none", borderBottom: "1px solid var(--line)",
@@ -150,7 +151,8 @@ export function BenefitCapture({
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         placeholder="السؤالُ الذي بقي (اختياري)"
-        dir="auto"
+        lang="ar"
+        dir="rtl"
         style={{
           width: "100%", boxSizing: "border-box", margin: "14px 0 0",
           background: "transparent", border: "none", borderBottom: "1px solid var(--line)",
