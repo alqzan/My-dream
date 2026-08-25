@@ -4116,3 +4116,322 @@ html[data-madar-palette] [class*="to-emerald-"] { --tw-gradient-from: var(--them
 @media (max-width: 520px) {
   .mdr-theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+/* ===================== قائمة اليوم — حالة واضحة وهادئة =====================
+   هذه القائمة تعرض حالة الطقوس فقط. لا تقتطع من المصحف ولا تعرض آيات داخل
+   البهو؛ الضغط على القرآن يفتح صفحة المصحف نفسها، والتجميد يبقى مرئياً وقابلاً
+   للاستئناف من هنا من غير إعادة «إدارة العادات» إلى الصفحة. */
+.mdr-daily-rhythm {
+  display: grid;
+  gap: 0.68rem;
+  padding: 0.86rem 0.9rem 0.9rem;
+  border: 1px solid var(--gline);
+  border-radius: 1.35rem;
+  background: var(--paper2);
+  color: var(--ink);
+}
+.mdr-daily-rhythm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  direction: rtl;
+  padding: 0.05rem 0.12rem 0.15rem;
+}
+.mdr-daily-rhythm-eyebrow {
+  display: block;
+  color: var(--ink52);
+  font-size: 0.58rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+.mdr-daily-rhythm-head h2 {
+  margin: 0.1rem 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+}
+.mdr-daily-rhythm-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.35rem;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 62%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gold) 11%, var(--paper2));
+  color: var(--gold);
+  font-size: 0.7rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+.mdr-daily-rhythm-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.4rem;
+  padding: 0.62rem 0.15rem;
+  border-bottom: 1px solid var(--line);
+  direction: rtl;
+}
+.mdr-daily-rhythm-row:last-child { border-bottom: 0; }
+.mdr-daily-rhythm-row.is-pending {
+  background: color-mix(in srgb, var(--rhythm-color, var(--gold)) 3%, transparent);
+}
+.mdr-daily-rhythm-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  gap: 0.62rem;
+  padding: 0.05rem 0.05rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  text-decoration: none;
+  direction: rtl;
+}
+.mdr-daily-rhythm-main:hover,
+.mdr-daily-rhythm-main:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--rhythm-color, var(--gold)) 6%, transparent);
+}
+.mdr-daily-rhythm-main:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rhythm-color, var(--gold)) 34%, transparent);
+}
+.mdr-daily-rhythm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--rhythm-color, var(--gold)) 22%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rhythm-color, var(--gold)) 10%, var(--paper2));
+  color: var(--rhythm-color, var(--gold));
+  font-size: 1rem;
+  line-height: 1;
+}
+.mdr-daily-rhythm-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.1rem;
+}
+.mdr-daily-rhythm-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 950;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-state {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--rhythm-color, var(--gold)) 70%, var(--ink));
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-state.is-done { color: var(--green); }
+.mdr-daily-rhythm-detail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.28rem;
+  overflow: hidden;
+  color: var(--ink52);
+  font-size: 0.59rem;
+  font-weight: 750;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-detail > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdr-daily-rhythm-separator { color: var(--ink34); }
+.mdr-daily-rhythm-streak {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 0.16rem;
+  color: color-mix(in srgb, var(--rhythm-color, var(--gold)) 72%, var(--ink));
+  font-weight: 850;
+}
+.mdr-daily-rhythm-streak svg:first-child { color: var(--rhythm-color, var(--gold)); }
+.mdr-daily-rhythm-streak svg:last-child { color: var(--clay); }
+.mdr-daily-rhythm-chevron {
+  flex: none;
+  color: var(--ink34);
+}
+.mdr-daily-rhythm-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  border: 1.5px solid color-mix(in srgb, var(--rhythm-color, var(--gold)) 46%, var(--line));
+  border-radius: 999px;
+  color: var(--paper);
+}
+.mdr-daily-rhythm-status > span {
+  width: 0.36rem;
+  height: 0.36rem;
+  border-radius: 999px;
+  background: var(--rhythm-color, var(--gold));
+  opacity: 0.6;
+}
+.mdr-daily-rhythm-status.is-done {
+  border-color: var(--rhythm-color, var(--gold));
+  background: var(--rhythm-color, var(--gold));
+}
+.mdr-daily-rhythm-status.is-done > span { display: none; }
+.mdr-daily-rhythm-freeze {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: var(--ink34);
+}
+.mdr-daily-rhythm-freeze:hover,
+.mdr-daily-rhythm-freeze:focus-visible {
+  border-color: color-mix(in srgb, var(--gold) 38%, var(--line));
+  background: color-mix(in srgb, var(--gold) 8%, var(--paper2));
+  color: var(--gold);
+  outline: none;
+}
+.mdr-daily-rhythm-empty {
+  margin: 0;
+  padding: 0.82rem 0.25rem 0.35rem;
+  color: var(--ink52);
+  font-size: 0.68rem;
+  line-height: 1.7;
+  text-align: center;
+}
+.mdr-daily-rhythm-frozen {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.68rem;
+  border-top: 1px solid var(--line);
+}
+.mdr-daily-rhythm-frozen-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  direction: rtl;
+}
+.mdr-daily-rhythm-frozen-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ink52);
+}
+.mdr-daily-rhythm-frozen-head > span svg { color: var(--gold); }
+.mdr-daily-rhythm-frozen-head strong {
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+.mdr-daily-rhythm-frozen-head small {
+  color: var(--ink34);
+  font-size: 0.57rem;
+  font-weight: 750;
+}
+.mdr-daily-rhythm-frozen-list {
+  display: grid;
+  gap: 0.35rem;
+}
+.mdr-daily-rhythm-frozen-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.5rem;
+  padding: 0.4rem 0.48rem;
+  border: 1px dashed color-mix(in srgb, var(--gold) 25%, var(--line));
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--gold) 3%, var(--paper2));
+  direction: rtl;
+}
+.mdr-daily-rhythm-frozen-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rhythm-color, var(--gold)) 10%, var(--paper2));
+  color: color-mix(in srgb, var(--rhythm-color, var(--gold)) 55%, var(--ink52));
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.mdr-daily-rhythm-frozen-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.05rem;
+}
+.mdr-daily-rhythm-frozen-copy strong {
+  overflow: hidden;
+  color: var(--ink52);
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-frozen-copy small {
+  overflow: hidden;
+  color: var(--ink34);
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-resume {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  min-height: 1.9rem;
+  flex: none;
+  padding: 0 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, var(--line));
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--gold) 7%, var(--paper2));
+  color: var(--gold);
+  font: inherit;
+  font-size: 0.6rem;
+  font-weight: 900;
+}
+.mdr-daily-rhythm-resume:hover,
+.mdr-daily-rhythm-resume:focus-visible {
+  background: color-mix(in srgb, var(--gold) 14%, var(--paper2));
+  outline: none;
+}
+
+@media (max-width: 520px) {
+  .mdr-daily-rhythm { padding-inline: 0.72rem; }
+  .mdr-daily-rhythm-row { gap: 0.25rem; }
+  .mdr-daily-rhythm-main { gap: 0.5rem; }
+  .mdr-daily-rhythm-icon { width: 2.35rem; height: 2.35rem; }
+  .mdr-daily-rhythm-detail { font-size: 0.56rem; }
+  .mdr-daily-rhythm-freeze { width: 1.8rem; }
+}
