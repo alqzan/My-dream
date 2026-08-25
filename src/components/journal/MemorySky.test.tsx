@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemorySky } from "./MemorySky";
-import { SKY_CLUSTER_THRESHOLD } from "@/lib/memorySky";
+import { toIndicDigits } from "@/lib/utils";
 import type { JournalEntry } from "@/lib/types";
 
-// أرشيفٌ كبير موزّع على عدّة أشهر/سنوات (لتشكيل كوكبات).
+// أرشيفٌ موزّع على عدّة أشهر/سنوات (لتشكيل مجرات السنوات).
 function makeEntries(n: number): JournalEntry[] {
   const out: JournalEntry[] = [];
   for (let i = 0; i < n; i++) {
@@ -21,28 +21,30 @@ function render(entries: JournalEntry[]) {
   return renderToStaticMarkup(<MemorySky entries={entries} memories={[]} onOpen={() => {}} />);
 }
 
-describe("MemorySky — الكوكبات تظهر عند الأرشيف الكبير", () => {
-  it("shows constellations (not the empty state) for 334 memories", () => {
+describe("MemorySky — هرم المجرات والنجوم والكواكب", () => {
+  it("shows year galaxies (not the empty state) for 334 memories", () => {
     const n = 334;
-    expect(n).toBeGreaterThan(SKY_CLUSTER_THRESHOLD);
     const html = render(makeEntries(n));
-    expect(html).not.toContain(EMPTY_TEXT); // البقّ الأصلي: كانت «السماء الخالية» تُغطّيها
-    expect(html).toContain("كوكبة"); // عدّاد الكوكبات في الترويسة
-    expect(html).toContain(`${n} ذكرى`); // مجموع الذكريات
-    expect(html).toMatch(/يناير|فبراير|مارس|أبريل|مايو|يونيو|يوليو/); // اسمُ شهرٍ في aria-label الكوكبة
+    expect(html).not.toContain(EMPTY_TEXT);
+    expect(html).toContain("مجرة");
+    expect(html).toContain(toIndicDigits(String(n)) + " ذكرى");
+    expect(html).toMatch(/مجرة ٢٠٢٤|مجرة ٢٠٢٥|مجرة ٢٠٢٦/);
   });
 
-  it("shows constellations for 1000 memories", () => {
+  it("shows galaxies for 1000 memories", () => {
     const html = render(makeEntries(1000));
     expect(html).not.toContain(EMPTY_TEXT);
-    expect(html).toContain("كوكبة");
-    expect(html).toContain("1000 ذكرى");
+    expect(html).toContain("مجرة");
+    expect(html).toContain("١٠٠٠ ذكرى");
   });
 
-  it("renders individual stars below the threshold", () => {
+  it("keeps the year-first hierarchy for a small archive", () => {
     const html = render(makeEntries(10));
     expect(html).not.toContain(EMPTY_TEXT);
-    expect(html).toContain("نجمة"); // «١٠ نجمة · المس نجمةً…»
+    expect(html).toContain("مجرة");
+    expect(html).toContain("السنة مجرّة");
+    expect(html).toContain("الشهر نجم");
+    expect(html).toContain("اليوم كوكب");
   });
 
   it("shows the empty state only when there are truly no memories", () => {

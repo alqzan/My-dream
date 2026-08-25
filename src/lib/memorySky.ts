@@ -21,6 +21,23 @@ export interface MonthCluster {
   entries: JournalEntry[];
 }
 
+export interface YearGalaxy {
+  key: string; // YYYY
+  year: number;
+  label: string;
+  count: number;
+  entries: JournalEntry[];
+  months: MonthCluster[];
+}
+
+export interface DayPlanet {
+  key: string; // YYYY-MM-DD
+  date: string;
+  day: number;
+  count: number;
+  entries: JournalEntry[];
+}
+
 // تجميع المذكرات في كوكباتٍ شهرية (الأحدث أوّلاً). التواريخ المشوّهة تُتجاهَل.
 export function clusterByMonth(entries: JournalEntry[]): MonthCluster[] {
   const map = new Map<string, JournalEntry[]>();
@@ -37,6 +54,51 @@ export function clusterByMonth(entries: JournalEntry[]): MonthCluster[] {
       return { key, year: y, month: m, label: `${AR_MONTHS[m - 1] ?? ""} ${y}`, count: es.length, entries: es };
     })
     .sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0)); // الأحدث أوّلاً
+}
+
+// المستوى الأعلى من السماء: كل سنة مجرة، وداخلها نجوم الأشهر.
+export function clusterByYear(entries: JournalEntry[]): YearGalaxy[] {
+  const map = new Map<string, JournalEntry[]>();
+  for (const e of entries) {
+    const date = e.date || "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const key = date.slice(0, 4);
+    const arr = map.get(key);
+    if (arr) arr.push(e);
+    else map.set(key, [e]);
+  }
+  return [...map.entries()]
+    .map(([key, es]) => ({
+      key,
+      year: Number(key),
+      label: key,
+      count: es.length,
+      entries: es,
+      months: clusterByMonth(es),
+    }))
+    .sort((a, b) => b.year - a.year);
+}
+
+// المستوى الأدق: كوكب واحد لكل يوم. إن وُجدت أكثر من مذكرة في اليوم نفسه
+// تبقى كلُّها داخله وتظهر في بطاقة اليوم، فلا يضيع الوصول إلى أي مذكرة.
+export function clusterByDay(entries: JournalEntry[]): DayPlanet[] {
+  const map = new Map<string, JournalEntry[]>();
+  for (const e of entries) {
+    const key = e.date || "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+    const arr = map.get(key);
+    if (arr) arr.push(e);
+    else map.set(key, [e]);
+  }
+  return [...map.entries()]
+    .map(([date, es]) => ({
+      key: date,
+      date,
+      day: Number(date.slice(8, 10)),
+      count: es.length,
+      entries: es,
+    }))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
 export type SkyView =

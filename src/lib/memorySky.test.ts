@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { skyView, clusterByMonth, entryVoice, silentDates, SKY_CLUSTER_THRESHOLD } from "./memorySky";
+import {
+  skyView,
+  clusterByMonth,
+  clusterByYear,
+  clusterByDay,
+  entryVoice,
+  silentDates,
+  SKY_CLUSTER_THRESHOLD,
+} from "./memorySky";
 import type { JournalEntry } from "./types";
 
 // يولّد n مذكرة موزّعة على أشهرٍ حقيقية عبر ~3 سنوات.
@@ -65,6 +73,34 @@ describe("clusterByMonth", () => {
     expect(clusters).toHaveLength(2); // Jan + Feb, malformed dropped
     const jan = clusters.find((c) => c.key === "2026-01");
     expect(jan?.count).toBe(2);
+  });
+});
+
+describe("year galaxy / day planet hierarchy", () => {
+  it("groups every valid entry into a year galaxy with month stars", () => {
+    const entries: JournalEntry[] = [
+      { id: "a", date: "2025-12-31", content: "" },
+      { id: "b", date: "2026-01-01", content: "" },
+      { id: "c", date: "2026-02-01", content: "" },
+      { id: "bad", date: "nope", content: "" },
+      { id: "bad-prefix", date: "2027oops", content: "" },
+    ];
+    const years = clusterByYear(entries);
+    expect(years.map((y) => y.year)).toEqual([2026, 2025]);
+    expect(years.reduce((sum, y) => sum + y.count, 0)).toBe(3);
+    expect(years[0].months.map((m) => m.key)).toEqual(["2026-02", "2026-01"]);
+  });
+
+  it("creates one day planet while preserving multiple entries inside it", () => {
+    const entries: JournalEntry[] = [
+      { id: "a", date: "2026-08-25", content: "أ" },
+      { id: "b", date: "2026-08-25", content: "ب" },
+      { id: "c", date: "2026-08-24", content: "ج" },
+    ];
+    const days = clusterByDay(entries);
+    expect(days.map((d) => d.date)).toEqual(["2026-08-25", "2026-08-24"]);
+    expect(days[0].count).toBe(2);
+    expect(days[0].entries.map((e) => e.id)).toEqual(["a", "b"]);
   });
 });
 
