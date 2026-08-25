@@ -64,7 +64,6 @@ html[dir="rtl"] :where(
 ) {
   direction: rtl;
   text-align: start;
-  unicode-bidi: plaintext;
 }
 html[dir="rtl"] :where(
   input[type="number"],
