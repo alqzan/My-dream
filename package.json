@@ -9,6 +9,7 @@
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "test": "vitest run",
     "test:rules": "firebase emulators:exec --project demo-madar-rules-test --only firestore,storage \"vitest run --config vitest.rules.config.ts\"",
+    "doctor:ai": "node scripts/ai-doctor.mjs",
     "bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
