@@ -4457,3 +4457,271 @@ html[data-madar-palette] [class*="to-emerald-"] { --tw-gradient-from: var(--them
   .mdr-daily-rhythm-detail { font-size: 0.56rem; }
   .mdr-daily-rhythm-freeze { width: 1.8rem; }
 }
+
+/* إدارة اليوم تبقى خلف ثلاث نقاط: قائمة العادات لا تحمل أزرار حذف/تجميد
+   ظاهرة، والعناصر المخفية لا تعود إلى القائمة إلا بطلب صريح من زر الإدارة. */
+.mdr-daily-rhythm {
+  position: relative;
+}
+.mdr-daily-rhythm-head-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+}
+.mdr-daily-rhythm-manage,
+.mdr-daily-rhythm-more {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 0.72rem;
+  background: transparent;
+  color: var(--ink34);
+  font: inherit;
+  cursor: pointer;
+}
+.mdr-daily-rhythm-manage:hover,
+.mdr-daily-rhythm-manage:focus-visible,
+.mdr-daily-rhythm-more:hover,
+.mdr-daily-rhythm-more:focus-visible,
+.mdr-daily-rhythm-manage[aria-expanded="true"],
+.mdr-daily-rhythm-more[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--gold) 38%, var(--line));
+  background: color-mix(in srgb, var(--gold) 8%, var(--paper2));
+  color: var(--gold);
+  outline: none;
+}
+.mdr-daily-rhythm-hidden-count {
+  position: absolute;
+  top: -0.2rem;
+  inset-inline-start: -0.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.2rem;
+  border: 2px solid var(--paper2);
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--paper);
+  font-size: 0.5rem;
+  font-weight: 950;
+  line-height: 1;
+}
+.mdr-daily-rhythm-row {
+  position: relative;
+}
+.mdr-daily-rhythm-actions {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.mdr-daily-rhythm-menu {
+  position: absolute;
+  z-index: 25;
+  inset-inline-end: 0;
+  top: calc(100% + 0.25rem);
+  display: grid;
+  width: 9.4rem;
+  padding: 0.28rem;
+  border: 1px solid var(--gline);
+  border-radius: 0.85rem;
+  background: var(--paper2);
+  box-shadow: 0 0.7rem 1.8rem rgba(74, 52, 27, 0.14);
+  direction: rtl;
+}
+.mdr-daily-rhythm-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  width: 100%;
+  padding: 0 0.55rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--ink72);
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-align: right;
+  cursor: pointer;
+}
+.mdr-daily-rhythm-menu button:hover,
+.mdr-daily-rhythm-menu button:focus-visible {
+  background: color-mix(in srgb, var(--gold) 9%, var(--paper2));
+  color: var(--ink);
+  outline: none;
+}
+.mdr-daily-rhythm-menu button:first-child svg { color: var(--gold); }
+.mdr-daily-rhythm-menu button.is-danger { color: var(--clay); }
+.mdr-daily-rhythm-menu button.is-danger:hover,
+.mdr-daily-rhythm-menu button.is-danger:focus-visible {
+  background: color-mix(in srgb, var(--clay) 9%, var(--paper2));
+  color: var(--clay);
+}
+.mdr-daily-rhythm-hidden-panel {
+  position: absolute;
+  z-index: 30;
+  inset-inline-end: 0;
+  top: calc(100% + 0.45rem);
+  width: min(20rem, calc(100vw - 2.5rem));
+  padding: 0.8rem;
+  border: 1px solid var(--gline);
+  border-radius: 1rem;
+  background: var(--paper2);
+  box-shadow: 0 0.9rem 2.4rem rgba(74, 52, 27, 0.16);
+  direction: rtl;
+}
+.mdr-daily-rhythm-hidden-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.mdr-daily-rhythm-hidden-head > div {
+  display: grid;
+  gap: 0.14rem;
+}
+.mdr-daily-rhythm-hidden-head strong {
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 950;
+}
+.mdr-daily-rhythm-hidden-head small {
+  color: var(--ink52);
+  font-size: 0.58rem;
+  font-weight: 750;
+}
+.mdr-daily-rhythm-hidden-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--ink34);
+  cursor: pointer;
+}
+.mdr-daily-rhythm-hidden-close:hover,
+.mdr-daily-rhythm-hidden-close:focus-visible {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  outline: none;
+}
+.mdr-daily-rhythm-hidden-list {
+  display: grid;
+  gap: 0.4rem;
+  padding-top: 0.65rem;
+}
+.mdr-daily-rhythm-hidden-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.45rem;
+  padding: 0.42rem 0.45rem;
+  border: 1px dashed color-mix(in srgb, var(--gold) 27%, var(--line));
+  border-radius: 0.78rem;
+  background: color-mix(in srgb, var(--gold) 3%, var(--paper2));
+}
+.mdr-daily-rhythm-hidden-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rhythm-color, var(--gold)) 10%, var(--paper2));
+  color: color-mix(in srgb, var(--rhythm-color, var(--gold)) 60%, var(--ink52));
+  font-size: 0.83rem;
+  opacity: 0.78;
+}
+.mdr-daily-rhythm-hidden-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.08rem;
+}
+.mdr-daily-rhythm-hidden-copy strong {
+  overflow: hidden;
+  color: var(--ink72);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-hidden-copy small {
+  overflow: hidden;
+  color: var(--ink34);
+  font-size: 0.54rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdr-daily-rhythm-hidden-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: none;
+}
+.mdr-daily-rhythm-hidden-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid transparent;
+  border-radius: 0.58rem;
+  background: transparent;
+  color: var(--clay);
+  cursor: pointer;
+}
+.mdr-daily-rhythm-hidden-delete:hover,
+.mdr-daily-rhythm-hidden-delete:focus-visible {
+  border-color: color-mix(in srgb, var(--clay) 28%, var(--line));
+  background: color-mix(in srgb, var(--clay) 9%, var(--paper2));
+  outline: none;
+}
+.mdr-daily-rhythm-hidden-empty {
+  margin: 0;
+  padding: 0.75rem 0.2rem 0.2rem;
+  color: var(--ink52);
+  font-size: 0.64rem;
+  line-height: 1.7;
+}
+
+/* بطاقة «خطوتك الآن» تعرض اقتراحًا واحدًا فقط، وتستعير هدوء الورق والحبر
+   من شاشة البهو دون أن تعيد تلوين البطاقات في الصفحات الأخرى. */
+.mdr-home-now .mdr-insight-card {
+  margin: 0;
+  padding: 0.78rem 0.85rem;
+  border-radius: 1.15rem;
+}
+.mdr-home-now .mdr-insight-card > div:first-child {
+  gap: 0.45rem;
+}
+.mdr-home-now .mdr-insight-card > div:first-child > div:first-child span:last-child {
+  color: var(--ink34) !important;
+}
+.mdr-home-now .mdr-insight-card > div:first-child + div {
+  padding: 0.78rem;
+  border-radius: 0.9rem;
+}
+
+@media (max-width: 520px) {
+  .mdr-daily-rhythm-menu { width: 8.9rem; }
+  .mdr-daily-rhythm-hidden-panel { width: min(18.5rem, calc(100vw - 2rem)); }
+}

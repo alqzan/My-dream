@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookMarked,
   BookOpen,
@@ -10,9 +10,12 @@ import {
   ChevronLeft,
   Flame,
   Hourglass,
+  MoreHorizontal,
   Play,
   Snowflake,
   Sprout,
+  Trash2,
+  X,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { buildDayDigest } from "@/lib/assistantContext";
@@ -33,6 +36,7 @@ interface RitualSpec {
   streak: GraceStreak;
   href?: string;
   onToggle?: () => void;
+  isCustom?: boolean;
 }
 
 interface FrozenSpec {
@@ -40,6 +44,7 @@ interface FrozenSpec {
   name: string;
   color: string;
   icon: ReactNode;
+  isCustom?: boolean;
 }
 
 function streakLabel(streak: GraceStreak): string {
@@ -73,24 +78,83 @@ function StatusMark({ done, name }: { done: boolean; name: string }) {
   );
 }
 
-function FreezeAction({ name, onClick }: { name: string; onClick: () => void }) {
+function RitualActions({
+  ritual,
+  onFreeze,
+  onDelete,
+}: {
+  ritual: RitualSpec;
+  onFreeze: () => void;
+  onDelete?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const custom = ritual.isCustom === true;
+
   return (
-    <button
-      type="button"
-      className="mdr-daily-rhythm-freeze press"
-      onClick={() => {
-        buzz();
-        onClick();
-      }}
-      aria-label={`جمّد ${name} مؤقتًا`}
-      title={`جمّد ${name} مؤقتًا`}
-    >
-      <Snowflake size={14} strokeWidth={2.2} aria-hidden="true" />
-    </button>
+    <div className="mdr-daily-rhythm-actions">
+      <button
+        type="button"
+        className="mdr-daily-rhythm-more press"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+        aria-label={`إجراءات ${ritual.name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="إجراءات"
+      >
+        <MoreHorizontal size={16} strokeWidth={2.2} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div
+          className="mdr-daily-rhythm-menu"
+          role="menu"
+          aria-label={`إجراءات ${ritual.name}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              buzz();
+              onFreeze();
+              setOpen(false);
+            }}
+          >
+            <Snowflake size={14} aria-hidden="true" />
+            {custom ? "تجميد اليوم" : "إخفاء اليوم"}
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              role="menuitem"
+              className="is-danger"
+              onClick={() => {
+                onDelete();
+                setOpen(false);
+              }}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              حذف العادة
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-function RitualRow({ ritual, onFreeze }: { ritual: RitualSpec; onFreeze: () => void }) {
+function RitualRow({
+  ritual,
+  onFreeze,
+  onDelete,
+}: {
+  ritual: RitualSpec;
+  onFreeze: () => void;
+  onDelete?: () => void;
+}) {
   const content = (
     <>
       <span className="mdr-daily-rhythm-icon" aria-hidden="true">{ritual.icon}</span>
@@ -135,37 +199,58 @@ function RitualRow({ ritual, onFreeze }: { ritual: RitualSpec; onFreeze: () => v
         </button>
       )}
       <StatusMark done={ritual.done} name={ritual.name} />
-      <FreezeAction name={ritual.name} onClick={onFreeze} />
+      <RitualActions ritual={ritual} onFreeze={onFreeze} onDelete={onDelete} />
     </div>
   );
 }
 
-function FrozenRow({ item, onResume }: { item: FrozenSpec; onResume: () => void }) {
+function HiddenItemRow({
+  item,
+  onResume,
+  onDelete,
+}: {
+  item: FrozenSpec;
+  onResume: () => void;
+  onDelete?: () => void;
+}) {
   return (
-    <div className="mdr-daily-rhythm-frozen-row">
+    <div className="mdr-daily-rhythm-hidden-row">
       <span
-        className="mdr-daily-rhythm-frozen-icon"
+        className="mdr-daily-rhythm-hidden-icon"
         style={{ ["--rhythm-color" as string]: item.color }}
         aria-hidden="true"
       >
         {item.icon}
       </span>
-      <span className="mdr-daily-rhythm-frozen-copy">
+      <span className="mdr-daily-rhythm-hidden-copy">
         <strong>{item.name}</strong>
-        <small>مجمّدة مؤقتًا · لا تدخل في السلسلة</small>
+        <small>مخفية مؤقتًا · لا تدخل في السلسلة</small>
       </span>
-      <button
-        type="button"
-        className="mdr-daily-rhythm-resume press"
-        onClick={() => {
-          buzz();
-          onResume();
-        }}
-        aria-label={`استئناف ${item.name}`}
-      >
-        <Play size={11} strokeWidth={2.5} aria-hidden="true" />
-        استئناف
-      </button>
+      <div className="mdr-daily-rhythm-hidden-actions">
+        <button
+          type="button"
+          className="mdr-daily-rhythm-resume press"
+          onClick={() => {
+            buzz();
+            onResume();
+          }}
+          aria-label={`إظهار ${item.name}`}
+        >
+          <Play size={11} strokeWidth={2.5} aria-hidden="true" />
+          إظهار
+        </button>
+        {item.isCustom && onDelete && (
+          <button
+            type="button"
+            className="mdr-daily-rhythm-hidden-delete press"
+            onClick={onDelete}
+            aria-label={`حذف ${item.name}`}
+            title="حذف العادة"
+          >
+            <Trash2 size={13} aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -187,9 +272,28 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
   const quranKhatma = useAppStore((s) => s.quranKhatma);
   const toggleHabitLog = useAppStore((s) => s.toggleHabitLog);
   const toggleFreezeHabit = useAppStore((s) => s.toggleFreezeHabit);
+  const deleteHabit = useAppStore((s) => s.deleteHabit);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  const hiddenPanelRef = useRef<HTMLDivElement>(null);
 
   const todayStr = today();
   const frozen = useMemo(() => new Set(frozenHabits ?? []), [frozenHabits]);
+  useEffect(() => {
+    if (!hiddenOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !hiddenPanelRef.current?.contains(target)) setHiddenOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHiddenOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [hiddenOpen]);
   const quranDates = useMemo(
     () => quranActivityDates({ quranWird, quranHifz, quranReflections, quranKhatma }),
     [quranWird, quranHifz, quranReflections, quranKhatma]
@@ -298,6 +402,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
         wash: `${color}16`,
         icon: habit.icon || "⭐",
         done,
+        isCustom: true,
         streak: graceStreak(habit.logs ?? []),
         onToggle: () => {
           if (!done) buzz();
@@ -312,6 +417,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
       name: habit.name,
       color: habit.color || SECTION.brand,
       icon: habit.icon || "⭐",
+      isCustom: true,
     }));
   const activeRituals = [...activeCore, ...activeHabits];
   const frozenItems = [...frozenCore, ...frozenCustom];
@@ -319,6 +425,11 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
   const countLabel = activeRituals.length > 0
     ? `${arNum(doneCount)} من ${arNum(activeRituals.length)}`
     : "كلها مجمّدة";
+
+  function confirmDelete(habitId: string, name: string) {
+    if (typeof window !== "undefined" && !window.confirm(`تحذف عادة «${name}»؟ سجلّها سيُحذف معها.`)) return;
+    deleteHabit(habitId);
+  }
 
   return (
     <section
@@ -329,7 +440,57 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
         <div>
           <h2 id="daily-rhythm-title">اليوم</h2>
         </div>
-        <span className="mdr-daily-rhythm-count">{countLabel}</span>
+        <div ref={hiddenPanelRef} className="mdr-daily-rhythm-head-actions">
+          <span className="mdr-daily-rhythm-count">{countLabel}</span>
+          <button
+            type="button"
+            className="mdr-daily-rhythm-manage press"
+            onClick={() => setHiddenOpen((value) => !value)}
+            aria-label="إدارة العناصر المخفية"
+            aria-haspopup="dialog"
+            aria-expanded={hiddenOpen}
+            title="إدارة العناصر المخفية"
+          >
+            <MoreHorizontal size={17} strokeWidth={2.2} aria-hidden="true" />
+            {frozenItems.length > 0 && <span className="mdr-daily-rhythm-hidden-count">{arNum(frozenItems.length)}</span>}
+          </button>
+
+          {hiddenOpen && (
+            <div className="mdr-daily-rhythm-hidden-panel" role="dialog" aria-label="إدارة العناصر المخفية">
+              <div className="mdr-daily-rhythm-hidden-head">
+                <div>
+                  <strong>العناصر المخفية</strong>
+                  <small>لا تظهر في قائمة اليوم ولا تُحتسب</small>
+                </div>
+                <button
+                  type="button"
+                  className="mdr-daily-rhythm-hidden-close press"
+                  onClick={() => setHiddenOpen(false)}
+                  aria-label="إغلاق إدارة العناصر المخفية"
+                >
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </div>
+              {frozenItems.length > 0 ? (
+                <div className="mdr-daily-rhythm-hidden-list">
+                  {frozenItems.map((item) => (
+                    <HiddenItemRow
+                      key={item.key}
+                      item={item}
+                      onResume={() => {
+                        toggleFreezeHabit(item.key);
+                        setHiddenOpen(false);
+                      }}
+                      onDelete={item.isCustom ? () => confirmDelete(item.key, item.name) : undefined}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="mdr-daily-rhythm-hidden-empty">لا توجد عناصر مخفية حالياً.</p>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="mdr-daily-rhythm-list">
@@ -338,33 +499,13 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
             key={ritual.key}
             ritual={ritual}
             onFreeze={() => toggleFreezeHabit(ritual.freezeKey)}
+            onDelete={ritual.isCustom ? () => confirmDelete(ritual.key, ritual.name) : undefined}
           />
         ))}
         {activeRituals.length === 0 && (
-          <p className="mdr-daily-rhythm-empty">ما عليك شيء الآن؛ العناصر المجمّدة ظاهرة تحت.</p>
+          <p className="mdr-daily-rhythm-empty">ما عليك شيء الآن؛ العناصر المخفية تجدها من زر الإدارة.</p>
         )}
       </div>
-
-      {frozenItems.length > 0 && (
-        <div className="mdr-daily-rhythm-frozen">
-          <div className="mdr-daily-rhythm-frozen-head">
-            <span>
-              <Snowflake size={14} strokeWidth={2.2} aria-hidden="true" />
-              <strong>مجمّد مؤقتًا ({arNum(frozenItems.length)})</strong>
-            </span>
-            <small>لا يدخل في السلسلة</small>
-          </div>
-          <div className="mdr-daily-rhythm-frozen-list">
-            {frozenItems.map((item) => (
-              <FrozenRow
-                key={item.key}
-                item={item}
-                onResume={() => toggleFreezeHabit(item.key)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
