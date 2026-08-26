@@ -1345,6 +1345,11 @@ async function mediaSourceBlob(source: string): Promise<Blob> {
   return blob;
 }
 
+async function sha256HexBytes(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function uploadMediaToR2(
   syncKey: string,
   kind: MediaKind,
@@ -1353,6 +1358,7 @@ async function uploadMediaToR2(
 ): Promise<void> {
   const blob = await mediaSourceBlob(source);
   const contentType = blob.type.split(";", 1)[0].toLowerCase() || "application/octet-stream";
+  const contentDigest = await sha256HexBytes(await blob.arrayBuffer());
   // Upload THROUGH the Worker (it writes to R2 via its internal binding) instead
   // of a direct browser→R2 presigned PUT. The direct PUT needed the R2 *bucket's*
   // CORS + S3 signing and failed on iOS with an opaque "Load failed"; this POST
@@ -1363,7 +1369,11 @@ async function uploadMediaToR2(
     `&ct=${encodeURIComponent(contentType)}`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${syncKey}`, "Content-Type": contentType },
+    headers: {
+      Authorization: `Bearer ${syncKey}`,
+      "Content-Type": contentType,
+      "X-Madar-Content-SHA256": contentDigest,
+    },
     body: blob,
   });
   if (!res.ok) {

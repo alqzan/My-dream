@@ -14,7 +14,7 @@ import {
   countPages, countSpots, countAyat, openMistakes, coveredToday,
 } from "./hifz";
 import { dueQueue, type DuePage } from "./schedule";
-import { idToPage } from "./meta";
+import { idToPage, TOTAL_AYAT, TOTAL_PAGES } from "./meta";
 
 export type SessionStep =
   | { kind: "memorize"; portion: Portion }
@@ -120,15 +120,56 @@ export interface SessionSnapshot {
   tally: SessionTally;
 }
 
+function isFiniteInteger(value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+
+function isPortion(value: unknown): value is Portion {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Partial<Portion>;
+  return isFiniteInteger(p.fromId, 1, TOTAL_AYAT) && isFiniteInteger(p.toId, 1, TOTAL_AYAT) && p.fromId <= p.toId;
+}
+
+function isSessionStep(value: unknown): value is SessionStep {
+  if (!value || typeof value !== "object") return false;
+  const step = value as Partial<SessionStep>;
+  if (step.kind === "memorize" || step.kind === "recent" || step.kind === "test") {
+    return isPortion(step.portion);
+  }
+  if (step.kind === "due") {
+    return isPortion(step.portion) && isFiniteInteger(step.page, 1, TOTAL_PAGES) &&
+      isFiniteInteger(step.overdueDays) && typeof step.never === "boolean";
+  }
+  if (step.kind === "drill") {
+    return typeof step.mistakeId === "string" && step.mistakeId.length > 0 &&
+      isFiniteInteger(step.ayahId, 1, TOTAL_AYAT) &&
+      (step.wordIndex === null || isFiniteInteger(step.wordIndex));
+  }
+  return false;
+}
+
+function isSessionTally(value: unknown): value is SessionTally {
+  if (!value || typeof value !== "object") return false;
+  const tally = value as Partial<SessionTally>;
+  return isFiniteInteger(tally.memorized) && isFiniteInteger(tally.reviewed) &&
+    isFiniteInteger(tally.mistakesClosed);
+}
+
+export function isValidSessionSnapshot(value: unknown, todayStr: string): value is SessionSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snap = value as Partial<SessionSnapshot>;
+  return snap.date === todayStr && Array.isArray(snap.steps) && snap.steps.length > 0 &&
+    snap.steps.every(isSessionStep) && isFiniteInteger(snap.idx) && snap.idx < snap.steps.length &&
+    isSessionTally(snap.tally);
+}
+
 export function loadSession(todayStr: string): SessionSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(RESUME_KEY);
     if (!raw) return null;
-    const snap = JSON.parse(raw) as SessionSnapshot;
-    if (snap?.date !== todayStr || !Array.isArray(snap.steps) || !snap.steps.length) return null;
-    if (snap.idx >= snap.steps.length) return null; // منتهية
-    return snap;
+    const snap: unknown = JSON.parse(raw);
+    return isValidSessionSnapshot(snap, todayStr) ? snap : null;
   } catch {
     return null;
   }

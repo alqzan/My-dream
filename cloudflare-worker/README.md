@@ -5,7 +5,8 @@ Private Cloudflare Worker for Madar media. Both upload and download flow
 talks to R2 directly, so there is no bucket CORS requirement, no S3 presigning,
 and no S3 credentials on the hot path. The Worker authenticates the device's
 sync key (constant-time HMAC/SHA-256 compare), enforces an origin allow-list,
-and caps MIME types and sizes.
+and caps MIME types and sizes. Uploads also carry a SHA-256 digest of the raw
+body, which the Worker verifies before writing to R2.
 
 `src/index.ts` is the TypeScript source; `worker.dashboard.js` is the
 byte-for-byte-equivalent plain-JS build to paste into the dashboard editor. Keep
@@ -16,8 +17,9 @@ the two in sync when editing.
 - `GET /health` — public liveness check; returns no private data.
 - `GET /v1/media/blob?kind&hash&exp&sig` — streams an object straight from R2.
   The link is HMAC-signed with an absolute `exp`, so it needs no Bearer header.
-- `POST /v1/media/put?kind&hash&ct` — body is the bytes. Validates kind/hash/MIME
-  and the declared size, then writes to R2 via the binding. PDFs use the existing
+- `POST /v1/media/put?kind&hash&ct` — body is the bytes. Validates kind/hash/MIME,
+  the `X-Madar-Content-SHA256` body digest, and the declared size, then writes to
+  R2 via the binding. PDFs use the existing
   private `photos` bucket with a 32MB limit, so no new R2 bucket or migration is
   needed. Returns
   `exists: true` when an immutable object with the same size is already present.

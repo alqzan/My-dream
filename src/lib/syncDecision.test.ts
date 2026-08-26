@@ -164,3 +164,38 @@ describe("cloudHasUnseen — يرى أصلاً جديداً", () => {
     expect(cloudHasUnseen(local, cloud)).toBe(false);
   });
 });
+
+describe("cloudHasUnseen — لا يُسقط تغييرات القرآن", () => {
+  it("يرى جيل الحفظ وسجلّاً جديداً", () => {
+    const local = base();
+    const cloud = base({
+      quranHifz: {
+        ...structuredClone(EMPTY_HIFZ),
+        planId: "plan-1",
+        sessions: [{ id: "session-1", date: "2026-07-02", fromId: 1, toId: 7 }],
+      },
+    });
+    expect(cloudHasUnseen(cloud, local)).toBe(true);
+    expect(cloudHasUnseen(local, cloud)).toBe(false);
+  });
+
+  it("يرى تقدّم الختمة وسجلّ الصفحة الجديد", () => {
+    const local = base();
+    const cloud = base({
+      quranKhatma: { ...structuredClone(EMPTY_KHATMA), juz: 1, pageLog: [{ date: "2026-07-02", page: 20 }] },
+    });
+    expect(cloudHasUnseen(cloud, local)).toBe(true);
+    expect(cloudHasUnseen(local, cloud)).toBe(false);
+  });
+
+  it("يرى تقدّم صفحةٍ معدّلةً في اليوم نفسه", () => {
+    const local = base({
+      quranKhatma: { ...structuredClone(EMPTY_KHATMA), pageLog: [{ date: "2026-07-02", page: 20 }] },
+    });
+    const cloud = base({
+      quranKhatma: { ...structuredClone(EMPTY_KHATMA), pageLog: [{ date: "2026-07-02", page: 21 }] },
+    });
+    expect(cloudHasUnseen(cloud, local)).toBe(true);
+    expect(cloudHasUnseen(local, cloud)).toBe(false);
+  });
+});

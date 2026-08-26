@@ -2,6 +2,7 @@
 
 import type { JournalAttachment } from "@/lib/types";
 import type { MediaSource } from "@/lib/mediaSources";
+import { isSafeMediaUrl } from "@/lib/mediaUrl";
 import { useMediaCacheVersion, resolveMedia } from "@/components/ui/useMedia";
 import { AppImage } from "@/components/ui/AppImage";
 import { Download, ExternalLink, FileText, Paperclip } from "lucide-react";
@@ -23,6 +24,11 @@ function previewSource(attachment: JournalAttachment): MediaSource[] {
   return attachment.previewHash
     ? [{ hash: attachment.previewHash, kind: "photos" }]
     : [];
+}
+
+function firstSafeMediaUrl(sources: MediaSource[]): string | null {
+  const url = resolveMedia(sources)[0];
+  return isSafeMediaUrl(url) ? url : null;
 }
 
 function statusLabel(attachment: JournalAttachment, hasFile: boolean, hasPreview: boolean): string {
@@ -51,8 +57,8 @@ export function JournalAttachments({ attachments }: { attachments?: JournalAttac
 
       <div className="space-y-2">
         {attachments.map((attachment, index) => {
-          const fileUrl = resolveMedia(attachmentSource(attachment))[0];
-          const previewUrl = resolveMedia(previewSource(attachment))[0];
+          const fileUrl = firstSafeMediaUrl(attachmentSource(attachment));
+          const previewUrl = firstSafeMediaUrl(previewSource(attachment));
           const filename = attachment.filename || `ملف PDF ${index + 1}`;
           const size = formatBytes(attachment.size);
           return (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTodayPlan } from "./session";
+import { buildTodayPlan, isValidSessionSnapshot } from "./session";
 import { coveredToday, recentReviewBand } from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzSession, HifzReviewLog, HifzRating, HifzMistake } from "../types";
@@ -143,5 +143,26 @@ describe("buildTodayPlan — مسارٌ واحد مرتّب لعمل اليوم"
     const plan = buildTodayPlan(s, "2026-01-10");
     expect(plan.duePages).toBe(7); // سقف «متوازن»
     expect(plan.dueHidden).toBeGreaterThan(0);
+  });
+});
+
+describe("isValidSessionSnapshot — لا نستأنف لقطةً مشوّهة", () => {
+  const valid = {
+    date: "2026-01-10",
+    steps: [{ kind: "memorize", portion: { fromId: 1, toId: 7 } }],
+    idx: 0,
+    tally: { memorized: 0, reviewed: 0, mistakesClosed: 0 },
+  };
+
+  it("يقبل لقطةً صحيحةً لليوم", () => {
+    expect(isValidSessionSnapshot(valid, "2026-01-10")).toBe(true);
+  });
+
+  it("يرفض idx سالباً أو خارج النطاق وحقول الخطوة غير الصالحة", () => {
+    expect(isValidSessionSnapshot({ ...valid, idx: -1 }, "2026-01-10")).toBe(false);
+    expect(isValidSessionSnapshot({ ...valid, idx: 1 }, "2026-01-10")).toBe(false);
+    expect(isValidSessionSnapshot({ ...valid, steps: [{ kind: "memorize", portion: { fromId: 0, toId: 7 } }] }, "2026-01-10")).toBe(false);
+    expect(isValidSessionSnapshot({ ...valid, steps: [{ kind: "memorize", portion: { fromId: 1, toId: 6237 } }] }, "2026-01-10")).toBe(false);
+    expect(isValidSessionSnapshot({ ...valid, tally: { memorized: "1", reviewed: 0, mistakesClosed: 0 } }, "2026-01-10")).toBe(false);
   });
 });

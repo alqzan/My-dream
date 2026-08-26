@@ -64,6 +64,21 @@ describe("pageSchedules — per-page due dates derived from history", () => {
     expect(sched[0].lastReviewed).toBeNull();
   });
 
+  it("does not let duplicate same-day reviews inflate the interval", () => {
+    const p1 = pageRange(1);
+    const s = hz({
+      frontierId: p1.end,
+      sessions: [sess(1, p1.end, "2026-01-01", 3)],
+      reviews: [
+        { ...rev(1, p1.end, "2026-01-08", 3), at: 100 },
+        { ...rev(1, p1.end, "2026-01-08", 1), at: 200 },
+      ],
+    });
+    const schedule = pageSchedules(s, "2026-01-09")[0];
+    expect(schedule.lapses).toBe(1);
+    expect(schedule.intervalDays).toBe(1);
+  });
+
   it("a page mastered today is NOT due until 7 days pass", () => {
     const p1 = pageRange(1);
     const s = hz({ frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] });

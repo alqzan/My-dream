@@ -55,7 +55,7 @@ function assertOrigin(request, env) {
 function corsHeaders(request, env) {
   const headers = new Headers({
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Madar-Content-SHA256",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   });
@@ -76,6 +76,11 @@ function json(request, env, value, status = 200) {
 
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256HexBytes(value) {
+  const digest = await crypto.subtle.digest("SHA-256", value);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -164,10 +169,19 @@ async function putBlob(request, env) {
   const allowed = kind === "photos" ? new Set([...IMAGE_TYPES, ...PDF_TYPES]) : AUDIO_TYPES;
   if (!allowed.has(contentType)) throw new HttpError(415, `Content type ${contentType} is not allowed`);
 
+  const limit = maxBytes(kind, contentType, env);
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (Number.isSafeInteger(declaredLength) && declaredLength > limit) {
+    throw new HttpError(413, "File is too large");
+  }
+  const declaredDigest = (request.headers.get("X-Madar-Content-SHA256") ?? "").trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(declaredDigest)) throw new HttpError(400, "Missing content digest");
   const body = await request.arrayBuffer();
   const size = body.byteLength;
   if (size <= 0) throw new HttpError(400, "Empty body");
-  if (size > maxBytes(kind, contentType, env)) throw new HttpError(413, "File is too large");
+  if (size > limit) throw new HttpError(413, "File is too large");
+  const actualDigest = await sha256HexBytes(body);
+  if (!constantTimeEqual(actualDigest, declaredDigest)) throw new HttpError(400, "Content digest does not match");
 
   const key = objectKey(kind, hash);
   const existing = await env.MEDIA_BUCKET.head(key);

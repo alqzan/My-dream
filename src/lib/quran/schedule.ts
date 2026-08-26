@@ -66,14 +66,36 @@ export interface PageSchedule {
 }
 
 // حدث حفظٍ أو مراجعةٍ مُقيَّم يمسّ مدى أوجه — نطويه على مستوى الوجه.
-interface RatedEvent { fromPage: number; toPage: number; date: string; rating: HifzRating }
+interface RatedEvent { fromPage: number; toPage: number; date: string; rating: HifzRating; at: number | null; order: number }
 
 function ratedEvents(s: HifzState): RatedEvent[] {
   const all = [...(s.sessions ?? []), ...(s.reviews ?? [])];
-  return all
+  const events = all
     .filter((e): e is typeof e & { rating: HifzRating } => e.rating === 1 || e.rating === 2 || e.rating === 3)
-    .map((e) => ({ fromPage: idToPage(e.fromId), toPage: idToPage(e.toId), date: e.date, rating: e.rating }))
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    .map((e, order) => ({
+      fromPage: idToPage(e.fromId),
+      toPage: idToPage(e.toId),
+      date: e.date,
+      rating: e.rating,
+      at: typeof e.at === "number" && Number.isFinite(e.at) ? e.at : null,
+      order,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? -Infinity) - (b.at ?? -Infinity) || a.order - b.order);
+
+  // أكثر من ضغطة على نفس المقطع في اليوم نفسه لا تمثّل مراجعاتٍ متباعدة
+  // مستقلة. نحتفظ بالسجلّات كما هي للتاريخ والتراجع، لكن لا نسمح لها بتضخيم
+  // سلّم المباعدة؛ الأحدث (وبترتيب المصفوفة، الأحدث أولاً عند غياب at) يفوز.
+  const latest = new Map<string, RatedEvent>();
+  for (const event of events) {
+    const key = `${event.date}:${event.fromPage}:${event.toPage}`;
+    const current = latest.get(key);
+    const eventIsLater = !current ||
+      (event.at !== null && current.at === null) ||
+      (event.at !== null && current.at !== null && event.at > current.at) ||
+      (event.at === current.at && event.order > current.order);
+    if (eventIsLater) latest.set(key, event);
+  }
+  return [...latest.values()].sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? -Infinity) - (b.at ?? -Infinity) || a.order - b.order);
 }
 
 // جدول كلّ وجهٍ محفوظ [بداية الخطة .. الجبهة]. الأوجه غير المُقيَّمة بعدُ مستحقّةٌ

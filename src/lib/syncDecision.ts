@@ -78,6 +78,33 @@ export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean
   if ((cloud.quranWird ?? []).some((wd) => !localWird.has(wd))) return true;
   const localHabitLogs = new Map((local.habits ?? []).map((h) => [h.id, new Set(h.logs ?? [])]));
   if ((cloud.habits ?? []).some((h) => (h.logs ?? []).some((wd) => !localHabitLogs.get(h.id)?.has(wd)))) return true;
+  const localHifz = local.quranHifz;
+  const cloudHifz = cloud.quranHifz;
+  if (cloudHifz) {
+    // An explicit cloud plan generation is content we have not seen. An old
+    // document may omit planId, so an absent cloud value must not make a fresh
+    // device treat its own local plan as remotely new.
+    if (cloudHifz.planId && cloudHifz.planId !== localHifz?.planId) return true;
+    if (hasNewId(localHifz?.sessions ?? [], cloudHifz.sessions) ||
+      hasNewId(localHifz?.reviews ?? [], cloudHifz.reviews) ||
+      hasNewId(localHifz?.mistakes ?? [], cloudHifz.mistakes)) return true;
+    if ((cloudHifz.frontierId ?? 0) > (localHifz?.frontierId ?? 0) ||
+      (cloudHifz.lastTestDate ?? "") > (localHifz?.lastTestDate ?? "")) return true;
+    if (Object.keys(cloudHifz.deletedRecords ?? {}).some((id) => !(id in (localHifz?.deletedRecords ?? {})))) return true;
+  }
+  const localKhatma = local.quranKhatma;
+  const cloudKhatma = cloud.quranKhatma;
+  if (cloudKhatma) {
+    const localPageLog = new Map<string, number>();
+    for (const entry of localKhatma?.pageLog ?? []) {
+      localPageLog.set(entry.date, Math.max(localPageLog.get(entry.date) ?? 0, entry.page));
+    }
+    if ((cloudKhatma.pageLog ?? []).some((entry) => entry.page > (localPageLog.get(entry.date) ?? 0))) return true;
+    if ((cloudKhatma.juz ?? 0) > (localKhatma?.juz ?? 0) ||
+      (cloudKhatma.page ?? 0) > (localKhatma?.page ?? 0) ||
+      (cloudKhatma.completed ?? 0) > (localKhatma?.completed ?? 0) ||
+      (cloudKhatma.lastReadDate ?? "") > (localKhatma?.lastReadDate ?? "")) return true;
+  }
   const localDeleted = local.deleted ?? {};
   if (Object.keys(cloud.deleted ?? {}).some((k) => !(k in localDeleted))) return true;
   const localDelMedia = local.deletedMedia ?? {};
