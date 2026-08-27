@@ -4,6 +4,7 @@ import {
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalAttachment, JournalEntry, Transaction } from "./types";
+import { isValidJournalEntry, isValidTransaction } from "./backupValidation";
 import { entryPhotos, entryAudios, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
 import { MEDIA_CACHE_PREFIX } from "./mediaCache";
@@ -670,9 +671,13 @@ async function loadJournalShards(
   mainData: { journalEntries?: unknown[] }
 ): Promise<CloudEntry[]> {
   const byId = new Map<string, CloudEntry>();
-  const put = (e: CloudEntry | undefined) => {
-    const id = (e as { id?: string } | undefined)?.id;
-    if (id) byId.set(id, e as CloudEntry);
+  let invalidEntry = false;
+  const put = (e: unknown) => {
+    if (!isValidJournalEntry(e)) {
+      invalidEntry = true;
+      return;
+    }
+    byId.set(e.id, e as CloudEntry);
   };
   // Legacy inline entries first (overwritten by a shard copy if one exists).
   for (const e of (mainData.journalEntries as CloudEntry[] | undefined) ?? []) put(e);
@@ -682,10 +687,15 @@ async function loadJournalShards(
     try {
       const snap = await getDocs(collection(db, COLLECTION, uid, JOURNAL_SUB));
       snap.forEach((d) => {
-        const entries = (d.data() as { entries?: CloudEntry[] }).entries ?? [];
+        const entries = (d.data() as { entries?: unknown }).entries ?? [];
+        if (!Array.isArray(entries)) {
+          invalidEntry = true;
+          return;
+        }
         sigs.set(d.id, shardSig(entries));
         for (const e of entries) put(e);
       });
+      shardLoadOk = !invalidEntry;
     } catch {
       // Couldn't read the shards (offline / transient). We fall back to legacy
       // inline + local, but flag the load as incomplete so the UI is honest
@@ -693,6 +703,7 @@ async function loadJournalShards(
       shardLoadOk = false;
     }
   }
+  if (shardLoadOk) shardLoadOk = !invalidEntry;
   shardSignatures = sigs;
   return [...byId.values()];
 }
@@ -758,9 +769,13 @@ async function writeJournalShards(
     const sig = await runTransaction(database, async (txn) => {
       const ref = doc(database, COLLECTION, uid, JOURNAL_SUB, sid);
       const snap = await txn.get(ref);
-      const remote = snap.exists()
-        ? ((snap.data() as { entries?: CloudEntry[] }).entries ?? [])
+      const remoteRaw = snap.exists()
+        ? ((snap.data() as { entries?: unknown }).entries ?? [])
         : [];
+      if (!Array.isArray(remoteRaw) || !remoteRaw.every(isValidJournalEntry)) {
+        throw new Error("invalid remote journal shard");
+      }
+      const remote = remoteRaw as CloudEntry[];
       const merged = mergeJournalShardEntries(es, remote, deleted, deletedMedia);
       const mergedSig = shardSig(merged);
       if (mergedSig !== shardSig(remote)) {
@@ -811,9 +826,7 @@ function parseTransactionShard(data: Record<string, unknown>): Transaction[] {
     throw new Error("invalid transaction shard");
   }
   if (data.transactions.some((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return true;
-    const transaction = value as Partial<Transaction>;
-    return typeof transaction.id !== "string" || transaction.id.length === 0;
+    return !isValidTransaction(value);
   })) {
     throw new Error("invalid transaction shard entries");
   }
@@ -827,12 +840,15 @@ async function loadTransactionShards(
   uid: string,
   mainData: { transactions?: unknown[]; deleted?: Record<string, number> },
 ): Promise<Transaction[]> {
-  const inline = Array.isArray(mainData.transactions)
-    ? mainData.transactions as Transaction[]
+  const rawInline = mainData.transactions;
+  const inline = Array.isArray(rawInline)
+    ? rawInline.filter(isValidTransaction)
     : [];
-  transactionShardReadComplete = true;
+  const inlineInvalid = rawInline !== undefined
+    && (!Array.isArray(rawInline) || inline.length !== rawInline.length);
+  transactionShardReadComplete = !inlineInvalid;
   if (!db) {
-    transactionShardLoadOk = true;
+    transactionShardLoadOk = !inlineInvalid;
     transactionShardMode = "inline";
     transactionShardSignatures = new Map();
     return inline;
@@ -847,7 +863,7 @@ async function loadTransactionShards(
       merged = mergeTransactionShardEntries(transactions, merged, mainData.deleted ?? {});
     });
     transactionShardSignatures = sigs;
-    transactionShardLoadOk = true;
+    transactionShardLoadOk = !inlineInvalid;
     transactionShardMode = "sharded";
     return merged;
   } catch (error) {
@@ -855,7 +871,7 @@ async function loadTransactionShards(
     // Existing projects may still have only the old main-document rules. If
     // the inline array is present, it is a complete legacy snapshot, so keep
     // syncing in that mode without blocking the owner or touching data.
-    if (isPermissionDeniedError(error) && Array.isArray(mainData.transactions)) {
+    if (isPermissionDeniedError(error) && Array.isArray(mainData.transactions) && !inlineInvalid) {
       transactionShardLoadOk = true;
       transactionShardMode = "inline";
       return inline;
