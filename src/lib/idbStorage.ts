@@ -45,7 +45,9 @@ export const persistedIdbStorage = createDeferredStorage(idbStorage);
 // الأصليّ ولتُختبر بمؤقّتاتٍ وهمية. وهذا الملفّ هو واجهةُ التخزين القابلة
 // للاستبدال أصلاً (راجع `docs/APP-STORE-PLAN.md`) — فمكانُ الوصل هنا.
 if (typeof window !== "undefined") {
-  const flush = () => { void persistedIdbStorage.flush(); };
+  // `flush` keeps a failed batch queued and retries it internally; suppress
+  // the rejected promise here because lifecycle events have no caller waiting.
+  const flush = () => { void persistedIdbStorage.flush().catch(() => {}); };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flush();
   });

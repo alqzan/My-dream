@@ -108,9 +108,25 @@ export function pageSchedules(s: HifzState, todayStr: string): PageSchedule[] {
   const events = ratedEvents(s);
   const preset = presetOf(s.plan);
 
+  // Index each rated range once instead of scanning the full event list for
+  // every page. A long-running plan can contain thousands of ratings; this
+  // preserves the exact range semantics while changing the hot loop from
+  // pages×events to events×covered-pages.
+  const eventsByPage: RatedEvent[][] = Array.from(
+    { length: Math.max(0, lastPage - firstPage + 1) },
+    () => [],
+  );
+  for (const event of events) {
+    const start = Math.max(firstPage, event.fromPage);
+    const end = Math.min(lastPage, event.toPage);
+    for (let page = start; page <= end; page++) {
+      eventsByPage[page - firstPage].push(event);
+    }
+  }
+
   const out: PageSchedule[] = [];
   for (let page = firstPage; page <= lastPage; page++) {
-    const hits = events.filter((e) => e.fromPage <= page && e.toPage >= page);
+    const hits = eventsByPage[page - firstPage];
     const lapses = hits.filter((e) => e.rating === 1).length;
     if (hits.length === 0) {
       out.push({ page, intervalDays: 0, lastReviewed: null, dueDate: null, overdueDays: 0, lapses, due: true });

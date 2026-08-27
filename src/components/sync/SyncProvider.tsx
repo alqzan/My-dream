@@ -29,6 +29,7 @@ import type { AppData } from "@/lib/types";
 import { hasData, cloudHasUnseen, shouldAdoptCloud } from "@/lib/syncDecision";
 import { adoptCloudSnapshot } from "@/lib/syncAdopt";
 import { createSaveScheduler, type SaveScheduler } from "@/lib/saveScheduler";
+import { isCurrentSyncWork } from "@/lib/syncLifecycle";
 import { showToast } from "@/components/ui/UndoToast";
 
 // "partial": the main doc synced but the picture is incomplete — a journal
@@ -417,7 +418,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // it with backoff, and invalidate any in-flight shard/media hydration when
       // a newer listener generation or snapshot supersedes it.
       const handleSnapshotFailure = (generation: number, error: unknown) => {
-        if (cancelled || generation !== snapGeneration) return;
+        if (!isCurrentSyncWork(cancelled, generation, snapGeneration)) return;
         unsubSnap();
         unsubSnap = () => {};
         scheduleSnapRetry(error);
@@ -430,7 +431,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         unsubSnap = () => {};
         const generation = ++snapGeneration;
         unsubSnap = subscribeUserMain(space, (read, error) => {
-          if (cancelled || generation !== snapGeneration) return;
+          if (!isCurrentSyncWork(cancelled, generation, snapGeneration)) return;
           if (error) {
             handleSnapshotFailure(generation, error);
             return;
@@ -465,7 +466,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           (async () => {
             try {
               const cloudMain = await read.full();
-              if (cancelled || generation !== snapGeneration || event !== snapEventSeq) return;
+              if (!isCurrentSyncWork(cancelled, generation, snapGeneration, event, snapEventSeq)) return;
               const local = snapshot();
               // Does THIS device hold changes the incoming cloud snapshot lacks?
               // If so, the merge below will contain data the cloud doesn't have
@@ -475,7 +476,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               const { display } = await adoptCloudSnapshot({
                 snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
               });
-              if (cancelled || generation !== snapGeneration || event !== snapEventSeq) return;
+              if (!isCurrentSyncWork(cancelled, generation, snapGeneration, event, snapEventSeq)) return;
               applyDisplay(display);
               lastCloudUpdatedRef.current = cloudMain.lastUpdated ?? "";
               lastRevisionRef.current = cloudMain.revision ?? lastRevisionRef.current;
@@ -487,7 +488,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               // localHasUnpushed so two idle devices don't ping-pong saves.
               if (localHasUnpushed || editSeqRef.current !== mark) saver.schedule();
             } catch (error) {
-              if (cancelled || generation !== snapGeneration || event !== snapEventSeq) return;
+              if (!isCurrentSyncWork(cancelled, generation, snapGeneration, event, snapEventSeq)) return;
               handleSnapshotFailure(generation, error);
             }
           })();

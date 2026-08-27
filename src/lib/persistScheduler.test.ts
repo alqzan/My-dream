@@ -196,3 +196,34 @@ describe("createDeferredStorage — تعديلٌ أثناء الكتابة", () 
     expect(s.pending()).toBe(false);
   });
 });
+
+describe("createDeferredStorage — فشلُ التخزين لا يُسقط اللقطة", () => {
+  it("تعيد الدفعة الفاشلة إلى الطابور وتنجح في المحاولة التالية", async () => {
+    const data = new Map<string, string>();
+    const writes: string[] = [];
+    let failOnce = true;
+    const inner: StateStorage = {
+      getItem: async (n) => data.get(n) ?? null,
+      setItem: async (n, v) => {
+        writes.push(v);
+        if (failOnce) {
+          failOnce = false;
+          throw new Error("temporary IndexedDB failure");
+        }
+        data.set(n, v);
+      },
+      removeItem: async () => {},
+    };
+    const s = createDeferredStorage(inner, { delayMs: 100 });
+
+    await s.setItem(K, "لا تضيع");
+    await vi.advanceTimersByTimeAsync(100); // المحاولة الأولى تفشل
+    expect(data.get(K)).toBeUndefined();
+    expect(s.pending()).toBe(true); // اللقطة ما زالت معلّقة لإعادة المحاولة
+
+    await s.flush();
+    expect(data.get(K)).toBe("لا تضيع");
+    expect(writes).toEqual(["لا تضيع", "لا تضيع"]);
+    expect(s.pending()).toBe(false);
+  });
+});

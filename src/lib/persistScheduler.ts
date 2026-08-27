@@ -57,6 +57,17 @@ export function createDeferredStorage(
     if (timer) { clearTimeout(timer); timer = null; }
   };
 
+  const retryAfterFailure = () => {
+    // A failed IndexedDB write must remain observable as pending work. Retry
+    // later instead of silently dropping the batch that drain already lifted.
+    if (!disposed && queued.size && timer === null) {
+      timer = setTimeout(() => {
+        timer = null;
+        startDrain();
+      }, delayMs);
+    }
+  };
+
   async function drain(): Promise<void> {
     // كتابةٌ جاريةٌ الآن تبتلع هذه: ما يصل أثناءها يبقى في الطابور، ويُجدول له
     // مرورٌ تالٍ في ذيل هذه الكتابة.
@@ -68,13 +79,29 @@ export function createDeferredStorage(
         // الكتابة يدخل طابوراً نظيفاً فلا تبتلعه هذه الجولة صامتاً.
         const batch = [...queued.entries()];
         queued.clear();
-        for (const [name, value] of batch) {
-          await inner.setItem(name, value);
+        try {
+          for (const [name, value] of batch) {
+            await inner.setItem(name, value);
+          }
+        } catch (error) {
+          // Requeue the failed snapshot. If a newer value for the same key was
+          // queued while the write was in flight, keep that newer value instead.
+          for (const [name, value] of batch) {
+            if (!queued.has(name)) queued.set(name, value);
+          }
+          throw error;
         }
       }
     } finally {
       writing = false;
     }
+  }
+
+  function startDrain() {
+    // Timer-driven writes have no caller waiting on their promise. Handle the
+    // rejection here and retain/retry the queued snapshot instead of creating
+    // an unhandled rejection.
+    void drain().catch(() => retryAfterFailure());
   }
 
   function schedule() {
@@ -84,7 +111,7 @@ export function createDeferredStorage(
       // يُصفَّر **قبل** التنفيذ، فلا يبقى شبحُ مؤقّتٍ يرى `flush` كتابةً معلّقةً
       // لا وجود لها (العطل الأول في saveScheduler.ts).
       timer = null;
-      void drain();
+      startDrain();
     }, delayMs);
   }
 
@@ -113,15 +140,28 @@ export function createDeferredStorage(
     async flush() {
       if (!queued.size) return;
       clear();
-      await drain();
+      try {
+        await drain();
+      } catch (error) {
+        retryAfterFailure();
+        throw error;
+      }
     },
 
     pending: () => queued.size > 0 || writing || timer !== null,
 
     async dispose() {
       clear();
-      disposed = true;
-      await drain();
+      // Mark the wrapper disposed only after the final drain succeeds. If the
+      // backing store rejects, the queue stays retryable rather than being
+      // stranded during teardown.
+      try {
+        await drain();
+        disposed = true;
+      } catch (error) {
+        retryAfterFailure();
+        throw error;
+      }
     },
   };
 }

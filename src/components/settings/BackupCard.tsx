@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Download, Upload, ShieldCheck, GitMerge, Replace, Loader2, Lock, KeyRound } from "lucide-react";
 import { showUndo, showToast } from "@/components/ui/UndoToast";
 import { encryptJson, decryptJson, isEncryptedBackup, type EncryptedBackup } from "@/lib/backupCrypto";
+import { isValidBackupPayload, MAX_BACKUP_BYTES } from "@/lib/backupValidation";
 
 // Journal media is either a local `data:` URL or (since the move to Cloud
 // Storage) an `https://` download URL — the doc keeps only a lightweight
@@ -343,13 +344,14 @@ export function BackupCard() {
     setEncPending(null);
     setImportPassword("");
     try {
+      if (file.size > MAX_BACKUP_BYTES) throw new Error("backup too large");
       const parsed = JSON.parse(await file.text());
       // Encrypted backup → ask for its password before we can read it.
       if (isEncryptedBackup(parsed)) {
         setEncPending(parsed);
         return;
       }
-      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.transactions)) {
+      if (!isValidBackupPayload(parsed)) {
         throw new Error("bad shape");
       }
       // Don't apply yet — let the user preview it and pick merge vs. replace.
@@ -366,7 +368,7 @@ export function BackupCard() {
     setError("");
     try {
       const obj = await decryptJson(encPending, importPassword);
-      if (!obj || typeof obj !== "object" || !Array.isArray((obj as { transactions?: unknown }).transactions)) {
+      if (!isValidBackupPayload(obj)) {
         throw new Error("bad shape");
       }
       setEncPending(null);

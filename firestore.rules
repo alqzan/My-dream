@@ -54,6 +54,17 @@ service cloud.firestore {
         && d.writerVersion == 2;
     }
 
+    // Monthly transaction shards use the same read-old/write-new migration as
+    // journal shards. The main document remains the compatibility fallback for
+    // projects whose production rules have not published this match yet.
+    function isCurrentTransactionShard() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['transactions', 'writerVersion'])
+        && d.keys().hasOnly(['transactions', 'writerVersion'])
+        && d.transactions is list
+        && d.writerVersion == 1;
+    }
+
     // Media hashes are sharded by kind + the first two hash characters. The
     // exact shape prevents a cached client from writing a free-form document
     // into this collection; hashes are immutable references and are therefore
@@ -68,10 +79,11 @@ service cloud.firestore {
     }
 
     // Main record: one document per space holding every non-sharded field
-    // (transactions, journal metadata, prayers, habits, settings, the media
-    // manifest version marker, `revision`, …). Journal entries and media hash
+    // (journal metadata, prayers, habits, settings, the media manifest version
+    // marker, `revision`, …). Journal entries, transactions, and media hash
     // manifests live in subcollections instead (see below) to stay under the
-    // 1MiB document cap.
+    // 1MiB document cap. Older clients/projects may still carry transactions
+    // inline; the app keeps that format as a safe compatibility fallback.
     match /userData/{space} {
       allow get: if isSpace(space);
       allow list: if false; // never enumerate space ids
@@ -91,6 +103,15 @@ service cloud.firestore {
         // Current clients never delete month documents. Keeping the document
         // (possibly with no live entries) is what prevents a partial device
         // from treating an absent month as authorization to erase it.
+        allow delete: if false;
+      }
+
+      // Monthly transaction shards: userData/{space}/transactions/{YYYY-MM}.
+      // Never delete a shard document; transaction tombstones remain on the
+      // main record so a partial device cannot resurrect a deleted payment.
+      match /transactions/{shardId} {
+        allow get, list: if isSpace(space);
+        allow create, update: if isSpace(space) && isCurrentTransactionShard();
         allow delete: if false;
       }
 

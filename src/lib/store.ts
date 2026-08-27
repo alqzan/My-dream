@@ -37,7 +37,7 @@ const ID_COLLECTIONS = [
 // the other device's stale non-null copy.
 const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
-  "lastSalaryConfirm", "frozenHabits", "budgetWindow", "quranKhatma",
+  "lastSalaryConfirm", "frozenHabits", "budgetWindow", "qadaBacklog", "quranKhatma",
 ] as const;
 
 // These preferences are persisted on the device but deliberately excluded
@@ -502,7 +502,17 @@ export const useAppStore = create<AppStore>()(
         }
       }
 
-      if (removed) patch.deleted = { ...prev.deleted, ...removed };
+      // Keep explicit tombstones returned by an action as well as automatic
+      // id tombstones. Category deletion, for example, removes id-keyed
+      // categories and also returns budget:<category> tombstones; the latter
+      // must not be discarded when the former are added automatically here.
+      if (removed) {
+        patch.deleted = {
+          ...prev.deleted,
+          ...((patch.deleted ?? {}) as Record<string, number>),
+          ...removed,
+        };
+      }
       if (stamped) patch.fieldUpdatedAt = { ...prev.fieldUpdatedAt, ...stamped };
       rawSet(patch as Partial<AppStore>, replace as false);
     }) as typeof rawSet;
@@ -516,6 +526,11 @@ export const useAppStore = create<AppStore>()(
     // A key that's simultaneously re-added is never tombstoned; a re-added key
     // lifts any prior tombstone.
     type MediaChange = { item: string; kind: MediaKindTag };
+    // Hashing is asynchronous. Serialize changes for one entry so a fast
+    // remove→re-add cannot finish as re-add→remove and leave a stale tombstone.
+    // Entries are independent, so a large import still hashes different entries
+    // concurrently.
+    const mediaTombstoneQueues = new Map<string, Promise<void>>();
     const applyMediaTombstones = async (entryId: string, removed: MediaChange[], added: MediaChange[]) => {
       const keysOf = async (list: MediaChange[]) =>
         (await Promise.all(list.map(async (c) => {
@@ -534,6 +549,25 @@ export const useAppStore = create<AppStore>()(
         for (const k of add) if (k in dm) { delete dm[k]; changed = true; }
         return changed ? { deletedMedia: dm } : {};
       });
+    };
+
+    const queueMediaTombstones = (entryId: string, removed: MediaChange[], added: MediaChange[]) => {
+      const previous = mediaTombstoneQueues.get(entryId) ?? Promise.resolve();
+      const current = previous
+        .catch(() => undefined)
+        .then(() => applyMediaTombstones(entryId, removed, added));
+      mediaTombstoneQueues.set(entryId, current);
+      // Media hashing is best-effort for unsupported strings, but an unexpected
+      // async failure must never become an unhandled rejection. The next queued
+      // change can still proceed after a failed hash operation.
+      void current.then(
+        () => {
+          if (mediaTombstoneQueues.get(entryId) === current) mediaTombstoneQueues.delete(entryId);
+        },
+        () => {
+          if (mediaTombstoneQueues.get(entryId) === current) mediaTombstoneQueues.delete(entryId);
+        },
+      );
     };
 
     // Diff an entry's media before/after an edit and feed the change to the
@@ -561,7 +595,7 @@ export const useAppStore = create<AppStore>()(
             .filter((value): value is string => Boolean(value));
         diff(attachmentItems(before), attachmentItems({ ...before, ...updates }), "attachments");
       }
-      if (removed.length || added.length) void applyMediaTombstones(before.id, removed, added);
+      if (removed.length || added.length) queueMediaTombstones(before.id, removed, added);
     };
 
     return {
@@ -1289,7 +1323,10 @@ export const useAppStore = create<AppStore>()(
         })),
 
       addCategory: (def) =>
-        set((s) => ({ categories: [...s.categories, def] })),
+        set((s) => ({
+          categories: [...s.categories, def],
+          ...clearTombstone(s.deleted, def.id),
+        })),
 
       updateCategory: (id, updates) =>
         set((s) => ({
@@ -1297,14 +1334,30 @@ export const useAppStore = create<AppStore>()(
         })),
 
       deleteCategory: (id) =>
-        set((s) => ({
-          // Deleting a main category takes its sub-categories with it.
-          categories: s.categories.filter((c) => c.id !== id && c.parentId !== id),
-          // A budget cap for a category that no longer exists is meaningless —
-          // the transactions/recurring rules themselves are kept (history is
-          // never deleted), they'll just show as "غير مصنف".
-          budgets: s.budgets.filter((b) => b.category !== id),
-        })),
+        set((s) => {
+          // Deleting a main category takes its sub-categories with it. Keep the
+          // transaction/recurring history; only the now-meaningless caps go.
+          const categoryIds = new Set([
+            id,
+            ...s.categories.filter((c) => c.parentId === id).map((c) => c.id),
+          ]);
+          const deletedAt = Date.now();
+          const deleted = { ...(s.deleted ?? {}) };
+          // The wrapper will also tombstone the removed category ids. Including
+          // them here makes the action self-describing, while the wrapper merges
+          // these with its automatic tombstones rather than replacing them.
+          for (const categoryId of categoryIds) deleted[categoryId] = deletedAt;
+          for (const budget of s.budgets) {
+            if (categoryIds.has(budget.category)) {
+              deleted[budgetTombKey(budget.category)] = deletedAt;
+            }
+          }
+          return {
+            categories: s.categories.filter((c) => !categoryIds.has(c.id)),
+            budgets: s.budgets.filter((b) => !categoryIds.has(b.category)),
+            deleted,
+          };
+        }),
 
       // Reorder a category among its siblings (mains among mains, subs among
       // subs of the same parent) by swapping it with the adjacent one — the
@@ -1686,7 +1739,7 @@ export const useAppStore = create<AppStore>()(
         // تسجيل الصلاة هو مصدر قرارٍ مباشر للمطالبة؛ أفرغ اللقطة فوراً حتى
         // لا تعود نافذة التذكير بحالةٍ قديمة إذا أُعيد فتح التطبيق قبل مهلة
         // تجميع IndexedDB العامة (١٢٠٠ms).
-        void persistedIdbStorage.flush();
+        void persistedIdbStorage.flush().catch(() => {});
       },
 
       cyclePrayerStatus: (date, prayer) => {
@@ -1704,7 +1757,7 @@ export const useAppStore = create<AppStore>()(
           }
           return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
         });
-        void persistedIdbStorage.flush();
+        void persistedIdbStorage.flush().catch(() => {});
       },
 
       // مُساعدٌ واحدٌ لكلّ ما يُكتب على يوم صلاةٍ خارج الخمس: يُنشئ اليومَ إن

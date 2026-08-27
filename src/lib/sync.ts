@@ -3,11 +3,16 @@ import {
 } from "firebase/firestore";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
-import type { AppData, JournalAttachment, JournalEntry } from "./types";
+import type { AppData, JournalAttachment, JournalEntry, Transaction } from "./types";
 import { entryPhotos, entryAudios, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
 import { MEDIA_CACHE_PREFIX } from "./mediaCache";
 import { journalShardId } from "./merge";
+import {
+  mergeTransactionShardEntries,
+  splitTransactionShards,
+  TRANSACTION_SHARD_WRITER_VERSION,
+} from "./transactionShards";
 import { showToast } from "@/components/ui/UndoToast";
 
 // ===================== Permanent local media store =====================
@@ -600,6 +605,7 @@ const JOURNAL_SUB = "journal";
 const JOURNAL_WRITER_VERSION = 2;
 const SHARD_WARN_BYTES = 850 * 1024; // warn before a single shard nears 1MB
 const SHARD_WRITE_CONCURRENCY = 4;
+const TRANSACTIONS_SUB = "transactions";
 
 function splitJournalShards(entries: CloudEntry[]): Map<string, CloudEntry[]> {
   const m = new Map<string, CloudEntry[]>();
@@ -646,12 +652,14 @@ const shardSig = (entries: unknown[]): string => {
   );
 };
 
-// True when the last shard read completed without an error. When false, the
-// snapshot we handed back may be missing a month we couldn't fetch — so the UI
-// must show "جزئي" instead of claiming a clean "متزامن". Read via lastShardLoadOk().
+// True when the last journal and transaction shard reads completed without an
+// error. When false, the snapshot we handed back may be missing a month we
+// couldn't fetch — so the UI must show "جزئي" instead of claiming a clean
+// "متزامن". An old project that safely fell back to a complete inline array is
+// considered complete.
 let shardLoadOk = true;
 export function lastShardLoadOk(): boolean {
-  return shardLoadOk;
+  return shardLoadOk && transactionShardLoadOk;
 }
 
 // Read all journal shards and fold them (plus any legacy entries still inline in
@@ -767,6 +775,157 @@ async function writeJournalShards(
   shardSignatures = new Map([...shardSignatures, ...nextSigs, ...mergedSigs]);
 }
 
+// ===================== Transaction sharding =====================
+// Transactions used to live in the main document forever. Keep the same
+// read-old/write-new migration shape as journal shards, but retain a safe
+// inline mode when a Firebase project has not yet published the matching rules.
+// No transaction is removed from the old main document until a shard write has
+// completed successfully and the main document is committed afterwards.
+let transactionShardSignatures = new Map<string, string>();
+let transactionShardLoadOk = true;
+let transactionShardMode: "inline" | "sharded" = "sharded";
+let transactionShardReadComplete = false;
+let transactionShardSpace = "";
+
+class TransactionShardWriteError extends Error {
+  constructor(public original: unknown, public committed: boolean) {
+    super("transaction shard write failed");
+  }
+}
+
+export function lastTransactionShardLoadOk(): boolean {
+  return transactionShardLoadOk;
+}
+
+function transactionShardSig(transactions: unknown[]): string {
+  const idOf = (value: unknown) => (value as { id?: string })?.id ?? "";
+  return JSON.stringify(
+    [...transactions]
+      .sort((a, b) => (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0))
+      .map(canonicalize)
+  );
+}
+
+function parseTransactionShard(data: Record<string, unknown>): Transaction[] {
+  if (data.writerVersion !== TRANSACTION_SHARD_WRITER_VERSION || !Array.isArray(data.transactions)) {
+    throw new Error("invalid transaction shard");
+  }
+  if (data.transactions.some((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+    const transaction = value as Partial<Transaction>;
+    return typeof transaction.id !== "string" || transaction.id.length === 0;
+  })) {
+    throw new Error("invalid transaction shard entries");
+  }
+  return data.transactions as Transaction[];
+}
+
+// Read all transaction shards and fold them with the legacy inline array. The
+// shard is primary for equal/missing legacy stamps because it is the canonical
+// copy after migration; newer per-item stamps still win in either direction.
+async function loadTransactionShards(
+  uid: string,
+  mainData: { transactions?: unknown[]; deleted?: Record<string, number> },
+): Promise<Transaction[]> {
+  const inline = Array.isArray(mainData.transactions)
+    ? mainData.transactions as Transaction[]
+    : [];
+  transactionShardReadComplete = true;
+  if (!db) {
+    transactionShardLoadOk = true;
+    transactionShardMode = "inline";
+    transactionShardSignatures = new Map();
+    return inline;
+  }
+  const sigs = new Map<string, string>();
+  try {
+    const snap = await getDocs(collection(db, COLLECTION, uid, TRANSACTIONS_SUB));
+    let merged = inline;
+    snap.forEach((document) => {
+      const transactions = parseTransactionShard(document.data() as Record<string, unknown>);
+      sigs.set(document.id, transactionShardSig(transactions));
+      merged = mergeTransactionShardEntries(transactions, merged, mainData.deleted ?? {});
+    });
+    transactionShardSignatures = sigs;
+    transactionShardLoadOk = true;
+    transactionShardMode = "sharded";
+    return merged;
+  } catch (error) {
+    transactionShardSignatures = new Map();
+    // Existing projects may still have only the old main-document rules. If
+    // the inline array is present, it is a complete legacy snapshot, so keep
+    // syncing in that mode without blocking the owner or touching data.
+    if (isPermissionDeniedError(error) && Array.isArray(mainData.transactions)) {
+      transactionShardLoadOk = true;
+      transactionShardMode = "inline";
+      return inline;
+    }
+    // A missing inline array means this document may already be sharded. Do
+    // not pretend the read was complete and never write a partial fallback.
+    transactionShardLoadOk = false;
+    transactionShardMode = "sharded";
+    return inline;
+  }
+}
+
+async function writeTransactionShards(
+  uid: string,
+  transactions: Transaction[],
+  deleted: Record<string, number> = {},
+): Promise<void> {
+  if (!db) return;
+  const database = db;
+  const shards = splitTransactionShards(transactions);
+  const nextSigs = new Map<string, string>();
+  const changed: Array<[string, Transaction[]]> = [];
+  for (const [sid, items] of shards) {
+    const sig = transactionShardSig(items);
+    nextSigs.set(sid, sig);
+    if (transactionShardSignatures.get(sid) === sig) continue;
+    const bytes = new Blob([sig]).size;
+    if (bytes >= SHARD_WARN_BYTES) warnShardNearLimit(`معاملات ${sid}`, bytes);
+    changed.push([sid, items]);
+  }
+
+  const mergedSigs = new Map<string, string>();
+  let committed = false;
+  const errors: unknown[] = [];
+  await mapWithConcurrency(changed, SHARD_WRITE_CONCURRENCY, async ([sid, items]) => {
+    try {
+      const sig = await runTransaction(database, async (txn) => {
+        const ref = doc(database, COLLECTION, uid, TRANSACTIONS_SUB, sid);
+        const snap = await txn.get(ref);
+        const remote = snap.exists()
+          ? parseTransactionShard(snap.data() as Record<string, unknown>)
+          : [];
+        const merged = mergeTransactionShardEntries(items, remote, deleted);
+        const mergedSig = transactionShardSig(merged);
+        if (mergedSig !== transactionShardSig(remote)) {
+          txn.set(ref, {
+            transactions: merged,
+            writerVersion: TRANSACTION_SHARD_WRITER_VERSION,
+          }, { merge: false });
+        }
+        return mergedSig;
+      });
+      committed = true;
+      mergedSigs.set(sid, sig);
+    } catch (error) {
+      // Let every in-flight shard finish before deciding whether an inline
+      // fallback is safe. Promise.all would reject on the first error while a
+      // sibling transaction could still be committing.
+      errors.push(error);
+    }
+  });
+  if (errors.length) throw new TransactionShardWriteError(errors[0], committed);
+  transactionShardSignatures = new Map([
+    ...transactionShardSignatures,
+    ...nextSigs,
+    ...mergedSigs,
+  ]);
+  transactionShardMode = "sharded";
+}
+
 let shardWarned = false;
 function warnShardNearLimit(sid: string, bytes: number): void {
   if (shardWarned) return;
@@ -782,9 +941,12 @@ async function prepareForCloud(
   knownPhotos: Set<string>,
   knownAudios: Set<string>
 ): Promise<{
-  // The main doc holds everything EXCEPT the journal (which is sharded).
-  main: Omit<AppData, "journalEntries"> & CloudMediaMeta;
+  // The main doc holds everything EXCEPT the journal and transactions (which
+  // are sharded). The inline fallback is restored by saveUserData only when
+  // the project's rules explicitly require the legacy format.
+  main: Omit<AppData, "journalEntries" | "transactions"> & CloudMediaMeta;
   cloudJournal: CloudEntry[];
+  cloudTransactions: Transaction[];
   newPhotos: Map<string, string>;
   newAudios: Map<string, string>;
   photoRefs: Set<string>;
@@ -910,6 +1072,7 @@ async function prepareForCloud(
   // save.
   const {
     journalEntries: _omitJournal,
+    transactions: _omitTransactions,
     photoManifest: _omitPhotoManifest,
     audioManifest: _omitAudioManifest,
     mediaManifestVersion: _omitMediaManifestVersion,
@@ -922,6 +1085,7 @@ async function prepareForCloud(
       mediaManifestVersion: MEDIA_MANIFEST_VERSION,
     },
     cloudJournal: journalEntries,
+    cloudTransactions: data.transactions,
     newPhotos,
     newAudios,
     photoRefs,
@@ -944,9 +1108,9 @@ async function prepareForCloud(
 // الحاجة فقط** (أي حين يثبت أنّ السحابة تحرّكت فعلاً فسندمج). `full()` مُذكَّرة
 // فلا تنزّل مرّتين للإشعار الواحد.
 export interface CloudRead {
-  /** المستند الرئيس كما هو — **بلا** مذكرات الshards (قد يحمل مذكراتٍ قديمة مضمّنة). */
+  /** المستند الرئيس كما هو — **بلا** مذكرات/معاملات الshards (قد يحمل النسخ القديمة مضمّنة). */
   main: AppData & CloudMediaMeta;
-  /** اللقطة الكاملة: المستند الرئيس + كلّ shards المذكرات (رحلةُ شبكةٍ إضافية). */
+  /** اللقطة الكاملة: المستند الرئيس + كلّ shards المذكرات والمعاملات. */
   full: () => Promise<AppData & CloudMediaMeta>;
 }
 
@@ -956,11 +1120,16 @@ function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
   return {
     main,
     full: () => {
-      // Journal lives in shards now; fold them (and any legacy inline entries)
-      // back into journalEntries so the rest of the app sees one flat list.
-      pending ??= loadJournalShards(uid, main).then((journalEntries) => ({
+      // Journal and transactions live in separate shards now; fold them (and
+      // any legacy inline arrays) back into one flat AppData snapshot so the
+      // rest of the app never needs to know about the storage migration.
+      pending ??= Promise.all([
+        loadJournalShards(uid, main),
+        loadTransactionShards(uid, main),
+      ]).then(([journalEntries, transactions]) => ({
         ...main,
         journalEntries: journalEntries as unknown as JournalEntry[],
+        transactions,
       }));
       return pending;
     },
@@ -972,6 +1141,13 @@ function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
 // its current references can touch, so media already in R2 is not re-uploaded.
 export async function readCloudMain(uid: string): Promise<CloudRead | null> {
   if (!db) return null;
+  if (transactionShardSpace !== uid) {
+    transactionShardSpace = uid;
+    transactionShardSignatures = new Map();
+    transactionShardLoadOk = true;
+    transactionShardMode = "sharded";
+    transactionShardReadComplete = false;
+  }
   const snap = await getDoc(doc(db, COLLECTION, uid));
   if (!snap.exists()) {
     knownCloudHashes = new Set();
@@ -979,6 +1155,11 @@ export async function readCloudMain(uid: string): Promise<CloudRead | null> {
     mediaManifestMode = "sharded";
     resetMediaManifestState();
     shardSignatures = new Map();
+    shardLoadOk = true;
+    transactionShardSignatures = new Map();
+    transactionShardLoadOk = true;
+    transactionShardMode = "sharded";
+    transactionShardReadComplete = true;
     return null;
   }
   return cloudRead(uid, snap.data() as AppData & CloudMediaMeta);
@@ -1461,7 +1642,7 @@ export async function saveUserData(
 ): Promise<SaveResult> {
   if (!db) return { mediaComplete: true, revision: 0 };
   const database = db;
-  const { main, cloudJournal, newPhotos, newAudios, photoRefs, audioRefs } =
+  const { main, cloudJournal, cloudTransactions, newPhotos, newAudios, photoRefs, audioRefs } =
     await prepareForCloud(data, knownCloudHashes, knownCloudAudioHashes);
 
   // A v2 manifest is intentionally lazy: load the shards touched by this
@@ -1543,11 +1724,35 @@ export async function saveUserData(
   pendingLegacyPhotoManifest = new Set();
   pendingLegacyAudioManifest = new Set();
 
-  // Keep the journal off the 1MB single-doc cap. The main document carries no
-  // growing media arrays; the v2 version marker tells a future client where to
-  // find the sharded manifest.
+  // Keep the journal and transactions off the 1MB single-doc cap. The main
+  // document carries no growing history arrays once their shard writes have
+  // succeeded. If this project still has the legacy rules, the read path marks
+  // the space inline and we deliberately retain the old array in the main doc.
   await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
-  const honestMain = { ...main };
+  let useInlineTransactions = transactionShardMode === "inline";
+  if (!useInlineTransactions) {
+    try {
+      await writeTransactionShards(uid, cloudTransactions, data.deleted ?? {});
+    } catch (err) {
+      // A legacy project can deny the new subcollection while still allowing
+      // the old main document. Only use that fallback when the preceding full
+      // read proved the inline snapshot is complete. Never replace a
+      // potentially sharded document with a partial local array after an
+      // unknown read/write failure.
+      const originalError = err instanceof TransactionShardWriteError ? err.original : err;
+      const writeCommitted = err instanceof TransactionShardWriteError && err.committed;
+      if (isPermissionDeniedError(originalError) && !writeCommitted && transactionShardReadComplete && transactionShardLoadOk && Array.isArray(data.transactions)) {
+        useInlineTransactions = true;
+        transactionShardMode = "inline";
+      } else {
+        throw err;
+      }
+    }
+  }
+  const honestMain = {
+    ...main,
+    ...(useInlineTransactions ? { transactions: cloudTransactions } : {}),
+  };
   if (useInlineManifest) {
     // The main document is already bounded by Firestore's 1MiB limit. Keep the
     // fallback additive and truthful by carrying every reference currently in

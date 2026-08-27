@@ -10,6 +10,7 @@ vi.mock("idb-keyval", () => ({
 }));
 
 import { useAppStore } from "./store";
+import { budgetTombKey, mergeAppData } from "./merge";
 import type { AppData } from "./types";
 
 // لقطةٌ فيها **كلّ** حقلٍ من AppData بقيمةٍ غير افتراضية. أيّ حقلٍ يُضاف لاحقاً
@@ -164,6 +165,53 @@ describe("أختام التعديل لكل عنصر — يضعها المتجر 
     // الفجر كان مسجّلاً في اللقطة ولم يُمسّ — لا طابع له من هذا التعديل.
     expect(day.prayerUpdatedAt?.الفجر).toBeUndefined();
     expect(s.budgets.find((b) => b.category === "c1")!.updatedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it("تعديلُ رصيد القضاء يُختم حتى لا يغلبه جهازٌ آخر أقدم", () => {
+    useAppStore.getState().hydrate(FULL);
+    const before = Date.now();
+    useAppStore.getState().addQadaBacklog(1);
+    const s = useAppStore.getState();
+    expect(s.qadaBacklog).toBe(4);
+    expect(s.fieldUpdatedAt?.qadaBacklog).toBeGreaterThanOrEqual(before);
+  });
+
+  it("حذفُ تصنيفٍ يشهد سقوفه وتصنيفاته الفرعية ولا يعيدها الدمج", () => {
+    const main = { id: "main", label: "رئيسي", icon: "🧺", color: "#000" };
+    const sub = { id: "sub", label: "فرعي", icon: "☕", color: "#000", parentId: "main" };
+    const other = { id: "other", label: "آخر", icon: "✨", color: "#000" };
+    useAppStore.getState().hydrate({
+      ...FULL,
+      categories: [main, sub, other],
+      budgets: [
+        { category: "main", limit: 100 },
+        { category: "sub", limit: 50 },
+        { category: "other", limit: 25 },
+      ],
+    });
+
+    useAppStore.getState().deleteCategory("main");
+    const local = useAppStore.getState().snapshot();
+    expect(local.categories.map((c) => c.id)).toEqual(["other"]);
+    expect(local.budgets.map((b) => b.category)).toEqual(["other"]);
+    expect(local.deleted).toMatchObject({ main: expect.any(Number), sub: expect.any(Number) });
+    expect(local.deleted?.[budgetTombKey("main")]).toBeGreaterThan(0);
+    expect(local.deleted?.[budgetTombKey("sub")]).toBeGreaterThan(0);
+
+    const staleCloud = {
+      ...local,
+      categories: [main, sub, other],
+      budgets: [
+        { category: "main", limit: 100 },
+        { category: "sub", limit: 50 },
+        { category: "other", limit: 25 },
+      ],
+      deleted: {},
+      lastUpdated: "2026-01-01T00:00:00.000Z",
+    };
+    const merged = mergeAppData(local, staleCloud);
+    expect(merged.categories.map((c) => c.id)).toEqual(["other"]);
+    expect(merged.budgets.map((b) => b.category)).toEqual(["other"]);
   });
 
   it("تسجيلُ يومِ عادةٍ لا يرفع طابع العادة (للسجلّات دمجُها وشواهدها)", () => {

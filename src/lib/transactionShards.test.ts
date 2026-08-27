@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { transactionShardId, splitTransactionShards, planTransactionMigration } from "./transactionShards";
+import {
+  mergeTransactionShardEntries,
+  transactionShardId,
+  splitTransactionShards,
+  planTransactionMigration,
+} from "./transactionShards";
 import type { Transaction } from "./types";
 
 function tx(id: string, date: string, amount: number, extra: Partial<Transaction> = {}): Transaction {
@@ -33,6 +38,40 @@ describe("splitTransactionShards", () => {
 
   it("returns an empty map for no transactions", () => {
     expect(splitTransactionShards([]).size).toBe(0);
+  });
+});
+
+describe("mergeTransactionShardEntries — additive financial merge", () => {
+  it("keeps cloud-only transactions when a stale device writes the month", () => {
+    const local = [tx("local", "2026-08-02", 10, { updatedAt: 200 })];
+    const remote = [tx("remote", "2026-08-01", 20, { updatedAt: 100 })];
+
+    expect(mergeTransactionShardEntries(local, remote).map((item) => item.id).sort()).toEqual([
+      "local",
+      "remote",
+    ]);
+  });
+
+  it("chooses the newer edit for one id without replacing unrelated cloud data", () => {
+    const local = [tx("same", "2026-08-01", 99, { updatedAt: 300 })];
+    const remote = [
+      tx("same", "2026-08-01", 10, { updatedAt: 200 }),
+      tx("cloud-only", "2026-08-03", 7, { updatedAt: 100 }),
+    ];
+
+    const merged = mergeTransactionShardEntries(local, remote);
+    expect(merged.find((item) => item.id === "same")?.amount).toBe(99);
+    expect(merged.find((item) => item.id === "cloud-only")?.amount).toBe(7);
+  });
+
+  it("honors a deletion tombstone but allows a newer re-add", () => {
+    const remote = [tx("deleted", "2026-08-01", 10, { updatedAt: 100 })];
+    expect(mergeTransactionShardEntries([], remote, { deleted: 100 })).toEqual([]);
+    expect(mergeTransactionShardEntries(
+      [tx("deleted", "2026-08-01", 11, { updatedAt: 101 })],
+      remote,
+      { deleted: 100 },
+    ).map((item) => item.amount)).toEqual([11]);
   });
 });
 

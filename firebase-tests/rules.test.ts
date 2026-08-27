@@ -147,6 +147,32 @@ describe("firestore.rules — journal shards (userData/{space}/journal/{shardId}
   });
 });
 
+describe("firestore.rules — transaction shards (userData/{space}/transactions/{shardId})", () => {
+  const transaction = { id: "tx-1", date: "2026-08-08", amount: 45, category: "food", note: "قهوة" };
+
+  it("scopes transaction shard read/write to the matching space only", async () => {
+    const own = clientFirestore()
+      .collection("userData").doc(REAL_SPACE).collection("transactions").doc("2026-08");
+    await assertSucceeds(own.set({ transactions: [transaction], writerVersion: 1 }));
+    await assertSucceeds(own.get());
+    await assertFails(
+      clientFirestore().collection("userData").doc(OTHER_SPACE)
+        .collection("transactions").doc("2026-08")
+        .set({ transactions: [transaction], writerVersion: 1 })
+    );
+  });
+
+  it("rejects old cached writers, malformed shapes, and deletion", async () => {
+    const own = clientFirestore()
+      .collection("userData").doc(REAL_SPACE).collection("transactions").doc("2026-08");
+    await assertFails(own.set({ transactions: [transaction] }));
+    await assertFails(own.set({ transactions: [transaction], writerVersion: 2 }));
+    await assertFails(own.set({ transactions: [transaction], writerVersion: 1, extra: true }));
+    await assertSucceeds(own.set({ transactions: [transaction], writerVersion: 1 }));
+    await assertFails(own.delete());
+  });
+});
+
 describe("firestore.rules — media manifest shards (userData/{space}/mediaManifest/{shardId})", () => {
   const PHOTO_HASH = "0123456789abcdef0123456789abcdef";
 

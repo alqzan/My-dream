@@ -4,13 +4,10 @@
 // Firebase-free by design (mirrors merge.ts's own reasoning) so the migration
 // math is unit-testable without an emulator or a live document.
 //
-// STATUS: this module is the tested, idempotent PLANNING/dry-run layer asked
-// for by the task. It is NOT yet wired into sync.ts's live Firestore
-// read/write path — see docs/DOC-GROWTH.md for exactly why (the live wiring
-// is a real production-sync change to the app's financial data path, and
-// this session could not integration-test it against a real Firestore
-// project) and the precise, line-referenced plan to complete that wiring by
-// mirroring the journal shard code that already ships and works.
+// The pure planning layer below is also used by sync.ts's live shard path. It
+// stays Firebase-free so the financial merge can be tested without credentials
+// or a live project; the I/O wrapper in sync.ts is responsible for transactions,
+// rules compatibility, and the legacy inline fallback.
 import type { Transaction } from "./types";
 import { journalShardId } from "./merge";
 
@@ -19,6 +16,14 @@ import { journalShardId } from "./merge";
  *  (rather than duplicating the date-parsing) is deliberate: one tested rule
  *  for "which month does this date belong to" across both entity types. */
 export const transactionShardId = journalShardId;
+
+/** Firestore rules use this marker to reject cached writers with the old shape. */
+export const TRANSACTION_SHARD_WRITER_VERSION = 1;
+
+export interface TransactionShardPayload {
+  transactions: Transaction[];
+  writerVersion: number;
+}
 
 export function splitTransactionShards(transactions: Transaction[]): Map<string, Transaction[]> {
   const shards = new Map<string, Transaction[]>();
@@ -29,6 +34,37 @@ export function splitTransactionShards(transactions: Transaction[]): Map<string,
     arr.push(t);
   }
   return shards;
+}
+
+// Merge one local monthly shard into the remote copy without replacing the
+// whole month. A stale device may not have loaded every transaction that exists
+// remotely, so cloud-only ids survive. Per-transaction updatedAt resolves edits;
+// an equal/missing stamp keeps the first (primary) copy, matching merge.ts's
+// legacy behaviour. Tombstones live on the main document and remain the only
+// deletion authority.
+export function mergeTransactionShardEntries(
+  primary: Transaction[],
+  secondary: Transaction[],
+  deleted: Record<string, number> = {},
+): Transaction[] {
+  const byId = new Map<string, Transaction>();
+  for (const transaction of secondary) byId.set(transaction.id, transaction);
+  for (const transaction of primary) {
+    const other = byId.get(transaction.id);
+    if (!other || (transaction.updatedAt ?? 0) >= (other.updatedAt ?? 0)) {
+      byId.set(transaction.id, transaction);
+    }
+  }
+  return [...byId.values()]
+    .filter((transaction) => {
+      const deletedAt = deleted[transaction.id];
+      return deletedAt === undefined || (transaction.updatedAt ?? 0) > deletedAt;
+    })
+    .sort((a, b) =>
+      b.date.localeCompare(a.date) ||
+      (b.updatedAt ?? 0) - (a.updatedAt ?? 0) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    );
 }
 
 // Deterministic content signature for one shard: sorted keys, sorted-by-id

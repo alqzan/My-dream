@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { useSync } from "@/components/sync/SyncProvider";
 import { inventoryMedia, reuploadAllMedia, describeUploadError, type MediaInventory, type MediaAccessError } from "@/lib/sync";
 import { journalShardId } from "@/lib/merge";
+import { splitTransactionShards } from "@/lib/transactionShards";
 import { getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import { entryPhotos } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
@@ -123,6 +124,8 @@ export function DataHealthCard() {
     mainBytes: number;
     shardBytes: number;
     shardId: string | null;
+    transactionShardBytes: number;
+    transactionShardId: string | null;
     photos: number;
     entries: number;
     transactions: number;
@@ -136,8 +139,8 @@ export function DataHealthCard() {
     // (everything except the journal) and the LARGEST monthly shard separately;
     // the old code summed the whole journal into one number and cried "1MB"
     // over a main doc that was actually fine.
-    const { journalEntries, ...mainNoJournal } = snap;
-    const mainBytes = new Blob([JSON.stringify(mainNoJournal)]).size;
+    const { journalEntries, transactions, ...mainNoHistory } = snap;
+    const mainBytes = new Blob([JSON.stringify(mainNoHistory)]).size;
     // Media is stored as refs, not base64 — strip blobs to gauge text weight.
     const shards = new Map<string, unknown[]>();
     for (const e of journalEntries) {
@@ -151,6 +154,13 @@ export function DataHealthCard() {
       const b = new Blob([JSON.stringify({ entries: arr })]).size;
       if (b > shardBytes) { shardBytes = b; shardId = sid; }
     }
+    const transactionShards = splitTransactionShards(transactions);
+    let transactionShardBytes = 0;
+    let largestTransactionShardId: string | null = null;
+    for (const [sid, arr] of transactionShards) {
+      const b = new Blob([JSON.stringify({ transactions: arr })]).size;
+      if (b > transactionShardBytes) { transactionShardBytes = b; largestTransactionShardId = sid; }
+    }
     // entryPhotos already reconciles the legacy `photo` with `photos` (photo is
     // just photos[0]) — using it avoids counting the first image twice.
     let photos = 0;
@@ -161,6 +171,8 @@ export function DataHealthCard() {
       mainBytes,
       shardBytes,
       shardId,
+      transactionShardBytes,
+      transactionShardId: largestTransactionShardId,
       photos,
       entries: journalEntries.length,
       transactions: snap.transactions.length,
@@ -172,11 +184,12 @@ export function DataHealthCard() {
 
   // The busier of the two documents (main vs. largest month) is what actually
   // approaches the cap — drive the bar off that so the warning is honest.
-  const worstBytes = Math.max(info.mainBytes, info.shardBytes);
+  const worstBytes = Math.max(info.mainBytes, info.shardBytes, info.transactionShardBytes);
   const pct = Math.min(100, Math.round((worstBytes / DOC_LIMIT) * 100));
   const kb = Math.round(worstBytes / 1024);
   const mainKb = Math.round(info.mainBytes / 1024);
   const shardKb = Math.round(info.shardBytes / 1024);
+  const transactionShardKb = Math.round(info.transactionShardBytes / 1024);
   // Two-stage warning, not a single near-the-cliff one: 65% is an early,
   // calm notice ("keep an eye on this"); 75% is urgent ("act before it fails
   // outright" — Firestore just rejects the write past 1MB, no partial save).
@@ -223,6 +236,12 @@ export function DataHealthCard() {
               ليطابق ما في Firestore حين يقارنه المالك بعينه. */}
           <span data-digits="latin">
             {info.shardId ? `أكبر شهر (${info.shardId}): ${shardKb}KB` : "لا مذكرات بعد"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1" dir="rtl">
+          <span>المعاملات موزعة شهرياً</span>
+          <span data-digits="latin">
+            {info.transactionShardId ? `أكبر شهر (${info.transactionShardId}): ${transactionShardKb}KB` : "لا معاملات بعد"}
           </span>
         </div>
         {pct >= 75 ? (

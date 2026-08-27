@@ -6,7 +6,7 @@
 // هو العَرَض. فالحارس هنا يعدّ النداءات لا يفحص المخرجات.
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import type { AppData, JournalEntry } from "./types";
+import type { AppData, JournalEntry, Transaction } from "./types";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 
 const setDocMock = vi.fn(async () => {});
@@ -55,9 +55,9 @@ beforeAll(async () => {
   ({ photoHash } = await import("./mediaHash"));
 });
 
-function appData(journalEntries: JournalEntry[]): AppData {
+function appData(journalEntries: JournalEntry[], transactions: Transaction[] = []): AppData {
   return {
-    transactions: [],
+    transactions,
     books: [],
     readingLogs: [],
     journalEntries,
@@ -99,10 +99,47 @@ function shardCollection(shards: Record<string, unknown[]>) {
   return { docs, forEach: (cb: (d: { id: string; data: () => unknown }) => void) => docs.forEach(cb) };
 }
 
+function transactionShardCollection(shards: Record<string, unknown[]>) {
+  const docs = Object.entries(shards).map(([id, transactions]) => ({
+    id,
+    data: () => ({ transactions, writerVersion: 1 }),
+  }));
+  return { docs, forEach: (cb: (d: { id: string; data: () => unknown }) => void) => docs.forEach(cb) };
+}
+
+function emptyCollection() {
+  return { docs: [], forEach: () => {} };
+}
+
+let journalResponse: ReturnType<typeof shardCollection> | ReturnType<typeof emptyCollection> = emptyCollection();
+let transactionResponse: ReturnType<typeof transactionShardCollection> | ReturnType<typeof emptyCollection> = emptyCollection();
+
+function installShardResponses() {
+  getDocsMock.mockImplementation(async (ref: { __col?: unknown[] }) => {
+    return (ref.__col ?? []).includes("transactions") ? transactionResponse : journalResponse;
+  });
+}
+
+function setJournalShards(shards: Record<string, unknown[]>) {
+  journalResponse = shardCollection(shards);
+  installShardResponses();
+}
+
+function setTransactionShards(shards: Record<string, unknown[]>) {
+  transactionResponse = transactionShardCollection(shards);
+  installShardResponses();
+}
+
 const journalWrites = () =>
   setDocMock.mock.calls.filter((c) => {
     const parts = (c[0] as { __doc?: unknown[] })?.__doc ?? [];
     return parts.includes("journal");
+  });
+
+const transactionWrites = () =>
+  setDocMock.mock.calls.filter((c) => {
+    const parts = (c[0] as { __doc?: unknown[] })?.__doc ?? [];
+    return parts.includes("transactions");
   });
 
 const mediaManifestWrites = () =>
@@ -123,7 +160,9 @@ beforeEach(() => {
   getDocsMock.mockClear();
   deleteDocMock.mockClear();
   getDocMock.mockResolvedValue({ exists: () => false });
-  getDocsMock.mockResolvedValue({ docs: [], forEach: () => {} });
+  journalResponse = emptyCollection();
+  transactionResponse = emptyCollection();
+  installShardResponses();
   global.fetch = vi.fn(async () => ({
     ok: true,
     status: 200,
@@ -146,15 +185,14 @@ describe("readCloudMain — القراءة على مرحلتين", () => {
 
   it("`full()` تنزّل الshards مرّةً واحدة مهما تكرّر النداء", async () => {
     getDocMock.mockResolvedValue(mainDoc());
-    getDocsMock.mockResolvedValue(
-      shardCollection({ "2026-01": [{ date: "2026-01-01", id: "e1", content: "a" }] })
-    );
+    setJournalShards({ "2026-01": [{ date: "2026-01-01", id: "e1", content: "a" }] });
+    setTransactionShards({ "2026-01": [] });
 
     const read = await sync.readCloudMain("space");
     const first = await read!.full();
     const second = await read!.full();
 
-    expect(getDocsMock).toHaveBeenCalledTimes(1);
+    expect(getDocsMock).toHaveBeenCalledTimes(2);
     expect(first.journalEntries).toHaveLength(1);
     expect(second.journalEntries).toHaveLength(1);
   });
@@ -202,7 +240,7 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
 
   beforeEach(() => {
     getDocMock.mockResolvedValue(mainDoc());
-    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": cloudShard }));
+    setJournalShards({ "2026-01": cloudShard });
   });
 
   it("محتوىً واحد بترتيبٍ مختلف للمفاتيح والمصفوفة → صفرُ كتابات للshards", async () => {
@@ -252,7 +290,7 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
       { id: "e1", date: "2026-01-10", content: "a", updatedAt: 100 },
       { id: "e2", date: "2026-01-20", content: "b", updatedAt: 100 },
     ];
-    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": remote }));
+    setJournalShards({ "2026-01": remote });
     getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
       const parts = ref.__doc ?? [];
       return parts.includes("journal")
@@ -275,7 +313,7 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
   it("شهراً لا يعرفه الجهاز القديم لا يُحذف", async () => {
     const jan = [{ id: "e1", date: "2026-01-10", content: "a" }];
     const feb = [{ id: "e2", date: "2026-02-10", content: "b" }];
-    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": jan, "2026-02": feb }));
+    setJournalShards({ "2026-01": jan, "2026-02": feb });
     await sync.loadUserMain("space");
     setDocMock.mockClear();
     deleteDocMock.mockClear();
@@ -290,7 +328,7 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
       { id: "e1", date: "2026-01-10", content: "a", updatedAt: 100 },
       { id: "e2", date: "2026-01-20", content: "b", updatedAt: 100 },
     ];
-    getDocsMock.mockResolvedValue(shardCollection({ "2026-01": remote }));
+    setJournalShards({ "2026-01": remote });
     getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
       const parts = ref.__doc ?? [];
       return parts.includes("journal")
@@ -305,6 +343,63 @@ describe("writeJournalShards — الشهر الذي لم يتغيّر لا يُ
 
     const write = journalWrites()[0][1] as { entries: JournalEntry[] };
     expect(write.entries.map((e) => e.id)).toEqual(["e1"]);
+  });
+});
+
+describe("transaction shards — migration and legacy compatibility", () => {
+  const inline = { id: "inline", date: "2026-08-01", amount: 10, category: "food", note: "old", updatedAt: 100 } as Transaction;
+  const cloudOnly = { id: "cloud-only", date: "2026-08-02", amount: 20, category: "food", note: "cloud", updatedAt: 200 } as Transaction;
+
+  it("reads legacy inline transactions together with monthly shard data", async () => {
+    getDocMock.mockResolvedValue(mainDoc({ transactions: [inline] }));
+    setTransactionShards({ "2026-08": [cloudOnly] });
+
+    const loaded = await sync.loadUserMain("space");
+
+    expect(loaded?.transactions.map((item) => item.id).sort()).toEqual(["cloud-only", "inline"]);
+  });
+
+  it("writes a current monthly shard and preserves a cloud-only transaction", async () => {
+    const main = mainDoc({ transactions: [inline] });
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
+      const parts = ref.__doc ?? [];
+      if (parts.includes("transactions")) {
+        return { exists: () => true, data: () => ({ transactions: [cloudOnly], writerVersion: 1 }) };
+      }
+      return main;
+    });
+    setTransactionShards({ "2026-08": [cloudOnly] });
+    await sync.loadUserMain("space");
+    setDocMock.mockClear();
+
+    await sync.saveUserData("space", appData([], [inline, cloudOnly]));
+
+    const writes = transactionWrites();
+    expect(writes).toHaveLength(1);
+    expect((writes[0][1] as { writerVersion: number }).writerVersion).toBe(1);
+    expect((writes[0][1] as { transactions: Transaction[] }).transactions.map((item) => item.id).sort())
+      .toEqual(["cloud-only", "inline"]);
+    expect((setDocMock.mock.calls.find((call) => ((call[0] as { __doc?: unknown[] }).__doc ?? []).length === 3)?.[1] as { transactions?: unknown[] }).transactions)
+      .toBeUndefined();
+  });
+
+  it("keeps the complete inline format when the new collection is denied", async () => {
+    const legacy = mainDoc({ transactions: [inline] });
+    getDocMock.mockResolvedValue(legacy);
+    getDocsMock.mockImplementation(async (ref: { __col?: unknown[] }) => {
+      if ((ref.__col ?? []).includes("transactions")) {
+        throw Object.assign(new Error("rules do not cover transactions"), { code: "permission-denied" });
+      }
+      return emptyCollection();
+    });
+    await sync.loadUserMain("space-inline-transactions");
+    setDocMock.mockClear();
+
+    await sync.saveUserData("space-inline-transactions", appData([], [inline]));
+
+    expect(transactionWrites()).toHaveLength(0);
+    const mainWrite = setDocMock.mock.calls.find((call) => ((call[0] as { __doc?: unknown[] }).__doc ?? []).length === 3);
+    expect((mainWrite?.[1] as { transactions?: Transaction[] }).transactions).toEqual([inline]);
   });
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "my-dream-app",
-  "version": "0.1.375",
+  "version": "0.1.376",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "test": "vitest run",
     "test:rules": "firebase emulators:exec --project demo-madar-rules-test --only firestore,storage \"vitest run --config vitest.rules.config.ts\"",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "doctor:ai": "node scripts/ai-doctor.mjs",
     "bump": "node scripts/bump-version.mjs"
   },
@@ -36,9 +37,12 @@
     "eslint": "^8",
     "eslint-config-next": "^15.5.20",
     "firebase-tools": "^15.26.0",
-    "postcss": "^8",
+    "postcss": "8.5.26",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^2.1.9"
+  },
+  "overrides": {
+    "postcss": "8.5.26"
   }
 }

@@ -20,45 +20,23 @@
 إذا غيّرت اسم الـbucket، غيّره أيضًا في `cloudflare-worker/wrangler.toml` في
 السطرين `R2_BUCKET_NAME` و`bucket_name`.
 
-## 2. سياسة CORS للـbucket
+## 2. سياسة الوصول — لا حاجة إلى CORS للـbucket أو مفاتيح S3
 
-افتح bucket `madar-media` ثم **Settings → CORS Policy → Add CORS policy → JSON**
-والصق:
+التطبيق الحالي يرفع وينزّل عبر ربط R2 داخل الـWorker فقط. لذلك اترك الـbucket
+خاصًا، ولا تفعّل **Public Development URL** أو **Custom Domain**، ولا تضف سياسة
+CORS للـbucket. متصفح التطبيق يتعامل مع CORS الخاص بعنوان الـWorker، وهو مضبوط
+في `ALLOWED_ORIGINS` داخل `cloudflare-worker/wrangler.toml`:
 
-```json
-[
-  {
-    "AllowedOrigins": [
-      "https://alqzan.github.io",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000"
-    ],
-    "AllowedMethods": ["GET", "PUT", "HEAD"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
+```text
+https://alqzan.github.io,http://localhost:3000,http://127.0.0.1:3000
 ```
 
-الأصل `Origin` لا يتضمن `/My-dream`؛ لذلك الصحيح هو
-`https://alqzan.github.io` فقط. لا تستخدم `*` لأن الوسائط خاصة.
+الأصل لا يتضمن `/My-dream`. لا تستخدم `*` لأن الوسائط خاصة.
 
-## 3. إنشاء مفتاح R2 محدود بالـbucket
+لا تُنشئ مفاتيح R2 S3 لهذا المسار؛ `R2_ACCOUNT_ID` و`R2_ACCESS_KEY_ID` و
+`R2_SECRET_ACCESS_KEY` لم تعد تُقرأ، وتظلّ خارج التطبيق والـWorker hot path.
 
-1. ارجع إلى صفحة **R2 Object Storage → Overview**.
-2. تحت **Account Details** اختر **Manage** بجانب **API Tokens**.
-3. اختر **Create Account API token**.
-4. الصلاحية: **Object Read & Write**.
-5. النطاق: **Apply to specific buckets only → madar-media**.
-6. أنشئ المفتاح واحفظ فورًا القيم التالية في مدير كلمات مرور:
-   - Access Key ID
-   - Secret Access Key (لن تظهر مرة ثانية)
-7. انسخ أيضًا **Account ID** من لوحة Cloudflare.
-
-لا تضع أيًا من هذه القيم في GitHub أو في ملف داخل المستودع.
-
-## 4. حساب بصمة مفتاح مزامنة «مدار»
+## 3. حساب بصمة مفتاح مزامنة «مدار»
 
 على الكمبيوتر الأساسي افتح تطبيق «مدار»، ثم أدوات المطور في المتصفح
 (**F12 → Console**) والصق هذا السطر:
@@ -70,7 +48,7 @@ crypto.subtle.digest("SHA-256", new TextEncoder().encode(localStorage.getItem("m
 انسخ الناتج ذي 64 خانة. هذه **بصمة** المفتاح وليست المفتاح نفسه. إذا ظهر ناتج
 لمفتاح فارغ، تأكد أولًا أن بطاقة «مفتاح المزامنة» في إعدادات مدار مفعّلة.
 
-## 5. نشر الـWorker
+## 4. نشر الـWorker
 
 من طرفية داخل المستودع:
 
@@ -80,14 +58,11 @@ npm ci
 npx wrangler login
 ```
 
-سيفتح Wrangler صفحة Cloudflare للموافقة. بعدها أدخل الأسرار الأربعة واحدًا
-واحدًا؛ كل أمر سيطلب القيمة بشكل مخفي:
+سيفتح Wrangler صفحة Cloudflare للموافقة. أدخل سرّ المزامنة الوحيد؛ سيطلب الأمر
+القيمة بشكل مخفي:
 
 ```bash
 npx wrangler secret put SYNC_KEY_SHA256
-npx wrangler secret put R2_ACCOUNT_ID
-npx wrangler secret put R2_ACCESS_KEY_ID
-npx wrangler secret put R2_SECRET_ACCESS_KEY
 npm run deploy
 ```
 
@@ -106,7 +81,7 @@ https://madar-r2-gateway.<your-subdomain>.workers.dev
 
 لا يمكن اختبار المسارات الخاصة من المتصفح بلا مفتاح، وستعيد `401` وهذا صحيح.
 
-## 6. ربط GitHub Pages بالـWorker
+## 5. ربط GitHub Pages بالـWorker
 
 في مستودع GitHub افتح:
 
@@ -119,7 +94,7 @@ https://madar-r2-gateway.<your-subdomain>.workers.dev
 إضافة المتغير، افتح **Actions → Deploy to GitHub Pages → Run workflow** على
 `main` لإعادة البناء بالقيمة الجديدة.
 
-## 7. ترحيل الصور الحالية والتحقق
+## 6. ترحيل الصور الحالية والتحقق
 
 نفّذ هذا على الكمبيوتر الأساسي الذي يحمل النسخة المحلية والصور:
 
@@ -137,7 +112,7 @@ https://madar-r2-gateway.<your-subdomain>.workers.dev
 لا تحذف أي نسخة محلية أو احتياطية بعد الترحيل؛ الكود لا يحذف الملفات اليتيمة
 من R2 تلقائيًا أصلًا، حمايةً من حذف صورة ما زال جهاز آخر يشير إليها.
 
-## 8. تجربة Day One قبل الاستيراد الكامل
+## 7. تجربة Day One قبل الاستيراد الكامل
 
 1. استورد عينة 30–50 مذكرة على الكمبيوتر.
 2. انتظر اكتمال المزامنة، ثم شغّل فحص الصور وتأكد أن المعلّق والمكسور صفر.
@@ -148,11 +123,10 @@ https://madar-r2-gateway.<your-subdomain>.workers.dev
 الفيديو، وحد Worker يسمح للصور حتى 8MB وللتسجيل الصوتي حتى 32MB. صور التطبيق
 تُضغط عادة إلى نحو 200KB قبل الرفع.
 
-## ملاحظة أمان عن حد الحجم
+## 8. ملاحظة أمان عن حد الحجم
 
 الـWorker يرفض إصدار رابط لملف معلن فوق الحد، ويربط نوع MIME بالتوقيع، وبعد
-الرفع يقرأ الحجم والنوع الفعليين من R2 ويحذف الملف إذا خالفا الطلب. رابط PUT
-نفسه Bearer قصير العمر (دقيقتان)؛ لذلك يجب حماية مفتاح المزامنة والروابط وعدم
-مشاركتها. فرض حجم صارم حتى عند عميل خبيث يتعمد تجاوز خطوة التحقق يتطلب تمرير
-جسم الملف عبر Worker بدل الرفع المباشر الموقّع؛ نموذج «مدار» الحالي ذو مالك
-واحد يجعل التدفق المباشر + التحقق اللاحق هو التوازن المناسب.
+الرفع يقرأ الحجم والنوع الفعليين من R2. الرفع نفسه يمر عبر Worker، ومفتاح
+المزامنة Bearer لا يُحفظ في الروابط؛ لذلك احمِ المفتاح ولا تشاركه. روابط التنزيل
+موقعة HMAC ومحددة بين يوم وسبعة أيام، والبايتات التي تُجلب تُحفظ محليًا في
+IndexedDB.
