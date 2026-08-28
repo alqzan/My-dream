@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isValidBackupPayload, isValidJournalEntry, isValidTransaction } from "./backupValidation";
+import {
+  isSyncReadableJournalEntry,
+  isSyncReadableTransaction,
+  isValidBackupPayload,
+  isValidJournalEntry,
+  isValidTransaction,
+} from "./backupValidation";
 
 const valid = {
   transactions: [{ id: "t1", date: "2026-08-01", amount: 10, category: "food", note: "قهوة" }],
@@ -48,5 +54,27 @@ describe("backup validation", () => {
       photoRefs: ["abc"], photoEdits: { abc: { rotation: 90, scale: 1 } },
     })).toBe(true);
     expect(isValidJournalEntry({ id: "j1", date: "2026-08-01", content: "نص", photoRefs: [42] })).toBe(false);
+  });
+
+  it("keeps the cloud read boundary compatible with legacy optional fields", () => {
+    const legacyJournal = {
+      id: "j-legacy",
+      date: "2026-08-01",
+      content: "نص قديم",
+      photoEdits: { abc: { rotation: "90" } },
+    };
+    const legacyTransaction = {
+      id: "t-legacy",
+      date: "2026-08-01",
+      amount: 10,
+      category: "food",
+      note: "قهوة",
+      legacyStamp: "old-client",
+    };
+
+    expect(isSyncReadableJournalEntry(legacyJournal)).toBe(true);
+    expect(isSyncReadableTransaction(legacyTransaction)).toBe(true);
+    expect(isValidJournalEntry(legacyJournal)).toBe(false);
+    expect(isValidTransaction(legacyTransaction)).toBe(true);
   });
 });

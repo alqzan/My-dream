@@ -88,7 +88,23 @@ const HIFZ_INTENSITIES = new Set(["light", "balanced", "intense"]);
 const PRAYER_NAMES = new Set(["الفجر", "الظهر", "العصر", "المغرب", "العشاء"]);
 const PRAYER_STATUSES = new Set(["لم", "منفردة", "جماعة", "فائتة", "قضاء"]);
 
-/** Runtime guard shared by backup restore and Firestore transaction shards. */
+/**
+ * The minimum shape needed to merge an existing transaction safely.
+ *
+ * Cloud records may have been written by an older build and can carry optional
+ * fields that the current backup validator does not recognize. Keep this read
+ * boundary deliberately small so those records are preserved byte-for-byte;
+ * the stricter `isValidTransaction` guard remains the backup/restore boundary.
+ */
+export function isSyncReadableTransaction(value: unknown): value is Transaction {
+  return hasId(value)
+    && nonEmptyString(value.date)
+    && finiteNumber(value.amount)
+    && typeof value.category === "string"
+    && typeof value.note === "string";
+}
+
+/** Runtime guard for backup restore and strict new transaction validation. */
 export function isValidTransaction(value: unknown): value is Transaction {
   if (!hasId(value)) return false;
   if (
@@ -171,7 +187,18 @@ function validMergedSource(value: unknown): boolean {
     && finiteNumber(value.mergedAt);
 }
 
-/** Runtime guard shared by backup restore and Firestore journal shards. */
+/**
+ * The minimum shape needed to merge an existing journal entry safely. Optional
+ * legacy fields are intentionally left untouched rather than rejected here;
+ * `isValidJournalEntry` remains the strict backup/restore boundary.
+ */
+export function isSyncReadableJournalEntry(value: unknown): value is JournalEntry {
+  return hasId(value)
+    && nonEmptyString(value.date)
+    && typeof value.content === "string";
+}
+
+/** Runtime guard for backup restore and strict new journal validation. */
 export function isValidJournalEntry(value: unknown): value is JournalEntry {
   if (!hasId(value) || !nonEmptyString(value.date) || typeof value.content !== "string") return false;
   if (!optionalString(value.title) || !optionalString(value.time) || !optionalString(value.question)) return false;

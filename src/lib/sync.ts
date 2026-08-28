@@ -4,7 +4,10 @@ import {
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalAttachment, JournalEntry, Transaction } from "./types";
-import { isValidJournalEntry, isValidTransaction } from "./backupValidation";
+import {
+  isSyncReadableJournalEntry,
+  isSyncReadableTransaction,
+} from "./backupValidation";
 import { entryPhotos, entryAudios, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 import { isStorageUrl, hashFromStorageUrl, photoHash, mediaHashOf, mediaTombKey } from "./mediaHash";
 import { MEDIA_CACHE_PREFIX } from "./mediaCache";
@@ -622,6 +625,8 @@ function splitJournalShards(entries: CloudEntry[]): Map<string, CloudEntry[]> {
 // Signature of what each shard last held (read or written), so a save rewrites
 // only the shards that actually changed — not all of them on every edit.
 let shardSignatures = new Map<string, string>();
+let journalShardMode: "inline" | "sharded" = "sharded";
+let journalShardSpace = "";
 
 // **التوقيع قانونيّ عمداً** (مفاتيح مرتّبة، ومذكرات مرتّبة بالمعرّف، وبلا
 // `undefined`). التوقيع الساذج `JSON.stringify(entries)` كان يقارن نصّين لا
@@ -659,6 +664,35 @@ const shardSig = (entries: unknown[]): string => {
 // "متزامن". An old project that safely fell back to a complete inline array is
 // considered complete.
 let shardLoadOk = true;
+
+export type ShardLoadIssue =
+  | "journal-invalid"
+  | "journal-read"
+  | "transaction-invalid"
+  | "transaction-read";
+
+const SHARD_LOAD_ISSUE_PRIORITY: Record<ShardLoadIssue, number> = {
+  "journal-invalid": 2,
+  "transaction-invalid": 2,
+  "journal-read": 1,
+  "transaction-read": 1,
+};
+
+let shardLoadIssue: ShardLoadIssue | null = null;
+
+function noteShardLoadIssue(issue: ShardLoadIssue): void {
+  if (
+    shardLoadIssue === null
+    || SHARD_LOAD_ISSUE_PRIORITY[issue] > SHARD_LOAD_ISSUE_PRIORITY[shardLoadIssue]
+  ) {
+    shardLoadIssue = issue;
+  }
+}
+
+export function lastShardLoadIssue(): ShardLoadIssue | null {
+  return shardLoadIssue;
+}
+
 export function lastShardLoadOk(): boolean {
   return shardLoadOk && transactionShardLoadOk;
 }
@@ -672,17 +706,25 @@ async function loadJournalShards(
 ): Promise<CloudEntry[]> {
   const byId = new Map<string, CloudEntry>();
   let invalidEntry = false;
+  const rawInline = mainData.journalEntries;
+  const inlineEntries = Array.isArray(rawInline) ? rawInline : [];
+  if (rawInline !== undefined && (!Array.isArray(rawInline) || inlineEntries.some((e) => !isSyncReadableJournalEntry(e)))) {
+    invalidEntry = true;
+    noteShardLoadIssue("journal-invalid");
+  }
   const put = (e: unknown) => {
-    if (!isValidJournalEntry(e)) {
+    if (!isSyncReadableJournalEntry(e)) {
       invalidEntry = true;
+      noteShardLoadIssue("journal-invalid");
       return;
     }
     byId.set(e.id, e as CloudEntry);
   };
   // Legacy inline entries first (overwritten by a shard copy if one exists).
-  for (const e of (mainData.journalEntries as CloudEntry[] | undefined) ?? []) put(e);
+  for (const e of inlineEntries) put(e);
   const sigs = new Map<string, string>();
   shardLoadOk = true;
+  journalShardMode = "sharded";
   if (db) {
     try {
       const snap = await getDocs(collection(db, COLLECTION, uid, JOURNAL_SUB));
@@ -690,20 +732,34 @@ async function loadJournalShards(
         const entries = (d.data() as { entries?: unknown }).entries ?? [];
         if (!Array.isArray(entries)) {
           invalidEntry = true;
+          noteShardLoadIssue("journal-invalid");
           return;
         }
         sigs.set(d.id, shardSig(entries));
         for (const e of entries) put(e);
       });
       shardLoadOk = !invalidEntry;
-    } catch {
+    } catch (error) {
+      // Before journal sharding, the main document was the complete source of
+      // truth. If the project has not published the new collection rules yet,
+      // keep that complete inline snapshot and remain in the old mode. This is
+      // safe only when the inline array is present, non-empty, and every record
+      // has the minimum merge-safe shape; otherwise the UI must stay partial.
+      if (isPermissionDeniedError(error) && inlineEntries.length > 0 && !invalidEntry) {
+        shardLoadOk = true;
+        journalShardMode = "inline";
+        shardSignatures = new Map();
+        return [...byId.values()];
+      }
       // Couldn't read the shards (offline / transient). We fall back to legacy
       // inline + local, but flag the load as incomplete so the UI is honest
       // (the returned snapshot may be missing a month we couldn't fetch).
       shardLoadOk = false;
+      noteShardLoadIssue(invalidEntry ? "journal-invalid" : "journal-read");
     }
   }
   if (shardLoadOk) shardLoadOk = !invalidEntry;
+  if (invalidEntry) noteShardLoadIssue("journal-invalid");
   shardSignatures = sigs;
   return [...byId.values()];
 }
@@ -772,7 +828,7 @@ async function writeJournalShards(
       const remoteRaw = snap.exists()
         ? ((snap.data() as { entries?: unknown }).entries ?? [])
         : [];
-      if (!Array.isArray(remoteRaw) || !remoteRaw.every(isValidJournalEntry)) {
+      if (!Array.isArray(remoteRaw) || !remoteRaw.every(isSyncReadableJournalEntry)) {
         throw new Error("invalid remote journal shard");
       }
       const remote = remoteRaw as CloudEntry[];
@@ -826,7 +882,7 @@ function parseTransactionShard(data: Record<string, unknown>): Transaction[] {
     throw new Error("invalid transaction shard");
   }
   if (data.transactions.some((value) => {
-    return !isValidTransaction(value);
+    return !isSyncReadableTransaction(value);
   })) {
     throw new Error("invalid transaction shard entries");
   }
@@ -842,10 +898,11 @@ async function loadTransactionShards(
 ): Promise<Transaction[]> {
   const rawInline = mainData.transactions;
   const inline = Array.isArray(rawInline)
-    ? rawInline.filter(isValidTransaction)
+    ? rawInline.filter(isSyncReadableTransaction)
     : [];
   const inlineInvalid = rawInline !== undefined
     && (!Array.isArray(rawInline) || inline.length !== rawInline.length);
+  if (inlineInvalid) noteShardLoadIssue("transaction-invalid");
   transactionShardReadComplete = !inlineInvalid;
   if (!db) {
     transactionShardLoadOk = !inlineInvalid;
@@ -880,6 +937,11 @@ async function loadTransactionShards(
     // not pretend the read was complete and never write a partial fallback.
     transactionShardLoadOk = false;
     transactionShardMode = "sharded";
+    noteShardLoadIssue(
+      inlineInvalid || (error instanceof Error && error.message.startsWith("invalid transaction shard"))
+        ? "transaction-invalid"
+        : "transaction-read"
+    );
     return inline;
   }
 }
@@ -1139,14 +1201,20 @@ function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
       // Journal and transactions live in separate shards now; fold them (and
       // any legacy inline arrays) back into one flat AppData snapshot so the
       // rest of the app never needs to know about the storage migration.
-      pending ??= Promise.all([
-        loadJournalShards(uid, main),
-        loadTransactionShards(uid, main),
-      ]).then(([journalEntries, transactions]) => ({
-        ...main,
-        journalEntries: journalEntries as unknown as JournalEntry[],
-        transactions,
-      }));
+      if (pending === null) {
+        // The issue belongs to this full read, not to the preceding cheap main
+        // document read. Both shard loaders run together, so reset once here
+        // rather than racing two independent resets.
+        shardLoadIssue = null;
+        pending = Promise.all([
+          loadJournalShards(uid, main),
+          loadTransactionShards(uid, main),
+        ]).then(([journalEntries, transactions]) => ({
+          ...main,
+          journalEntries: journalEntries as unknown as JournalEntry[],
+          transactions,
+        }));
+      }
       return pending;
     },
   };
@@ -1157,6 +1225,12 @@ function cloudRead(uid: string, main: AppData & CloudMediaMeta): CloudRead {
 // its current references can touch, so media already in R2 is not re-uploaded.
 export async function readCloudMain(uid: string): Promise<CloudRead | null> {
   if (!db) return null;
+  if (journalShardSpace !== uid) {
+    journalShardSpace = uid;
+    shardSignatures = new Map();
+    shardLoadOk = true;
+    journalShardMode = "sharded";
+  }
   if (transactionShardSpace !== uid) {
     transactionShardSpace = uid;
     transactionShardSignatures = new Map();
@@ -1172,10 +1246,12 @@ export async function readCloudMain(uid: string): Promise<CloudRead | null> {
     resetMediaManifestState();
     shardSignatures = new Map();
     shardLoadOk = true;
+    journalShardMode = "sharded";
     transactionShardSignatures = new Map();
     transactionShardLoadOk = true;
     transactionShardMode = "sharded";
     transactionShardReadComplete = true;
+    shardLoadIssue = null;
     return null;
   }
   return cloudRead(uid, snap.data() as AppData & CloudMediaMeta);
@@ -1744,7 +1820,10 @@ export async function saveUserData(
   // document carries no growing history arrays once their shard writes have
   // succeeded. If this project still has the legacy rules, the read path marks
   // the space inline and we deliberately retain the old array in the main doc.
-  await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
+  let useInlineJournal = journalShardMode === "inline";
+  if (!useInlineJournal) {
+    await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
+  }
   let useInlineTransactions = transactionShardMode === "inline";
   if (!useInlineTransactions) {
     try {
@@ -1767,6 +1846,7 @@ export async function saveUserData(
   }
   const honestMain = {
     ...main,
+    ...(useInlineJournal ? { journalEntries: cloudJournal } : {}),
     ...(useInlineTransactions ? { transactions: cloudTransactions } : {}),
   };
   if (useInlineManifest) {

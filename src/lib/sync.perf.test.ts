@@ -197,6 +197,63 @@ describe("readCloudMain — القراءة على مرحلتين", () => {
     expect(second.journalEntries).toHaveLength(1);
   });
 
+  it("يحافظ على سجل مذكرة قديم قابل للقراءة ولا يعلنه مزامنة جزئية", async () => {
+    const legacy = {
+      id: "legacy-journal",
+      date: "2026-01-01",
+      content: "نص قديم",
+      photoEdits: { abc: { rotation: "90" } },
+    };
+    getDocMock.mockResolvedValue(mainDoc());
+    setJournalShards({ "2026-01": [legacy] });
+    setTransactionShards({ "2026-01": [] });
+
+    const loaded = await sync.loadUserMain("space-legacy-journal-shape");
+
+    expect(loaded?.journalEntries).toEqual([legacy]);
+    expect(sync.lastShardLoadOk()).toBe(true);
+    expect(sync.lastShardLoadIssue()).toBeNull();
+  });
+
+  it("يُبقي حالة التحذير عند تعذّر قراءة شرائح المذكرات", async () => {
+    getDocMock.mockResolvedValue(mainDoc());
+    getDocsMock.mockImplementation(async (ref: { __col?: unknown[] }) => {
+      if ((ref.__col ?? []).includes("journal")) {
+        throw Object.assign(new Error("temporary read failure"), { code: "unavailable" });
+      }
+      return emptyCollection();
+    });
+
+    await sync.loadUserMain("space-journal-read-failure");
+
+    expect(sync.lastShardLoadOk()).toBe(false);
+    expect(sync.lastShardLoadIssue()).toBe("journal-read");
+  });
+
+  it("يستعمل اللقطة المضمّنة الكاملة إذا رفضت القواعد قراءة شرائح المذكرات", async () => {
+    const legacy = { id: "inline-journal", date: "2026-01-01", content: "قديم" };
+    getDocMock.mockResolvedValue(mainDoc({ journalEntries: [legacy] }));
+    getDocsMock.mockImplementation(async (ref: { __col?: unknown[] }) => {
+      if ((ref.__col ?? []).includes("journal")) {
+        throw Object.assign(new Error("rules do not cover journal"), { code: "permission-denied" });
+      }
+      return emptyCollection();
+    });
+
+    const loaded = await sync.loadUserMain("space-inline-journal");
+
+    expect(loaded?.journalEntries).toEqual([legacy]);
+    expect(sync.lastShardLoadOk()).toBe(true);
+    expect(sync.lastShardLoadIssue()).toBeNull();
+    setDocMock.mockClear();
+
+    await sync.saveUserData("space-inline-journal", appData([legacy as unknown as JournalEntry]));
+
+    expect(journalWrites()).toHaveLength(0);
+    const mainWrite = setDocMock.mock.calls.find((call) => ((call[0] as { __doc?: unknown[] }).__doc ?? []).length === 3);
+    expect((mainWrite?.[1] as { journalEntries?: JournalEntry[] }).journalEntries).toEqual([legacy]);
+  });
+
   it("المستمع الحيّ يسلّم المستند الرئيس بلا تنزيل الshards", async () => {
     const received: Array<Awaited<ReturnType<typeof sync.readCloudMain>>> = [];
     const unsub = sync.subscribeUserMain("space", (read) => { received.push(read); });

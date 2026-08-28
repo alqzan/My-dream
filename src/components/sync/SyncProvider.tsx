@@ -19,6 +19,7 @@ import {
   primeUrlCache,
   inlineCachedMedia,
   lastShardLoadOk,
+  lastShardLoadIssue,
   fetchInlineMedia,
   RevisionConflictError,
   describeSyncError,
@@ -32,10 +33,11 @@ import { createSaveScheduler, type SaveScheduler } from "@/lib/saveScheduler";
 import { isCurrentSyncWork } from "@/lib/syncLifecycle";
 import { showToast } from "@/components/ui/UndoToast";
 
-// "partial": the main doc synced but the picture is incomplete — a journal
-// shard couldn't be read, or some media hasn't reached the cloud yet. Honest
-// middle state between "synced" and "offline" so the UI never over-claims.
+// "partial": the main doc synced but the picture is incomplete — a journal or
+// transaction shard couldn't be read, or some media hasn't reached the cloud
+// yet. Honest middle state between "synced" and "offline".
 type SyncState = "idle" | "syncing" | "synced" | "partial" | "offline";
+type SyncIssue = ReturnType<typeof lastShardLoadIssue>;
 
 interface SyncContextValue {
   enabled: boolean;
@@ -44,6 +46,8 @@ interface SyncContextValue {
   // True when the text doc synced but some referenced photo/voice note hasn't
   // reached the cloud yet — so the UI can be honest instead of claiming "متزامن".
   mediaPending: boolean;
+  // Reason for a partial shard read, when the last full read identified one.
+  issue: SyncIssue;
 }
 
 const SyncContext = createContext<SyncContextValue>({
@@ -51,6 +55,7 @@ const SyncContext = createContext<SyncContextValue>({
   status: "idle",
   lastSyncedAt: null,
   mediaPending: false,
+  issue: null,
 });
 
 export const useSync = () => useContext(SyncContext);
@@ -67,6 +72,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SyncState>(syncEnabled ? "syncing" : "idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [mediaPending, setMediaPending] = useState(false);
+  const [issue, setIssue] = useState<SyncIssue>(null);
 
   // True while we're applying a remote snapshot, so the store subscription
   // doesn't treat that change as a local edit and echo it straight back.
@@ -114,8 +120,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     // Mark a clean sync — but downgrade to "partial" when the picture is
     // incomplete (a shard we couldn't read, or media still pending), so the UI
-    // never claims a full "متزامن" over a partial state.
+    // never claims a full "متزامن" over a partial state. Capture the reason
+    // from the same full read that produced the boolean.
     const markSynced = (mediaComplete = true) => {
+      const shardIssue = lastShardLoadIssue();
+      setIssue(shardIssue);
       setStatus(!lastShardLoadOk() || !mediaComplete ? "partial" : "synced");
       setLastSyncedAt(Date.now());
     };
@@ -534,7 +543,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [hydrate, snapshot]);
 
   return (
-    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt, mediaPending }}>
+    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt, mediaPending, issue }}>
       {children}
     </SyncContext.Provider>
   );

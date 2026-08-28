@@ -7,7 +7,7 @@ import { Cloud, CloudOff, RefreshCw, KeyRound, ImageUp } from "lucide-react";
 // Automatic, login-free sync status. Every device shares one space, so there
 // is nothing to sign into — this just shows whether we're up to date.
 export function SyncStatus() {
-  const { enabled, status, mediaPending } = useSync();
+  const { enabled, status, mediaPending, issue } = useSync();
 
   // Sync is possible on this build but no key is set on THIS device (e.g. a
   // freshly-opened laptop) → sync is silently off. Never render nothing here:
@@ -58,14 +58,21 @@ export function SyncStatus() {
     );
   }
 
-  // Honest middle state: the main doc synced but a journal shard couldn't be
-  // read this round, so the picture may be incomplete. Not an error (we're
-  // online), but not a clean "متزامن" either — it reconciles on the next load.
+  // Honest middle state: the main doc synced but a shard could not be read or
+  // contained an unsafe core record. Keep the warning actionable without
+  // exposing any user data or credentials.
   if (!syncing && status === "partial") {
+    const title = issue === "journal-invalid"
+      ? "المزامنة محمية — يوجد سجل مذكرة غير مكتمل؛ لم يُحذف وستُعاد المحاولة"
+      : issue === "transaction-invalid"
+        ? "المزامنة محمية — يوجد سجل معاملة غير مكتمل؛ لم يُحذف وستُعاد المحاولة"
+        : issue === "journal-read" || issue === "transaction-read"
+          ? "تعذّرت قراءة شرائح المزامنة هذه المرة؛ بياناتك المحلية محفوظة وستُعاد المحاولة"
+          : "مزامنة جزئية — تعذّرت قراءة جزء من المذكرات أو المعاملات، وستُعاد المحاولة";
     return (
       <div
         className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500"
-        title="تزامن جزئي — تعذّرت قراءة جزء من المذكرات هذه المرة، سيكتمل عند التحديث التالي"
+        title={title}
       >
         <CloudOff size={13} />
         <span className="hidden sm:inline">مزامنة جزئية</span>
