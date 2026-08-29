@@ -1,0 +1,54 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createJournalDraftWriter, JOURNAL_DRAFT_DEBOUNCE_MS, type JournalDraftStorage } from "./journalDraft";
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+function memoryStorage() {
+  const data = new Map<string, string>();
+  const writes: string[] = [];
+  const storage: JournalDraftStorage = {
+    setItem: (key, value) => { writes.push(value); data.set(key, value); },
+    removeItem: (key) => { data.delete(key); },
+  };
+  return { data, writes, storage };
+}
+
+const draft = (content: string) => ({
+  date: "2026-08-29",
+  title: "",
+  content,
+  question: "",
+  answering: false,
+});
+
+describe("createJournalDraftWriter", () => {
+  it("يجمع الكتابة المتتابعة في كتابة مسودة واحدة", async () => {
+    const store = memoryStorage();
+    const writer = createJournalDraftWriter(store.storage, "draft");
+
+    writer.schedule(draft("كلمة"));
+    writer.schedule(draft("كلمة ثانية"));
+    writer.schedule(draft("كلمة ثانية ثالثة"));
+    expect(store.writes).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(JOURNAL_DRAFT_DEBOUNCE_MS);
+    expect(store.writes).toHaveLength(1);
+    expect(JSON.parse(store.writes[0]).content).toBe("كلمة ثانية ثالثة");
+  });
+
+  it("يفرغ آخر لقطة فوراً عند الإغلاق ويحذفها بعد الحفظ الحقيقي", () => {
+    const store = memoryStorage();
+    const writer = createJournalDraftWriter(store.storage, "draft");
+
+    writer.schedule(draft("لا تضيع"));
+    writer.flush();
+    expect(store.data.has("draft")).toBe(true);
+
+    writer.clear();
+    expect(store.data.has("draft")).toBe(false);
+    writer.schedule(draft("بعد الإغلاق"));
+    writer.dispose();
+    expect(JSON.parse(store.writes.at(-1)!).content).toBe("بعد الإغلاق");
+  });
+});

@@ -29,6 +29,8 @@ interface JournalFormProps {
   startAnswering?: boolean;
 }
 
+import { createJournalDraftWriter, type JournalDraftWriter } from "@/lib/journalDraft";
+
 function nowHHMM() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -67,11 +69,14 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
 const DRAFT_KEY = "madar-journal-draft";
 
 export function JournalForm({ onClose, initial, initialDate, startAnswering }: JournalFormProps) {
-  const { addJournalEntry, updateJournalEntry, deleteJournalEntry } = useAppStore();
+  const addJournalEntry = useAppStore((state) => state.addJournalEntry);
+  const updateJournalEntry = useAppStore((state) => state.updateJournalEntry);
+  const deleteJournalEntry = useAppStore((state) => state.deleteJournalEntry);
   const [date, setDate] = useState(initial?.date ?? initialDate ?? today());
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
   const [question, setQuestion] = useState(initial?.question ?? dailyQuestion(today()));
+  const [draftReady, setDraftReady] = useState(Boolean(initial));
   const [answering, setAnswering] = useState(!!initial?.question || !!startAnswering);
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
@@ -94,30 +99,30 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const [showExtras, setShowExtras] = useState(true);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const draftWriterRef = useRef<JournalDraftWriter | null>(null);
   // Always points at the latest handleDone so the mount-time keydown/effect
   // below can call it without capturing a stale closure over the form state.
   const handleDoneRef = useRef<() => void>(() => {});
 
   // المراجع الهاشية القديمة تبقى جزءاً من المعاينة والتحرير حتى لو لم تُرطَّب
   // بعد؛ الصور المحلية المضافة في هذه الجلسة تلحق بها ولا تستبدلها.
-  useMediaCacheVersion();
+  const mediaCacheVersion = useMediaCacheVersion();
   const photoSources = useMemo(() => {
     const draft = initial
       ? { ...initial, photos, photo: photos[0] ?? "" }
       : ({ id: "draft", date, content: "", photos, photo: photos[0] ?? "" } as JournalEntry);
     return entryPhotoSources(draft);
   }, [initial, photos, date]);
-  const photoSlots = resolveMediaSlots(photoSources);
-
-  // Auto-grow the writing area to fit its content so there's no cramped inner
-  // scrollbar — you just keep writing and the sheet scrolls. Runs on every
-  // content change (typing, formatting buttons, restored draft).
-  useEffect(() => {
-    const ta = contentRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = ta.scrollHeight + "px";
-  }, [content]);
+  // Media bytes can arrive asynchronously, so the cache version still needs to
+  // invalidate this view. The memo prevents every keystroke from walking all
+  // old photo/audio references in an entry with a large attachment history.
+  const photoSlots = useMemo(
+    () => resolveMediaSlots(photoSources),
+    // The cache version is intentionally an invalidation dependency: the
+    // sources stay identical while an async media download fills a slot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [photoSources, mediaCacheVersion]
+  );
 
   // Full-screen composer lifecycle: lock the page behind it, restore focus on
   // close, land straight in the writing area for a fresh entry, and treat
@@ -164,36 +169,41 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
 
   // Auto-save a draft of a NEW entry so writing is never lost if you leave
   // mid-way. Restored on reopen; cleared once the entry is actually saved.
-  // (Photos are excluded — too heavy for localStorage.)
+  // (Photos are excluded — too heavy for localStorage.) The writer batches the
+  // synchronous localStorage operation so it never runs once per keypress.
   useEffect(() => {
     if (initial) return;
+    let writer: JournalDraftWriter | null = null;
     try {
+      writer = createJournalDraftWriter(window.localStorage, DRAFT_KEY);
+      draftWriterRef.current = writer;
       const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const d = JSON.parse(raw);
-      if (d.title) setTitle(d.title);
-      if (d.content) setContent(d.content);
-      if (d.date) setDate(d.date);
-      if (d.question) setQuestion(d.question);
-      if (typeof d.answering === "boolean") setAnswering(d.answering);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.title) setTitle(d.title);
+        if (d.content) setContent(d.content);
+        if (d.date) setDate(d.date);
+        if (d.question) setQuestion(d.question);
+        if (typeof d.answering === "boolean") setAnswering(d.answering);
+      }
     } catch {
       /* ignore corrupt draft */
     }
+    // Keep the first empty render from scheduling a removal before a saved
+    // draft has had a chance to hydrate into the form (important in dev
+    // StrictMode, which mounts effects twice).
+    setDraftReady(true);
+    return () => {
+      writer?.dispose();
+      if (draftWriterRef.current === writer) draftWriterRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (initial || savedId.current) return;
-    try {
-      if (title.trim() || content.trim()) {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ date, title, content, question, answering }));
-      } else {
-        localStorage.removeItem(DRAFT_KEY);
-      }
-    } catch {
-      /* storage full/unavailable — ignore */
-    }
-  }, [initial, date, title, content, question, answering]);
+    if (initial || !draftReady || savedId.current || !draftWriterRef.current) return;
+    draftWriterRef.current.schedule({ date, title, content, question, answering });
+  }, [initial, draftReady, date, title, content, question, answering]);
 
   const hasSomething = () => Boolean(content.trim() || title.trim() || photos.length || audios.length || attachments.length || tags.length);
 
@@ -253,7 +263,10 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
       });
       savedId.current = id;
     }
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    if (draftWriterRef.current) draftWriterRef.current.clear();
+    else {
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    }
     setSaveState("saved");
   }
 
@@ -304,7 +317,10 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     } else if (savedId.current) {
       deleteJournalEntry(savedId.current);
     }
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    if (draftWriterRef.current) draftWriterRef.current.clear();
+    else {
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    }
     onClose();
   }
 

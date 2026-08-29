@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "./journal/journal-editor.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 
 // Prefix for static assets so icons/manifest resolve under the GitHub Pages
