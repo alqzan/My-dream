@@ -4214,6 +4214,23 @@ button.mdr-summary-habit-row { cursor: pointer; }
   color: var(--ink);
   outline: none;
 }
+.mdr-prayer-reminder-dismiss {
+  min-height: 2.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.72rem;
+  background: transparent;
+  color: var(--ink34);
+  font: inherit;
+  font-size: 0.61rem;
+  font-weight: 800;
+}
+.mdr-prayer-reminder-dismiss:hover,
+.mdr-prayer-reminder-dismiss:focus-visible {
+  border-color: var(--gline);
+  background: var(--goldw);
+  color: var(--ink);
+  outline: none;
+}
 
 /* ===================== المال — الدورة الواضحة ===================== */
 /* الترتيب المعتمد: منحنى الصرف، ثم حالة الدورة، ثم دوائر السقوف. كل ما بعده

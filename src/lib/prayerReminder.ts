@@ -4,6 +4,9 @@ import { PRAYERS } from "./types";
 /** مدة الانتظار بعد الأذان قبل مطالبة التسجيل. */
 export const PRAYER_REMINDER_DELAY_MS = 30 * 60 * 1000;
 
+/** لا نوقظ المستخدم بسبب صلاةٍ قديمة جداً عند فتح التطبيق. */
+export const PRAYER_REMINDER_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+
 export interface PrayerReminderCandidate {
   date: string;
   prayer: PrayerName;
@@ -11,6 +14,44 @@ export interface PrayerReminderCandidate {
   remindAt: Date;
   token: string;
 }
+
+/**
+ * يختار تذكيراً واحداً حديثاً فقط.
+ *
+ * عندما يعود المستخدم بعد ساعات قد تكون عدة صلوات غير مسجلة. اختيار أقدمها
+ * يجعل النافذة تبدو كأنها تتراكم وتعيد نفسها، لذلك نأخذ آخر صلاة مستحقة ضمن
+ * عمرٍ معقول ونترك الصلوات الأقدم للسجل اليدوي داخل شاشة الصلاة.
+ */
+export function pickSmartPrayerReminder(
+  candidates: PrayerReminderCandidate[],
+  now: Date,
+  maxAgeMs = PRAYER_REMINDER_MAX_AGE_MS
+): PrayerReminderCandidate | null {
+  const nowMs = now.getTime();
+  const ageLimit = Math.max(0, maxAgeMs);
+  return candidates
+    .filter((candidate) => {
+      const age = nowMs - candidate.remindAt.getTime();
+      return age >= 0 && age <= ageLimit;
+    })
+    .sort((a, b) => b.adhanAt.getTime() - a.adhanAt.getTime())[0] ?? null;
+}
+
+/** آخر وقت أذانٍ حُسمت صلاته، حتى لا نعيد فتح سجلٍ أقدم بعد إجابة الأحدث. */
+export function latestRecordedPrayerAt(
+  times: Record<PrayerName, Date> | null,
+  log: PrayerLog | undefined
+): number {
+  if (!times || !log) return 0;
+  return PRAYERS.reduce((latest, prayer) => {
+    const status = log.prayers[prayer];
+    const adhanAt = times[prayer];
+    if (status === undefined || status === "لم" || !(adhanAt instanceof Date)) return latest;
+    const timestamp = adhanAt.getTime();
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, 0);
+}
+
 /**
  * يعيد كل الصلوات التي حان تذكيرها ولم تُسجّل بعد.
  *

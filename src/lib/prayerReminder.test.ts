@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PRAYER_REMINDER_DELAY_MS, duePrayerReminders } from "./prayerReminder";
+import {
+  PRAYER_REMINDER_DELAY_MS,
+  duePrayerReminders,
+  latestRecordedPrayerAt,
+  pickSmartPrayerReminder,
+} from "./prayerReminder";
 import type { PrayerName } from "./types";
 
 const date = "2026-08-21";
@@ -35,5 +40,23 @@ describe("duePrayerReminders", () => {
 
   it("لا يخترع مطالبة إذا تعذّر حساب المواقيت", () => {
     expect(duePrayerReminders(at(23), date, null, undefined)).toEqual([]);
+  });
+
+  it("يختار آخر صلاة حديثة بدل تراكم الصلوات القديمة", () => {
+    const due = duePrayerReminders(at(14), date, times, undefined);
+    expect(pickSmartPrayerReminder(due, at(14))?.prayer).toBe("الظهر");
+  });
+
+  it("لا يفتح مطالبة لصلاة أقدم من العمر المسموح", () => {
+    const due = duePrayerReminders(at(23), date, times, undefined);
+    expect(pickSmartPrayerReminder(due, at(23), 60 * 60 * 1000)).toBeNull();
+  });
+
+  it("يعرف آخر صلاة حُسمت كي لا يعيد فتح ما قبلها", () => {
+    expect(latestRecordedPrayerAt(times, {
+      date,
+      prayers: { الفجر: "لم", الظهر: "جماعة", العصر: "لم" },
+    })).toBe(times.الظهر.getTime());
+    expect(latestRecordedPrayerAt(times, undefined)).toBe(0);
   });
 });

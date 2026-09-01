@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { PrayerName, PrayerStatus } from "@/lib/types";
 import { computePrayerTimes, getCachedCoords, getPrayerLog, parseDate, today, formatClock } from "@/lib/utils";
-import { duePrayerReminders, type PrayerReminderCandidate } from "@/lib/prayerReminder";
+import {
+  duePrayerReminders,
+  latestRecordedPrayerAt,
+  pickSmartPrayerReminder,
+  type PrayerReminderCandidate,
+} from "@/lib/prayerReminder";
 import { Modal } from "@/components/ui/Modal";
 import { MdrButton } from "@/components/madar/primitives";
 import { arClock } from "@/lib/madar/format";
@@ -13,7 +18,8 @@ import { Clock3 } from "lucide-react";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 
 const STORAGE_KEY = "madar-prayer-reminders-v1";
-const SNOOZE_MS = 30 * 60 * 1000;
+const SNOOZE_MS = 2 * 60 * 60 * 1000;
+const DAY_QUIET_SUFFIX = ":day-quiet";
 
 type SnoozeMap = Record<string, number>;
 
@@ -42,6 +48,17 @@ function writeSnoozes(snoozes: SnoozeMap) {
   }
 }
 
+function endOfLocalDay(date: string): number {
+  const next = parseDate(date);
+  next.setDate(next.getDate() + 1);
+  next.setHours(0, 0, 0, 0);
+  return next.getTime();
+}
+
+function dayQuietKey(date: string): string {
+  return `${date}${DAY_QUIET_SUFFIX}`;
+}
+
 function prayerLabel(prayer: PrayerReminderCandidate): string {
   return `${prayer.prayer} (${arClock(prayer.adhanAt, formatClock)})`;
 }
@@ -61,6 +78,10 @@ export function PrayerReminderWatcher() {
   // snapshot once more while a reminder is being answered. Keep the answer
   // local too, so that race cannot reopen the same sheet in this session.
   const answeredTokensRef = useRef<Set<string>>(new Set());
+  // After answering or dismissing the latest prayer, do not walk backwards
+  // through older due prayers in the same session. A newer prayer can still
+  // advance the reminder naturally.
+  const handledAtRef = useRef<Map<string, number>>(new Map());
   const [hydrated, setHydrated] = useState(() => useAppStore.persist.hasHydrated());
   const [candidate, setCandidate] = useState<PrayerReminderCandidate | null>(null);
 
@@ -82,20 +103,30 @@ export function PrayerReminderWatcher() {
   }, []);
 
   const refresh = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
     const current = new Date();
     const date = today();
     const coords = getCachedCoords();
     const times = computePrayerTimes(parseDate(date), coords.lat, coords.lng);
     const log = getPrayerLog(prayerLogs, date);
     const due = duePrayerReminders(current, date, times, log);
+    const smartCandidate = pickSmartPrayerReminder(due, current);
+    const handledThrough = Math.max(
+      latestRecordedPrayerAt(times, log),
+      ...handledAtRef.current.values(),
+    );
+    const quietUntil = snoozesRef.current[dayQuietKey(date)] ?? 0;
     // نافذة مراجعة البنك أولويةٌ أعلى؛ لا نضع نافذتين فوق بعضهما. بعد إغلاقها
     // يعيد الأثر نفسه الحساب فتظهر مطالبة الصلاة إن بقيت مستحقة.
-    const next = bankReviewing
+    // لا نرجع إلى صلاةٍ أقدم إذا كان آخر تذكير حديثاً لكنه مؤجّل؛ هذا يمنع
+    // النافذة من الالتفاف على اختيار المستخدم وعرض سلسلةٍ من المطالبات القديمة.
+    const next = bankReviewing || quietUntil > current.getTime() || !smartCandidate
       ? null
-      : due.find((item) =>
-          !answeredTokensRef.current.has(item.token) &&
-          (snoozesRef.current[item.token] ?? 0) <= current.getTime()
-        ) ?? null;
+      : smartCandidate.adhanAt.getTime() <= handledThrough ||
+          answeredTokensRef.current.has(smartCandidate.token) ||
+          (snoozesRef.current[smartCandidate.token] ?? 0) > current.getTime()
+        ? null
+        : smartCandidate;
     // Keep the same candidate object while its sheet is open; this avoids
     // resetting the modal's focus every minute.
     setCandidate((previous) => previous?.token === next?.token ? previous : next);
@@ -123,6 +154,7 @@ export function PrayerReminderWatcher() {
     const status = getPrayerLog(prayerLogs, candidate.date)?.prayers[candidate.prayer];
     if (status !== undefined && status !== "لم") {
       answeredTokensRef.current.add(candidate.token);
+      handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
       setCandidate(null);
     }
   }, [candidate, prayerLogs]);
@@ -135,13 +167,17 @@ export function PrayerReminderWatcher() {
       const date = token.slice(0, 10);
       const prayer = token.slice(11) as PrayerName;
       const status = getPrayerLog(prayerLogs, date)?.prayers[prayer];
-      if (status === undefined || status === "لم") answeredTokensRef.current.delete(token);
+      if (status === undefined || status === "لم") {
+        answeredTokensRef.current.delete(token);
+        handledAtRef.current.delete(token);
+      }
     }
   }, [prayerLogs]);
 
   function answer(status: Extract<PrayerStatus, "جماعة" | "منفردة">) {
     if (!candidate) return;
     answeredTokensRef.current.add(candidate.token);
+    handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
     setPrayerStatus(candidate.date, candidate.prayer, status);
     const next = { ...snoozesRef.current };
     delete next[candidate.token];
@@ -158,10 +194,32 @@ export function PrayerReminderWatcher() {
     setCandidate(null);
   }
 
+  function dismissCurrent() {
+    if (!candidate) return;
+    handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
+    const next = { ...snoozesRef.current, [candidate.token]: endOfLocalDay(candidate.date) };
+    snoozesRef.current = next;
+    writeSnoozes(next);
+    setCandidate(null);
+  }
+
+  function quietForToday() {
+    if (!candidate) return;
+    handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
+    const next = {
+      ...snoozesRef.current,
+      [candidate.token]: endOfLocalDay(candidate.date),
+      [dayQuietKey(candidate.date)]: endOfLocalDay(candidate.date),
+    };
+    snoozesRef.current = next;
+    writeSnoozes(next);
+    setCandidate(null);
+  }
+
   const title = candidate ? `تذكير ${candidate.prayer}` : "تذكير الصلاة";
 
   return (
-    <Modal open={!!candidate} onClose={later} title={title} className="mdr-prayer-reminder-modal">
+    <Modal open={!!candidate} onClose={dismissCurrent} title={title} className="mdr-prayer-reminder-modal">
       {candidate && (
         <div className="mdr-prayer-reminder">
           <div className="mdr-prayer-reminder-banner">
@@ -191,7 +249,14 @@ export function PrayerReminderWatcher() {
             onClick={later}
             className="mdr-prayer-reminder-later press"
           >
-            ذكّرني بعد ٣٠ دقيقة
+            ذكّرني بعد ساعتين
+          </button>
+          <button
+            type="button"
+            onClick={quietForToday}
+            className="mdr-prayer-reminder-dismiss press"
+          >
+            لا تذكرني اليوم
           </button>
         </div>
       )}
