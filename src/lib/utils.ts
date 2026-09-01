@@ -972,3 +972,13 @@ export const entriesCount = (n: number): string =>
 /** «يوم · يومان · ٣ أيام · ١١ يوماً». */
 export const daysCount = (n: number): string =>
   arabicCount(n, { one: "يوم واحد", two: "يومان", few: "أيام", many: "يوماً" });
+
+/** عدّادات وسائط المذكرة — «صورة · صورتان · ٣ صور · ١١ صورة» وأخواتها. */
+export const photosCount = (n: number): string =>
+  arabicCount(n, { one: "صورة واحدة", two: "صورتان", few: "صور", many: "صورة" });
+
+export const audiosCount = (n: number): string =>
+  arabicCount(n, { one: "تسجيل واحد", two: "تسجيلان", few: "تسجيلات", many: "تسجيلاً" });
+
+export const filesCount = (n: number): string =>
+  arabicCount(n, { one: "ملف واحد", two: "ملفان", few: "ملفات", many: "ملفاً" });

@@ -72,6 +72,7 @@
 | `src/lib/lock.ts` (`madar-lock-pin`) | القفل يسقط ← الخصوصية |
 | `src/lib/quran/session.ts` · `readPrefs.ts` | موضع القراءة والتفضيلات |
 | `src/lib/insightPrefs.ts` | تفضيلات البصائر |
+| `src/components/journal/JournalForm.tsx` (`madar-journal-draft`) | مسودةُ مذكرةٍ لم تُحفظ بعد — نصٌّ كتبه المالك ولا نسخة له في المتجر |
 | البقية (تفضيلات عرضٍ في المكوّنات) | مزعج لا كارثيّ |
 
 الحلّ: غلافٌ واحد `prefs.get/set/remove` (متزامن الواجهة، غير متزامن التنفيذ)

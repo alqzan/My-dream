@@ -13,6 +13,10 @@ import {
   hijriDate,
   normalizeArabic,
   toIndicDigits,
+  arabicCount,
+  photosCount,
+  audiosCount,
+  filesCount,
 } from "@/lib/utils";
 import { compressImageSmart } from "@/lib/imageUtils";
 import { photoHash } from "@/lib/mediaHash";
@@ -431,7 +435,11 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   );
 
   const wordCount = content.trim() ? content.trim().split(/\s+/u).length : 0;
-  const wordCountLabel = `${toIndicDigits(String(wordCount))} ${wordCount === 1 ? "كلمة" : "كلمة"}`;
+  // العدُّ العربيّ يمرّ بـ`arabicCount` كبقيّة التطبيق: «كلمة واحدة · كلمتان ·
+  // ٣ كلمات · ١١ كلمة». الصياغةُ اليدوية كانت تكتب «٣ كلمة» في كل مذكرة.
+  const wordCountLabel = arabicCount(wordCount, {
+    zero: "لا كلمات بعد", one: "كلمة واحدة", two: "كلمتان", few: "كلمات", many: "كلمة",
+  });
   const saveLabel = saveState === "saving"
     ? "يُحفظ الآن…"
     : saveState === "saved"
@@ -790,9 +798,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           <section className="mdr-journal-media-entry" aria-label="وسائط المذكرة">
             {(photoSources.length > 0 || audios.length > 0 || attachments.length > 0) && (
               <div className="mdr-journal-media-counts">
-                {photoSources.length > 0 && <span>{toIndicDigits(String(photoSources.length))} صورة</span>}
-                {audios.length > 0 && <span>{toIndicDigits(String(audios.length))} صوت</span>}
-                {attachments.length > 0 && <span>{toIndicDigits(String(attachments.length))} ملف</span>}
+                {photoSources.length > 0 && <span>{photosCount(photoSources.length)}</span>}
+                {audios.length > 0 && <span>{audiosCount(audios.length)}</span>}
+                {attachments.length > 0 && <span>{filesCount(attachments.length)}</span>}
               </div>
             )}
             <div>

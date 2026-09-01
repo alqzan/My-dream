@@ -11,6 +11,7 @@ vi.mock("idb-keyval", () => ({
 
 import { useAppStore } from "./store";
 import { budgetTombKey, mergeAppData } from "./merge";
+import { isValidBackupPayload } from "./backupValidation";
 import type { AppData } from "./types";
 
 // لقطةٌ فيها **كلّ** حقلٍ من AppData بقيمةٍ غير افتراضية. أيّ حقلٍ يُضاف لاحقاً
@@ -123,6 +124,23 @@ describe("snapshot ⇄ hydrate — كلّ حقلٍ في AppData يعبر الد�
   it("hydrate لا يختم lastUpdated من جديد (وإلّا انهارت مقارنة الأحدث)", () => {
     useAppStore.getState().hydrate(FULL);
     expect(useAppStore.getState().lastUpdated).toBe(FULL.lastUpdated);
+  });
+
+  // النسخةُ التي يصدّرها التطبيق يجب أن يقبلها فاحصُه هو. `isValidBackupPayload`
+  // بوابةٌ **كلٌّ أو لا شيء**: حقلٌ واحدٌ يختلف عن توقّع الفاحص يردّ الملفّ كلَّه
+  // برسالة «الملف غير صالح». وفاحصُ النسخ اليوم فيه عشراتُ المدقّقين المكتوبة
+  // يدوياً بإزاء `types.ts`، فأيُّ انحرافٍ بينهما — حقلٌ صار مطلوباً، أو قيمةُ
+  // حالةٍ أُعيدت تسميتُها — يجعل التطبيق يصدّر نسخةً لا يستطيع استعادتها، بلا
+  // خطأ ترجمةٍ ولا اختبارٍ يسقط. هذا هو الحارس: لقطةٌ فيها كلُّ حقلٍ في AppData
+  // تعبر الفاحص كما تعبر hydrate/snapshot.
+  it("اللقطة الكاملة تمرّ من فاحص النسخ الاحتياطية (لا نصدّر ما لا نستعيد)", () => {
+    useAppStore.getState().hydrate(FULL);
+    const exported = useAppStore.getState().snapshot();
+    const rejected = (Object.keys(exported) as (keyof AppData)[]).filter(
+      (key) => !isValidBackupPayload({ transactions: exported.transactions, [key]: exported[key] })
+    );
+    expect(rejected, `حقولٌ يرفضها الفاحص: ${rejected.join("، ")}`).toEqual([]);
+    expect(isValidBackupPayload(exported)).toBe(true);
   });
 });
 
