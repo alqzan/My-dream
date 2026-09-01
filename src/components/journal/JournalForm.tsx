@@ -4,7 +4,16 @@ import { createPortal } from "react-dom";
 import { useAppStore } from "@/lib/store";
 import type { JournalAttachment, JournalEntry, JournalPhotoEdit } from "@/lib/types";
 import { MOODS } from "@/lib/types";
-import { uid, today, parseDate, entryAudios } from "@/lib/utils";
+import {
+  uid,
+  today,
+  parseDate,
+  entryAudios,
+  formatDate,
+  hijriDate,
+  normalizeArabic,
+  toIndicDigits,
+} from "@/lib/utils";
 import { compressImageSmart } from "@/lib/imageUtils";
 import { photoHash } from "@/lib/mediaHash";
 import { dailyQuestion } from "@/lib/questions";
@@ -13,9 +22,29 @@ import { JournalPhotoEditor } from "./JournalPhotoEditor";
 import { entryPhotoSources } from "@/lib/mediaSources";
 import { photoEditKey, isDefaultPhotoEdit } from "@/lib/photoEdits";
 import { useMediaCacheVersion, resolveMediaSlots } from "@/components/ui/useMedia";
-import { Button } from "@/components/ui/Button";
-import { Camera, Image as ImageIcon, X, Loader2, Sparkles, Bold, Italic, Heading, List, Quote, Tag, ChevronRight, Paperclip, ChevronDown, FileText, Pencil, Upload } from "lucide-react";
+import {
+  AudioLines,
+  Bold,
+  Camera,
+  Check,
+  ChevronDown,
+  FileText,
+  Heading,
+  Image as ImageIcon,
+  Italic,
+  List,
+  Loader2,
+  Paperclip,
+  Pencil,
+  Quote,
+  RemoveFormatting,
+  Sparkles,
+  Tag,
+  Upload,
+  X,
+} from "lucide-react";
 import { AppImage } from "@/components/ui/AppImage";
+import { MOOD_SKY } from "@/lib/memoryDome";
 
 interface JournalFormProps {
   onClose: () => void;
@@ -72,11 +101,12 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const addJournalEntry = useAppStore((state) => state.addJournalEntry);
   const updateJournalEntry = useAppStore((state) => state.updateJournalEntry);
   const deleteJournalEntry = useAppStore((state) => state.deleteJournalEntry);
-  const [date, setDate] = useState(initial?.date ?? initialDate ?? today());
+  const seedDate = initial?.date ?? initialDate ?? today();
+  const [date, setDate] = useState(seedDate);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
-  const [question, setQuestion] = useState(initial?.question ?? dailyQuestion(today()));
   const [draftReady, setDraftReady] = useState(Boolean(initial));
+  const [question, setQuestion] = useState(initial?.question ?? dailyQuestion(seedDate));
   const [answering, setAnswering] = useState(!!initial?.question || !!startAnswering);
   const [photos, setPhotos] = useState<string[]>(
     initial?.photos?.length ? initial.photos : initial?.photo ? [initial.photo] : []
@@ -94,11 +124,20 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const [audioBusy, setAudioBusy] = useState(false);
   const [audioError, setAudioError] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initial ? "saved" : "idle");
-  // المرفقات جزءٌ مرئي من ورقة الكتابة في التصميم الجديد. تبقى حالة الطيّ
-  // اختيارية لمن يريد مساحةً أنظف، لكن لا تُخفى تلقائياً كي لا يضيع وجود PDF.
-  const [showExtras, setShowExtras] = useState(true);
+  // المرفقات القديمة تُفتح مرئيةً عند تعديل المذكرة حتى لا يبدو ملف Day One
+  // وكأنه اختفى. أمّا الورقة الجديدة فتبدأ هادئة، وتُفتح الأدوات من الرصيف
+  // السفلي كما في التصميم المرجعي.
+  const [showExtras, setShowExtras] = useState(() => Boolean(
+    initial && (
+      (initial.photos?.length ?? (initial.photo ? 1 : 0)) > 0 ||
+      entryAudios(initial).length > 0 ||
+      (initial.attachmentRefs?.length ?? 0) > 0 ||
+      (initial.tags?.length ?? 0) > 0
+    )
+  ));
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const extrasRef = useRef<HTMLDivElement>(null);
   const draftWriterRef = useRef<JournalDraftWriter | null>(null);
   // Always points at the latest handleDone so the mount-time keydown/effect
   // below can call it without capturing a stale closure over the form state.
@@ -209,9 +248,24 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
 
   // إضافة وسم: تشذيب، بلا تكرار، وحد أقصى معقول للعدد والطول.
   function addTag(raw: string) {
-    const t = raw.trim().replace(/^#/, "").slice(0, 24);
-    if (!t) return;
-    setTags((prev) => (prev.includes(t) || prev.length >= 12 ? prev : [...prev, t]));
+    // لوحة المفاتيح العربية تكتب الفاصلة «،» لا ","؛ كلاهما يفصل أكثر من
+    // وسم، والتطبيع يمنع تكرار «إجازة» و«اجازة» كوسمين مختلفين سهواً.
+    const candidates = raw
+      .split(/[،,]/)
+      .map((value) => value.trim().replace(/^#/, "").slice(0, 24))
+      .filter(Boolean);
+    if (!candidates.length) return;
+    setTags((prev) => {
+      const next = [...prev];
+      const seen = new Set(prev.map((value) => normalizeArabic(value)));
+      for (const candidate of candidates) {
+        const key = normalizeArabic(candidate);
+        if (!key || seen.has(key) || next.length >= 12) continue;
+        next.push(candidate);
+        seen.add(key);
+      }
+      return next;
+    });
     setTagInput("");
   }
   function removeTag(t: string) {
@@ -348,11 +402,48 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
       ta.setSelectionRange(s + token.length, s + token.length);
     });
   }
+  function clearFormatting() {
+    const ta = contentRef.current;
+    if (!ta) return;
+    const selectionStart = ta.selectionStart;
+    const selectionEnd = ta.selectionEnd;
+    const start = selectionStart === selectionEnd
+      ? content.lastIndexOf("\n", selectionStart - 1) + 1
+      : selectionStart;
+    const nextBreak = content.indexOf("\n", selectionEnd);
+    const end = selectionStart === selectionEnd
+      ? (nextBreak === -1 ? content.length : nextBreak)
+      : selectionEnd;
+    const selected = content.slice(start, end);
+    const plain = selected
+      .replace(/^\s*(?:#{1,6}|>|[-*+])\s+/gmu, "")
+      .replace(/\*\*|__|_/gu, "");
+    setContent(content.slice(0, start) + plain + content.slice(end));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start, start + plain.length);
+    });
+  }
 
   const titleIdeas = useMemo(
-    () => suggestTitles(content, date),
-    [content, date]
+    () => suggestTitles(content, date, answering ? question : undefined),
+    [content, date, answering, question]
   );
+
+  const wordCount = content.trim() ? content.trim().split(/\s+/u).length : 0;
+  const wordCountLabel = `${toIndicDigits(String(wordCount))} ${wordCount === 1 ? "كلمة" : "كلمة"}`;
+  const saveLabel = saveState === "saving"
+    ? "يُحفظ الآن…"
+    : saveState === "saved"
+      ? "حُفظ تلقائيًا"
+      : hasSomething()
+        ? "مسودة محلية"
+        : "ابدأ الكتابة";
+
+  function revealExtras() {
+    setShowExtras(true);
+    window.setTimeout(() => extrasRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+  }
 
   const MAX_PHOTOS = 30;
   const MAX_ATTACHMENTS = 10;
@@ -475,155 +566,256 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     // صفحة المذكرات (بطاقة «في مثل هذا اليوم» وزرّ الإضافة) — يظهر كلما تركت
     // لوحةُ المفاتيح أثراً في القياس: شريط لوحة الآيباد المصغّرة، أو قياسٌ لم
     // يُحدَّث بعدُ على الجوال.
-    <div className="fixed inset-0 z-50 mdr mdr-journal-composer [animation:fadeIn_0.2s_ease_both]">
+    <div
+      className="fixed inset-0 z-[70] mdr mdr-journal-composer [animation:fadeIn_0.2s_ease_both]"
+      lang="ar"
+      dir="rtl"
+    >
       <div
-        className="absolute inset-x-0 flex flex-col bg-[var(--paper)]"
+        className="absolute inset-x-0 flex flex-col bg-[var(--paper)] mdr-journal-sheet"
         style={{ top: "var(--vvo, 0px)", height: "var(--vvh, 100dvh)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mdr-journal-composer-title"
       >
-      {/* شريط علوي ثابت */}
-      <header className="shrink-0 flex items-center justify-between gap-2 px-2 border-b border-gray-100 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
+      {/* ترويسة المحرّر كما في المرجع النهائي: عودة للمذكرات وحفظ تلقائي. */}
+      <header className="mdr-journal-compose-head">
         <button
+          type="button"
           onClick={handleDone}
           aria-label="حفظ وإغلاق"
-          className="p-2 rounded-full text-gray-500 hover:bg-gray-100 press"
+          className="mdr-journal-back press"
         >
-          <ChevronRight size={24} />
+          المذكرات
         </button>
-        <div className="flex-1 min-w-0 text-center">
-          <p className="text-sm font-bold text-gray-900 truncate">{initial ? "تعديل المذكرة" : "مذكرة جديدة"}</p>
-          <span className="block h-3 leading-3 text-[11px] text-gray-400">
-            {saveState === "saving" ? "يُحفظ…" : saveState === "saved" ? "محفوظ تلقائياً ✓" : ""}
-          </span>
+        <div className={`mdr-journal-save-state ${saveState === "saved" ? "is-saved" : ""}`} aria-live="polite">
+          {saveState === "saved" && <Check size={13} aria-hidden="true" />}
+          <span>{saveLabel}</span>
         </div>
-        <Button onClick={handleDone} size="sm" className="mdr-journal-done">تم</Button>
+        <span className="mdr-journal-word-count">{wordCountLabel}</span>
       </header>
 
       {/* المحتوى — يمرّر داخل الشاشة */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="max-w-2xl mx-auto w-full space-y-4 px-4 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <div className="mdr-journal-context" aria-label="سياق المذكرة">
-        <div>
-          <span>تتحدث عن</span>
-          <strong>{date}</strong>
-        </div>
-        <div className="mdr-journal-context-meta">
-          <span>{answering ? "إجابة سؤال اليوم" : initial?.time ? `كُتبت ${initial.time}` : "مذكرة اليوم"}</span>
-          <span>{saveState === "saving" ? "يُحفظ…" : saveState === "saved" ? "محفوظ تلقائياً" : "مسودة"}</span>
-        </div>
-      </div>
+        <main className="mdr-journal-compose-body">
+          <h1 id="mdr-journal-composer-title" className="sr-only">
+            {initial ? "تعديل المذكرة" : "مذكرة جديدة"}
+          </h1>
 
-      {/* العنوان — كبير وغامق في الأعلى */}
-      <div>
-        <input
-          value={title}
-          onChange={(e) => setTitle(expandTimeCommand(e.target.value))}
-          placeholder="عنوان المذكرة"
-          aria-label="عنوان المذكرة"
-          lang="ar"
-          dir="rtl"
-          className="w-full text-xl font-black border-0 border-b-2 border-[var(--line)] focus:border-[var(--gold)] bg-transparent px-1 py-2 focus:outline-none placeholder:text-gray-300 placeholder:font-bold"
-        />
-        {!title && titleIdeas.length > 0 && (
-          <div className="flex gap-1.5 flex-wrap mt-2">
-            <Sparkles size={13} className="text-[var(--gold)] mt-1" />
-            {titleIdeas.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTitle(t)}
-                className="text-[11px] bg-[var(--goldw)] text-[var(--gold)] px-2.5 py-1 rounded-full hover:bg-[var(--goldw)] transition-colors press"
-              >
-                {t}
+          <section className="mdr-journal-subject" aria-label="تاريخ المذكرة">
+            <span className="mdr-journal-subject-kicker">تتحدّث عن</span>
+            <details className="mdr-journal-date-context">
+              <summary>
+                <span>{formatDate(date)}</span>
+                <ChevronDown size={14} aria-hidden="true" />
+              </summary>
+              <div className="mdr-journal-date-editor">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  aria-label="اختر تاريخ المذكرة"
+                  lang="ar"
+                  dir="rtl"
+                />
+                <div className="mdr-journal-date-actions">
+                  <button type="button" onClick={() => setDate(today())} className={date === today() ? "is-active" : ""}>اليوم</button>
+                  <button type="button" onClick={() => shiftDate(-1)}>اليوم السابق</button>
+                  <button type="button" onClick={() => shiftDate(1)}>اليوم التالي</button>
+                </div>
+              </div>
+            </details>
+            <p className="mdr-journal-subject-meta">
+              <span>{initial?.time ? `كُتبت الساعة ${toIndicDigits(initial.time)}` : "تُحفظ لحظة الكتابة"}</span>
+              <span aria-hidden="true">·</span>
+              <span>{hijriDate(date)}</span>
+            </p>
+          </section>
+
+          {/* الورقة المسطّرة في النسخة النهائية؛ التنسيق ظاهر ولا يقطع الحبر. */}
+          <section className="mdr-journal-editor" aria-label="ورقة المذكرة">
+            <input
+              value={title}
+              onChange={(e) => setTitle(expandTimeCommand(e.target.value))}
+              placeholder="عنوانُ المذكرة"
+              aria-label="عنوان المذكرة"
+              lang="ar"
+              dir="rtl"
+              inputMode="text"
+              spellCheck
+              autoCorrect="on"
+              autoCapitalize="sentences"
+              autoComplete="off"
+              className="mdr-journal-title-input"
+            />
+            {!title && content.trim().length > 3 && titleIdeas.length > 0 && (
+              <div className="mdr-journal-title-ideas" aria-label="عناوين مقترحة">
+                <Sparkles size={13} aria-hidden="true" />
+                {titleIdeas.map((suggestion) => (
+                  <button key={suggestion} type="button" onClick={() => setTitle(suggestion)} className="press">
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mdr-journal-formatting" aria-label="أدوات تنسيق النص">
+              {[
+                { icon: Bold, label: "عريض", action: () => wrapSelection("**") },
+                { icon: Italic, label: "مائل", action: () => wrapSelection("_") },
+                { icon: Heading, label: "عنوان", action: () => prefixLine("## ") },
+                { icon: List, label: "قائمة", action: () => prefixLine("- ") },
+                { icon: Quote, label: "اقتباس", action: () => prefixLine("> ") },
+                { icon: RemoveFormatting, label: "عادي", action: clearFormatting },
+              ].map((tool) => (
+                <button key={tool.label} type="button" onClick={tool.action} aria-label={tool.label} title={tool.label} className="press">
+                  <tool.icon size={15} aria-hidden="true" />
+                  <span>{tool.label}</span>
+                </button>
+              ))}
+            </div>
+            <textarea
+              ref={contentRef}
+              value={content}
+              onChange={(e) => setContent(expandTimeCommand(e.target.value))}
+              placeholder="اكتب كما تتكلّم… هذه ورقتك."
+              aria-label="نص المذكرة"
+              className="mdr-journal-writing-field"
+              lang="ar"
+              dir="rtl"
+              inputMode="text"
+              spellCheck
+              autoCorrect="on"
+              autoCapitalize="sentences"
+              autoComplete="off"
+              enterKeyHint="enter"
+            />
+            <div className="mdr-journal-writing-hint">
+              <span>اكتب <bdi dir="ltr">/الوقت</bdi> لإدراج الساعة</span>
+              <span>{wordCountLabel}</span>
+            </div>
+          </section>
+
+          <section className="mdr-journal-mood-row" aria-label="مزاج المذكرة">
+            <div role="group" aria-label="اختر شعور هذه المذكرة">
+              {MOODS.map((item) => {
+                const active = mood === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setMood(active ? undefined : item.value)}
+                    aria-label={item.label}
+                    aria-pressed={active}
+                    className={active ? "is-active press" : "press"}
+                    title={item.label}
+                  >
+                    <span style={{ background: MOOD_SKY[item.value] }} aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+            <p>{mood ? `المزاج: ${MOODS.find((item) => item.value === mood)?.label}` : "المزاجُ اختياري"}</p>
+          </section>
+
+          <section className={`mdr-journal-question-field ${answering ? "is-answering" : ""}`}>
+            <div>
+              <label htmlFor="mdr-journal-question">السؤالُ الذي بقي</label>
+              <button type="button" onClick={() => setAnswering((value) => !value)} aria-pressed={answering}>
+                {answering ? "مرفق بالمذكرة" : "إرفاق السؤال"}
               </button>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+            <input
+              id="mdr-journal-question"
+              value={question}
+              onChange={(e) => { setQuestion(e.target.value); setAnswering(true); }}
+              placeholder="اكتب سؤالًا بقي معك…"
+              lang="ar"
+              dir="rtl"
+              inputMode="text"
+              spellCheck
+              autoCorrect="on"
+              autoCapitalize="sentences"
+              autoComplete="off"
+            />
+            <p>{answering ? "سيُحفظ السؤال مع هذه المذكرة." : "السؤال ظاهر للتأمل، ولن يُربط بالمذكرة حتى ترفقه."}</p>
+          </section>
 
-      <div className="mdr-journal-date-row">
-        <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ المذكرة</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            lang="ar"
-            dir="rtl"
-            className="flex-1 border border-[var(--line)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gline)]"
-          />
-          <div className="mdr-journal-date-actions">
-            <button type="button" onClick={() => setDate(today())} className="is-active">اليوم</button>
-            <button type="button" onClick={() => shiftDate(-1)}>أمس</button>
-            <button type="button" onClick={() => shiftDate(1)}>غدًا</button>
-          </div>
-        </div>
-      </div>
+          <section className="mdr-journal-tags-inline" aria-label="وسوم المذكرة">
+            <div className="mdr-journal-tags-head">
+              <Tag size={14} aria-hidden="true" />
+              <span>الوسوم</span>
+              {tags.length > 0 && <small>{toIndicDigits(String(tags.length))}</small>}
+            </div>
+            {tags.length > 0 && (
+              <div className="mdr-journal-tag-chips">
+                {tags.map((item) => (
+                  <button key={item} type="button" onClick={() => removeTag(item)} aria-label={`حذف الوسم ${item}`}>
+                    {item} <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {tags.length < 12 && (
+              <div className="mdr-journal-tag-entry">
+                <input
+                  value={tagInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (/[،,]\s*$/u.test(value)) addTag(value);
+                    else setTagInput(value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "," || e.key === "،") {
+                      e.preventDefault();
+                      addTag(tagInput);
+                    } else if (e.key === "Backspace" && !tagInput && tags.length) {
+                      removeTag(tags[tags.length - 1]);
+                    }
+                  }}
+                  onBlur={() => addTag(tagInput)}
+                  placeholder="وسم عربي، أو أكثر بفاصلة «،»"
+                  aria-label="إضافة وسم للمذكرة"
+                  lang="ar"
+                  dir="rtl"
+                  inputMode="text"
+                  spellCheck
+                  autoCorrect="on"
+                  autoComplete="off"
+                />
+                <button type="button" onClick={() => addTag(tagInput)} disabled={!tagInput.trim()}>أضِف</button>
+              </div>
+            )}
+          </section>
 
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs font-medium text-gray-500">ماذا في بالك اليوم؟</label>
-          <span className="text-[11px] font-normal h-4">
-            {saveState === "saving" && <span className="text-gray-400">يُحفظ…</span>}
-            {saveState === "saved" && <span className="text-finance/80">حُفظ ✓</span>}
-          </span>
-        </div>
+          <section className="mdr-journal-media-entry" aria-label="وسائط المذكرة">
+            {(photoSources.length > 0 || audios.length > 0 || attachments.length > 0) && (
+              <div className="mdr-journal-media-counts">
+                {photoSources.length > 0 && <span>{toIndicDigits(String(photoSources.length))} صورة</span>}
+                {audios.length > 0 && <span>{toIndicDigits(String(audios.length))} صوت</span>}
+                {attachments.length > 0 && <span>{toIndicDigits(String(attachments.length))} ملف</span>}
+              </div>
+            )}
+            <div>
+              <button type="button" onClick={revealExtras}><ImageIcon size={16} aria-hidden="true" /> أضِف صورة</button>
+              <button type="button" onClick={revealExtras}><AudioLines size={16} aria-hidden="true" /> أضِف تسجيلًا</button>
+              <button type="button" onClick={revealExtras}><Paperclip size={16} aria-hidden="true" /> أضِف مرفقًا</button>
+            </div>
+          </section>
 
-        {/* محرّر النص: شريط تنسيق ثابت (بلمسة واحدة) + مساحة تتمدّد مع الكتابة */}
-        <div className="mdr-journal-editor rounded-2xl border border-[var(--line)] bg-[var(--paper2)] overflow-hidden transition-colors focus-within:border-[var(--gline)] focus-within:ring-2 focus-within:ring-[var(--goldw)]">
-          <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-100 bg-gray-50/70">
-            {[
-              { icon: Bold, t: "عريض", fn: () => wrapSelection("**") },
-              { icon: Italic, t: "مائل", fn: () => wrapSelection("_") },
-              { icon: Heading, t: "عنوان", fn: () => prefixLine("## ") },
-              { icon: List, t: "قائمة", fn: () => prefixLine("- ") },
-              { icon: Quote, t: "اقتباس", fn: () => prefixLine("> ") },
-            ].map((b) => (
-              <button
-                key={b.t}
-                type="button"
-                title={b.t}
-                aria-label={b.t}
-                onClick={b.fn}
-                className="w-8 h-8 rounded-lg text-gray-500 hover:bg-[var(--goldw)] hover:text-[var(--gold)] press flex items-center justify-center"
-              >
-                <b.icon size={16} />
-              </button>
-            ))}
-            <span className="ms-auto text-[10px] text-gray-300 pe-1.5 select-none">اكتب /الوقت للساعة</span>
-          </div>
-          <textarea
-            ref={contentRef}
-            value={content}
-            onChange={(e) => setContent(expandTimeCommand(e.target.value))}
-            placeholder="اكتب مذكرتك هنا…"
-            aria-label="نص المذكرة"
-            className="w-full min-h-[260px] block bg-transparent px-4 py-3.5 text-[15px] leading-loose focus:outline-none resize-none mdr-journal-lined-paper"
-            lang="ar"
-            dir="rtl"
-          />
-        </div>
-        <div className="flex justify-end mt-1 h-3">
-          {content.trim() && (
-            <span className="text-[10px] text-gray-300">
-              {content.trim().split(/\s+/).length} كلمة
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* إضافات — صور وPDF وصوت ووسوم، تبقى محفوظةً في نفس حقول المذكرة */}
-      <div>
+      {/* الصور والصوت والملفات القديمة تبقى في حقولها نفسها، بلا إعادة استيراد. */}
+      <div ref={extrasRef} className="mdr-journal-extras-wrap">
         <button
           type="button"
           onClick={() => setShowExtras((v) => !v)}
           className="w-full flex items-center gap-2 text-xs font-bold text-gray-500 py-2 press mdr-journal-attachments-toggle"
         >
           <Paperclip size={14} className="text-[var(--gold)]" />
-          المرفقات
+          تفاصيل الوسائط
           {(() => {
-            const n = photos.length + audios.length + attachments.length + tags.length + (mood ? 1 : 0);
+            const n = photoSources.length + audios.length + attachments.length;
             return n > 0 ? <span className="text-[10px] bg-[var(--goldw)] text-[var(--gold)] rounded-full px-2 py-0.5">{n}</span> : null;
           })()}
-          <span className="text-gray-300 font-normal">صور · صوت · PDF · وسوم · شعور</span>
+          <span className="text-gray-300 font-normal">صور · صوت · ملفات</span>
           <ChevronDown size={15} className={`ms-auto transition-transform ${showExtras ? "rotate-180" : ""}`} />
         </button>
         {showExtras && (
@@ -799,71 +991,6 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         <p className="text-[10px] text-gray-300 mt-1 text-center">تسجيل أو رفع حتى {MAX_AUDIO_NOTES} مقاطع صوتية · الأصل يبقى محفوظاً</p>
       </div>
 
-      {/* وسوم — للتصنيف والفلترة لاحقاً */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-          <Tag size={12} /> وسوم
-          {tags.length > 0 && <span className="text-gray-300 font-normal">— {tags.length}</span>}
-        </label>
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {tags.map((t) => (
-              <span
-                key={t}
-                className="flex items-center gap-1 text-[11px] font-medium bg-[var(--goldw)] text-[var(--gold)] px-2.5 py-1 rounded-full"
-              >
-                #{t}
-                <button
-                  onClick={() => removeTag(t)}
-                  className="hover:text-red-500 press"
-                  aria-label={`حذف الوسم ${t}`}
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        {tags.length < 12 && (
-          <input
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === ",") {
-                e.preventDefault();
-                addTag(tagInput);
-              } else if (e.key === "Backspace" && !tagInput && tags.length) {
-                removeTag(tags[tags.length - 1]);
-              }
-            }}
-            onBlur={() => addTag(tagInput)}
-            placeholder="أضف وسماً واضغط Enter (مثل: سفر، عائلة)"
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gline)]"
-          />
-        )}
-      </div>
-
-      {/* شعور اليوم — اختياريّ تماماً، يظهر بعد الكتابة فلا يزيد الاحتكاك */}
-      {(content.trim() || mood) && (
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-2">شعور اليوم (اختياري)</label>
-          <div className="flex items-center gap-1.5">
-            {MOODS.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setMood(mood === m.value ? undefined : m.value)}
-                aria-label={m.label}
-                aria-pressed={mood === m.value}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border press transition-colors ${mood === m.value ? "border-[var(--gold)] bg-[var(--goldw)]" : "border-gray-200 dark:border-transparent bg-white dark:bg-[#241c12]"}`}
-              >
-                <span className={`mdr-mood-diamond ${mood === m.value ? "is-active" : ""}`} aria-hidden="true" />
-                <span className={`text-[9px] ${mood === m.value ? "text-[var(--gold)] font-bold" : "text-gray-400"}`}>{m.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
           </div>
         )}
       </div>
@@ -878,7 +1005,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         />
       )}
 
-      {/* تجاهل — الرجوع/«تم» يحفظان تلقائياً؛ هذا الخيار الوحيد المُتلِف */}
+      {/* الإغلاق يحفظ تلقائياً؛ هذا الخيار الوحيد المُتلِف. */}
       <div className="pt-1">
         <button
           onClick={handleCancel}
@@ -888,8 +1015,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         </button>
       </div>
 
-        </div>
+        </main>
       </div>
+
       </div>
     </div>,
     document.body

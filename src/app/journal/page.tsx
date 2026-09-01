@@ -339,9 +339,10 @@ export default function JournalPage() {
         <button
           type="button"
           onClick={() => setShowForm(true)}
+          className="mdr-journal-primary-write"
           style={{
             display: "block", width: "100%", minHeight: 50, margin: "14px 0 0",
-            background: "var(--ink)", color: "var(--paper)", border: "none",
+            color: "var(--paper)", border: "none",
             borderRadius: 16, fontSize: 14, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
           }}
         >
@@ -385,9 +386,14 @@ export default function JournalPage() {
             aria-label="سطر سريع"
             lang="ar"
             dir="rtl"
+            inputMode="text"
+            spellCheck
+            autoCorrect="on"
+            autoCapitalize="sentences"
+            autoComplete="off"
             style={{
               flex: 1, minWidth: 0, background: "transparent", border: "none",
-              outline: "none", fontSize: 13.5, minHeight: 40, fontFamily: "inherit", color: "var(--ink)",
+              outline: "none", fontSize: 16, minHeight: 40, fontFamily: "inherit", color: "var(--ink)", textAlign: "right",
             }}
           />
           <MdrButton kind="ink" onClick={addQuickLine} disabled={!quickLine.trim()} minHeight={40} style={{ fontSize: 12.5, padding: "0 13px" }}>
