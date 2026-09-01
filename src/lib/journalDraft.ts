@@ -29,14 +29,23 @@ export interface JournalDraftWriter {
 }
 
 export const JOURNAL_DRAFT_DEBOUNCE_MS = 350;
+/**
+ * سقفُ التأجيل. التأجيل وحده يُصفَّر مع كل ضغطة، فكتابةٌ متدفّقة لا تسكت ٣٥٠ms
+ * تؤجّل المسودة إلى ما لا نهاية — وهي بالضبط الحالة التي تكثر فيها الكتابة
+ * ويكثر ما يضيع لو انطفأ التبويب. بعد هذا السقف تُكتب المسودة ولو لم يتوقّف
+ * الكاتب، ثمّ يبدأ سقفٌ جديد.
+ */
+export const JOURNAL_DRAFT_MAX_WAIT_MS = 3000;
 
 export function createJournalDraftWriter(
   storage: JournalDraftStorage,
   key: string,
   delayMs = JOURNAL_DRAFT_DEBOUNCE_MS,
+  maxWaitMs = JOURNAL_DRAFT_MAX_WAIT_MS,
 ): JournalDraftWriter {
   let latest: JournalDraft | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let firstScheduledAt = 0;
   let disposed = false;
 
   const clearTimer = () => {
@@ -44,6 +53,7 @@ export function createJournalDraftWriter(
       clearTimeout(timer);
       timer = null;
     }
+    firstScheduledAt = 0;
   };
 
   const write = () => {
@@ -67,8 +77,17 @@ export function createJournalDraftWriter(
     schedule(draft) {
       if (disposed) return;
       latest = { ...draft };
-      clearTimer();
-      timer = setTimeout(write, delayMs);
+      const now = Date.now();
+      if (firstScheduledAt === 0) firstScheduledAt = now;
+      const waited = now - firstScheduledAt;
+      if (waited >= maxWaitMs) {
+        write(); // يُصفّر المؤقّت والسقف معاً
+        return;
+      }
+      const startedAt = firstScheduledAt;
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(write, Math.min(delayMs, maxWaitMs - waited));
+      firstScheduledAt = startedAt;
     },
     flush() {
       if (disposed) return;

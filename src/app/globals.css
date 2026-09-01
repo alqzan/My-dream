@@ -649,15 +649,10 @@ body {
 .mdr-journal-composer header { border-color: var(--line) !important; background: var(--paper) !important; }
 .mdr-journal-composer .bg-gray-50\/70 { background: var(--paper2) !important; }
 .mdr-journal-composer .mdr-journal-editor { box-shadow: none !important; }
-.mdr-journal-composer .mdr-journal-done {
-  background: var(--ink) !important;
-  color: var(--paper) !important;
-}
 .mdr-journal-composer .text-journal,
 .mdr-journal-composer [class*="text-journal"] { color: var(--gold) !important; }
 .mdr-journal-composer [class*="bg-journal/"] { background: var(--goldw) !important; }
 .mdr-journal-composer [class*="border-journal"] { border-color: var(--gline) !important; }
-.mdr-journal-composer .mdr-journal-date-row input { background: var(--paper2); color: var(--ink); }
 
 /* القرآن: الأخضر يخصّ الحفظ فقط، والتبويبات الثلاثة تفصل اليوم عن المذاكرة
    والخريطة دون فتح مسارات التدبر أو المصحف في الواجهة الأساسية. */
@@ -869,40 +864,15 @@ body {
 
 /* محرر المذكرات: ورقة مسطرة + مرفقات ظاهرة. سؤال اليوم يبقى في صفحة
    المذكرات الخارجية، ويصل المحرّر كحالة إجابة دون إعادة بطاقة السؤال هنا. */
-.mdr-journal-composer .mdr-journal-context {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem;
-  padding: 0.8rem 0.1rem 0.2rem; border-bottom: 1px solid var(--line);
-}
-.mdr-journal-context > div:first-child { display: grid; gap: 0.2rem; }
-.mdr-journal-context span { color: var(--ink52); font-size: 0.68rem; }
-.mdr-journal-context strong { color: var(--ink); font-size: 1rem; }
-.mdr-journal-context-meta { display: grid; gap: 0.15rem; text-align: left; }
-.mdr-journal-context-meta span:last-child { color: var(--gold); }
-.mdr-journal-composer .mdr-journal-date-row input { background: var(--paper2) !important; color: var(--ink) !important; }
 .mdr-journal-date-actions { display: flex; gap: 0.25rem; }
 .mdr-journal-date-actions button {
   min-height: 2.4rem; padding: 0 0.65rem; border: 1px solid var(--line); border-radius: 0.7rem;
   background: transparent; color: var(--ink52); font: inherit; font-size: 0.68rem; font-weight: 800; cursor: pointer;
 }
 .mdr-journal-date-actions button.is-active { border-color: var(--gline); background: var(--goldw); color: var(--gold); }
-.mdr-journal-eyebrow { display: block; color: var(--gold); font-size: 0.68rem; font-weight: 900; }
-.mdr-journal-question {
-  padding: 0.85rem 0.9rem; border: 1px solid var(--line); border-radius: 1.15rem; background: var(--paper2);
-}
-.mdr-journal-question-text { margin-top: 0.25rem; color: var(--ink); font-size: 0.85rem; line-height: 1.75; }
-.mdr-journal-question-action {
-  flex: none; min-height: 2.2rem; padding: 0 0.7rem; border: 1px solid var(--gline); border-radius: 0.75rem;
-  background: var(--goldw); color: var(--gold); font: inherit; font-size: 0.7rem; font-weight: 900; cursor: pointer;
-}
-.mdr-journal-question-input { width: 100%; margin-top: 0.6rem; padding: 0.55rem 0; border: 0; border-bottom: 1px solid var(--gline); background: transparent; color: var(--ink); font: inherit; font-size: 0.85rem; outline: none; }
-.mdr-journal-editor { border-color: var(--gline) !important; background: var(--paper2) !important; }
-.mdr-journal-lined-paper {
-  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 31px, var(--line) 32px) !important;
-  background-size: 100% 32px !important;
-  line-height: 32px !important;
-  padding-top: 0.4rem !important;
-}
-.mdr-journal-attachments-toggle { border-top: 1px solid var(--line); color: var(--ink72) !important; }
+/* بلا `!important`: لم تعد الزرَّ طبقةُ `text-gray-500` من Tailwind تنازعه
+   (أُزيلت من الوسم)، فاللون هنا يكفي في السمتين. */
+.mdr-journal-attachments-toggle { border-top: 1px solid var(--line); color: var(--ink72); }
 .mdr-journal-attachments { padding: 0.75rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper2); }
 .mdr-journal-composer .border-gray-200,
 .mdr-journal-composer .border-gray-100 { border-color: var(--line) !important; }
@@ -932,8 +902,8 @@ body {
 }
 .mdr-journal-page .mdr-journal-primary-write,
 .mdr-journal-page .fab {
-  background: var(--ink) !important;
-  color: var(--paper) !important;
+  background: var(--ink);
+  color: var(--paper);
 }
 .mdr-journal-page .mdr-journal-primary-write:focus-visible,
 .mdr-journal-page .fab:focus-visible {
@@ -944,13 +914,13 @@ body {
 .mdr-journal-composer {
   /* المحرر مستقل بصرياً؛ لا نسمح بنصوص الشريط الجانبي أو الصفحة الأم أن
      تظهر خلفه، خصوصاً على سطح المكتب حين تكون الورقة أضيق من الشاشة. */
-  background: var(--paper) !important;
-  color: var(--ink) !important;
+  background: var(--paper);
+  color: var(--ink);
 }
 .mdr-journal-composer .mdr-journal-sheet {
   overflow-y: auto;
   scrollbar-width: thin;
-  background: var(--paper) !important;
+  background: var(--paper);
 }
 .mdr-journal-compose-head {
   position: relative;
@@ -962,7 +932,7 @@ body {
   min-height: 3.55rem;
   padding: max(0.38rem, env(safe-area-inset-top)) 1rem 0.38rem;
   border-bottom: 1px solid var(--line);
-  background: var(--paper) !important;
+  background: var(--paper);
 }
 .mdr-journal-back {
   min-width: 5.2rem;
@@ -1058,8 +1028,8 @@ body {
   padding: 0 0.7rem;
   border: 1px solid var(--line);
   border-radius: 0;
-  background: var(--paper) !important;
-  color: var(--ink) !important;
+  background: var(--paper);
+  color: var(--ink);
   font: inherit;
   font-size: 1rem;
   text-align: right;
@@ -1070,12 +1040,12 @@ body {
   display: grid;
   min-width: 0;
   margin-top: 0.9rem;
-  overflow: hidden !important;
-  padding: 1rem 2.15rem 1.1rem 1rem !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 0 !important;
-  background: var(--paper2) !important;
-  box-shadow: none !important;
+  overflow: hidden;
+  padding: 1rem 2.15rem 1.1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper2);
+  box-shadow: none;
 }
 .mdr-journal-composer .mdr-journal-editor::before {
   position: absolute;
@@ -1394,9 +1364,9 @@ body {
 .mdr-journal-composer .mdr-journal-attachments-toggle {
   min-height: 2.75rem;
   border-block: 1px solid var(--line);
-  color: var(--ink72) !important;
+  color: var(--ink72);
 }
-.mdr-journal-composer .mdr-journal-attachments-toggle > svg:first-child { color: var(--gold) !important; }
+.mdr-journal-composer .mdr-journal-attachments-toggle > svg:first-child { color: var(--gold); }
 .mdr-journal-composer button:focus-visible,
 .mdr-journal-composer input:focus-visible,
 .mdr-journal-composer textarea:focus-visible,
@@ -1422,7 +1392,7 @@ body {
   }
   .mdr-journal-back { min-width: 5rem; padding-inline: 0.5rem; }
   .mdr-journal-compose-body { padding-inline: 1rem; }
-  .mdr-journal-composer .mdr-journal-editor { padding-inline: 2rem 0.85rem !important; }
+  .mdr-journal-composer .mdr-journal-editor { padding-inline: 2rem 0.85rem; }
   .mdr-journal-formatting button { flex-basis: 3.7rem; }
   .mdr-journal-mood-row { align-items: flex-start; }
   .mdr-journal-mood-row p { flex-basis: 100%; text-align: right; }
@@ -1437,7 +1407,6 @@ body {
 @media (max-width: 639px) {
   .mdr-quran-page, .mdr-finance-page { border-inline: 0; }
   .mdr-finance-tabs { width: 100%; }
-  .mdr-journal-date-row > .flex { align-items: stretch; flex-direction: column; }
   .mdr-journal-date-actions { width: 100%; }
   .mdr-journal-date-actions button { flex: 1; }
   .mdr-finance-now-actions { align-items: stretch; flex-direction: column; }

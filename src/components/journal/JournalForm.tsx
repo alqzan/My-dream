@@ -142,6 +142,12 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const extrasRef = useRef<HTMLDivElement>(null);
+  // أزرار «أضِف …» في الورقة كانت تفتح قسم الوسائط فقط، فيلزم نقرةٌ ثانية على
+  // الزرّ الحقيقي تحته. هذه المراجع تجعل النقرة الواحدة تفتح المنتقي مباشرةً؛
+  // والتسجيل وحده يبقى نقرتين لأنّ الميكروفون زرُّه المسجّل نفسه.
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const audioSectionRef = useRef<HTMLDivElement>(null);
   const draftWriterRef = useRef<JournalDraftWriter | null>(null);
   // Always points at the latest handleDone so the mount-time keydown/effect
   // below can call it without capturing a stale closure over the form state.
@@ -448,9 +454,21 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         ? "مسودة محلية"
         : "ابدأ الكتابة";
 
-  function revealExtras() {
+  function revealExtras(target?: React.RefObject<HTMLElement | null>) {
     setShowExtras(true);
-    window.setTimeout(() => extrasRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+    window.setTimeout(
+      () => (target?.current ?? extrasRef.current)?.scrollIntoView({ block: "start", behavior: "smooth" }),
+      60,
+    );
+  }
+
+  // نقرةٌ واحدة: يُفتح القسم (فتظهر النتيجة بعد الاختيار) ويُفتح المنتقي فوراً.
+  // إن كان الحدُّ الأقصى بالغاً فلا منتقي أصلاً — نكتفي بكشف القسم ليرى السبب.
+  function pickMedia(inputRef: React.RefObject<HTMLInputElement | null>) {
+    setShowExtras(true);
+    const input = inputRef.current;
+    if (input) input.click();
+    else revealExtras();
   }
 
   const MAX_PHOTOS = 30;
@@ -697,9 +715,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
               autoComplete="off"
               enterKeyHint="enter"
             />
+            {/* العدّاد في الترويسة وحدها — كان مكرّراً هنا وفي أعلى الشاشة معاً. */}
             <div className="mdr-journal-writing-hint">
               <span>اكتب <bdi dir="ltr">/الوقت</bdi> لإدراج الساعة</span>
-              <span>{wordCountLabel}</span>
             </div>
           </section>
 
@@ -804,9 +822,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
               </div>
             )}
             <div>
-              <button type="button" onClick={revealExtras}><ImageIcon size={16} aria-hidden="true" /> أضِف صورة</button>
-              <button type="button" onClick={revealExtras}><AudioLines size={16} aria-hidden="true" /> أضِف تسجيلًا</button>
-              <button type="button" onClick={revealExtras}><Paperclip size={16} aria-hidden="true" /> أضِف مرفقًا</button>
+              <button type="button" onClick={() => pickMedia(photoInputRef)}><ImageIcon size={16} aria-hidden="true" /> أضِف صورة</button>
+              <button type="button" onClick={() => revealExtras(audioSectionRef)}><AudioLines size={16} aria-hidden="true" /> أضِف تسجيلًا</button>
+              <button type="button" onClick={() => pickMedia(attachmentInputRef)}><Paperclip size={16} aria-hidden="true" /> أضِف مرفقًا</button>
             </div>
           </section>
 
@@ -815,7 +833,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         <button
           type="button"
           onClick={() => setShowExtras((v) => !v)}
-          className="w-full flex items-center gap-2 text-xs font-bold text-gray-500 py-2 press mdr-journal-attachments-toggle"
+          className="w-full flex items-center gap-2 text-xs font-bold py-2 press mdr-journal-attachments-toggle"
         >
           <Paperclip size={14} className="text-[var(--gold)]" />
           تفاصيل الوسائط
@@ -905,6 +923,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
               <ImageIcon size={20} className="text-gray-400 mb-1" />
               <span className="text-xs text-gray-400">من الاستديو</span>
               <input
+                ref={photoInputRef}
                 type="file"
                 accept="image/*"
                 multiple
@@ -955,6 +974,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             <FileText size={19} className="text-gray-400" />
             <span className="text-xs text-gray-400">أضف ملفات متعددة</span>
             <input
+              ref={attachmentInputRef}
               type="file"
               accept="*/*"
               multiple
@@ -970,7 +990,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
       </div>
 
       {/* ملاحظة صوتية */}
-      <div>
+      <div ref={audioSectionRef}>
         <label className="block text-xs font-medium text-gray-500 mb-2">
           ملاحظات صوتية
           {audios.length > 0 && (

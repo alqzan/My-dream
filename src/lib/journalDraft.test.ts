@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createJournalDraftWriter, JOURNAL_DRAFT_DEBOUNCE_MS, type JournalDraftStorage } from "./journalDraft";
+import {
+  createJournalDraftWriter,
+  JOURNAL_DRAFT_DEBOUNCE_MS,
+  JOURNAL_DRAFT_MAX_WAIT_MS,
+  type JournalDraftStorage,
+} from "./journalDraft";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -50,5 +55,25 @@ describe("createJournalDraftWriter", () => {
     writer.schedule(draft("بعد الإغلاق"));
     writer.dispose();
     expect(JSON.parse(store.writes.at(-1)!).content).toBe("بعد الإغلاق");
+  });
+
+  // التأجيل وحده يُصفَّر مع كل ضغطة: كاتبٌ متدفّق لا يسكت ٣٥٠ms كان يؤجّل
+  // مسودته إلى ما لا نهاية، فلو انطفأ التبويب ضاع كلُّ ما كتبه. السقف يكتبها
+  // ولو لم يتوقّف.
+  it("يكتب المسودة عند سقف التأجيل ولو لم تتوقّف الكتابة", async () => {
+    const store = memoryStorage();
+    const writer = createJournalDraftWriter(store.storage, "draft");
+
+    // ضغطةٌ كلَّ ٣٠٠ms — أقلُّ من التأجيل، فلا سكوت يُطلق الكتابة أبداً.
+    for (let i = 1; i <= 12; i++) {
+      writer.schedule(draft(`كلمة ${i}`));
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    expect(store.writes.length).toBeGreaterThanOrEqual(1);
+    expect(JSON.parse(store.writes.at(-1)!).content).toMatch(/^كلمة /);
+
+    // ولا يكتب أكثر ممّا يوجبه السقف: ١٢ ضغطة × ٣٠٠ms = ٣٦٠٠ms.
+    const elapsed = 12 * 300;
+    expect(store.writes.length).toBeLessThanOrEqual(Math.ceil(elapsed / JOURNAL_DRAFT_MAX_WAIT_MS) + 1);
   });
 });

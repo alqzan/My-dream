@@ -1,3 +1,4 @@
+import { toIndicDigits } from "./utils";
 import type {
   AppData,
   Asset,
@@ -502,56 +503,160 @@ function validMeta(value: unknown): boolean {
   );
 }
 
-/** Returns `true` only for a payload safe to pass to the restore preview. */
-export function isValidBackupPayload(value: unknown): value is UnknownRecord & Partial<AppData> {
-  if (!record(value) || !isValidTransactionCollection(value.transactions)) return false;
-  if (!validMeta(value.__meta)) return false;
+// ===================== لماذا رُفض الملف =====================
+// الفاحص بوابةٌ **كلٌّ أو لا شيء**: سجلٌّ واحد ينحرف عن الشكل يردّ الملفّ كلَّه.
+// كان ذلك يظهر للمالك رسالةً واحدة — «الملف غير صالح» — فلا يعرف أالملفُّ تالفٌ
+// فعلاً أم أنّ مدقّقاً واحداً تشدّد على حقلٍ قديم، ولا سبيل له إلى معرفة ذلك
+// إلا بفتح JSON بيده. الرفض يبقى كما هو (لا نستعيد ما لا نثق بشكله)، لكنّه
+// صار **يسمّي المجموعة والسجلّ** الذي عثر عليه أوّلاً.
+export interface BackupRejection {
+  /** مفتاح الحقل في `AppData` كما هو في الملف. */
+  field: string;
+  /** اسمُه بالعربية للعرض. */
+  label: string;
+  /** موضع السجلّ داخل المجموعة (يبدأ من صفر) حين يكون العطل في سجلٍّ بعينه. */
+  index?: number;
+  /** معرّف السجلّ إن حمله — أدقُّ ما يدلّ المالك عليه في ملفه. */
+  id?: string;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  transactions: "المعاملات",
+  books: "الكتب",
+  readingLogs: "سجلّات القراءة",
+  knowledgeSources: "مصادر المحبرة",
+  benefits: "الفوائد",
+  shelfItems: "الرفّ",
+  habits: "العادات",
+  recurring: "المتكرّرة",
+  installmentPlans: "خطط الأقساط",
+  assets: "الأصول",
+  categories: "التصنيفات",
+  reserves: "الصناديق",
+  quranReflections: "تأمّلات القرآن",
+  futureLetters: "رسائل المستقبل",
+  countdownEvents: "العدّادات",
+  journalEntries: "المذكرات",
+  budgets: "السقوف",
+  prayerLogs: "سجلّ الصلاة",
+  quranWird: "الوِرد",
+  quranHifz: "الحفظ",
+  quranKhatma: "الختمة",
+  frozenHabits: "العادات المجمّدة",
+  deleted: "شواهد الحذف",
+  deletedMedia: "شواهد حذف الوسائط",
+  fieldUpdatedAt: "أختام الحقول",
+  merchantRules: "قواعد التجّار",
+  qadaBacklog: "رصيد القضاء",
+  dailyBudget: "الميزانية اليومية",
+  monthlyIncome: "الدخل الشهري",
+  salaryDay: "يوم الراتب",
+  budgetWindow: "نافذة الميزانية",
+  lastSalaryConfirm: "آخر تأكيد راتب",
+  readingGoal: "هدف القراءة",
+  lastUpdated: "ختم آخر تعديل",
+  __meta: "ترويسة الملف",
+  __root: "الملف نفسه",
+};
+
+function label(field: string): string {
+  return FIELD_LABELS[field] ?? field;
+}
+
+/** أوّلُ سجلٍّ يرفضه المدقّق داخل مجموعة — بموضعه ومعرّفه إن وُجد. */
+function rejectInCollection(
+  field: string,
+  value: unknown,
+  validator: (item: unknown) => boolean,
+): BackupRejection | null {
+  if (!Array.isArray(value)) return { field, label: label(field) };
+  const index = value.findIndex((item) => !validator(item));
+  if (index === -1) return null;
+  const item = value[index];
+  const id = record(item) && typeof item.id === "string" ? item.id : undefined;
+  return { field, label: label(field), index, ...(id ? { id } : {}) };
+}
+
+/** أوّلُ سببٍ يجعل الملفّ غير صالحٍ للاستعادة، أو `null` إن كان سليماً. */
+export function findBackupRejection(value: unknown): BackupRejection | null {
+  if (!record(value)) return { field: "__root", label: label("__root") };
+  const transactions = rejectInCollection("transactions", value.transactions, isValidTransaction);
+  if (transactions) return transactions;
+  if (!validMeta(value.__meta)) return { field: "__meta", label: label("__meta") };
 
   const collectionValidators: Record<string, (item: unknown) => boolean> = {
-    books: (item) => collectionOf(item, validBook),
-    readingLogs: (item) => collectionOf(item, validReadingLog),
-    knowledgeSources: (item) => collectionOf(item, validKnowledgeSource),
-    benefits: (item) => collectionOf(item, validBenefit),
-    shelfItems: (item) => collectionOf(item, validShelfItem),
-    habits: (item) => collectionOf(item, validHabit),
-    recurring: (item) => collectionOf(item, validRecurring),
-    installmentPlans: (item) => collectionOf(item, validInstallmentPlan),
-    assets: (item) => collectionOf(item, validAsset),
-    categories: (item) => collectionOf(item, validCategory),
-    reserves: (item) => collectionOf(item, validReserve),
-    quranReflections: (item) => collectionOf(item, validQuranReflection),
-    futureLetters: (item) => collectionOf(item, validFutureLetter),
-    countdownEvents: (item) => collectionOf(item, validCountdownEvent),
+    books: validBook,
+    readingLogs: validReadingLog,
+    knowledgeSources: validKnowledgeSource,
+    benefits: validBenefit,
+    shelfItems: validShelfItem,
+    habits: validHabit,
+    recurring: validRecurring,
+    installmentPlans: validInstallmentPlan,
+    assets: validAsset,
+    categories: validCategory,
+    reserves: validReserve,
+    quranReflections: validQuranReflection,
+    futureLetters: validFutureLetter,
+    countdownEvents: validCountdownEvent,
+    journalEntries: isValidJournalEntry,
+    budgets: validBudget,
   };
   for (const [field, validator] of Object.entries(collectionValidators)) {
-    if (value[field] !== undefined && !validator(value[field])) return false;
+    if (value[field] === undefined) continue;
+    const rejection = rejectInCollection(field, value[field], validator);
+    if (rejection) return rejection;
   }
-  if (value.journalEntries !== undefined && !collectionOf(value.journalEntries, isValidJournalEntry)) return false;
-  if (value.budgets !== undefined && !collectionOf(value.budgets, validBudget)) return false;
-  if (value.prayerLogs !== undefined && !validPrayerLogs(value.prayerLogs)) return false;
-  if (value.quranWird !== undefined && !stringCollection(value.quranWird)) return false;
-  if (value.quranHifz !== undefined && !validHifz(value.quranHifz)) return false;
-  if (value.quranKhatma !== undefined && !validKhatma(value.quranKhatma)) return false;
-  if (value.frozenHabits !== undefined && !stringCollection(value.frozenHabits)) return false;
-  if (value.deleted !== undefined && !numberMap(value.deleted)) return false;
-  if (value.deletedMedia !== undefined && !numberMap(value.deletedMedia)) return false;
-  if (value.fieldUpdatedAt !== undefined && !numberMap(value.fieldUpdatedAt)) return false;
-  if (value.merchantRules !== undefined && !stringMap(value.merchantRules)) return false;
+  for (const [field, validator] of Object.entries<(item: unknown) => boolean>({
+    prayerLogs: validPrayerLogs,
+    quranWird: stringCollection,
+    quranHifz: validHifz,
+    quranKhatma: validKhatma,
+    frozenHabits: stringCollection,
+    deleted: numberMap,
+    deletedMedia: numberMap,
+    fieldUpdatedAt: numberMap,
+    merchantRules: stringMap,
+  })) {
+    if (value[field] !== undefined && !validator(value[field])) {
+      return { field, label: label(field) };
+    }
+  }
 
+  const scalar = (field: string, ok: boolean): BackupRejection | null =>
+    ok ? null : { field, label: label(field) };
   const qadaBacklog = value.qadaBacklog;
-  if (qadaBacklog !== undefined && (typeof qadaBacklog !== "number" || !Number.isFinite(qadaBacklog) || qadaBacklog < 0)) return false;
-  if (value.dailyBudget !== undefined && value.dailyBudget !== null && !record(value.dailyBudget)) return false;
-  if (record(value.dailyBudget)) {
-    if (!finiteNumber(value.dailyBudget.amount) || !nonEmptyString(value.dailyBudget.startDate)) return false;
-    if (!optionalFiniteNumber(value.dailyBudget.monthlyIncome) || !optionalFiniteNumber(value.dailyBudget.incomePct) || !optionalFiniteNumber(value.dailyBudget.carryAdjust)) return false;
+  if (qadaBacklog !== undefined && (typeof qadaBacklog !== "number" || !Number.isFinite(qadaBacklog) || qadaBacklog < 0)) {
+    return scalar("qadaBacklog", false);
   }
-  if (value.monthlyIncome !== undefined && value.monthlyIncome !== null && !finiteNumber(value.monthlyIncome)) return false;
-  if (value.salaryDay !== undefined && !finiteNumber(value.salaryDay)) return false;
-  if (value.budgetWindow !== undefined && value.budgetWindow !== "salary" && value.budgetWindow !== "month") return false;
-  if (value.lastSalaryConfirm !== undefined && value.lastSalaryConfirm !== null && typeof value.lastSalaryConfirm !== "string") return false;
-  if (value.readingGoal !== undefined && value.readingGoal !== null && !finiteNumber(value.readingGoal)) return false;
-  if (value.lastUpdated !== undefined && !nonEmptyString(value.lastUpdated)) return false;
-  return true;
+  if (value.dailyBudget !== undefined && value.dailyBudget !== null && !record(value.dailyBudget)) {
+    return scalar("dailyBudget", false);
+  }
+  if (record(value.dailyBudget)) {
+    if (!finiteNumber(value.dailyBudget.amount) || !nonEmptyString(value.dailyBudget.startDate)) return scalar("dailyBudget", false);
+    if (!optionalFiniteNumber(value.dailyBudget.monthlyIncome) || !optionalFiniteNumber(value.dailyBudget.incomePct) || !optionalFiniteNumber(value.dailyBudget.carryAdjust)) return scalar("dailyBudget", false);
+  }
+  if (value.monthlyIncome !== undefined && value.monthlyIncome !== null && !finiteNumber(value.monthlyIncome)) return scalar("monthlyIncome", false);
+  if (value.salaryDay !== undefined && !finiteNumber(value.salaryDay)) return scalar("salaryDay", false);
+  if (value.budgetWindow !== undefined && value.budgetWindow !== "salary" && value.budgetWindow !== "month") return scalar("budgetWindow", false);
+  if (value.lastSalaryConfirm !== undefined && value.lastSalaryConfirm !== null && typeof value.lastSalaryConfirm !== "string") return scalar("lastSalaryConfirm", false);
+  if (value.readingGoal !== undefined && value.readingGoal !== null && !finiteNumber(value.readingGoal)) return scalar("readingGoal", false);
+  if (value.lastUpdated !== undefined && !nonEmptyString(value.lastUpdated)) return scalar("lastUpdated", false);
+  return null;
+}
+
+/** جملةٌ عربية تُعرض للمالك مكان «الملف غير صالح» المبهمة. */
+export function describeBackupRejection(rejection: BackupRejection): string {
+  if (rejection.field === "__root") return "الملف ليس نسخة مدار احتياطية";
+  if (rejection.index === undefined) return `تعذّرت قراءة «${rejection.label}» في الملف`;
+  const position = toIndicDigits(String(rejection.index + 1));
+  const which = rejection.id ? ` (المعرّف ${rejection.id})` : "";
+  return `سجلٌّ في «${rejection.label}» شكلُه غير متوقَّع — رقم ${position}${which}`;
+}
+
+/** Returns `true` only for a payload safe to pass to the restore preview. */
+export function isValidBackupPayload(value: unknown): value is UnknownRecord & Partial<AppData> {
+  return findBackupRejection(value) === null;
 }
 
 function isValidTransactionCollection(value: unknown): value is Transaction[] {

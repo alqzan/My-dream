@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeBackupRejection,
+  findBackupRejection,
   isSyncReadableJournalEntry,
   isSyncReadableTransaction,
   isValidBackupPayload,
@@ -76,5 +78,30 @@ describe("backup validation", () => {
     expect(isSyncReadableTransaction(legacyTransaction)).toBe(true);
     expect(isValidJournalEntry(legacyJournal)).toBe(false);
     expect(isValidTransaction(legacyTransaction)).toBe(true);
+  });
+});
+
+// «الملف غير صالح» وحدها تركت المالك بلا سبيل: أالنسخة تالفةٌ فعلاً أم أنّ
+// سجلاً واحداً من أرشيفٍ قديم شذّ عن شكلٍ تشدّد فيه مدقّق؟ الرفض نفسه لم
+// يتغيّر — تغيّر أنّه صار يسمّي المجموعة وموضع السجلّ ومعرّفه.
+describe("سببُ رفض النسخة الاحتياطية", () => {
+  it("يسمّي المجموعة وموضع السجلّ ومعرّفه", () => {
+    const rejection = findBackupRejection({
+      ...valid,
+      books: [
+        { id: "b1", title: "ك", author: "م", totalPages: 10, currentPage: 1, status: "أقرأ" },
+        { id: "b2", title: "ك٢", author: "م", totalPages: "كثير", currentPage: 1, status: "أقرأ" },
+      ],
+    });
+    expect(rejection).toEqual({ field: "books", label: "الكتب", index: 1, id: "b2" });
+    expect(describeBackupRejection(rejection!)).toContain("الكتب");
+    expect(describeBackupRejection(rejection!)).toContain("b2");
+  });
+
+  it("يسمّي الحقل غير المجموعة كذلك، ولا يسمّي شيئاً لملفٍّ سليم", () => {
+    expect(findBackupRejection({ ...valid, merchantRules: { coffee: 42 } }))
+      .toEqual({ field: "merchantRules", label: "قواعد التجّار" });
+    expect(findBackupRejection("ليس ملفاً")).toEqual({ field: "__root", label: "الملف نفسه" });
+    expect(findBackupRejection(valid)).toBeNull();
   });
 });

@@ -1,8 +1,7 @@
 /* Keep the writing column's geometry stable while a long Arabic note grows.
    The base journal theme stays in globals.css; these are the performance and
    wrapping overrides for the composer only. */
-.mdr-journal-composer .mdr-journal-writing-field,
-.mdr-journal-composer .mdr-journal-lined-paper {
+.mdr-journal-composer .mdr-journal-writing-field {
   height: clamp(20rem, 46vh, 32rem);
   min-height: 20rem;
   overflow-x: hidden;

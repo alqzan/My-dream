@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Download, Upload, ShieldCheck, GitMerge, Replace, Loader2, Lock, KeyRound } from "lucide-react";
 import { showUndo, showToast } from "@/components/ui/UndoToast";
 import { encryptJson, decryptJson, isEncryptedBackup, type EncryptedBackup } from "@/lib/backupCrypto";
-import { isValidBackupPayload, MAX_BACKUP_BYTES } from "@/lib/backupValidation";
+import { describeBackupRejection, findBackupRejection, MAX_BACKUP_BYTES } from "@/lib/backupValidation";
 
 // Journal media is either a local `data:` URL or (since the move to Cloud
 // Storage) an `https://` download URL — the doc keeps only a lightweight
@@ -351,8 +351,12 @@ export function BackupCard() {
         setEncPending(parsed);
         return;
       }
-      if (!isValidBackupPayload(parsed)) {
-        throw new Error("bad shape");
+      // الرفض يبقى رفضاً — لا نستعيد ما لا نثق بشكله — لكنّه يسمّي المجموعة
+      // والسجلّ، فيعرف المالك أالملفُّ تالفٌ فعلاً أم أنّ سجلاً واحداً شذّ.
+      const rejection = findBackupRejection(parsed);
+      if (rejection) {
+        setError(`${describeBackupRejection(rejection)} — لم تُستعد أيّ بيانات`);
+        return;
       }
       // Don't apply yet — let the user preview it and pick merge vs. replace.
       const info = inspectBackup(parsed);
@@ -368,8 +372,12 @@ export function BackupCard() {
     setError("");
     try {
       const obj = await decryptJson(encPending, importPassword);
-      if (!isValidBackupPayload(obj)) {
-        throw new Error("bad shape");
+      const rejection = findBackupRejection(obj);
+      if (rejection) {
+        setError(`${describeBackupRejection(rejection)} — لم تُستعد أيّ بيانات`);
+        setEncPending(null);
+        setImportPassword("");
+        return;
       }
       setEncPending(null);
       setImportPassword("");
