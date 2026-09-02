@@ -5,7 +5,6 @@ import { spendWindow } from "@/lib/budgetCycle";
 import type { Transaction, ReserveSplit } from "@/lib/types";
 import { uid, today, formatAmount, getSubCategories, reserveBalance, cn } from "@/lib/utils";
 import { budgetWarningFor } from "@/lib/budgetStatus";
-import { planSummary, isPlanOpen, suggestPlanLink, suggestPlanByAmount, describeDueIn, daysBetween, INSTALLMENT_ROLE_LABEL, MAX_INSTALLMENT_COUNT, isValidDateKey } from "@/lib/installments";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -25,9 +24,8 @@ interface TransactionFormProps {
 
 export function TransactionForm({ onClose, initial, prefill, onSaved }: TransactionFormProps) {
   const {
-    categories, reserves, transactions, budgets, monthlyIncome, merchantRules, installmentPlans,
+    categories, reserves, transactions, budgets, monthlyIncome, merchantRules,
     addTransaction, updateTransaction, addCategory, rememberMerchant,
-    linkTransactionToPlan, unlinkTransactionFromPlan, convertTransactionToPlan,
   } = useAppStore();
   const mains = categories.filter((c) => !c.parentId);
 
@@ -49,11 +47,6 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   // شبكة التصنيفات (مطويّة حتى يُكتب التاجر — ومفتوحةٌ إن جاء الاسم جاهزاً)
   const [showCats, setShowCats] = useState(!!initial || !!prefill);
   const [showDetails, setShowDetails] = useState(false); // التاريخ ومصدر الصرف
-  // ربطُ هذا المصروف بخطة أقساط (الطريق اليوميّ: سجّل كالعادة ثمّ اربط بضغطة).
-  const [linkPlan, setLinkPlan] = useState<string | null>(initial?.planId ?? null);
-  // هل اختار المالك الخطة بيده؟ عندها نكفّ عن الاقتراح التلقائي (بما فيه إلغاؤه).
-  const [touchedPlan, setTouchedPlan] = useState(false);
-  const [showSplit, setShowSplit] = useState(false); // نموذج «قسّط هذا المصروف»
   // «تجاهله من الميزانيات»: مصروفٌ حقيقيّ لكنّه استثناءٌ لا يتكرّر (رسوم اختبار…)
   // فلا يستهلك اليومية ولا السقوف — ويبقى في السجل والإحصائيات كما هو.
   const [offBudget, setOffBudget] = useState(!!initial?.offBudget);
@@ -76,21 +69,6 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       setSubCat("");
     }
   }, [note, initial, touchedCat, categories, merchantRules]);
-
-  // **الربط التلقائي بالقسط**: مبلغٌ يطابق قسطاً مستحقّاً في موعده → تُختار خطته
-  // من نفسها، فيسجّل المالك مصروفه كالعادة ويتقدّم جدول الأقساط بلا أن يبحث عن
-  // شيء. لا يقع الاقتراح إلا حين لا يحتمل غير خطةٍ واحدة (suggestPlanLink)، ويبقى
-  // مرئياً في بطاقة الربط أدناه فيستطيع إلغاءه.
-  useEffect(() => {
-    if (initial || touchedPlan) return;
-    const hit = suggestPlanLink(
-      { amount: parseFloat(amount) || 0, date },
-      installmentPlans ?? [],
-      transactions,
-      today()
-    );
-    setLinkPlan(hit ? hit.plan.id : null);
-  }, [amount, date, initial, touchedPlan, installmentPlans, transactions]);
 
   const selectedMain = categories.find((c) => c.id === mainCat);
   const subs = getSubCategories(categories, mainCat);
@@ -117,34 +95,6 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
     return out;
   }, [sortedTx]);
   const lastTx = sortedTx[0];
-
-  // الخطط المفتوحة (نشطة ولم تكتمل) مع قسطها القادم — للربط بضغطة. نرتّبها
-  // فيتقدّم ما يطابق المبلغ المكتوب (وصولُ رسالة البنك ثمّ تسجيلُها هو الحالة
-  // اليومية، فالمطابقة تجعل الربط ضغطةً واحدة بلا بحث).
-  const openPlans = useMemo(() => {
-    const t = today();
-    return (installmentPlans ?? [])
-      .filter((p) => isPlanOpen(p, transactions, t))
-      .map((p) => ({ plan: p, next: planSummary(p, transactions, t).next }))
-      .sort((a, b) => {
-        const am = a.next && Math.abs(a.next.amount - parsedAmount) < 0.01 ? 0 : 1;
-        const bm = b.next && Math.abs(b.next.amount - parsedAmount) < 0.01 ? 0 : 1;
-        return am - bm || (a.next?.due ?? "").localeCompare(b.next?.due ?? "");
-      });
-  }, [installmentPlans, transactions, parsedAmount]);
-  const linkedPlan = (installmentPlans ?? []).find((p) => p.id === linkPlan);
-
-  // **«يبدو أنه قسط»**: المبلغ يطابق قسطاً مستحقّاً لكن تاريخه بعيدٌ عن موعده،
-  // فالربط التلقائي لا يقع (وهو محقّ: مطابقةُ رقمٍ ليست يقيناً). بدل أن يمرّ
-  // مصروفاً عادياً ويتخلّف جدول الخطة، نسأل سؤالاً واحداً ونربط بضغطته.
-  // لا يظهر بعد اختيارٍ يدويّ، ولا حين وقع الربط التلقائي أصلاً.
-  const amountHint = useMemo(() => {
-    if (initial || touchedPlan || linkPlan) return null;
-    const t = today();
-    const tx = { amount: parsedAmount, date };
-    if (suggestPlanLink(tx, installmentPlans ?? [], transactions, t)) return null;
-    return suggestPlanByAmount(tx, installmentPlans ?? [], transactions, t);
-  }, [initial, touchedPlan, linkPlan, parsedAmount, date, installmentPlans, transactions]);
 
   function pickCategoryFor(catId: string) {
     const cat = categories.find((c) => c.id === catId);
@@ -205,24 +155,6 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
     } else {
       addTransaction(tx);
     }
-    // ربطُ الدفعة بخطتها (أو فكُّه) بعد الحفظ — المبلغ يُحتسب مرّةً واحدة: مصروفاً
-    // عادياً كما هو، والخطة تقرأه فتتقدّم. «الأصل المؤجّل» لا يُربط من هنا (له
-    // زرّه الخاص «قسّط هذا المصروف») فلا يُحوَّل مصروفٌ مدفوعٌ إلى مؤجّلٍ بالغلط.
-    if (linkPlan && linkPlan !== initial?.planId) {
-      const s = planSummary(
-        (installmentPlans ?? []).find((p) => p.id === linkPlan)!,
-        useAppStore.getState().transactions,
-        today()
-      );
-      const row = s.next;
-      linkTransactionToPlan(tx.id, {
-        planId: linkPlan,
-        role: row?.isFinal ? "final" : "installment",
-        installmentNo: row?.no,
-      });
-    } else if (!linkPlan && initial?.planId) {
-      unlinkTransactionFromPlan(tx.id);
-    }
     // Learn this merchant → category so the next one is auto-classified.
     if (note.trim()) rememberMerchant(note, tx.category);
     // Live budget alert: warn the moment a category crosses 80% / its cap.
@@ -243,13 +175,6 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
 
   return (
     <div className="space-y-4">
-      {/* دفعةُ خطة أقساط: نوضّح الربط قبل التعديل — تغيير المبلغ يغيّر «المدفوع»
-          في الخطة (مشتقٌّ من المعاملات)، ولا يُفكّ الربط بالحفظ. */}
-      {initial?.planId && (
-        <p className="text-[11px] text-gray-500 bg-gray-50 dark:bg-white/5 rounded-xl px-3 py-2 leading-relaxed">
-          🧾 هذه دفعةٌ مرتبطة بخطة أقساط — تعديل مبلغها يُعيد حساب المدفوع والمتبقّي في الخطة.
-        </p>
-      )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">المبلغ (ريال)</label>
         <NumberInput
@@ -392,118 +317,11 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       </div>
       )}
 
-      {/* ===== الأقساط: ربطٌ بضغطة أو «قسّط هذا المصروف» ===== */}
-      {initial?.planRole === "principal" ? (
-        // الأصل المؤجّل: نوضّح أنّه لا يُحتسب صرفاً، وأنّ الأقساط هي الصرف.
-        <div className="rounded-xl bg-gray-50 dark:bg-white/5 p-3 text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-1.5">
-          <div className="font-bold">🧾 هذا «الأصل المؤجّل» لخطة أقساط</div>
-          <p>الشراء لم يخرج من حسابك (مؤجّل)، فلا يُحتسب في الميزانية ولا السقوف — الأقساط هي الصرف الفعليّ.</p>
-          <button
-            type="button"
-            onClick={() => { unlinkTransactionFromPlan(initial.id); onClose(); }}
-            className="flex items-center gap-1 font-bold text-gray-500 hover:text-red-500 press"
-          >
-            <Link2Off size={12} /> فُكّ الربط واحسبه مصروفاً عادياً
-          </button>
-        </div>
-      ) : openPlans.length > 0 ? (
-        <div className="rounded-xl bg-finance/5 p-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-finance">
-            <CalendarClock size={14} /> دفعة قسط؟
-          </div>
-
-          {/* تعرّفٌ بالمبلغ حين يبعد التاريخ عن الموعد — سؤالٌ لا حكم. */}
-          {amountHint && (
-            <div className="rounded-lg border border-finance/30 bg-white dark:bg-white/5 px-2.5 py-2 flex items-center gap-2">
-              <div className="flex-1 min-w-0 text-[11px] leading-relaxed">
-                <div className="font-bold text-gray-800 dark:text-gray-100 truncate">
-                  يبدو أنه القسط {formatAmount(amountHint.row.no)} من «{amountHint.plan.name || amountHint.plan.provider}»
-                </div>
-                <div className="text-gray-500">
-                  مستحقٌّ {describeDueIn(daysBetween(today(), amountHint.row.due))} · بنفس المبلغ
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setLinkPlan(amountHint.plan.id);
-                  setTouchedPlan(true);
-                  if (amountHint.plan.category) { pickCategoryFor(amountHint.plan.category); setTouchedCat(true); }
-                }}
-                className="shrink-0 text-[11px] font-bold text-white bg-finance rounded-lg px-2.5 py-1.5 press"
-              >
-                نعم، اربطه
-              </button>
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => { setLinkPlan(null); setTouchedPlan(true); }}
-              className={cn(
-                "text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors",
-                !linkPlan ? "bg-finance text-white border-finance" : "bg-white text-gray-500 border-gray-200"
-              )}
-            >
-              لا — مصروف عادي
-            </button>
-            {openPlans.map(({ plan, next }) => (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => {
-                  setLinkPlan(plan.id);
-                  setTouchedPlan(true);
-                  // تعبئةٌ لطيفة: مبلغ القسط وتصنيف الخطة إن كان الحقل فارغاً.
-                  if (next && !parsedAmount) setAmount(String(next.amount));
-                  if (plan.category) { pickCategoryFor(plan.category); setTouchedCat(true); }
-                }}
-                className={cn(
-                  "text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors",
-                  linkPlan === plan.id ? "bg-finance text-white border-finance" : "bg-white text-gray-500 border-gray-200"
-                )}
-              >
-                {plan.name || plan.provider}
-                {next ? ` · ${formatAmount(next.amount)}` : ""}
-              </button>
-            ))}
-          </div>
-          {linkedPlan && (
-            <p className="text-[10px] text-gray-500">
-              {!touchedPlan && "رُبطت تلقائياً — "}
-              ستُسجَّل كـ«{INSTALLMENT_ROLE_LABEL.installment}» في خطة «{linkedPlan.name || linkedPlan.provider}» — مصروفٌ واحدٌ لا يُحتسب مرّتين.
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      {/* «قسّط هذا المصروف»: الشراء كان مؤجّلاً لا كاش */}
-      {initial && !initial.planId && (
-        showSplit ? (
-          <SplitToPlanForm
-            amount={initial.amount}
-            defaultProvider={initial.note}
-            onCancel={() => setShowSplit(false)}
-            onSubmit={(draft) => { convertTransactionToPlan(initial.id, draft); setShowSplit(false); onClose(); }}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowSplit(true)}
-            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-100 dark:bg-white/10 rounded-xl py-2 press"
-          >
-            <CalendarClock size={13} /> شريته بالتقسيط (مؤجّل)؟ قسّطه
-          </button>
-        )
-      )}
-
       {/* «تجاهله من الميزانيات» — للمصروف الاستثنائيّ الذي لا يتكرّر (رسوم اختبار،
           عمرة، حادث): يبقى مصروفاً حقيقياً في السجل والإحصائيات ومجموع الشهر،
           لكنّه لا يستهلك الميزانية اليومية ولا سقوف الأقسام فتبقى الميزانية
-          مقياساً لصرفك المعتاد. لا يظهر للأصل المؤجّل — ذاك لا يُحتسب أصلاً. */}
-      {initial?.planRole !== "principal" && (
-        <button
+          مقياساً لصرفك المعتاد. */}
+      <button
           type="button"
           onClick={() => setOffBudget((v) => !v)}
           aria-pressed={offBudget}
@@ -535,8 +353,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
           >
             <span className={cn("block w-4 h-4 rounded-full bg-white transition-transform", offBudget && "-translate-x-4")} />
           </span>
-        </button>
-      )}
+      </button>
 
       {/* تفاصيل: التاريخ ومصدر الصرف — مطويّة للمصروف العادي */}
       <button type="button" onClick={() => setShowDetails((v) => !v)} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 press pt-1">
@@ -638,81 +455,6 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
           {initial ? "حفظ" : "إضافة"}
         </Button>
         <Button variant="secondary" onClick={onClose}>إلغاء</Button>
-      </div>
-    </div>
-  );
-}
-
-// «قسّط هذا المصروف» — أصغرُ نموذجٍ ممكن: قيمة القسط وعددها وأول موعد. الإجمالي
-// **هو مبلغ المعاملة نفسه** (لا يُكتب مرّتين)، والقسط يُشتقّ تلقائياً من القسمة
-// فيكفي تعديلُه إن خالف اتفاق الجهة. لا حقل رسومٍ ولا دفعةٍ أخيرة هنا — تُضاف
-// لاحقاً من قسم «الأقساط» عند الحاجة، فيبقى هذا الطريق ثلاث خانات لا أكثر.
-function SplitToPlanForm({
-  amount, defaultProvider, onCancel, onSubmit,
-}: {
-  amount: number;
-  defaultProvider: string;
-  onCancel: () => void;
-  onSubmit: (d: { provider: string; name?: string; installmentAmount: number; count: number; firstDueDate: string }) => void;
-}) {
-  const [provider, setProvider] = useState(defaultProvider.trim());
-  const [count, setCount] = useState("4");
-  const [firstDue, setFirstDue] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1); // الافتراض الطبيعيّ: أول قسطٍ بعد شهر
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
-  const n = Math.max(1, parseInt(count) || 1);
-  const derived = Math.round((amount / n) * 100) / 100; // قسطٌ مشتقّ من الإجمالي
-  const [installment, setInstallment] = useState("");
-  const value = parseFloat(installment) || derived;
-  const field = "w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40";
-  // نفس حرّاس النموذج الرئيسي: عددٌ داخل الحدّ وتاريخٌ صالح — فطريقان لإنشاء خطةٍ
-  // لا يقبل أحدهما ما يرفضه الآخر.
-  const error =
-    n > MAX_INSTALLMENT_COUNT ? `عدد الأقساط أكبر من المعقول (الحدّ ${MAX_INSTALLMENT_COUNT})`
-    : !isValidDateKey(firstDue) ? "أول موعد استحقاق غير صالح"
-    : !(value > 0) ? "قيمة القسط مطلوبة"
-    : null;
-
-  return (
-    <div className="rounded-xl bg-gray-50 dark:bg-white/5 p-3 space-y-2.5">
-      <div className="text-xs font-semibold text-gray-600">
-        تقسيط {formatAmount(amount)} ر.س — سيُعتبر الشراء مؤجّلاً، والأقساط هي الصرف.
-      </div>
-      <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="الجهة (تمارا، تابي...)" className={field} />
-      <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">عدد الأقساط</label>
-          <NumberInput value={count} onChange={setCount} inputMode="numeric" min={1} max={MAX_INSTALLMENT_COUNT} className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">قيمة القسط</label>
-          <NumberInput value={installment} onChange={setInstallment} placeholder={formatAmount(derived)} inputMode="decimal" className={field} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">أول موعد</label>
-          <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={field} />
-        </div>
-      </div>
-      <p className="text-[10px] text-gray-400">
-        {n} × {formatAmount(value)} = {formatAmount(Math.round(n * value * 100) / 100)} ر.س
-        {Math.abs(n * value - amount) > 0.5 ? " (يخالف الإجمالي — تحذيرٌ فقط)" : ""}
-      </p>
-      {error && <p className="text-[11px] text-red-500">• {error}</p>}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          disabled={!!error}
-          className="flex-1 bg-finance hover:bg-finance/90"
-          onClick={() => {
-            if (error) return;
-            onSubmit({ provider: provider.trim() || "تقسيط", installmentAmount: value, count: n, firstDueDate: firstDue });
-          }}
-        >
-          أنشئ الخطة
-        </Button>
-        <Button size="sm" variant="secondary" onClick={onCancel}>إلغاء</Button>
       </div>
     </div>
   );

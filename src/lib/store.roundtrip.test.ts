@@ -19,8 +19,8 @@ import type { AppData } from "./types";
 // والدمج والنسخة الاحتياطية، وغائبةً عن hydrate — فأصلٌ من السحابة أو من ملفٍ
 // مُستعاد لا يدخل المتجر أبداً).
 //
-// النوع `Required<AppData>` لا `AppData`: الحقول **الاختيارية** (`assets` و
-// `budgetWindow` و`frozenHabits` و`deletedMedia`…) هي بالضبط التي تنزلق بلا
+// النوع `Required<AppData>` لا `AppData`: الحقول **الاختيارية**
+// (`budgetWindow` و`frozenHabits` و`deletedMedia`…) هي بالضبط التي تنزلق بلا
 // خطأ ترجمة، وهي التي وقع فيها الخلل فعلاً. بهذا لا يُترجَم الملفّ أصلاً حتى
 // يُذكر الحقل الجديد هنا، ثمّ يفحص الاختبارُ عبورَه الدورة.
 const FULL: Required<AppData> = {
@@ -33,12 +33,6 @@ const FULL: Required<AppData> = {
   // بياناتُه. سقوطُهما من الدورة يعني ضياعاً صامتاً لا رجعةَ فيه.
   knowledgeSources: [{ id: "ks1", kind: "كتاب", name: "صيد الخاطر", author: "ابن الجوزي", bookId: "b1", createdAt: "2026-05-01" }],
   benefits: [{ id: "bn1", sourceId: "ks1", text: "أكثرُ ما يفسد العملَ العجلةُ في أوّله.", question: "ما حدُّ الأناة؟", applied: true, createdAt: "2026-05-01" }],
-  // الرفّ: عنصرٌ ينتظر وآخرُ تُرك. «المتروك» بالذات يجب أن يعبر — منه يُجمع
-  // ما وفَّرتَه، فسقوطُه يمحو الرقمَ الذي يقنعك بالتأجيل.
-  shelfItems: [
-    { id: "sh1", name: "سمّاعة", price: 900, reason: "للعمل", placedAt: "2026-05-01" },
-    { id: "sh2", name: "ساعة", price: 1500, placedAt: "2026-04-01", releasedAt: "2026-05-01" },
-  ],
   // `mergedFrom` مقصودٌ هنا: هو سجلّ «هذه المذكرة مدموجة ومِمَّ». لو سقط في
   // الدورة (لقطة → ترطيب → نسخة → دمج) صارت المدموجة تبدو مذكرةً عادية على
   // الجهاز الآخر — وهو بالضبط الدمج الغامض الذي تتجنّبه هذه الميزة.
@@ -47,19 +41,6 @@ const FULL: Required<AppData> = {
     mergedFrom: [{ id: "e1", time: "07:10", chars: 3, photos: 0, audios: 0, mergedAt: 1 }],
   }],
   habits: [{ id: "h1", name: "مشي", icon: "🚶", color: "#000", logs: ["2026-05-01"] }],
-  recurring: [{
-    id: "rc1", amount: 500, category: "c1", note: "إيجار", unit: "شهري", every: 1,
-    dayOfMonth: 1, anchorDate: "2026-01-01", active: true,
-  }],
-  installmentPlans: [{
-    id: "p1", provider: "تمارا", name: "جوّال", totalPrice: 1200, downPayment: 200,
-    installmentAmount: 100, count: 10, firstDueDate: "2026-02-15",
-    status: "active", createdAt: "2026-02-01",
-  }],
-  assets: [{
-    id: "a1", name: "ماك بوك", purchaseDate: "2026-07-26", purchasePrice: 5499, lifeDays: 1825,
-    createdAt: "2026-07-26",
-  }],
   budgets: [{ category: "c1", limit: 900 }],
   categories: [{ id: "c1", label: "قهوة", icon: "☕", color: "#c1663f" }],
   reserves: [{
@@ -68,7 +49,7 @@ const FULL: Required<AppData> = {
   }],
   // السننُ والقيامُ داخل يوم الصلاة: لو سقطا في الدورة (لقطة → ترطيب → نسخة →
   // دمج) لعاد الجهازُ الجديد بأيامِ صلاةٍ بلا سننٍ ولا ليالٍ — وهو الانزلاقُ
-  // الصامت نفسُه الذي وقع لـ`assets`.
+  // الصامت نفسُه الذي وقع لـ«الأصول» قبل حذفها.
   prayerLogs: [{
     date: "2026-05-01", prayers: { الفجر: "جماعة", الظهر: "فائتة" },
     sunan: 6, qiyam: { rakaat: 8, witr: true },
@@ -101,7 +82,7 @@ const FULL: Required<AppData> = {
 beforeEach(() => {
   useAppStore.setState({
     transactions: [], books: [], readingLogs: [], journalEntries: [], habits: [],
-    recurring: [], installmentPlans: [], assets: [], budgets: [], categories: [],
+    budgets: [], categories: [],
     reserves: [], prayerLogs: [], quranReflections: [], quranWird: [],
     futureLetters: [], frozenHabits: [], merchantRules: {}, deleted: {},
     deletedMedia: {}, fieldUpdatedAt: {},
@@ -115,12 +96,6 @@ describe("snapshot ⇄ hydrate — كلّ حقلٍ في AppData يعبر الد�
     for (const key of Object.keys(FULL) as (keyof AppData)[]) {
       expect(out[key], `الحقل ${key} لم يعبر hydrate/snapshot`).toEqual(FULL[key]);
     }
-  });
-
-  it("الأصول تصل من السحابة إلى جهازٍ جديد (0.1.298 كان يغلقها جزئياً فقط)", () => {
-    expect(useAppStore.getState().assets).toEqual([]);
-    useAppStore.getState().hydrate(FULL);
-    expect(useAppStore.getState().assets).toEqual(FULL.assets);
   });
 
   it("hydrate لا يختم lastUpdated من جديد (وإلّا انهارت مقارنة الأحدث)", () => {

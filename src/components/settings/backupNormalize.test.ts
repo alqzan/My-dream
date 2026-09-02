@@ -36,7 +36,7 @@ describe("normalizeBackup — لا يسقط حقلاً من الملف", () => {
     for (const [k, v] of Object.entries(out)) {
       expect(v, `الحقل ${k} خرج undefined من normalizeBackup`).not.toBeUndefined();
     }
-    for (const k of ["assets", "installmentPlans", "frozenHabits", "budgetWindow", "deletedMedia", "fieldUpdatedAt"]) {
+    for (const k of ["frozenHabits", "budgetWindow", "deletedMedia", "fieldUpdatedAt"]) {
       expect(Object.keys(out), `الحقل ${k} غائبٌ عن normalizeBackup`).toContain(k);
     }
   });

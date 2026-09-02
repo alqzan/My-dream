@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { mediaTombKey } from "./mediaHash";
-import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, RecurringTransaction, RecurringGenerationMode, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
+import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY, isPrayedStatus } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -707,18 +707,12 @@ export function budgetLimit(b: Budget, monthlyIncome: number | null): number {
 // كتابة `inSpendWindow` بيدها. المصدر الوحيد الآن `budgetStatuses`.
 
 // ===================== الصرف النقديّ فعلاً =====================
-// **البوابة الوحيدة** لسؤال «كم خرج من الجيب في هذه المعاملة؟». معاملةٌ مؤجّلة
-// (`deferred`) = شراءٌ بالتقسيط سُجّل كالتزام ولم يُدفع: تظهر في السجل وتُحتسب
-// صفراً في كل حساب (الميزانية اليومية · السقوف · الرسوم · الإحصائيات)، لأنّ
-// الدفعات هي التي تخرج فعلاً. بلا هذه البوابة يُحتسب الشراء مرّتين: 1200 مرّةً
-// كأصل، ثمّ 12×100 كأقساط. كلّ تجميعٍ للصرف في التطبيق يمرّ من هنا.
-export function cashOut(t: Pick<Transaction, "amount" | "deferred">): number {
-  return t.deferred ? 0 : t.amount;
-}
-
-// هل تمثّل هذه المعاملة خروجَ نقدٍ فعلاً؟ (للتصفية قبل التجميع أو عدّ أيام الصرف)
-export function isCashOut(t: Pick<Transaction, "deferred">): boolean {
-  return !t.deferred;
+// **البوابة الوحيدة** لسؤال «كم خرج من الجيب في هذه المعاملة؟». بعد حذف
+// الأقساط لم يبقَ نوعٌ من المعاملات لا يخرج نقداً — فكلّ معاملةٍ صرفٌ بمبلغها.
+// البوّابة باقيةٌ مع ذلك (لا تُجمع `t.amount` مباشرةً): هي المكان الوحيد الذي
+// يتغيّر لو عاد يوماً مفهومُ «التزامٌ لم يُدفع»، بدل مطاردة عشرات المجاميع.
+export function cashOut(t: Pick<Transaction, "amount">): number {
+  return t.amount;
 }
 
 // ===================== ما تُحاسِبه الميزانيات =====================
@@ -728,13 +722,13 @@ export function isCashOut(t: Pick<Transaction, "deferred">): boolean {
 // لا يتكرّر (رسوم اختبار، عمرة، حادث) فلا يُحاسَب عليه في الميزانية ولا السقوف.
 // كلّ حسابٍ يقارن صرفاً بميزانيةٍ أو سقفٍ يمرّ من هنا؛ وما عداه (المجاميع
 // والرسوم والإحصائيات) يبقى على `cashOut` فلا يختفي الصرف من صورة الشهر.
-export function budgetSpend(t: Pick<Transaction, "amount" | "deferred" | "offBudget">): number {
+export function budgetSpend(t: Pick<Transaction, "amount" | "offBudget">): number {
   return t.offBudget ? 0 : cashOut(t);
 }
 
 // هل تُحاسِب الميزانياتُ هذه المعاملة أصلاً؟ (للتصفية قبل التجميع)
-export function countsInBudget(t: Pick<Transaction, "deferred" | "offBudget">): boolean {
-  return isCashOut(t) && !t.offBudget;
+export function countsInBudget(t: Pick<Transaction, "offBudget">): boolean {
+  return !t.offBudget;
 }
 
 // ===================== Reserve funds & split spending =====================
@@ -815,64 +809,6 @@ export function computeDailyBudgetStatus(
       .reduce((s, t) => s + dailyShare(t), 0)
   );
   return { days, allowance, spent, carryAdjust, balance: round2(allowance - spent) };
-}
-
-// Compute the most recent date this recurring item was/is due, on or before
-// `now`. The interval's phase is anchored to `anchorDate` so "every N months/
-// weeks" (not just a fixed 1/12) lines up on a consistent cadence.
-export function mostRecentDueDate(r: RecurringTransaction, now: Date): Date {
-  const every = Math.max(1, Math.floor(r.every) || 1);
-  const anchor = parseDate(r.anchorDate || today());
-
-  if (r.unit === "أسبوعي") {
-    // dayOfMonth reused as weekday 0-6
-    const target = ((r.dayOfMonth % 7) + 7) % 7;
-    const due = new Date(now);
-    due.setDate(now.getDate() - ((now.getDay() - target + 7) % 7));
-
-    const anchorDue = new Date(anchor);
-    anchorDue.setDate(anchor.getDate() - ((anchor.getDay() - target + 7) % 7));
-
-    const weeksBetween = Math.round((due.getTime() - anchorDue.getTime()) / (7 * 24 * 3600 * 1000));
-    const remainder = ((weeksBetween % every) + every) % every;
-    if (remainder !== 0) due.setDate(due.getDate() - remainder * 7);
-    return due < anchorDue ? anchorDue : due;
-  }
-
-  // شهري (and anything else) — monthly-based cadence
-  const day = Math.min(Math.max(r.dayOfMonth, 1), 28);
-  const anchorMonthIndex = anchor.getFullYear() * 12 + anchor.getMonth();
-  const nowMonthIndex = now.getFullYear() * 12 + now.getMonth();
-  let k = Math.floor((nowMonthIndex - anchorMonthIndex) / every);
-  let dueMonthIndex = anchorMonthIndex + k * every;
-  let due = new Date(Math.floor(dueMonthIndex / 12), ((dueMonthIndex % 12) + 12) % 12, day);
-  if (due > now) {
-    k -= 1;
-    dueMonthIndex = anchorMonthIndex + k * every;
-    due = new Date(Math.floor(dueMonthIndex / 12), ((dueMonthIndex % 12) + 12) % 12, day);
-  }
-  return due < anchor ? new Date(anchor.getFullYear(), anchor.getMonth(), day) : due;
-}
-
-// وضع التوليد لقاعدةٍ متكرّرة. البيانات القديمة لا تحمل الحقل، وكلّها كانت
-// تُولّد معاملاتٍ تلقائياً — فغيابه = "auto" دائماً، بلا استثناء. المصدر الوحيد
-// لهذا القرار (يستعمله runRecurring والعرض) فلا يتكرّر الافتراض في مكانين.
-export function generationModeOf(r: { generationMode?: RecurringGenerationMode }): RecurringGenerationMode {
-  return r.generationMode === "reminder" ? "reminder" : "auto";
-}
-
-// The next occurrence strictly after `now` — one interval past the most
-// recent due date.
-export function nextDueDate(r: RecurringTransaction, now: Date): Date {
-  const recent = mostRecentDueDate(r, now);
-  const every = Math.max(1, Math.floor(r.every) || 1);
-  if (r.unit === "أسبوعي") {
-    const next = new Date(recent);
-    next.setDate(recent.getDate() + every * 7);
-    return next;
-  }
-  const monthIndex = recent.getFullYear() * 12 + recent.getMonth() + every;
-  return new Date(Math.floor(monthIndex / 12), ((monthIndex % 12) + 12) % 12, recent.getDate());
 }
 
 // تعريف «اليوم المكتمل» يعيش في مكانٍ واحد: dayAggregator.ts

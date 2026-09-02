@@ -1,11 +1,10 @@
 // ===================== حارسا حقل التاريخ =====================
-// `isValidDateKey` انتقل إلى `utils.ts` من `installments.ts`: صار يحرس الأقساط
+// `isValidDateKey` يعيش في `utils.ts` مع بقيّة قواعد التاريخ.
 // والأصول **والأحداث** معاً. و`keepValidDate` تحرس ما قبله: قيمةٌ فارغة عابرة
 // من منتقي Safari (بتقويمٍ هجريّ على الجهاز) كانت تمحو آخر تاريخٍ صالح، فيبدو
 // زرُّ الحفظ معطّلاً بلا سبب.
 import { describe, it, expect } from "vitest";
 import { isValidDateKey, keepValidDate, parseDate, toDateStr, displayTime } from "./utils";
-import { isValidDateKey as fromInstallments } from "./installments";
 
 describe("isValidDateKey", () => {
   it("يقبل تاريخاً صحيحاً", () => {
@@ -28,10 +27,6 @@ describe("isValidDateKey", () => {
     expect(isValidDateKey("2026-2-5")).toBe(false);
     expect(isValidDateKey("2026/02/15")).toBe(false);
     expect(isValidDateKey("غداً")).toBe(false);
-  });
-
-  it("هو نفسه المُصدَّر من وحدة الأقساط (لا نسختان تفترقان)", () => {
-    expect(fromInstallments).toBe(isValidDateKey);
   });
 
   // السببُ الأصليّ لوجود هذا الحارس: `parseDate` تُدوّر المستحيل بلا إشعار.

@@ -60,8 +60,6 @@ function appData(journalEntries: JournalEntry[]): AppData {
     readingLogs: [],
     journalEntries,
     habits: [],
-    recurring: [],
-    installmentPlans: [],
     budgets: [],
     categories: [],
     reserves: [],

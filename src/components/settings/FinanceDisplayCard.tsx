@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 
 const GROUPS: Array<{ title: string; ids: FinanceDisplayId[] }> = [
   { title: "ملخص الدورة", ids: ["curve", "cycle", "budgets"] },
-  { title: "أدوات المال", ids: ["daily", "shelf", "recurring", "installments", "assets", "reserves", "history"] },
+  { title: "أدوات المال", ids: ["daily", "reserves", "history"] },
 ];
 
 export function FinanceDisplayCard() {

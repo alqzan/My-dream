@@ -1,21 +1,17 @@
 import { toIndicDigits } from "./utils";
 import type {
   AppData,
-  Asset,
   Benefit,
   Book,
   CountdownEvent,
   FinanceCategoryDef,
   FutureLetter,
   Habit,
-  InstallmentPlan,
   JournalEntry,
   KnowledgeSource,
   QuranReflection,
   ReadingLog,
-  RecurringTransaction,
   ReserveFund,
-  ShelfItem,
   Transaction,
 } from "./types";
 
@@ -79,10 +75,6 @@ function stringMap(value: unknown): boolean {
   return record(value) && Object.values(value).every((item) => typeof item === "string");
 }
 
-const RECURRING_UNITS = new Set(["أسبوعي", "شهري"]);
-const GENERATION_MODES = new Set(["auto", "reminder"]);
-const INSTALLMENT_STATUSES = new Set(["active", "settled", "cancelled"]);
-const INSTALLMENT_ROLES = new Set(["principal", "down", "installment", "final", "settlement"]);
 const SOURCE_KINDS = new Set(["كتاب", "مقال", "درس", "تجربة"]);
 const HIFZ_UNITS = new Set(["ayah", "quarter", "half", "page"]);
 const HIFZ_INTENSITIES = new Set(["light", "balanced", "intense"]);
@@ -115,11 +107,7 @@ export function isValidTransaction(value: unknown): value is Transaction {
     || typeof value.note !== "string"
   ) return false;
   if (!optionalString(value.linkedJournalId)) return false;
-  if (!optionalString(value.planId)) return false;
-  if (!optionalFiniteNumber(value.planLinkedAt)) return false;
-  if (!optionalFiniteNumber(value.planInstallmentNo)) return false;
-  if (value.planRole !== undefined && !INSTALLMENT_ROLES.has(String(value.planRole))) return false;
-  if (!optionalBoolean(value.deferred) || !optionalBoolean(value.offBudget)) return false;
+  if (!optionalBoolean(value.offBudget)) return false;
   if (value.reserveSplits !== undefined && (
     !Array.isArray(value.reserveSplits)
     || !value.reserveSplits.every((split) => (
@@ -276,80 +264,12 @@ function validBenefit(value: unknown): value is Benefit {
     && optionalFiniteNumber(value.updatedAt);
 }
 
-function validShelfItem(value: unknown): value is ShelfItem {
-  return hasId(value)
-    && typeof value.name === "string"
-    && finiteNumber(value.price)
-    && optionalString(value.reason)
-    && nonEmptyString(value.placedAt)
-    && optionalString(value.releasedAt)
-    && optionalString(value.boughtAt)
-    && optionalString(value.transactionId)
-    && optionalFiniteNumber(value.ripenDays)
-    && optionalFiniteNumber(value.updatedAt);
-}
-
 function validHabit(value: unknown): value is Habit {
   return hasId(value)
     && typeof value.name === "string"
     && typeof value.icon === "string"
     && typeof value.color === "string"
     && stringCollection(value.logs)
-    && optionalFiniteNumber(value.updatedAt);
-}
-
-function validRecurring(value: unknown): value is RecurringTransaction {
-  return hasId(value)
-    && finiteNumber(value.amount)
-    && typeof value.category === "string"
-    && typeof value.note === "string"
-    && RECURRING_UNITS.has(String(value.unit))
-    && finiteNumber(value.every)
-    && finiteNumber(value.dayOfMonth)
-    && nonEmptyString(value.anchorDate)
-    && typeof value.active === "boolean"
-    && optionalString(value.lastGenerated)
-    && (value.generationMode === undefined || GENERATION_MODES.has(String(value.generationMode)))
-    && optionalFiniteNumber(value.updatedAt)
-    && optionalString(value.planId);
-}
-
-function validInstallmentPlan(value: unknown): value is InstallmentPlan {
-  return hasId(value)
-    && typeof value.provider === "string"
-    && typeof value.name === "string"
-    && optionalFiniteNumber(value.cashPrice)
-    && finiteNumber(value.totalPrice)
-    && finiteNumber(value.downPayment)
-    && optionalString(value.downDate)
-    && finiteNumber(value.installmentAmount)
-    && finiteNumber(value.count)
-    && nonEmptyString(value.firstDueDate)
-    && optionalFiniteNumber(value.fees)
-    && optionalFiniteNumber(value.finalPayment)
-    && INSTALLMENT_STATUSES.has(String(value.status))
-    && optionalString(value.category)
-    && optionalString(value.recurringId)
-    && optionalString(value.principalTxId)
-    && optionalString(value.note)
-    && nonEmptyString(value.createdAt)
-    && optionalFiniteNumber(value.updatedAt);
-}
-
-function validAsset(value: unknown): value is Asset {
-  return hasId(value)
-    && typeof value.name === "string"
-    && optionalString(value.icon)
-    && nonEmptyString(value.purchaseDate)
-    && finiteNumber(value.purchasePrice)
-    && optionalFiniteNumber(value.salvageValue)
-    && finiteNumber(value.lifeDays)
-    && optionalString(value.planId)
-    && optionalString(value.transactionId)
-    && optionalString(value.soldDate)
-    && optionalFiniteNumber(value.soldPrice)
-    && optionalString(value.note)
-    && nonEmptyString(value.createdAt)
     && optionalFiniteNumber(value.updatedAt);
 }
 
@@ -527,11 +447,7 @@ const FIELD_LABELS: Record<string, string> = {
   readingLogs: "سجلّات القراءة",
   knowledgeSources: "مصادر المحبرة",
   benefits: "الفوائد",
-  shelfItems: "الرفّ",
   habits: "العادات",
-  recurring: "المتكرّرة",
-  installmentPlans: "خطط الأقساط",
-  assets: "الأصول",
   categories: "التصنيفات",
   reserves: "الصناديق",
   quranReflections: "تأمّلات القرآن",
@@ -590,11 +506,7 @@ export function findBackupRejection(value: unknown): BackupRejection | null {
     readingLogs: validReadingLog,
     knowledgeSources: validKnowledgeSource,
     benefits: validBenefit,
-    shelfItems: validShelfItem,
     habits: validHabit,
-    recurring: validRecurring,
-    installmentPlans: validInstallmentPlan,
-    assets: validAsset,
     categories: validCategory,
     reserves: validReserve,
     quranReflections: validQuranReflection,

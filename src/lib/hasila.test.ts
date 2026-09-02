@@ -45,17 +45,6 @@ describe("نافذةُ الثلاثين", () => {
     expect(w.habitsCap).toBe(60);
     expect(w.spendTotal).toBe(50);
   });
-
-  it("المعاملةُ المؤجّلة تُحتسب صفراً في الصرف — لم تُدفع", () => {
-    const w = windowStats("2026-08-19", {
-      ...EMPTY,
-      transactions: [
-        { id: "a", date: "2026-08-19", amount: 1200, category: "c", note: "", deferred: true } as Transaction,
-        { id: "b", date: "2026-08-19", amount: 100, category: "c", note: "" } as Transaction,
-      ],
-    });
-    expect(w.spendTotal).toBe(100);
-  });
 });
 
 describe("النسبةُ والأعمدة", () => {

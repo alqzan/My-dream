@@ -25,7 +25,6 @@ import { ThreeArcs, type ArcSpec } from "@/components/madar/today/ThreeArcs";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
-import { SmartInsights } from "@/components/dashboard/SmartInsights";
 import { RamadanCard } from "@/components/dashboard/RamadanCard";
 import { CountdownCard } from "@/components/dashboard/CountdownCard";
 import { DayDigestCard } from "@/components/quran/DayDigestCard";
@@ -190,9 +189,6 @@ export default function Dashboard() {
           <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
           <ThreeArcs due={dueArc(prayedToday, hifzDueCount)} arcs={arcSpecs} />
         </section>
-        <div className="mdr-home-now" aria-live="polite">
-          <SmartInsights showSecondary={false} />
-        </div>
         <DayDigestCard compact />
         {isFirstRun && <OnboardingCard />}
         <RamadanCard />

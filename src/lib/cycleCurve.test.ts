@@ -51,9 +51,8 @@ describe("بناءُ المنحنى", () => {
     expect(buildCycleCurve(budget(100), [], "2026-08", NEXT, TODAY)).toBeNull();
   });
 
-  it("يُحاسِب بمقاييس مدار: المؤجّلُ صفرٌ، والخارجُ عن الميزانية صفر", () => {
+  it("يُحاسِب بمقاييس مدار: الخارجُ عن الميزانية صفر", () => {
     const c = buildCycleCurve(budget(100), [
-      tx("2026-08-02", 1200, { deferred: true }),
       tx("2026-08-03", 300, { offBudget: true }),
       tx("2026-08-04", 70),
     ], START, NEXT, TODAY)!;

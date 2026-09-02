@@ -206,27 +206,19 @@ export function DayView({ date, onClose }: DayViewProps) {
             <div className="space-y-1.5">
               {day.transactions.map((tx) => {
                 const info = getCategoryInfo(categories, tx.category);
-                // شراءٌ مؤجّل (أصل خطة أقساط): لم يخرج من الحساب — رمادياً بلا
-                // إشارةٍ سالبة ومعه سببُ استثنائه. إجمالي اليوم (day.expense)
-                // محسوبٌ بـcashOut أصلاً، فالرقم فوق يوافق ما تراه العين.
                 return (
                   <div key={tx.id} className="flex items-center gap-2 text-sm">
                     <span>{info.icon}</span>
-                    <span className={`flex-1 truncate ${tx.deferred ? "text-gray-400" : "text-gray-600"}`}>
+                    <span className="flex-1 truncate text-gray-600">
                       {tx.note || info.label}
                     </span>
-                    {tx.deferred && (
-                      <span className="shrink-0 text-[9px] font-semibold text-amber-700 bg-amber-100 dark:bg-amber-500/20 dark:text-amber-300 px-1.5 py-0.5 rounded-full">
-                        مؤجّل — لا يُحتسب
-                      </span>
-                    )}
-                    {tx.offBudget && !tx.deferred && (
+                    {tx.offBudget && (
                       <span className="shrink-0 text-[9px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full">
                         خارج الميزانيات
                       </span>
                     )}
-                    <span className={tx.deferred ? "text-gray-400 font-semibold line-through" : "text-red-500 font-semibold"}>
-                      {tx.deferred ? "" : "-"}{formatAmount(tx.amount)}
+                    <span className="text-red-500 font-semibold">
+                      -{formatAmount(tx.amount)}
                     </span>
                   </div>
                 );

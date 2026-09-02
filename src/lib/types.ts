@@ -53,20 +53,6 @@ export interface Transaction {
   // ختم آخر تعديل (ms). يستخدمه دمج المزامنة ليفوز التعديل الأحدث لهذا العنصر
   // بعينه، لا التعديل من الجهاز صاحب أحدث ختم على مستوى المستند كله.
   updatedAt?: number;
-  // ===== ربط المعاملة بخطة أقساط (اختياري) =====
-  // المعاملة تمثّل **دوراً واحداً فقط** في الخطة — الحقل مفردٌ لا مصفوفة، فلا
-  // يمكن بنيوياً أن تكون «دفعة أولى» و«قسطاً» في الوقت نفسه. دفعاتُ الخطة مصاريف
-  // عادية في كل الحسابات (الميزانية اليومية والسقوف)؛ الخطة تقرأها ولا تملكها.
-  planId?: string; // InstallmentPlan id
-  planRole?: InstallmentRole;
-  planInstallmentNo?: number; // رقم القسط (1..count) — للأقساط والدفعة الأخيرة فقط
-  planLinkedAt?: number; // ms وقت الربط بالخطة
-  // **الشراء المؤجّل (مهب كاش)**: سُجّل كالتزامٍ ولم يخرج من الحساب — «الأصل» الذي
-  // تُسدّده الأقساط. يظهر في السجل بوسم «مؤجّل» ولا يُحتسب في أيّ صرف (ولا ريال):
-  // لا الميزانية اليومية، ولا السقوف، ولا الرسوم البيانية، ولا الإحصائيات. ما
-  // يُحتسب هو الدفعات الفعلية — وإلا حُسب الشراء مرّتين (1200 ثمّ 12×100).
-  // البوابة الوحيدة لهذا القرار: `cashOut` / `isCashOut` في utils.ts.
-  deferred?: boolean;
   // **مصروفٌ خارج الميزانيات**: خرج من الجيب فعلاً (يظهر في السجل والإحصائيات
   // ومجاميع الصرف كأيّ مصروف)، لكنّه استثنائيّ غير متكرّر — رسوم اختبارٍ مثلاً —
   // فلا يصحّ أن يستهلك الميزانية اليومية ولا سقوف الأقسام فيبدو الشهر منفلتاً.
@@ -116,49 +102,6 @@ export interface Book {
   // عبر جهازين، فلا يرجع تعديلٌ للخلف لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً.
   updatedAt?: number;
 }
-
-/* ===================== الرفّ — شراءٌ يَنضج ===================== */
-
-/**
- * شيءٌ تشتهيه فتضعه على الرفِّ **ثلاثين يوماً** قبل أن تحكم.
- *
- * الفكرة: أكثرُ ما نندم عليه شراءٌ قرَّرناه في دقيقة. فالرفُّ لا يمنعك — يؤخّر
- * الحكمَ حتى تهدأ الشهوة، ثمّ يسألك وأنت صاحٍ.
- *
- * **ما وفَّرتَه مشتقٌّ لا معدود**: العنصرُ الذي تركتَه يبقى محفوظاً بـ
- * `releasedAt` ويُجمع ثمنُه، بدل عدّادٍ تراكميّ يفقد الزيادات عند دمج جهازين
- * (زيادةٌ هنا وأخرى هناك تُنتجان واحدة) — نفسُ الدرس الذي عُلِّم في «الفوائت».
- */
-export interface ShelfItem {
-  id: string;
-  name: string;
-  price: number;
-  /** لماذا تريده؟ السببُ نصفُ الحكم — يُقرأ بعد ثلاثين يوماً بعينٍ أخرى. */
-  reason?: string;
-  placedAt: string; // YYYY-MM-DD
-  /** «دَعْه واحفظ ثمنَه» — تركتَه، فيُجمع ثمنُه فيما وفَّرت. */
-  releasedAt?: string;
-  /** «اشترِه» بعد النضوج — ومعرّفُ المعاملة التي سُجّل بها. */
-  boughtAt?: string;
-  transactionId?: string;
-  /**
-   * مدّةُ نضوجِ **هذا العنصر** بالأيام، تُختار عند وضعه وتبقى معه.
-   *
-   * غيابُها = `SHELF_RIPEN_DAYS` (ثلاثون) — فكلُّ ما وُضع قبل هذا الحقل يبقى
-   * على مدّته كما هو. وهي **على العنصر لا في الإعدادات** عمداً: لو كانت إعداداً
-   * عاماً لَغيَّرَ تبديلُه نضوجَ ما ينتظر على الرفّ بأثرٍ رجعيّ — فيَنضج ما لم
-   * يصبر، أو يعود ناضجٌ خامّاً. المدّةُ عهدٌ قطعتَه على نفسك يوم وضعتَه.
-   */
-  ripenDays?: number;
-  // طابع آخر تعديلٍ لهذا العنصر (ms) — كبقيّة العناصر المعرّفة بـid.
-  updatedAt?: number;
-}
-
-/** مدّةُ النضوج الافتراضية — ثلاثون يوماً. */
-export const SHELF_RIPEN_DAYS = 30;
-
-/** المدد المتاحة عند وضع شيءٍ على الرفّ. */
-export const SHELF_RIPEN_CHOICES = [30, 60, 90] as const;
 
 /* ===================== المحبرة — المصادر والفوائد ===================== */
 
@@ -437,138 +380,6 @@ export function prayerStatusMeta(status: PrayerStatus | string | undefined) {
   return PRAYER_STATUS_META[status as PrayerStatus] ?? PRAYER_STATUS_META["لم"];
 }
 
-// Base repeat unit — "every" multiplies it, so (unit: شهري, every: 6) is a
-// semi-annual expense, (every: 12) is annual, (every: 18) every year and a
-// half, and so on — arbitrary spacing instead of a fixed monthly/yearly pair.
-export type RecurringUnit = "أسبوعي" | "شهري";
-
-// كيف يتصرّف الالتزام المتكرّر في موعده:
-//  • auto     — تُنشأ معاملةٌ تلقائياً (السلوك التاريخي، وهو الافتراضي عند الغياب).
-//  • reminder — تذكيرٌ فقط: يظهر في «القادم قريباً» و«أقرب التزام» ولا يولّد معاملة.
-//    خطط الأقساط تستعمل هذا الوضع حصراً — الدفع يُسجّل يدوياً بمبلغه الفعلي، فلا
-//    تُخلَق مصاريف وهمية لقسطٍ لم يُدفع.
-// غياب الحقل (بياناتٌ قديمة) = "auto" دائماً — راجع generationModeOf في utils.ts.
-export type RecurringGenerationMode = "auto" | "reminder";
-
-export interface RecurringTransaction {
-  id: string;
-  amount: number;
-  category: string; // FinanceCategoryDef id
-  note: string;
-  unit: RecurringUnit;
-  every: number; // repeat every N units
-  dayOfMonth: number; // weekday 0-6 for أسبوعي, day-of-month 1-28 for شهري
-  anchorDate: string; // YYYY-MM-DD — first occurrence; interval phase is counted from here
-  active: boolean;
-  lastGenerated?: string; // YYYY-MM-DD of last auto-created instance
-  generationMode?: RecurringGenerationMode; // غيابه = "auto"
-  // ختم آخر تعديل (ms) — يفوز به التعديل الأحدث لهذه القاعدة بعينها في الدمج.
-  // لا يُختم عند التوليد التلقائي (تحديث lastGenerated) كي لا يطغى توليدٌ آليّ
-  // على تعديلٍ حقيقيّ من الجهاز الآخر؛ lastGenerated يُدمج بأخذ الأحدث تاريخياً.
-  updatedAt?: number;
-  planId?: string; // خطة الأقساط التي أنشأت هذا التذكير (إن وُجدت)
-}
-
-// Quick presets shown in the UI on top of the free "every N" input.
-export const RECURRING_PRESETS: { label: string; unit: RecurringUnit; every: number }[] = [
-  { label: "أسبوعي", unit: "أسبوعي", every: 1 },
-  { label: "كل أسبوعين", unit: "أسبوعي", every: 2 },
-  { label: "شهري", unit: "شهري", every: 1 },
-  { label: "كل شهرين", unit: "شهري", every: 2 },
-  { label: "ربع سنوي", unit: "شهري", every: 3 },
-  { label: "كل 4 أشهر", unit: "شهري", every: 4 },
-  { label: "نصف سنوي", unit: "شهري", every: 6 },
-  { label: "سنوي", unit: "شهري", every: 12 },
-];
-
-// ===================== الأقساط (خطط التقسيط) =====================
-// خطةُ تقسيطٍ لالتزامٍ واحد (جوّال بالتقسيط، أثاث، تأمين مجزّأ...). الخطة **وصفٌ
-// للاتفاق فقط**؛ لا تنشئ مصروفاً بنفسها ولا تحرّك أيّ رصيد. كل ريالٍ يُحتسب حين
-// تُسجَّل معاملةٌ حقيقية مربوطة بها (Transaction.planId) — فلا يظهر قسطٌ كمصروفٍ
-// لمجرّد مرور موعده، ولا يتضخّم صرف الشهر بأرقامٍ لم تُدفع.
-//
-// `totalPrice` هو **المرجع الوحيد** للمبلغ الواجب: الرسوم توضيحيةٌ لا تُضاف عليه،
-// و`cashPrice` للمقارنة فقط. `finalPayment` (دفعةٌ أخيرة كبيرة) **تستبدل** آخر قسط
-// ولا تُضاف إليه. إن لم تتّسق الأرقام مع الإجمالي فالعرض يحمل تحذيراً **غير
-// معطِّل** (لا نصحّح أرقام المالك من تلقائنا) — راجع planMismatch في installments.ts.
-export type InstallmentStatus = "active" | "settled" | "cancelled";
-
-// دور المعاملة داخل الخطة — واحدٌ فقط لكل معاملة:
-//  principal  = **الأصل المؤجّل**: الشراء نفسه حين لم يكن كاش (اشتريتَ بالتقسيط).
-//               التزامٌ لا صرف: يحمل `deferred` فلا يُحتسب ريالاً واحداً في أيّ
-//               حساب، والأقساط هي التي تُسدّده. ليس دفعةً ولا يدخل «المدفوع».
-//  down       = الدفعة الأولى · installment = قسط · final = الدفعة الأخيرة الكبيرة
-//  settlement = سدادٌ مبكر (يُسجَّل بمبلغه الفعليّ وحده؛ الفرق يُعرَض «موفَّراً»
-//               ولا يُخلَق له مصروفٌ وهميّ).
-export type InstallmentRole = "principal" | "down" | "installment" | "final" | "settlement";
-
-export interface InstallmentPlan {
-  id: string;
-  provider: string; // الجهة (تمارا · تابي · بنك · معرض...)
-  name: string; // اسم الالتزام
-  cashPrice?: number; // السعر النقدي (اختياري — للمقارنة فقط، لا يدخل أيّ حساب)
-  totalPrice: number; // السعر الإجمالي — المرجع الوحيد للمبلغ الواجب
-  downPayment: number; // الدفعة الأولى (0 = لا دفعة أولى)
-  // يوم دفع الدفعة الأولى — تُسجَّل مصروفاً حقيقياً بهذا التاريخ لحظة إنشاء الخطة
-  // (دفعةٌ خرجت فعلاً، لا موعدٌ مستقبليّ). غيابه (خططٌ قديمة) = يوم الإنشاء.
-  downDate?: string; // YYYY-MM-DD
-  installmentAmount: number; // قيمة القسط الشهري
-  count: number; // عدد الأقساط
-  firstDueDate: string; // YYYY-MM-DD أول موعد استحقاق
-  fees?: number; // الرسوم — توضيحية فقط (لا تُضاف على الإجمالي)
-  finalPayment?: number; // دفعة أخيرة كبيرة تستبدل آخر قسط (اختياري)
-  status: InstallmentStatus;
-  category?: string; // FinanceCategoryDef id يُقترح لمدفوعات الخطة
-  recurringId?: string; // ربط اختياري بالتزامٍ متكرّر (تذكير reminder فقط)
-  // معاملة «الأصل المؤجّل» التي تُسدّدها هذه الخطة (إن كان الشراء مسجَّلاً أصلاً
-  // كمصروفٍ ثمّ قُسِّط). المعاملة نفسها تحمل `deferred` + `planRole: "principal"`.
-  principalTxId?: string;
-  note?: string;
-  createdAt: string; // YYYY-MM-DD
-  updatedAt?: number; // ms — يفوز به التعديل الأحدث لهذه الخطة في الدمج
-}
-
-// ===================== الأصول والاستهلاك (الإهلاك) =====================
-// «أصل» = شيءٌ غالٍ اشتريتَه وتملكه ويخدمك سنين (جوّال، لابتوب، أثاث، سيارة)،
-// لا مصروفاً يومياً ينتهي بيومه. الفكرة الوحيدة هنا: **الكلفة تتوزّع على أيام
-// الاستعمال لا على يوم الشراء**، فتعرف «كم يكلّفني هذا الشيء في اليوم فعلاً»
-// و«كم بقي من قيمته».
-//
-// النموذج مقصودٌ بسيطاً: إهلاكٌ خطّيٌّ يوميّ (كل يومٍ ينقص القيمة بمقدارٍ ثابت)
-// لأنه الوحيد الذي يمكن للمالك أن يتحقّق منه ذهنياً. العمر «على كيفك» بالأيام —
-// تختار سنةً أو ثلاثاً أو رقماً حرّاً.
-//
-// **لا يمسّ الأصلُ أيّ صرف**: الإهلاك عرضٌ محاسبيّ محض ولا يولّد معاملةً ولا
-// يدخل الميزانية اليومية ولا السقوف. المصروف الحقيقي هو ثمن الشراء (أو الأقساط)
-// حين سُجّل، ولا يجوز احتسابه مرّةً ثانيةً كإهلاك.
-export interface Asset {
-  id: string;
-  name: string; // «آيفون ١٦»، «لابتوب العمل»، «كنب المجلس»
-  icon?: string; // إيموجي اختياري
-  purchaseDate: string; // YYYY-MM-DD يوم امتلاكه (بداية الإهلاك)
-  purchasePrice: number; // ثمنه كاملاً (لا يهمّ أدُفع كاشاً أم بالتقسيط)
-  // القيمة المتوقّعة في نهاية العمر (ما تظنّ أنك ستبيعه به). 0 = يستهلك كلياً.
-  salvageValue?: number;
-  lifeDays: number; // العمر الافتراضي بالأيام (≥ 1) — «على كيفك»
-  planId?: string; // خطة الأقساط التي اشتريته بها (إن وُجدت) — ربطٌ للعرض فقط
-  transactionId?: string; // معاملة الشراء (إن رُبطت) — للعرض فقط
-  // البيع/التخلّص: يوقف الإهلاك عند هذا اليوم ويحسب الربح/الخسارة الفعليّ
-  // (ثمن البيع − القيمة الدفترية يومَها). لا يولّد معاملةً أيضاً.
-  soldDate?: string; // YYYY-MM-DD
-  soldPrice?: number;
-  note?: string;
-  createdAt: string; // YYYY-MM-DD
-  updatedAt?: number; // ms — يفوز به التعديل الأحدث لهذا الأصل في الدمج
-}
-
-// أعمارٌ جاهزة بضغطة (والحقل الحرّ باقٍ دائماً) — أيامٌ لا شهور، فالحساب يوميّ.
-export const ASSET_LIFE_PRESETS: { label: string; days: number }[] = [
-  { label: "سنة", days: 365 },
-  { label: "سنتان", days: 730 },
-  { label: "٣ سنوات", days: 1095 },
-  { label: "٥ سنوات", days: 1825 },
-  { label: "١٠ سنوات", days: 3650 },
-];
 
 // A monthly cap on a main category — either a fixed SAR amount or a
 // percentage of the monthly income (pct wins when both are set, and the
@@ -772,15 +583,8 @@ export interface AppData {
   // قديمةٌ بلا الحقلين تعمل.
   knowledgeSources?: KnowledgeSource[];
   benefits?: Benefit[];
-  // الرفّ: ما وضعتَه لينضج ثلاثين يوماً قبل الشراء. اختياريّ فبياناتٌ قديمة تعمل.
-  shelfItems?: ShelfItem[];
   journalEntries: JournalEntry[];
   habits: Habit[];
-  recurring: RecurringTransaction[];
-  // خطط الأقساط — وصفُ اتفاقٍ فقط؛ المدفوع يُشتَقّ من المعاملات المربوطة بها.
-  installmentPlans: InstallmentPlan[];
-  // الأصول الغالية وإهلاكها اليومي — عرضٌ محاسبيّ لا يولّد مصروفاً ولا يمسّ رصيداً.
-  assets: Asset[];
   budgets: Budget[];
   categories: FinanceCategoryDef[];
   reserves: ReserveFund[];

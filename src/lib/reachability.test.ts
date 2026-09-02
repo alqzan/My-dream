@@ -40,9 +40,7 @@ const PARKED_COMPONENTS: Record<string, string> = {
  *
  * أكثرُها تابعٌ لمكوّنٍ موقوفٍ أعلاه؛ وما ليس كذلك فسببُه مكتوب.
  */
-const PARKED_ACTIONS: Record<string, string> = {
-  autoLinkTransaction: "يُنادى من داخل المتجر نفسه (ربطُ دفعةِ قسطٍ تلقائياً)، لا من الواجهة",
-};
+const PARKED_ACTIONS: Record<string, string> = {};
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

@@ -2,9 +2,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
-  RecurringTransaction, Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, DailyBudget,
-  KnowledgeSource, Benefit, ShelfItem,
-  ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent, InstallmentPlan, InstallmentRole, Asset,
+  Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, DailyBudget,
+  KnowledgeSource, Benefit,
+  ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode,
 } from "./types";
@@ -12,23 +12,22 @@ import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from 
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
-import { uid, today, toDateStr, parseDate, mostRecentDueDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, generationModeOf, unionRefs } from "./utils";
+import { uid, today, toDateStr, parseDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, unionRefs } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { persistedIdbStorage } from "./idbStorage";
-import { planSummary, rowRemaining, isValidDateKey, MAX_INSTALLMENT_COUNT, suggestPlanLink } from "./installments";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
 // wrapper) so cloud sync can't resurrect a removed item from another device.
 const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
-  "recurring", "reserves", "habits", "futureLetters", "categories",
-  "quranReflections", "installmentPlans", "assets", "countdownEvents",
-  "knowledgeSources", "benefits", "shelfItems",
+  "reserves", "habits", "futureLetters", "categories",
+  "quranReflections", "countdownEvents",
+  "knowledgeSources", "benefits",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -57,16 +56,12 @@ const STAMPED_COLLECTIONS = ID_COLLECTIONS;
 type StampedItem = { id: string; updatedAt?: number };
 
 // Fields that must NOT count as "the owner edited this item", per collection.
-// Two kinds live here:
-//  • آليّة: `lastGenerated` يتحرّك مع كلّ runRecurring، وختمُه يجعل مجرّد فتح
-//    التطبيق يطغى على تعديلٍ حقيقيّ من الجهاز الآخر.
-//  • **مركّبة لها دمجُها المستقل**: سجلّات العادة وإيداعات الصندوق تتّحد عنصراً
-//    عنصراً ولها شواهد حذفٍ خاصّة (habitlog:/deposit:)، ووسائط المذكرة تتّحد
-//    بالاتحاد وتُحذف بشاهد (deletedMedia). لو رفع تغييرُها طابع العنصر لصار
-//    تسجيلُ يومٍ — أو استكمالُ صور Day One — «تعديلاً» يفوز على إعادة تسمية
-//    العادة أو تحرير نصّ المذكرة على الجهاز الآخر، وهو ما لا يريده أحد.
+// **مركّبة لها دمجُها المستقل**: سجلّات العادة وإيداعات الصندوق تتّحد عنصراً
+// عنصراً ولها شواهد حذفٍ خاصّة (habitlog:/deposit:)، ووسائط المذكرة تتّحد
+// بالاتحاد وتُحذف بشاهد (deletedMedia). لو رفع تغييرُها طابع العنصر لصار
+// تسجيلُ يومٍ — أو استكمالُ صور Day One — «تعديلاً» يفوز على إعادة تسمية
+// العادة أو تحرير نصّ المذكرة على الجهاز الآخر، وهو ما لا يريده أحد.
 const UNSTAMPED_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], readonly string[]>> = {
-  recurring: ["lastGenerated"],
   habits: ["logs"],
   reserves: ["deposits"],
   journalEntries: [
@@ -150,64 +145,6 @@ interface AppStore extends AppData {
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
 
-  // Recurring
-  addRecurring: (r: RecurringTransaction) => void;
-  updateRecurring: (id: string, updates: Partial<RecurringTransaction>) => void;
-  deleteRecurring: (id: string) => void;
-  runRecurring: () => number; // returns count of generated transactions
-
-  // الأقساط — الخطة وصفٌ للاتفاق، والدفع معاملةٌ حقيقية مربوطة بها
-  addInstallmentPlan: (plan: InstallmentPlan) => void;
-  updateInstallmentPlan: (id: string, updates: Partial<InstallmentPlan>) => void;
-  // الإلغاء **لا يحذف** أيّ معاملةٍ سُجّلت — يوقف المطالبة فقط.
-  cancelInstallmentPlan: (id: string) => void;
-  reopenInstallmentPlan: (id: string) => void;
-  deleteInstallmentPlan: (id: string) => void; // شاهدُ حذفٍ فقط (المعاملات تبقى)
-  // يسجّل دفعةً بدورٍ واحد ويربطها بالخطة؛ يرجع معرّف المعاملة (أو "" إن رُفضت).
-  recordInstallmentPayment: (
-    planId: string,
-    p: { role: InstallmentRole; amount: number; date?: string; installmentNo?: number; note?: string; category?: string }
-  ) => string;
-  // **سجّل القسط القادم بضغطةٍ واحدة** (الطريق اليوميّ): يدفع أقدم قسطٍ غير مكتمل
-  // بمبلغه اليوم. يرجع معرّف المعاملة، أو "" إن لم يبقَ قسط.
-  payNextInstallment: (planId: string, opts?: { amount?: number; date?: string }) => string;
-  // **قسّط مصروفاً مسجَّلاً**: الشراء لم يكن كاش (مؤجّل) — تُنشأ خطةٌ إجماليّها مبلغ
-  // المعاملة، وتصير المعاملة «الأصل المؤجّل» فلا تُحتسب صرفاً (الأقساط هي الصرف).
-  convertTransactionToPlan: (
-    txId: string,
-    plan: { provider: string; name?: string; installmentAmount: number; count: number; firstDueDate: string; downPayment?: number; fees?: number; finalPayment?: number; note?: string }
-  ) => string;
-  // ربط/فكّ معاملةٍ قائمة بخطة — للطريق اليوميّ: سجّل المصروف كالعادة ثمّ اربطه.
-  linkTransactionToPlan: (
-    txId: string,
-    link: { planId: string; role: InstallmentRole; installmentNo?: number }
-  ) => void;
-  unlinkTransactionFromPlan: (txId: string) => void;
-  // سدادٌ مبكر: يسجّل **المبلغ الفعليّ وحده** ويقفل الخطة. لا مصروف وهمي للفرق.
-  settleInstallmentPlan: (planId: string, amount: number, date?: string) => string;
-  // تذكيرٌ متكرّر للخطة (generationMode: "reminder" — لا يولّد معاملات أبداً).
-  linkInstallmentReminder: (planId: string) => void;
-  // **إنشاء خطةٍ كاملة بخطوةٍ واحدة** (المسار الأساسي للأقساط): تُنشَأ الخطة،
-  // وتُسجَّل الدفعة الأولى مصروفاً حقيقياً بتاريخها (لأنها خرجت فعلاً)، ويُربط
-  // تذكيرٌ شهريّ — كل ذلك تلقائياً. لا تُنشأ معاملةٌ لأيّ قسطٍ قادم أبداً.
-  createInstallmentPlan: (draft: {
-    provider?: string; name: string;
-    downPayment: number; downDate?: string;
-    installmentAmount: number; count: number; firstDueDate: string;
-    finalPayment?: number; category?: string; note?: string;
-    recordDown?: boolean; // سجّل الدفعة الأولى مصروفاً (افتراضياً نعم)
-    reminder?: boolean; // اربط تذكيراً شهرياً (افتراضياً نعم)
-  }) => string;
-  // **الربط التلقائي**: يربط معاملةً بقسطٍ يطابقها حين لا يحتمل غير خطةٍ واحدة.
-  // يرجع اسم الخطة عند الربط، أو "" إن لم يكن هناك مرشّحٌ محسوم.
-  autoLinkTransaction: (txId: string) => string;
-
-  // الأصول الغالية وإهلاكها اليوميّ — عرضٌ محاسبيّ محض: لا معاملة، ولا أثر على
-  // الميزانية اليومية ولا السقوف ولا الإحصائيات.
-  addAsset: (asset: Asset) => void;
-  updateAsset: (id: string, updates: Partial<Asset>) => void;
-  deleteAsset: (id: string) => void;
-
   // Budgets — a fixed limit OR a % of monthly income
   setBudget: (category: string, cap: { limit?: number; pct?: number }) => void;
   removeBudget: (category: string) => void;
@@ -257,24 +194,6 @@ interface AppStore extends AppData {
 
   // Reading
   // ---------- المحبرة: المصادر والفوائد ----------
-  // ---------- الرفّ ----------
-  addShelfItem: (item: ShelfItem) => void;
-  /**
-   * تصحيحُ ما كُتب: الاسم والثمن والسبب والمدّة.
-   *
-   * **لا يمسّ `placedAt`** — التعديل تصحيحُ وصفٍ لا إعادةُ وضعٍ على الرفّ؛
-   * وإلا لأمكن تصفيرُ العدّاد بتغيير حرفٍ في الاسم، و«ثلاثون أخرى»
-   * (`renewShelfItem`) هي البابُ الصريحُ الوحيد لإعادة العدّ.
-   */
-  updateShelfItem: (id: string, updates: Partial<Omit<ShelfItem, "id" | "placedAt">>) => void;
-  /** «دَعْه» — يبقى محفوظاً ليُجمع ثمنُه فيما وفَّرت. */
-  releaseShelfItem: (id: string) => void;
-  /** «ثلاثون أخرى» — يُعيد عدّ النضوج من اليوم. */
-  renewShelfItem: (id: string) => void;
-  /** «اشترِه» — يربطه بمعاملةٍ سُجّلت له. */
-  buyShelfItem: (id: string, transactionId: string) => void;
-  deleteShelfItem: (id: string) => void;
-
   // `knowledgeSources` و`benefits` بلا إجراءات: بابُ «مسار المعرفة» حُذف بقرارٍ
   // صريح بعد مراجعةٍ شاملة (بُني ولم يُعرض في شاشةٍ قطّ). الحقلان باقيان في
   // `AppData` وفي اللقطة والترطيب والنسخ الاحتياطي والدمج، فلا تضيع بيانةٌ
@@ -611,15 +530,11 @@ export const useAppStore = create<AppStore>()(
       readingLogs: [],
       knowledgeSources: [],
       benefits: [],
-      shelfItems: [],
       journalEntries: [],
       habits: [
         { id: "h1", name: "رياضة", icon: "🏃", color: "#3d9640", logs: [] },
         { id: "h2", name: "قرآن", icon: "📖", color: "#7c6fcd", logs: [] },
       ],
-      recurring: [],
-      installmentPlans: [],
-      assets: [],
       budgets: [],
       categories: DEFAULT_CATEGORIES,
       reserves: [],
@@ -868,443 +783,6 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({
           transactions: s.transactions.filter((t) => t.id !== id),
         })),
-
-      // نختم updatedAt على الإضافة/التعديل فيفوز آخر تعديلٍ حقيقيٍّ عند الدمج.
-      addRecurring: (r) =>
-        set((s) => ({
-          recurring: [...s.recurring, { ...r, updatedAt: Date.now() }],
-          ...clearTombstone(s.deleted, r.id),
-        })),
-
-      updateRecurring: (id, updates) =>
-        set((s) => ({
-          recurring: s.recurring.map((r) =>
-            r.id === id ? { ...r, ...updates, updatedAt: Date.now() } : r
-          ),
-        })),
-
-      deleteRecurring: (id) =>
-        set((s) => ({ recurring: s.recurring.filter((r) => r.id !== id) })),
-
-      runRecurring: () => {
-        let generated = 0;
-        set((s) => {
-          const now = parseDate(today());
-          const newTx: Transaction[] = [];
-          // كل المعرّفات الموجودة أصلاً — الحارس الذي يجعل التشغيل idempotent:
-          // المعرّف الحتميّ (`rec_<rule>_<date>`) إن كان موجوداً (تشغيلٌ سابق، أو
-          // وصل من جهازٍ آخر بالمزامنة) فلا تُضاف نسختُه ثانيةً. بدونه كان تراجعُ
-          // `lastGenerated` (دمجٌ قديم) أو تشغيلان متتاليان يُنتِجان صفّاً مكرّراً
-          // يُصلحه الدمج لاحقاً فقط — أمّا محلياً فيظهر مصروفان.
-          const existingIds = new Set(s.transactions.map((t) => t.id));
-          let rulesChanged = false;
-          const updatedRecurring = s.recurring.map((r) => {
-            if (!r.active) return r;
-            // «تذكير» لا يولّد معاملةً أبداً (خطط الأقساط) — والغياب = auto.
-            if (generationModeOf(r) !== "auto") return r;
-            // Backfill every missed occurrence, not just the latest — if the
-            // app wasn't opened for two months, both rent payments land.
-            // Walk back from the most recent due date until we hit what was
-            // already generated (capped so a corrupt anchor can't explode).
-            const every = Math.max(1, Math.floor(r.every) || 1);
-            const dueDates: string[] = [];
-            let due = mostRecentDueDate(r, now);
-            // The date-based breaks below (lastGenerated / anchorDate) are the
-            // real terminators; the counter is only a runaway guard for a
-            // corrupt anchor. 600 covers >10 years of weekly occurrences so a
-            // long gap never silently drops legitimate transactions.
-            for (let i = 0; i < 600; i++) {
-              const dueStr = toDateStr(due);
-              if (r.lastGenerated && dueStr <= r.lastGenerated) break;
-              if (dueStr < r.anchorDate) break;
-              dueDates.unshift(dueStr);
-              if (r.unit === "أسبوعي") {
-                due = new Date(due);
-                due.setDate(due.getDate() - every * 7);
-              } else {
-                const idx = due.getFullYear() * 12 + due.getMonth() - every;
-                due = new Date(Math.floor(idx / 12), ((idx % 12) + 12) % 12, due.getDate());
-              }
-            }
-            if (!dueDates.length) return r;
-            for (const dueStr of dueDates) {
-              // Deterministic id from the rule + occurrence date so two devices
-              // that each generate the same due occurrence produce the SAME id —
-              // the sync merge (byId) then collapses them into one instead of
-              // leaving a duplicate rent/subscription. Manual transactions keep
-              // their random uid(); only auto-generated recurring ones are keyed.
-              const id = `rec_${r.id}_${dueStr}`;
-              if (existingIds.has(id)) continue; // موجودة سلفاً — لا تكرار
-              existingIds.add(id);
-              newTx.push({
-                id,
-                date: dueStr,
-                amount: r.amount,
-                category: r.category,
-                note: r.note ? `${r.note} (تلقائي)` : "معاملة متكررة",
-                updatedAt: Date.now(),
-              });
-              generated++;
-            }
-            // `lastGenerated` لا يرجع للخلف أبداً (حتى لو أعطت مرساةٌ معدّلة موعداً
-            // أقدم)، ويتقدّم حتى لو تُخطّيت كل المواعيد كمكرّرة — فلا يُعاد فحصها.
-            const last = dueDates[dueDates.length - 1];
-            const nextLast = r.lastGenerated && r.lastGenerated > last ? r.lastGenerated : last;
-            if (nextLast === r.lastGenerated) return r;
-            rulesChanged = true;
-            // بلا ختم updatedAt: التوليد إجراءٌ آليّ، وختمُه يجعله يطغى على تعديلٍ
-            // حقيقيٍّ من الجهاز الآخر عند الدمج. lastGenerated يُدمج بأخذ الأحدث.
-            return { ...r, lastGenerated: nextLast };
-          });
-          if (!newTx.length && !rulesChanged) return {};
-          return {
-            ...(newTx.length ? { transactions: [...newTx, ...s.transactions] } : {}),
-            ...(rulesChanged ? { recurring: updatedRecurring } : {}),
-          };
-        });
-        return generated;
-      },
-
-      // ---------- الأقساط ----------
-      addInstallmentPlan: (plan) =>
-        set((s) => ({
-          installmentPlans: [
-            { ...plan, updatedAt: Date.now() },
-            ...(s.installmentPlans ?? []),
-          ],
-          // إعادة إضافة معرّفٍ مُحذوف (تراجع) ترفع شاهد الحذف وإلا أسقطه الدمج.
-          ...clearTombstone(s.deleted, plan.id),
-        })),
-
-      updateInstallmentPlan: (id, updates) =>
-        set((s) => ({
-          installmentPlans: (s.installmentPlans ?? []).map((p) =>
-            p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
-          ),
-        })),
-
-      // الإلغاء يوقف المطالبة ويُبقي كل معاملةٍ سُجّلت (تاريخُ الصرف لا يُمسّ).
-      cancelInstallmentPlan: (id) =>
-        set((s) => ({
-          installmentPlans: (s.installmentPlans ?? []).map((p) =>
-            p.id === id ? { ...p, status: "cancelled" as const, updatedAt: Date.now() } : p
-          ),
-        })),
-
-      reopenInstallmentPlan: (id) =>
-        set((s) => ({
-          installmentPlans: (s.installmentPlans ?? []).map((p) =>
-            p.id === id ? { ...p, status: "active" as const, updatedAt: Date.now() } : p
-          ),
-        })),
-
-      // حذف الخطة = شاهدُ حذفٍ (يكتبه غلاف set تلقائياً) والمعاملات تبقى كما هي:
-      // ما دُفع فعلاً مصروفٌ حقيقيّ، وحذف الخطة قرارُ تنظيمٍ لا محوُ تاريخ.
-      deleteInstallmentPlan: (id) =>
-        set((s) => ({
-          installmentPlans: (s.installmentPlans ?? []).filter((p) => p.id !== id),
-        })),
-
-      recordInstallmentPayment: (planId, p) => {
-        const st = get();
-        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
-        if (!plan) return "";
-        const amount = round2(p.amount);
-        if (!Number.isFinite(amount) || amount <= 0) return "";
-        const date = p.date || today();
-        // معرّفٌ عشوائيّ (لا حتميّ): الدفعة حدثٌ يدويّ يجوز تكراره بمبالغ مختلفة،
-        // والحتميّة هنا كانت تدمج دفعتين حقيقيتين في واحدة.
-        const id = uid();
-        const roleLabel = p.role === "installment" && p.installmentNo
-          ? `قسط ${p.installmentNo}`
-          : p.role === "down" ? "دفعة أولى"
-          : p.role === "final" ? "دفعة أخيرة"
-          : p.role === "settlement" ? "سداد مبكر" : "قسط";
-        const tx: Transaction = {
-          id,
-          date,
-          amount,
-          category: p.category ?? plan.category ?? st.categories[0]?.id ?? "",
-          note: p.note ?? `${plan.name || plan.provider} — ${roleLabel}`,
-          // دورٌ واحد فقط: الحقل مفردٌ، فلا تمثّل معاملةٌ دورين معاً.
-          planId,
-          planRole: p.role,
-          ...(p.role === "installment" || p.role === "final"
-            ? { planInstallmentNo: p.installmentNo }
-            : {}),
-          planLinkedAt: Date.now(),
-        };
-        set((s) => ({
-          transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions],
-          ...clearTombstone(s.deleted, id),
-        }));
-        return id;
-      },
-
-      // الطريق اليوميّ #1: ضغطةٌ واحدة تسجّل القسط القادم بمبلغه في تاريخ اليوم.
-      // لا اختيارَ رقمٍ ولا تاريخٍ ولا تصنيف — كلّها مشتقّة من الخطة والجدول.
-      payNextInstallment: (planId, opts) => {
-        const st = get();
-        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
-        if (!plan) return "";
-        const next = planSummary(plan, st.transactions, today()).next;
-        if (!next) return "";
-        // قسطٌ مدفوعٌ جزئياً (تحويلٌ ناقص سابقاً): نسجّل **الباقي عليه وحده**، وإلا
-        // ضاعفنا المدفوع وأظهرنا الخطة أقرب للإتمام من حقيقتها.
-        const due = rowRemaining(next);
-        return get().recordInstallmentPayment(planId, {
-          role: next.isFinal ? "final" : "installment",
-          amount: opts?.amount ?? due,
-          installmentNo: next.no,
-          // تاريخ الدفع هو **يوم الدفع الفعليّ** (اليوم)، لا موعد الاستحقاق الفائت:
-          // المعاملة سجلٌّ لخروج النقد، وموعدُ الاستحقاق يبقى في جدول الخطة. لو
-          // كُتب التاريخ القديم لتغيّر صرفُ شهرٍ مضى وميزانيتُه المرحّلة بلا سبب.
-          date: opts?.date,
-        });
-      },
-
-      // «قسّط هذا المصروف»: الشراء كان **مؤجّلاً لا كاش**. المعاملة القائمة تصير
-      // «الأصل المؤجّل» (deferred + planRole: "principal") فتخرج من كل حسابات
-      // الصرف وتبقى في السجل كسجلٍّ للشراء، والخطة إجماليّها مبلغُها بالضبط.
-      // هكذا لا يُحتسب الشراء مرّتين: الأقساط وحدها هي الصرف الفعليّ.
-      convertTransactionToPlan: (txId, draft) => {
-        const st = get();
-        const tx = st.transactions.find((t) => t.id === txId);
-        if (!tx) return "";
-        const total = round2(tx.amount);
-        if (!(total > 0)) return "";
-        // نفس حرّاس النموذج الرئيسي تماماً — هذا طريقٌ ثانٍ لإنشاء خطة، فلا يجوز
-        // أن يقبل ما يرفضه الأول: تاريخٌ صالح، وعددٌ داخل الحدّ (وإلا جدولٌ لا معنى
-        // له وقائمةٌ لا تنتهي). القيمة السالبة/الصفرية للقسط مرفوضة كذلك.
-        if (!isValidDateKey(draft.firstDueDate)) return "";
-        if (!(draft.installmentAmount > 0)) return "";
-        const rawCount = Math.floor(draft.count) || 0;
-        if (rawCount < 1 || rawCount > MAX_INSTALLMENT_COUNT) return "";
-        const count = rawCount;
-        const planId = uid();
-        const plan: InstallmentPlan = {
-          id: planId,
-          provider: draft.provider.trim(),
-          name: (draft.name?.trim() || tx.note.trim() || draft.provider.trim()),
-          totalPrice: total,
-          downPayment: round2(draft.downPayment ?? 0),
-          installmentAmount: round2(draft.installmentAmount),
-          count,
-          firstDueDate: draft.firstDueDate,
-          fees: draft.fees,
-          finalPayment: draft.finalPayment,
-          status: "active",
-          category: tx.category || undefined,
-          note: draft.note,
-          principalTxId: txId,
-          createdAt: today(),
-          updatedAt: Date.now(),
-        };
-        set((s) => ({
-          installmentPlans: [plan, ...(s.installmentPlans ?? [])],
-          transactions: s.transactions.map((t) =>
-            t.id === txId
-              ? {
-                  ...t,
-                  deferred: true,
-                  planId,
-                  planRole: "principal" as const,
-                  planInstallmentNo: undefined,
-                  planLinkedAt: Date.now(),
-                  updatedAt: Date.now(),
-                }
-              : t
-          ),
-          ...clearTombstone(s.deleted, planId),
-        }));
-        return planId;
-      },
-
-      // الطريق اليوميّ #2: سجّل المصروف كما تفعل دائماً، ثمّ اربطه بالخطة بضغطة —
-      // فلا إدخالٌ مزدوج ولا مبلغٌ يُحتسب مرّتين. الدور مفردٌ دائماً.
-      linkTransactionToPlan: (txId, link) =>
-        set((s) => {
-          if (!(s.installmentPlans ?? []).some((p) => p.id === link.planId)) return {};
-          return {
-            transactions: s.transactions.map((t) =>
-              t.id === txId
-                ? {
-                    ...t,
-                    planId: link.planId,
-                    planRole: link.role,
-                    planInstallmentNo:
-                      link.role === "installment" || link.role === "final" ? link.installmentNo : undefined,
-                    // الأصل وحده مؤجّل؛ أيّ دورٍ آخر دفعةٌ نقدية فعلية.
-                    deferred: link.role === "principal" ? true : undefined,
-                    planLinkedAt: Date.now(),
-                    updatedAt: Date.now(),
-                  }
-                : t
-            ),
-          };
-        }),
-
-      // فكّ الربط يُرجع المعاملة مصروفاً عادياً — ويرفع «التأجيل» فتُحتسب من جديد.
-      unlinkTransactionFromPlan: (txId) =>
-        set((s) => ({
-          transactions: s.transactions.map((t) =>
-            t.id === txId
-              ? {
-                  ...t,
-                  planId: undefined, planRole: undefined, planInstallmentNo: undefined,
-                  planLinkedAt: undefined, deferred: undefined, updatedAt: Date.now(),
-                }
-              : t
-          ),
-          installmentPlans: (s.installmentPlans ?? []).map((p) =>
-            p.principalTxId === txId ? { ...p, principalTxId: undefined, updatedAt: Date.now() } : p
-          ),
-        })),
-
-      // سدادٌ مبكر: معاملةٌ واحدة بالمبلغ **الفعليّ** + إغلاق الخطة. الفرق بين ما
-      // كان واجباً وما دُفع يُعرَض «موفَّراً» (planSummary.saved) ولا يُخلَق له
-      // مصروفٌ ولا إيرادٌ وهميّ — لا نلوّث سجلّ الصرف بأرقامٍ لم تُنقَل.
-      settleInstallmentPlan: (planId, amount, date) => {
-        const st = get();
-        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
-        if (!plan) return "";
-        const paid = round2(amount);
-        if (!Number.isFinite(paid) || paid <= 0) return "";
-        const id = uid();
-        const tx: Transaction = {
-          id,
-          date: date || today(),
-          amount: paid,
-          category: plan.category ?? st.categories[0]?.id ?? "",
-          note: `${plan.name || plan.provider} — سداد مبكر`,
-          planId,
-          planRole: "settlement",
-          planLinkedAt: Date.now(),
-        };
-        set((s) => ({
-          transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions],
-          installmentPlans: (s.installmentPlans ?? []).map((x) =>
-            x.id === planId ? { ...x, status: "settled" as const, updatedAt: Date.now() } : x
-          ),
-          ...clearTombstone(s.deleted, id),
-        }));
-        return id;
-      },
-
-      // تذكيرٌ متكرّر مربوطٌ بالخطة: يظهر في «القادم قريباً» و«أقرب التزام» ولا
-      // يولّد معاملةً أبداً (generationMode: "reminder")، فلا يتضاعف القسط.
-      linkInstallmentReminder: (planId) => {
-        const st = get();
-        const plan = (st.installmentPlans ?? []).find((x) => x.id === planId);
-        if (!plan) return;
-        if (plan.recurringId && st.recurring.some((r) => r.id === plan.recurringId)) return;
-        const rid = uid();
-        const day = Math.min(28, Math.max(1, parseDate(plan.firstDueDate).getDate() || 1));
-        const rule: RecurringTransaction = {
-          id: rid,
-          amount: plan.installmentAmount,
-          category: plan.category ?? st.categories[0]?.id ?? "",
-          note: `${plan.name || plan.provider} (قسط)`,
-          unit: "شهري",
-          every: 1,
-          dayOfMonth: day,
-          anchorDate: plan.firstDueDate,
-          active: true,
-          generationMode: "reminder",
-          planId,
-          updatedAt: Date.now(),
-        };
-        set((s) => ({
-          recurring: [...s.recurring, rule],
-          installmentPlans: (s.installmentPlans ?? []).map((p) =>
-            p.id === planId ? { ...p, recurringId: rid, updatedAt: Date.now() } : p
-          ),
-        }));
-      },
-
-      // **المسار الأساسي**: «اشتريتُ شيئاً بالتقسيط» في خطوةٍ واحدة. الحالة التي
-      // بُني عليها: دفعةٌ أولى ١٥٠٠ ثمّ ٧٨٠ × ٦ شهور. الإجمالي يُحسب من البنود
-      // (لا يُطالَب المالك بجمعه)، والدفعة الأولى تُسجَّل مصروفاً حقيقياً بتاريخها
-      // لأنها **خرجت فعلاً**، والتذكير الشهري يُربط تلقائياً. الأقساط القادمة لا
-      // تُنشأ لها معاملات — تبقى جدولاً حتى تُدفع (المبدأ الحاكم للأقساط).
-      createInstallmentPlan: (draft) => {
-        const st = get();
-        const name = draft.name.trim() || (draft.provider ?? "").trim();
-        const count = Math.floor(draft.count) || 0;
-        if (!name) return "";
-        if (!(draft.installmentAmount > 0)) return "";
-        if (count < 1 || count > MAX_INSTALLMENT_COUNT) return "";
-        if (!isValidDateKey(draft.firstDueDate)) return "";
-        const down = round2(Math.max(0, draft.downPayment || 0));
-        const downDate = draft.downDate && isValidDateKey(draft.downDate) ? draft.downDate : today();
-        const finalPayment = draft.finalPayment && draft.finalPayment > 0 ? round2(draft.finalPayment) : undefined;
-        const regular = finalPayment ? count - 1 : count;
-        const planId = uid();
-        const plan: InstallmentPlan = {
-          id: planId,
-          provider: (draft.provider ?? "").trim(),
-          name,
-          totalPrice: round2(down + regular * round2(draft.installmentAmount) + (finalPayment ?? 0)),
-          downPayment: down,
-          downDate,
-          installmentAmount: round2(draft.installmentAmount),
-          count,
-          firstDueDate: draft.firstDueDate,
-          finalPayment,
-          status: "active",
-          category: draft.category || undefined,
-          note: draft.note?.trim() || undefined,
-          createdAt: today(),
-          updatedAt: Date.now(),
-        };
-        set((s) => ({
-          installmentPlans: [plan, ...(s.installmentPlans ?? [])],
-          ...clearTombstone(s.deleted, planId),
-        }));
-        // دفعةٌ أولى حقيقية = مصروفٌ حقيقيّ بتاريخه. الإيقاف متاحٌ لمن سجّلها
-        // بنفسه قبل قليل، فلا تُحتسب مرّتين.
-        if (down > 0 && draft.recordDown !== false) {
-          get().recordInstallmentPayment(planId, { role: "down", amount: down, date: downDate });
-        }
-        if (draft.reminder !== false) get().linkInstallmentReminder(planId);
-        return planId;
-      },
-
-      // يربط معاملةً قائمة بالقسط الذي يطابقها — بلا أن يبحث المالك عن الخطة.
-      // لا يربط إلا حين يكون المرشّح وحيداً (راجع suggestPlanLink)، فلا يُنسب
-      // ريالٌ لخطةٍ بالخطأ.
-      autoLinkTransaction: (txId) => {
-        const st = get();
-        const tx = st.transactions.find((t) => t.id === txId);
-        if (!tx) return "";
-        const hit = suggestPlanLink(tx, st.installmentPlans ?? [], st.transactions, today());
-        if (!hit) return "";
-        get().linkTransactionToPlan(txId, {
-          planId: hit.plan.id,
-          role: hit.role,
-          installmentNo: hit.row.no,
-        });
-        return hit.plan.name || hit.plan.provider;
-      },
-
-      // ---------- الأصول (الإهلاك) ----------
-      // لا شيء هنا يلمس المعاملات: الأصل سجلُّ ملكيةٍ وقيمة، والمصروف سُجّل يوم
-      // الشراء (أو في أقساطه). الإهلاك يُحسب عند العرض ولا يُخزَّن.
-      addAsset: (asset) =>
-        set((s) => ({
-          assets: [{ ...asset, updatedAt: Date.now() }, ...(s.assets ?? [])],
-          ...clearTombstone(s.deleted, asset.id),
-        })),
-
-      updateAsset: (id, updates) =>
-        set((s) => ({
-          assets: (s.assets ?? []).map((a) =>
-            a.id === id ? { ...a, ...updates, updatedAt: Date.now() } : a
-          ),
-        })),
-
-      deleteAsset: (id) =>
-        set((s) => ({ assets: (s.assets ?? []).filter((a) => a.id !== id) })),
 
       setBudget: (category, cap) =>
         set((s) => {
@@ -1618,41 +1096,6 @@ export const useAppStore = create<AppStore>()(
 
       deleteFutureLetter: (id) =>
         set((s) => ({ futureLetters: s.futureLetters.filter((l) => l.id !== id) })),
-
-      addShelfItem: (item) =>
-        set((st) => ({
-          shelfItems: [item, ...(st.shelfItems ?? [])],
-          // إعادةُ معرّفٍ حُذف للتوّ (تراجعٌ عن حذف) ترفع شاهدَ حذفه، وإلا أعاده
-          // الدمجُ إلى العدم في أوّل مزامنة — كما في `addTransaction`.
-          ...clearTombstone(st.deleted, item.id),
-        })),
-      updateShelfItem: (id, updates) =>
-        set((st) => ({
-          shelfItems: (st.shelfItems ?? []).map((x) => (x.id === id ? { ...x, ...updates } : x)),
-        })),
-      releaseShelfItem: (id) =>
-        set((st) => ({
-          shelfItems: (st.shelfItems ?? []).map((x) =>
-            x.id === id ? { ...x, releasedAt: today() } : x
-          ),
-        })),
-      renewShelfItem: (id) =>
-        set((st) => ({
-          shelfItems: (st.shelfItems ?? []).map((x) =>
-            x.id === id ? { ...x, placedAt: today(), releasedAt: undefined } : x
-          ),
-        })),
-      buyShelfItem: (id, transactionId) =>
-        set((st) => ({
-          shelfItems: (st.shelfItems ?? []).map((x) =>
-            x.id === id ? { ...x, boughtAt: today(), transactionId } : x
-          ),
-        })),
-      deleteShelfItem: (id) =>
-        set((st) => ({
-          shelfItems: (st.shelfItems ?? []).filter((x) => x.id !== id),
-          deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
-        })),
 
       addBook: (book) =>
         set((s) => ({ books: [book, ...s.books] })),
@@ -2151,17 +1594,11 @@ export const useAppStore = create<AppStore>()(
           readingLogs: data.readingLogs ?? [],
           knowledgeSources: data.knowledgeSources ?? [],
           benefits: data.benefits ?? [],
-          shelfItems: data.shelfItems ?? [],
           journalEntries: data.journalEntries ?? [],
           habits: data.habits ?? [],
-          recurring: data.recurring ?? [],
-          installmentPlans: data.installmentPlans ?? [],
-          // الأصول كانت غائبةً هنا رغم وجودها في snapshot والدمج والنسخة
-          // الاحتياطية: فكان أصلٌ قادمٌ من السحابة (أو من ملفٍ مُستعاد) لا يدخل
-          // المتجر أبداً. أيّ حقلٍ في AppData يجب أن يُغطّى في الستة كلّها
-          // (snapshot · hydrate · normalizeBackup · mergeAppData · hasData ·
-          // cloudHasUnseen) — راجع CLAUDE.md.
-          assets: data.assets ?? [],
+          // أيّ حقلٍ في AppData يجب أن يُغطّى في الستة كلّها (snapshot · hydrate ·
+          // normalizeBackup · mergeAppData · hasData · cloudHasUnseen) — راجع
+          // CLAUDE.md؛ إغفال أحدها عطلٌ صامت (كانت `assets` غائبةً عن hydrate).
           budgets: data.budgets ?? [],
           categories: data.categories ?? DEFAULT_CATEGORIES,
           reserves: data.reserves ?? [],
@@ -2191,16 +1628,12 @@ export const useAppStore = create<AppStore>()(
         const s = get();
         return {
           transactions: s.transactions,
-          assets: s.assets ?? [],
           books: s.books,
           readingLogs: s.readingLogs,
           knowledgeSources: s.knowledgeSources ?? [],
           benefits: s.benefits ?? [],
-          shelfItems: s.shelfItems ?? [],
           journalEntries: s.journalEntries,
           habits: s.habits,
-          recurring: s.recurring,
-          installmentPlans: s.installmentPlans ?? [],
           budgets: s.budgets,
           categories: s.categories,
           reserves: s.reserves,
@@ -2230,7 +1663,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 16,
+      version: 17,
       // التخزين المؤجَّل لا الخام: كلّ تعديلٍ كان يُسلسل المتجر كاملاً ويكتبه
       // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
       // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.
@@ -2252,23 +1685,9 @@ export const useAppStore = create<AppStore>()(
               id: t.id, date: t.date, amount: t.amount,
               category: t.category, note: t.note, linkedJournalId: t.linkedJournalId,
             }));
-          const recurring = ((state.recurring as Record<string, unknown>[]) ?? [])
-            .filter((r) => r.type !== "دخل" && oldExpenseCategories.has(r.category as string))
-            .map((r) => {
-              let unit = "شهري";
-              let every = 1;
-              if (r.frequency === "أسبوعي") { unit = "أسبوعي"; every = 1; }
-              else if (r.frequency === "سنوي") { unit = "شهري"; every = 12; }
-              return {
-                id: r.id, amount: r.amount, category: r.category, note: r.note,
-                unit, every, dayOfMonth: (r.dayOfMonth as number) ?? 1,
-                anchorDate: (r.lastGenerated as string) ?? todayStr,
-                active: r.active, lastGenerated: r.lastGenerated,
-              };
-            });
           const budgets = ((state.budgets as Record<string, unknown>[]) ?? [])
             .filter((b) => oldExpenseCategories.has(b.category as string));
-          state = { ...state, transactions, recurring, budgets, prayerLogs: state.prayerLogs ?? [] };
+          state = { ...state, transactions, budgets, prayerLogs: state.prayerLogs ?? [] };
         }
 
         // v3 turns the fixed category union into user-managed categories
@@ -2285,9 +1704,6 @@ export const useAppStore = create<AppStore>()(
           const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
             .map((t) => ({ ...t, category: remapCategory(t.category) })) as Transaction[];
 
-          const recurring = ((state.recurring as Record<string, unknown>[]) ?? [])
-            .map((r) => ({ ...r, category: remapCategory(r.category) })) as RecurringTransaction[];
-
           // Several old categories can collapse onto the same new one —
           // sum their caps instead of silently dropping any.
           const oldBudgets = (state.budgets as Record<string, unknown>[]) ?? [];
@@ -2301,7 +1717,6 @@ export const useAppStore = create<AppStore>()(
           state = {
             ...state,
             transactions,
-            recurring,
             budgets,
             categories: state.categories ?? DEFAULT_CATEGORIES,
             dailyBudget: state.dailyBudget ?? null,
@@ -2369,7 +1784,6 @@ export const useAppStore = create<AppStore>()(
           state = {
             ...state,
             transactions: stripBig(state.transactions),
-            recurring: stripBig(state.recurring),
           };
         }
 
@@ -2450,29 +1864,29 @@ export const useAppStore = create<AppStore>()(
           }
         }
 
-        // v14 يُضيف الأقساط (`installmentPlans`) ويُصرّح بدلالة الالتزامات المتكرّرة
-        // القديمة: كلّها كانت تولّد معاملاتٍ تلقائياً، فتُختم `generationMode:
-        // "auto"` صراحةً (والغياب يبقى مقروءاً auto عبر generationModeOf، فالبيانات
-        // القادمة من جهازٍ لم يُرقَّ بعد تعمل كما كانت). `updatedAt: 0` كي يفوز
-        // عليها أيّ تعديلٍ حقيقيٍّ لاحق في الدمج، ولا تطغى ترقيةٌ على تعديلٍ حديث
-        // من الجهاز الآخر. لا معاملةً تُنشأ ولا تُحذف في هذه المهاجرة.
-        if (version < 14) {
-          const rec = ((state.recurring as RecurringTransaction[]) ?? []).map((r) => ({
-            ...r,
-            generationMode: r.generationMode ?? ("auto" as const),
-            updatedAt: r.updatedAt ?? 0,
-          }));
-          state = {
-            ...state,
-            recurring: rec,
-            installmentPlans: state.installmentPlans ?? [],
-          };
-        }
-
-        // v15 يفتح «الأصول»: مجموعةٌ جديدة فارغة لا تمسّ أيّ بياناتٍ قائمة.
-        // كلّ قارئٍ يستعمل `assets ?? []` أصلاً، فالمهاجرة هنا للوضوح لا للإنقاذ.
-        if (version < 15) {
-          state = { ...state, assets: state.assets ?? [] };
+        // v17 يحذف أربعة أبوابٍ بقرار المالك: الأصول · الأقساط · الالتزامات
+        // المتكرّرة · الرفّ. كانت تصف التزاماً أو تعرض حساباً، ولم تكن تصرف —
+        // فحذفُها لا يغيّر ريالاً في السجل ولا في الميزانية اليومية ولا السقوف.
+        //
+        // ما يُحذف هنا **بياناتُ تلك الأبواب وحدها**، وتبقى كل معاملةٍ سُجّلت
+        // كما هي: قسطٌ دُفع يبقى مصروفاً في يومه، وإيجارٌ ولّدته قاعدةٌ متكرّرة
+        // يبقى مصروفاً عادياً. الاستثناء الوحيد: معاملة «الأصل المؤجّل»
+        // (`deferred`) — شراءٌ بالتقسيط سُجّل التزاماً ولم يخرج من الجيب، وكان
+        // يُحتسب **صفراً** في كلّ حساب. بلا الأقساط ما عاد لها معنى، وبقاؤها
+        // يعني ظهورَ مبلغٍ كامل (١٢٠٠ مثلاً) صرفاً لم يحدث — فتُحذف. حذفُها لا
+        // يغيّر أيّ مجموع، لأنها كانت صفراً في كلّ مجموع.
+        if (version < 17) {
+          const txs = ((state.transactions as Record<string, unknown>[]) ?? [])
+            .filter((t) => !t.deferred)
+            .map(({
+              planId: _planId, planRole: _planRole, planInstallmentNo: _no,
+              planLinkedAt: _at, deferred: _deferred, ...rest
+            }) => rest);
+          const {
+            recurring: _recurring, installmentPlans: _plans, assets: _assets,
+            shelfItems: _shelf, ...restState
+          } = state;
+          state = { ...restState, transactions: txs };
         }
 
         return state as unknown as AppData;

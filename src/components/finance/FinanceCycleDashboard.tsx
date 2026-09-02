@@ -17,7 +17,7 @@ import {
 import { arNum, arPct } from "@/lib/madar/format";
 import { formatAmount, formatDateShort, getCategoryInfo } from "@/lib/utils";
 
-type GoTarget = "daily" | "budgets" | "recurring" | "installments" | "reserves" | "history";
+type GoTarget = "daily" | "budgets" | "reserves" | "history";
 type SummaryId = "curve" | "cycle" | "budgets";
 
 interface FinanceCycleDashboardProps {
@@ -163,19 +163,6 @@ export function FinanceCycleDashboard({
               {projected.projected >= 0 ? "الاحتياطي" : "راجع الخطة"}
             </button>
           </div>
-        )}
-
-        {overview.nearest && (
-          <button
-            type="button"
-            className="mdr-finance-next-commitment"
-            onClick={() => onGo(overview.nearest?.kind === "installment" ? "installments" : "recurring")}
-          >
-            <span>أقرب التزام</span>
-            <strong>{overview.nearest.note || getCategoryInfo(categories, overview.nearest.category).label}</strong>
-            <b>{formatAmount(overview.nearest.amount)} ر.س · {salaryLabel(overview.nearest.daysUntil)}</b>
-            <ChevronLeft size={15} />
-          </button>
         )}
 
         {curve && score && (

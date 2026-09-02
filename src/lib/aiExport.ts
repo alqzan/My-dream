@@ -116,14 +116,11 @@ function financeTransaction(data: AppData, transaction: Transaction, redact: boo
   const record: Record<string, unknown> = {
     date: transaction.date,
     category: categoryLabel(data, transaction.category),
-    planRole: transaction.planRole,
-    deferred: transaction.deferred,
     offBudget: transaction.offBudget,
   };
   if (!redact) {
     record.amount = transaction.amount;
     record.note = transaction.note;
-    record.planId = transaction.planId;
   }
   return record;
 }
@@ -147,50 +144,11 @@ function financeData(data: AppData, period: AiExportPeriod, redact: boolean): Re
         ...(redact ? {} : { amount: deposit.amount, note: deposit.note }),
       })),
   }));
-  const installmentPlans = (data.installmentPlans ?? [])
-    .filter((plan) => period.mode === "all" || inPeriod(plan.createdAt, period) || inPeriod(plan.firstDueDate, period))
-    .map((plan) => ({
-      ...(redact ? {} : { provider: plan.provider, name: plan.name, note: plan.note }),
-      status: plan.status,
-      count: plan.count,
-      firstDueDate: plan.firstDueDate,
-      createdAt: plan.createdAt,
-      category: category(plan.category),
-      ...(redact
-        ? {}
-        : {
-            totalPrice: plan.totalPrice,
-            downPayment: plan.downPayment,
-            installmentAmount: plan.installmentAmount,
-            finalPayment: plan.finalPayment,
-            fees: plan.fees,
-          }),
-    }));
-  const recurring = (data.recurring ?? []).map((rule) => ({
-    category: category(rule.category),
-    unit: rule.unit,
-    every: rule.every,
-    dayOfMonth: rule.dayOfMonth,
-    active: rule.active,
-    generationMode: rule.generationMode,
-    ...(redact ? {} : { amount: rule.amount, note: rule.note }),
-  }));
-  const assets = (data.assets ?? [])
-    .filter((asset) => period.mode === "all" || inPeriod(asset.purchaseDate, period) || inPeriod(asset.soldDate, period))
-    .map((asset) => ({
-      ...(redact ? {} : { name: asset.name, note: asset.note }),
-      purchaseDate: asset.purchaseDate,
-      lifeDays: asset.lifeDays,
-      ...(redact ? {} : { purchasePrice: asset.purchasePrice, salvageValue: asset.salvageValue, soldDate: asset.soldDate, soldPrice: asset.soldPrice }),
-    }));
   return {
     transactions,
     categories: (data.categories ?? []).map((item) => ({ label: item.label })),
     budgets,
     reserves,
-    installmentPlans,
-    recurring,
-    assets,
     ...(redact ? {} : { monthlyIncome: data.monthlyIncome, dailyBudget: data.dailyBudget }),
   };
 }

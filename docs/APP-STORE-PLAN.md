@@ -31,7 +31,7 @@
 | الأمر | الأثر |
 |---|---|
 | `output: "export"` في `next.config.ts` | مجلد `out/` هو `webDir` لـCapacitor حرفياً. لا خادم، لا SSR، لا إعادة كتابة. |
-| منطق المجال نقيّ في `src/lib/*.ts` | `installments` · `assets` · `budgetStatus` · `dayAggregator` · `merge` · `syncDecision` — بلا `window`، ومختبَرة. تعبر بصفر تعديل. |
+| منطق المجال نقيّ في `src/lib/*.ts` | `budgetStatus` · `dayAggregator` · `merge` · `syncDecision` — بلا `window`، ومختبَرة. تعبر بصفر تعديل. |
 | `idbStorage.ts` واجهة `StateStorage` | نقطة تبديل واحدة، لا نثرٌ في الصفحات. المتجر يستعمل `persistedIdbStorage` — الغلافُ المؤجَّل حولها (`persistScheduler.ts`) — فالتبديل يطال `idbStorage` وحدها ويبقى التأجيل فوقها كما هو. |
 | `mediaCache.ts` واجهة قراءة الوسائط | بايتات الصور/الصوت **لا تعيش في لقطة المتجر** بل مفتاحاً لكل هاش في IndexedDB (`madar-media:<hash>`)، وتُقرأ عند العرض بسقف ذاكرةٍ صارم (LRU، 32 ميغابايت). نقطة تبديل واحدة: `idbGet` هنا وحدها هي ما يُستبدل بمخزن الملفات الأصليّ، وباقي المنطق (`mediaSources.ts` نقيّ) يعبر بصفر تعديل. الجالب الاحتياطي من R2 مُحقَنٌ من `SyncProvider` لا مستورَداً — فلا Firebase في هذه الطبقة. |
 | `persistScheduler.ts` نقيّ | `setTimeout` وحده: لا DOM ولا IndexedDB ولا متجر. يعبر بصفر تعديل، ومختبَرٌ بمؤقّتاتٍ وهمية. |
@@ -71,7 +71,6 @@
 | `src/lib/firebase.ts` (`madar-sync-media-key`، `madar-sync-key-version`) | فصل مفتاح البيانات/الوسائط (`docs/KEY-SEPARATION.md`) — غيابهما يرجع الجهاز لسلوك v1 تلقائياً (آمن)، لا انهيار |
 | `src/lib/lock.ts` (`madar-lock-pin`) | القفل يسقط ← الخصوصية |
 | `src/lib/quran/session.ts` · `readPrefs.ts` | موضع القراءة والتفضيلات |
-| `src/lib/insightPrefs.ts` | تفضيلات البصائر |
 | `src/components/journal/JournalForm.tsx` (`madar-journal-draft`) | مسودةُ مذكرةٍ لم تُحفظ بعد — نصٌّ كتبه المالك ولا نسخة له في المتجر |
 | البقية (تفضيلات عرضٍ في المكوّنات) | مزعج لا كارثيّ |
 

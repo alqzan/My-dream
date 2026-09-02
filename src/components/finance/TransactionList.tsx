@@ -1,7 +1,6 @@
 "use client";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, getMainCategory } from "@/lib/utils";
-import { INSTALLMENT_ROLE_LABEL } from "@/lib/installments";
 import { Trash2, PiggyBank } from "lucide-react";
 
 interface TransactionListProps {
@@ -59,24 +58,9 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                     <PiggyBank size={9} /> {reservedPct}% احتياطي
                   </span>
                 )}
-                {/* دفعةٌ مربوطة بخطة أقساط — تبقى مصروفاً عادياً في كل الحسابات،
-                    والوسم يوضّح لماذا سُجّلت حتى لا تبدو مصروفاً غامضاً. */}
-                {tx.planId && (
-                  <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 dark:bg-white/10 dark:text-gray-300 px-1.5 py-0.5 rounded-full shrink-0">
-                    🧾 {tx.planRole ? INSTALLMENT_ROLE_LABEL[tx.planRole] : "قسط"}
-                    {tx.planRole === "installment" && tx.planInstallmentNo ? ` ${tx.planInstallmentNo}` : ""}
-                  </span>
-                )}
-                {/* شراءٌ مؤجّل (مهب كاش): لم يخرج من الحساب فلا يُحتسب صرفاً —
-                    نقولها صريحةً حتى لا يبدو الرقم ناقصاً في حسابات الشهر. */}
-                {tx.deferred && (
-                  <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 dark:bg-amber-500/20 dark:text-amber-300 px-1.5 py-0.5 rounded-full shrink-0">
-                    مؤجّل — لا يُحتسب
-                  </span>
-                )}
                 {/* مصروفٌ استثنائيّ خارج الميزانيات: صرفٌ حقيقيّ (يبقى بالأحمر
                     وفي المجاميع) لكنّه لا يخصم من اليومية ولا السقوف. */}
-                {tx.offBudget && !tx.deferred && (
+                {tx.offBudget && (
                   <span className="text-[10px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full shrink-0">
                     خارج الميزانيات
                   </span>
@@ -86,9 +70,8 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
               <div className="text-xs text-gray-400 mt-0.5">{formatDate(tx.date)}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {/* المؤجّل بلا إشارة سالبة ولا لونٍ أحمر — لم يخرج من الجيب. */}
-              <span className={`text-base font-bold ${tx.deferred ? "text-gray-400 line-through" : "text-red-500"}`}>
-                {tx.deferred ? "" : "-"}{formatAmount(tx.amount)}
+              <span className="text-base font-bold text-red-500">
+                -{formatAmount(tx.amount)}
                 <span className="text-xs font-normal mr-0.5">ر.س</span>
               </span>
               {onDelete && (

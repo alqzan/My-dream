@@ -3,10 +3,6 @@ export const FINANCE_DISPLAY_IDS = [
   "cycle",
   "budgets",
   "daily",
-  "shelf",
-  "recurring",
-  "installments",
-  "assets",
   "reserves",
   "history",
 ] as const;
@@ -21,10 +17,6 @@ export const FINANCE_DISPLAY_LABELS: Record<FinanceDisplayId, { title: string; d
   cycle: { title: "حالة الدورة", description: "المتاح، الصرف، الأيام، والانضباط" },
   budgets: { title: "سقوف الإنفاق", description: "الملخص الدائري وإدارة السقوف معًا" },
   daily: { title: "الميزانية اليومية", description: "البدل اليومي وضبط دورة الراتب" },
-  shelf: { title: "الرفّ", description: "المشتريات التي تنتظر قبل اتخاذ القرار" },
-  recurring: { title: "المتكررة والقادم", description: "الالتزامات والمصاريف القادمة" },
-  installments: { title: "الأقساط", description: "خطط التقسيط ودفعاتها" },
-  assets: { title: "الأصول", description: "الأجهزة والمقتنيات واستهلاكها" },
   reserves: { title: "الاحتياطيات", description: "الأوعية والادخار والتعبئة" },
   history: { title: "آخر العمليات", description: "التقويم وسجل المصروفات" },
 };

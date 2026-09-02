@@ -38,8 +38,6 @@ describe("backup validation", () => {
       ["books", { id: "b1" }],
       ["habits", { id: "h1" }],
       ["reserves", { id: "r1" }],
-      ["assets", { id: "a1" }],
-      ["recurring", { id: "r1" }],
     ] as const) {
       expect(isValidBackupPayload({ ...valid, [field]: [item] })).toBe(false);
     }

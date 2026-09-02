@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  mergeAppData, mergeHifz, mergeRecurringRules, legacyHifzGen, unionOrdered, journalShardId,
+  mergeAppData, mergeHifz, legacyHifzGen, unionOrdered, journalShardId,
   budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey,
   applyTombstones, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD,
 } from "./merge";
@@ -8,7 +8,7 @@ import { mediaTombKey } from "./mediaHash";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type {
   AppData, JournalEntry, Transaction, ReserveFund, Habit, HifzState, HifzPlan,
-  RecurringTransaction, InstallmentPlan, Asset, Book, ReadingLog, QuranReflection,
+  Book, ReadingLog, QuranReflection,
   FutureLetter, FinanceCategoryDef,
 } from "./types";
 
@@ -20,9 +20,6 @@ function base(overrides: Partial<AppData> = {}): AppData {
     readingLogs: [],
     journalEntries: [],
     habits: [],
-    recurring: [],
-    installmentPlans: [],
-    assets: [],
     budgets: [],
     categories: [],
     reserves: [],
@@ -570,162 +567,6 @@ describe("mergeHifz — record deletions survive sync (generation tombstones)", 
   });
 });
 
-describe("mergeAppData — deterministic recurring ids dedupe", () => {
-  it("two devices generating the same recurring occurrence collapse to one", () => {
-    const id = "rec_R1_2026-05-01";
-    const local = base({ transactions: [tx({ id, amount: 500 })] });
-    const cloud = base({ transactions: [tx({ id, amount: 500 })] });
-    const merged = mergeAppData(local, cloud);
-    expect(merged.transactions.filter((t) => t.id === id)).toHaveLength(1);
-  });
-});
-
-describe("mergeRecurringRules — تعديلٌ يفوز، وlastGenerated لا يرجع للخلف", () => {
-  const rule = (over: Partial<RecurringTransaction> & { id: string }): RecurringTransaction => ({
-    amount: 500, category: "cat", note: "إيجار", unit: "شهري", every: 1,
-    dayOfMonth: 1, anchorDate: "2026-01-01", active: true, ...over,
-  });
-
-  it("keeps the most recent lastGenerated from either device (never rewinds)", () => {
-    const ahead = rule({ id: "r1", lastGenerated: "2026-05-01", updatedAt: 1000 });
-    const behind = rule({ id: "r1", lastGenerated: "2026-04-01", updatedAt: 2000 });
-    // الجهاز صاحب التعديل الأحدث متأخّرٌ في التوليد — يفوز بحقوله، ويبقى
-    // lastGenerated الأحدث فلا يُعاد توليد قسط مايو.
-    for (const merged of [mergeRecurringRules([ahead], [behind]), mergeRecurringRules([behind], [ahead])]) {
-      expect(merged).toHaveLength(1);
-      expect(merged[0].lastGenerated).toBe("2026-05-01");
-    }
-  });
-
-  it("the newer edit wins per field, in both orders (commutative)", () => {
-    const a = rule({ id: "r1", amount: 700, active: false, updatedAt: 3000 });
-    const b = rule({ id: "r1", amount: 500, active: true, updatedAt: 2000 });
-    for (const merged of [mergeRecurringRules([a], [b]), mergeRecurringRules([b], [a])]) {
-      expect(merged[0].amount).toBe(700);
-      expect(merged[0].active).toBe(false);
-    }
-  });
-
-  it("propagates a switch to reminder mode by recency", () => {
-    const a = rule({ id: "r1", generationMode: "reminder", updatedAt: 5000 });
-    const b = rule({ id: "r1", generationMode: "auto", updatedAt: 4000 });
-    expect(mergeRecurringRules([b], [a])[0].generationMode).toBe("reminder");
-  });
-
-  it("keeps rules that live on only one device", () => {
-    const merged = mergeRecurringRules([rule({ id: "r1" })], [rule({ id: "r2" })]);
-    expect(merged.map((r) => r.id).sort()).toEqual(["r1", "r2"]);
-  });
-
-  it("falls back to the primary copy when neither side carries a stamp (legacy)", () => {
-    const a = rule({ id: "r1", amount: 111 });
-    const b = rule({ id: "r1", amount: 222 });
-    expect(mergeRecurringRules([a], [b])[0].amount).toBe(111);
-  });
-
-  it("through mergeAppData: a deleted rule stays deleted and lastGenerated holds", () => {
-    const local = base({
-      lastUpdated: "2026-05-01T00:00:00.000Z",
-      recurring: [rule({ id: "r1", lastGenerated: "2026-05-01", updatedAt: 10 })],
-      deleted: { r2: Date.now() },
-    });
-    const cloud = base({
-      lastUpdated: "2026-05-09T00:00:00.000Z",
-      recurring: [
-        rule({ id: "r1", lastGenerated: "2026-03-01", updatedAt: 20 }),
-        rule({ id: "r2" }), // محذوفة محلياً — لا تعود
-      ],
-    });
-    const merged = mergeAppData(local, cloud);
-    expect(merged.recurring.map((r) => r.id)).toEqual(["r1"]);
-    expect(merged.recurring[0].lastGenerated).toBe("2026-05-01");
-  });
-});
-
-describe("mergeAppData — خطط الأقساط", () => {
-  const plan = (over: Partial<InstallmentPlan> & { id: string }): InstallmentPlan => ({
-    provider: "تمارا", name: "جوّال", totalPrice: 1200, downPayment: 200,
-    installmentAmount: 100, count: 10, firstDueDate: "2026-02-15",
-    status: "active", createdAt: "2026-02-01", ...over,
-  });
-
-  it("unions plans from both devices", () => {
-    const local = base({ installmentPlans: [plan({ id: "p1" })] });
-    const cloud = base({ installmentPlans: [plan({ id: "p2" })] });
-    expect(mergeAppData(local, cloud).installmentPlans.map((p) => p.id).sort()).toEqual(["p1", "p2"]);
-  });
-
-  it("the newer per-plan edit wins even when the OTHER device holds the newer doc stamp", () => {
-    const local = base({
-      lastUpdated: "2026-05-01T00:00:00.000Z",
-      installmentPlans: [plan({ id: "p1", status: "settled", updatedAt: 9000 })],
-    });
-    const cloud = base({
-      lastUpdated: "2026-05-20T00:00:00.000Z",
-      installmentPlans: [plan({ id: "p1", status: "active", updatedAt: 100 })],
-    });
-    expect(mergeAppData(local, cloud).installmentPlans[0].status).toBe("settled");
-    expect(mergeAppData(cloud, local).installmentPlans[0].status).toBe("settled");
-  });
-
-  it("a deleted plan is not resurrected by the other device's copy", () => {
-    const local = base({ installmentPlans: [], deleted: { p1: Date.now() } });
-    const cloud = base({ installmentPlans: [plan({ id: "p1" })], lastUpdated: "2026-06-01T00:00:00.000Z" });
-    expect(mergeAppData(local, cloud).installmentPlans).toHaveLength(0);
-    expect(mergeAppData(cloud, local).installmentPlans).toHaveLength(0);
-  });
-
-  it("payments linked to a plan survive the merge with their role intact", () => {
-    const paid = tx({ id: "pay1", amount: 100, planId: "p1", planRole: "installment", planInstallmentNo: 1, updatedAt: 5 });
-    const local = base({ installmentPlans: [plan({ id: "p1" })], transactions: [paid] });
-    const cloud = base({ installmentPlans: [plan({ id: "p1" })], transactions: [] });
-    const merged = mergeAppData(local, cloud);
-    expect(merged.transactions).toHaveLength(1);
-    expect(merged.transactions[0].planRole).toBe("installment");
-    expect(merged.transactions[0].planInstallmentNo).toBe(1);
-  });
-});
-
-// الأصول كانت بلا اختبار دمجٍ واحد رغم أنها المجموعة التي تخلّفت بين الأجهزة
-// (0.1.298). نغطّيها بما غُطّيت به خطط الأقساط بالضبط.
-describe("mergeAppData — الأصول تعبر بين الأجهزة ولا تعود بعد حذفها", () => {
-  const asset = (over: Partial<Asset> & { id: string }): Asset => ({
-    name: "ماك بوك", purchaseDate: "2026-07-26", purchasePrice: 5499, lifeDays: 1825,
-    createdAt: "2026-07-26", ...over,
-  });
-
-  it("unions assets from both devices", () => {
-    const local = base({ assets: [asset({ id: "a1" })] });
-    const cloud = base({ assets: [asset({ id: "a2" })] });
-    expect(mergeAppData(local, cloud).assets.map((a) => a.id).sort()).toEqual(["a1", "a2"]);
-    expect(mergeAppData(cloud, local).assets.map((a) => a.id).sort()).toEqual(["a1", "a2"]);
-  });
-
-  it("the newer per-asset edit wins even when the OTHER device holds the newer doc stamp", () => {
-    const local = base({
-      lastUpdated: "2026-05-01T00:00:00.000Z",
-      assets: [asset({ id: "a1", lifeDays: 730, updatedAt: 9000 })],
-    });
-    const cloud = base({
-      lastUpdated: "2026-05-20T00:00:00.000Z",
-      assets: [asset({ id: "a1", lifeDays: 1825, updatedAt: 100 })],
-    });
-    expect(mergeAppData(local, cloud).assets[0].lifeDays).toBe(730);
-    expect(mergeAppData(cloud, local).assets[0].lifeDays).toBe(730);
-  });
-
-  it("a deleted asset is not resurrected by the other device's copy", () => {
-    const local = base({ assets: [], deleted: { a1: Date.now() } });
-    const cloud = base({ assets: [asset({ id: "a1" })], lastUpdated: "2026-06-01T00:00:00.000Z" });
-    expect(mergeAppData(local, cloud).assets).toHaveLength(0);
-    expect(mergeAppData(cloud, local).assets).toHaveLength(0);
-  });
-});
-
-// ===================== تعديلُ عنصرٍ قائم لا يرجع للخلف =====================
-// السيناريو الحقيقي: تُعدَّل صفحةُ كتابٍ على الآيفون، والآيباد غيرُ متّصلٍ يحمل
-// النسخة القديمة ثمّ يسجّل شيئاً آخر (فيصير ختمُ مستنده أحدث) ويعود للاتصال.
-// قبل هذه الأختام كانت نسخةُ الكتاب القديمة تفوز فيرجع تقدّم القراءة.
 describe("mergeAppData — تعديلُ عنصرٍ قائم يفوز بطابعه لا بختم المستند", () => {
   const olderDoc = "2026-05-01T00:00:00.000Z";
   const newerDoc = "2026-05-20T00:00:00.000Z";

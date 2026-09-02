@@ -5,14 +5,9 @@ import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { BankImport } from "@/components/finance/BankImport";
-import { RecurringManager } from "@/components/finance/RecurringManager";
-import { UpcomingRecurring } from "@/components/finance/UpcomingRecurring";
 import { BudgetTracker } from "@/components/finance/BudgetTracker";
 import { CategoryManager } from "@/components/finance/CategoryManager";
 import { ReserveFunds } from "@/components/finance/ReserveFunds";
-import { InstallmentPlans } from "@/components/finance/InstallmentPlans";
-import { Assets } from "@/components/finance/Assets";
-import { Shelf } from "@/components/madar/mal/Shelf";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceCycleDashboard } from "@/components/finance/FinanceCycleDashboard";
@@ -24,18 +19,16 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
-import type { Transaction, ShelfItem } from "@/lib/types";
+import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package, Hourglass } from "lucide-react";
 import { getCategoryInfo, normalizeArabic, formatAmount, today, uid } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
 } from "@/lib/financeOverview";
-import { assetsOverview } from "@/lib/assets";
 import { spendWindow, nextSalaryDate } from "@/lib/budgetCycle";
 import { buildCycleCurve } from "@/lib/cycleCurve";
 import { budgetStatuses } from "@/lib/budgetStatus";
-import { waitingItems, savedTotal, isRipe } from "@/lib/shelf";
 import {
   readFinanceDisplayVisibility,
   saveFinanceDisplayVisibility,
@@ -74,9 +67,8 @@ function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
 
 export default function FinancePage() {
   const {
-    transactions, recurring, installmentPlans, assets, categories, dailyBudget, reserves, budgets, salaryDay, lastSalaryConfirm, budgetWindow, monthlyIncome,
-    shelfItems, deleteTransaction, addTransaction,
-    addShelfItem, updateShelfItem, deleteShelfItem, releaseShelfItem, renewShelfItem, buyShelfItem,
+    transactions, categories, dailyBudget, reserves, budgets, salaryDay, lastSalaryConfirm, budgetWindow, monthlyIncome,
+    deleteTransaction, addTransaction,
   } = useAppStore();
 
   // Instant delete + 5s undo window.
@@ -87,19 +79,14 @@ export default function FinancePage() {
   }
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showRecurring, setShowRecurring] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | undefined>();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [importSms, setImportSms] = useState<string | null>(null);
-  // عنصرُ الرفّ الذي نضج ويُشترى الآن: نفتح به نموذجَ المصروف نفسَه (لا مساراً
-  // ثانياً للصرف) ثمّ نربط المعاملة بالعنصر بمعرّفها. هكذا يمرّ الشراء بكلّ ما
-  // يمرّ به أيّ مصروف — الميزانية اليومية والسقوف والسجل — بلا استثناء.
-  const [buyingShelf, setBuyingShelf] = useState<ShelfItem | null>(null);
   // حالة فتح أقسام «الخطة»: افتراضٌ ثابت (الميزانية اليومية) يطابق الخادم، ثمّ
   // نطبّق التفضيل المحفوظ محلياً + أي قسمٍ يطلبه رابطٌ عميق بعد التركيب.
   const [openSections, setOpenSections] = useState<Record<PlanSectionId, boolean>>(
-    () => defaultPlanOpen({ budgetAttention: false, negativeBalance: false, installmentOverdue: false })
+    () => defaultPlanOpen({ budgetAttention: false, negativeBalance: false })
   );
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -146,14 +133,13 @@ export default function FinancePage() {
     }
   }, [financeVisibility, financeVisibilityReady]);
 
-  // الروابط العميقة + التفضيل المحفوظ: ‎?open=add|recurring|categories‎ تفتح
-  // النافذة، و‎#daily/#budgets/#recurring/#installments/#reserves/#history‎ تفتح القسم المطويّ
+  // الروابط العميقة + التفضيل المحفوظ: ‎?open=add|categories‎ تفتح
+  // النافذة، و‎#daily/#budgets/#reserves/#history‎ تفتح القسم المطويّ
   // المقصود *قبل* التمرير إليه. التفضيل المحفوظ يُطبَّق أوّلاً ثمّ يعلوه فتح الرابط.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const open = params.get("open");
-    if (open === "recurring") setShowRecurring(true);
-    else if (open === "categories") setShowCategories(true);
+    if (open === "categories") setShowCategories(true);
     else if (open === "add") setShowForm(true);
     if (open) {
       window.history.replaceState(null, "", window.location.pathname + window.location.hash);
@@ -162,8 +148,8 @@ export default function FinancePage() {
     const hash = window.location.hash.slice(1);
     const hashSection = planSectionFromHash(hash);
     if (hash === "history") setHistoryOpen(true);
-    // بلا تفضيلٍ محفوظ نفتح ما يحتاج انتباهاً فعلاً (قسطٌ فائت ← سقفٌ متجاوَز ←
-    // الميزانية اليومية). القيم تُقرأ من مرجعٍ (ref) فيبقى الأثر لمرّة الوصول
+    // بلا تفضيلٍ محفوظ نفتح ما يحتاج انتباهاً فعلاً (سقفٌ متجاوَز ← الميزانية
+    // اليومية). القيم تُقرأ من مرجعٍ (ref) فيبقى الأثر لمرّة الوصول
     // وحدها ولا يُقحم قيماً متغيّرة في اعتماديّاته.
     const base = saved ?? defaultPlanOpen(attentionRef.current);
     setOpenSections((prev) => ({
@@ -201,26 +187,11 @@ export default function FinancePage() {
   // «نظرة اليوم» + تنبيهات السقوف — تجميعٌ عرضيّ يعيد استعمال دوالّ الحساب القائمة.
   const overview = useMemo(
     () => buildFinanceOverview({
-      dailyBudget, transactions, reserves, recurring, installmentPlans,
+      dailyBudget, transactions, reserves,
       salaryDay: salaryDay ?? 27, monthPrefix: currentMonth, todayStr: today(),
     }),
-    [dailyBudget, transactions, reserves, recurring, installmentPlans, salaryDay, currentMonth]
+    [dailyBudget, transactions, reserves, salaryDay, currentMonth]
   );
-  // ملخّص الأصول لرأس القسم — حسابٌ نقيّ من assets.ts، بلا أثرٍ على أيّ صرف.
-  const assetsSummary = useMemo(() => assetsOverview(assets ?? [], today()), [assets]);
-  // ملخّص الرفّ لرأس القسم: كم ينتظر، وكم نضج، وكم وفَّرتَ بتركِه — كلُّها مشتقّة.
-  const shelfSummary = useMemo(() => {
-    const list = shelfItems ?? [];
-    const todayStr = today();
-    const waiting = waitingItems(list);
-    const ripe = waiting.filter((k) => isRipe(k, todayStr)).length;
-    const saved = savedTotal(list);
-    // «نضج» تُقال مرّةً واحدة — في الشارة. تكرارُها في الملخّص ضجيجٌ لا خبر.
-    const text = waiting.length === 0
-      ? saved > 0 ? `وفَّرت ${formatAmount(saved)} ر.س بتركِه` : "لا شيء على الرفّ"
-      : `${formatAmount(waiting.length)} ينتظر`;
-    return { waiting: waiting.length, ripe, saved, text };
-  }, [shelfItems]);
   // تنبيهات السقوف على نافذة دورة الراتب (لا الشهر الميلادي) — نفس نافذة
   // BudgetTracker، فتتصفّر مع تأكيد «نزل الراتب».
   const cycleStart = useMemo(
@@ -253,11 +224,10 @@ export default function FinancePage() {
   );
   // ما يستحقّ الفتح عند أوّل زيارةٍ بلا تفضيلٍ محفوظ — في مرجعٍ يُقرأ داخل تأثير
   // الوصول (لا يُعاد تشغيله مع كل تغيّر رقم).
-  const attentionRef = useRef({ budgetAttention: false, negativeBalance: false, installmentOverdue: false });
+  const attentionRef = useRef({ budgetAttention: false, negativeBalance: false });
   attentionRef.current = {
     budgetAttention: alerts.over > 0 || alerts.near > 0,
     negativeBalance: overview.hasBudget && overview.availableToday < 0,
-    installmentOverdue: overview.installments.overdueCount > 0,
   };
 
   const months = [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
@@ -357,14 +327,10 @@ export default function FinancePage() {
         </div>
       )}
 
-      {/* كل أدوات المال الأصلية باقية بلا نقصان، لكنّها **مجموعتان** لا تسعُ
-          أقسامٍ متساوية الوزن: ما يخصّ إنفاقَ يومك، وما هو التزامٌ أو مخزونٌ
-          لا تفتحه كلَّ يوم. الترتيبُ وحده هو ما تغيّر — لا قسمَ حُذف ولا
-          اختُصر، والروابطُ العميقة (‎#shelf‎ …) تعمل كما كانت. */}
+      {/* أدوات المال بعد حذف الأصول والأقساط والمتكرّرة والرفّ: ما بقي كلُّه
+          يخصّ إنفاقَ يومك — البدل اليومي والسقوف والاحتياطيات. */}
       <div className="mdr-finance-tools">
       <div className="mdr-finance-plan-details">
-
-      <p className="mdr-finance-group">مالُ يومك</p>
 
       {isFinanceSectionVisible("daily") && <CollapsibleSection
         id="daily"
@@ -500,119 +466,6 @@ export default function FinancePage() {
       </div>
       </CollapsibleSection>}
 
-      <p className="mdr-finance-group">التزاماتُك ومخزونك</p>
-
-
-      {isFinanceSectionVisible("recurring") && <CollapsibleSection
-        id="recurring"
-        title="المتكررة والقادم"
-        icon={<Repeat size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.recurring}
-        onToggle={() => toggleSection("recurring")}
-        summary={
-          overview.nearest
-            ? `أقرب: ${overview.nearest.note || getCategoryInfo(categories, overview.nearest.category).label} · ${formatAmount(overview.nearest.amount)} ر.س`
-            : "لا التزامات"
-        }
-      >
-        <Card>
-          <UpcomingRecurring recurring={recurring} categories={categories} />
-          <button
-            onClick={() => setShowRecurring(true)}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-2.5 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press"
-          >
-            <Repeat size={15} className="text-finance" />
-            إدارة المصاريف المتكررة
-          </button>
-        </Card>
-      </CollapsibleSection>}
-
-      {isFinanceSectionVisible("installments") && <CollapsibleSection
-        id="installments"
-        title="الأقساط"
-        icon={<CalendarClock size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.installments}
-        onToggle={() => toggleSection("installments")}
-        summary={
-          overview.installments.activeCount > 0
-            ? `${formatAmount(overview.installments.activeCount)} خطة · متبقٍّ ${formatAmount(overview.installments.remainingTotal)} ر.س`
-            : "لا أقساط"
-        }
-        badge={
-          overview.installments.overdueCount > 0
-            ? <AlertBadge>{formatAmount(overview.installments.overdueCount)} متأخّر</AlertBadge>
-            : undefined
-        }
-      >
-        <Card>
-          <InstallmentPlans />
-        </Card>
-      </CollapsibleSection>}
-
-      {/* «الرفّ»: تأخيرُ الحكم مدّةً تُختار لكلّ عنصر — لا يمنع شراءً، يؤجّله حتى تهدأ
-          الشهوة. ما تُرِكَ يُجمع ثمنُه في «وفَّرت» **اشتقاقاً** من العناصر
-          المتروكة لا بعدّادٍ يتراكم (عدّادٌ يخسر زيادةً عند الدمج بين جهازين). */}
-      {isFinanceSectionVisible("shelf") && <CollapsibleSection
-        id="shelf"
-        title="الرفّ"
-        icon={<Hourglass size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.shelf}
-        onToggle={() => toggleSection("shelf")}
-        summary={shelfSummary.text}
-        badge={shelfSummary.ripe > 0 ? <RipeBadge>{formatAmount(shelfSummary.ripe)} نضج</RipeBadge> : undefined}
-      >
-        <Card>
-          <div className="mdr">
-            <Shelf
-              items={shelfItems ?? []}
-              todayStr={today()}
-              onAdd={(draft) =>
-                addShelfItem({
-                  id: uid(), name: draft.name, price: draft.price, reason: draft.reason,
-                  ripenDays: draft.ripenDays, placedAt: today(),
-                })
-              }
-              onEdit={(id, draft) =>
-                updateShelfItem(id, {
-                  name: draft.name, price: draft.price, reason: draft.reason, ripenDays: draft.ripenDays,
-                })
-              }
-              // الحذف **تصحيحُ إدخالٍ لا حكم**: شيءٌ وُضع سهواً يخرج بلا أن
-              // يُحسب فيما «وفَّرت» (ذلك ثوابُ «دَعْه» وحده). ولذلك تراجعٌ
-              // بضغطة كبقيّة الحذف في التطبيق، لا نافذةُ تأكيد.
-              onDelete={(item) => {
-                deleteShelfItem(item.id);
-                showUndo(`حذفت «${item.name}» من الرفّ`, () => addShelfItem(item));
-              }}
-              onRelease={releaseShelfItem}
-              onRenew={renewShelfItem}
-              onBuy={setBuyingShelf}
-            />
-          </div>
-        </Card>
-      </CollapsibleSection>}
-
-      {isFinanceSectionVisible("assets") && <CollapsibleSection
-        id="assets"
-        title="الأصول"
-        icon={<Package size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.assets}
-        onToggle={() => toggleSection("assets")}
-        summary={
-          assetsSummary.count > 0
-            ? `${formatAmount(assetsSummary.count)} أصل · قيمتها ${formatAmount(assetsSummary.bookValue)} ر.س · ${formatAmount(assetsSummary.perDay)} ر.س يومياً`
-            : "لا أصول بعد"
-        }
-      >
-        <Card>
-          <Assets />
-        </Card>
-      </CollapsibleSection>}
-
       {isFinanceSectionVisible("reserves") && <CollapsibleSection
         id="reserves"
         title="الاحتياطيات"
@@ -638,32 +491,12 @@ export default function FinancePage() {
         <TransactionForm onClose={() => { setShowForm(false); setEditTx(undefined); }} initial={editTx} />
       </Modal>
 
-      {/* شراءُ ما نضج: نموذجُ المصروف نفسُه بمبلغٍ واسمٍ جاهزين — والتصنيفُ بيد
-          المالك. بعد الحفظ نربط المعاملةَ بالعنصر فيخرج من الرفّ إلى السجل. */}
-      <Modal
-        open={!!buyingShelf}
-        onClose={() => setBuyingShelf(null)}
-        title={buyingShelf ? `اشترِ «${buyingShelf.name}»` : "شراء"}
-      >
-        {buyingShelf && (
-          <TransactionForm
-            onClose={() => setBuyingShelf(null)}
-            prefill={{ amount: buyingShelf.price, note: buyingShelf.name }}
-            onSaved={(tx) => buyShelfItem(buyingShelf.id, tx.id)}
-          />
-        )}
-      </Modal>
-
       <Modal
         open={showImport}
         onClose={() => { setShowImport(false); setImportSms(null); }}
         title="استيراد بنكي تلقائي 🤖"
       >
         <BankImport initialSms={importSms ?? undefined} onClose={() => { setShowImport(false); setImportSms(null); }} />
-      </Modal>
-
-      <Modal open={showRecurring} onClose={() => setShowRecurring(false)} title="المصاريف المتكررة 🔁">
-        <RecurringManager onClose={() => setShowRecurring(false)} />
       </Modal>
 
       <Modal open={showCategories} onClose={() => setShowCategories(false)} title="تصنيفاتي">

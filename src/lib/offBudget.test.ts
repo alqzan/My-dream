@@ -1,17 +1,15 @@
 // الضمانة العابرة للوحدات: **المصروف الموسوم `offBudget` صرفٌ حقيقيّ في كل
-// مجموعٍ وإحصاء، وصفرٌ في الميزانيات وحدها.** الفرق عن المؤجّل جوهريّ: ذاك لم
-// يخرج من الجيب أصلاً (`cashOut` = 0)، وهذا خرج لكنّه استثناءٌ لا يتكرّر (رسوم
-// اختبار) فلا يُحاسَب عليه في اليومية ولا السقوف. البوابة هي `budgetSpend`، فلو
-// أُضيف حسابُ ميزانيةٍ جديد يقرأ `cashOut` مباشرةً ظهر الخلل هنا.
+// مجموعٍ وإحصاء، وصفرٌ في الميزانيات وحدها** — خرج من الجيب لكنّه استثناءٌ لا
+// يتكرّر (رسوم اختبار) فلا يُحاسَب عليه في اليومية ولا السقوف. البوابة هي
+// `budgetSpend`، فلو أُضيف حسابُ ميزانيةٍ جديد يقرأ `cashOut` مباشرةً ظهر الخلل هنا.
 import { describe, it, expect } from "vitest";
 import {
-  cashOut, isCashOut, budgetSpend, countsInBudget, dailyShare, reserveShare,
+  cashOut, budgetSpend, countsInBudget, dailyShare, reserveShare,
   computeDailyBudgetStatus, today,
 } from "./utils";
 import { budgetWarningFor } from "./budgetStatus";
 import { buildFinanceOverview, budgetAlerts, biggestCashExpense } from "./financeOverview";
 import { aggregateDay } from "./dayAggregator";
-import { generateInsights } from "./insights";
 import type { Transaction, FinanceCategoryDef, Budget } from "./types";
 
 const T = today();
@@ -28,8 +26,7 @@ const txs = [exam, coffee];
 
 describe("budgetSpend — بوابة الميزانيات", () => {
   it("keeps an off-budget expense as real cash but zeroes its budget charge", () => {
-    expect(cashOut(exam)).toBe(1200); // خرج من الجيب — بخلاف المؤجّل
-    expect(isCashOut(exam)).toBe(true);
+    expect(cashOut(exam)).toBe(1200); // خرج من الجيب
     expect(budgetSpend(exam)).toBe(0);
     expect(countsInBudget(exam)).toBe(false);
     expect(budgetSpend(coffee)).toBe(100);
@@ -41,10 +38,6 @@ describe("budgetSpend — بوابة الميزانيات", () => {
     expect(dailyShare({ ...exam, reserveSplits: [{ fundId: "f1", pct: 50 }] })).toBe(0);
     // المال خرج فعلاً من المظروف، فالاحتياطي يُخصم كالعادة.
     expect(reserveShare({ ...exam, reserveSplits: [{ fundId: "f1", pct: 50 }] }, "f1")).toBe(600);
-  });
-
-  it("a deferred purchase stays zero cash regardless of the flag", () => {
-    expect(budgetSpend({ amount: 1200, deferred: true })).toBe(0);
   });
 });
 
@@ -69,22 +62,12 @@ describe("سقوف الأقسام", () => {
   it("budgetWarningFor ignores it too (the live warning while saving an expense)", () => {
     expect(budgetWarningFor("cat-x", budgets, [exam], cats, null)).toBeNull();
   });
-
-  it("راجعةُ البوصلة لا تُنذر بتجاوزٍ سببه مصروفٌ خارج الميزانيات", () => {
-    const data = {
-      transactions: [exam], journalEntries: [], readingLogs: [], books: [], habits: [],
-      budgets, categories: cats, reserves: [], prayerLogs: [],
-      dailyBudget: null, monthlyIncome: null, futureLetters: [], installmentPlans: [],
-      quranHifz: null, quranKhatma: null, lastBackup: T,
-    };
-    expect(generateInsights(data).some((i) => i.dedupeKey.startsWith("finance:budget-"))).toBe(false);
-  });
 });
 
 describe("يبقى مصروفاً في كل صورةٍ للصرف", () => {
   it("month spend, the day card and «أكبر مصروف» all count it", () => {
     const o = buildFinanceOverview({
-      dailyBudget: null, transactions: txs, reserves: [], recurring: [],
+      dailyBudget: null, transactions: txs, reserves: [],
       salaryDay: 27, monthPrefix: T.slice(0, 7), todayStr: T,
     });
     expect(o.monthSpend).toBe(1300);

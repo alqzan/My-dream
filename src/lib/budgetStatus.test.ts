@@ -1,11 +1,10 @@
-// حارس «شاشةٌ واحدة لا شاشتان»: البوصلة والشارة والتنبيه الحيّ وبطاقة السقوف
-// كلّها تقرأ من `budgetStatuses` على **نفس** النافذة. البلاغ الذي وُلد منه هذا
-// الملف: صفحة الأموال تقول «ضمن السقوف» (اليوم 2 من الدورة، صرف 209) والبوصلة
-// تقول «وصلت 97% من سقف أساسيات» — لأنها وحدها كانت تجمع على الشهر الميلادي.
+// حارس «شاشةٌ واحدة لا شاشتان»: الشارةُ والتنبيهُ الحيّ وبطاقةُ السقوف كلّها
+// تقرأ من `budgetStatuses` على **نفس** النافذة. البلاغ الذي وُلد منه هذا الملف:
+// صفحة الأموال تقول «ضمن السقوف» (اليوم 2 من الدورة، صرف 209) وشاشةٌ أخرى تقول
+// «وصلت 97% من سقف أساسيات» — لأنها وحدها كانت تجمع على الشهر الميلادي.
 import { describe, it, expect } from "vitest";
 import { budgetStatuses, budgetStatusFor, budgetWarningFor, describeSpendWindow } from "./budgetStatus";
 import { budgetAlerts } from "./financeOverview";
-import { generateInsights } from "./insights";
 import { spendWindow } from "./budgetCycle";
 import type { Transaction, FinanceCategoryDef, Budget } from "./types";
 
@@ -54,47 +53,6 @@ describe("نافذة السقوف: الدورة لا الشهر", () => {
     expect(st.state).toBe("over");
     expect(st.remaining).toBeLessThan(0);
     expect(budgetAlerts(budgets, over, cats, null, CYCLE)).toEqual({ over: 1, near: 0 });
-  });
-});
-
-describe("بوصلة مدار تتبع نافذة صفحة الأموال", () => {
-  const base = {
-    transactions: all, journalEntries: [], readingLogs: [], books: [], habits: [],
-    budgets, categories: cats, reserves: [], prayerLogs: [],
-    dailyBudget: null, monthlyIncome: null, futureLetters: [], installmentPlans: [],
-    quranHifz: null, quranKhatma: null, lastBackup: "2026-07-28",
-  };
-  const budgetOnes = (o: object) =>
-    generateInsights({ ...base, ...o }).filter((i) => i.dedupeKey.startsWith("finance:budget-"));
-
-  it("لا تحذّر من سقفٍ لم يُقترَب منه في الدورة الجارية", () => {
-    expect(budgetOnes({ spendWindowStart: CYCLE })).toEqual([]);
-  });
-
-  it("تحذّر فعلاً حين يقترب صرف الدورة نفسها من السقف", () => {
-    const hot = [...newCycle, tx("f", "2026-07-28", 5900)];
-    const [ins] = budgetOnes({ transactions: hot, spendWindowStart: CYCLE });
-    expect(ins.dedupeKey).toBe(`finance:budget-near:basics:${CYCLE}`);
-    // المفتاح مقيَّدٌ بالدورة: إخفاء تحذير هذه الدورة لا يُسكِت التي بعدها.
-    expect(ins.dedupeKey).not.toBe(
-      budgetOnes({ transactions: hot.map((t) => ({ ...t, date: "2026-08-28" })), spendWindowStart: "2026-08-27" })[0]?.dedupeKey
-    );
-    // ولكلّ تحذيرٍ سطرُ سندٍ يذكر مداه.
-    expect(ins.reason).toContain("من نزول الراتب");
-  });
-
-  it("تطابق `budgetAlerts` على النافذة نفسها مهما كانت", () => {
-    for (const win of [CYCLE, "2026-07", "2026-06"]) {
-      const a = budgetAlerts(budgets, all, cats, null, win);
-      const list = budgetOnes({ spendWindowStart: win });
-      expect(list.filter((i) => i.dedupeKey.startsWith("finance:budget-over:")).length).toBe(a.over);
-      expect(list.filter((i) => i.dedupeKey.startsWith("finance:budget-near:")).length).toBe(a.near);
-    }
-  });
-
-  it("النافذة الافتراضية للمحرّك هي ما تعطيه spendWindow من إعدادات المالك", () => {
-    expect(spendWindow("salary", CYCLE, 27, TODAY)).toBe(CYCLE);
-    expect(spendWindow("month", CYCLE, 27, TODAY)).toBe("2026-07");
   });
 });
 
