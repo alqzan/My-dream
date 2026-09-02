@@ -27,8 +27,10 @@ const FULL: Required<AppData> = {
   transactions: [{ id: "t1", date: "2026-05-01", amount: 25, category: "c1", note: "قهوة" }],
   books: [{ id: "b1", title: "ك", author: "م", totalPages: 300, currentPage: 42, status: "أقرأ" }],
   readingLogs: [{ id: "r1", bookId: "b1", date: "2026-05-01", pagesRead: 20 }],
-  // المحبرة: مصدرٌ وفائدةٌ منه. لو سقطا في الدورة لعاد جهازٌ جديد بلا مسارِ
-  // معرفةٍ أصلاً — وهو الانزلاقُ الصامت نفسُه الذي وقع لـ`assets`.
+  // المحبرة: مصدرٌ وفائدةٌ منه. بابُهما حُذف من الواجهة (٠٫١٫٣٨٦) و**الحقلان
+  // باقيان عمداً**، فوجودُهما هنا هو التعهّد نفسُه: ما سجّله المالك قبلَ الحذف
+  // يعبر اللقطةَ والترطيبَ والنسخةَ والدمج سليماً، فإن عاد البابُ عادت إليه
+  // بياناتُه. سقوطُهما من الدورة يعني ضياعاً صامتاً لا رجعةَ فيه.
   knowledgeSources: [{ id: "ks1", kind: "كتاب", name: "صيد الخاطر", author: "ابن الجوزي", bookId: "b1", createdAt: "2026-05-01" }],
   benefits: [{ id: "bn1", sourceId: "ks1", text: "أكثرُ ما يفسد العملَ العجلةُ في أوّله.", question: "ما حدُّ الأناة؟", applied: true, createdAt: "2026-05-01" }],
   // الرفّ: عنصرٌ ينتظر وآخرُ تُرك. «المتروك» بالذات يجب أن يعبر — منه يُجمع
@@ -157,18 +159,20 @@ describe("أختام التعديل لكل عنصر — يضعها المتجر 
     expect(books.find((b) => b.id === "b2")!.updatedAt).toBeUndefined();
   });
 
-  it("يختم العادات والصناديق والتصنيفات والرسائل والتأمّلات كذلك", () => {
+  // التأمّلات (`quranReflections`) خرجت من هذا الفحص مع حذف بابها: لم يعد
+  // للمتجر إجراءٌ يعدّلها فلا ختمَ يُختبر. والحقلُ نفسُه ما زال يجتاز اللقطة
+  // والترطيب والدمج — وذلك مفحوصٌ في «الرحلةُ الكاملة» أعلاه.
+  it("يختم العادات والصناديق والتصنيفات والرسائل كذلك", () => {
     useAppStore.getState().hydrate(FULL);
     const before = Date.now();
     useAppStore.getState().updateHabit("h1", { name: "مشي 30د" });
     useAppStore.getState().updateReserve("f1", { target: 5000 });
     useAppStore.getState().updateCategory("c1", { label: "قهوة الصباح" });
     useAppStore.getState().openFutureLetter("l1");
-    useAppStore.getState().updateReflection("q1", { text: "محرَّر" });
     const s = useAppStore.getState();
     for (const stamp of [
       s.habits[0].updatedAt, s.reserves[0].updatedAt,
-      s.categories[0].updatedAt, s.futureLetters[0].updatedAt, s.quranReflections[0].updatedAt,
+      s.categories[0].updatedAt, s.futureLetters[0].updatedAt,
     ]) expect(stamp).toBeGreaterThanOrEqual(before);
   });
 

@@ -207,6 +207,19 @@ export function openMistakes(s: HifzState): HifzMistake[] {
     .sort((a, b) => b.hits.length - a.hits.length || (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
+/**
+ * المواضعُ المُتقَنة — أُغلقت باختبارٍ أو بيدٍ، الأحدثُ إغلاقاً أوّلاً.
+ *
+ * تُعرض لتُفتح ثانيةً عند الحاجة: «أغلقه بلا اختبار» ضغطةٌ واحدة بلا تأكيد،
+ * وكانت بلا رجعة — الموضعُ يختفي من اللوحة (وهي لا تعرض إلا المفتوح) فلا
+ * يُستعاد إلا بأن تخطئ فيه من جديد.
+ */
+export function resolvedMistakes(s: HifzState): HifzMistake[] {
+  return (s.mistakes ?? [])
+    .filter((m) => m.resolved && m.hits.length > 0)
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
 // خريطة أخطاء آيةٍ بعينها: wordIndex → الخطأ (للتلوين المسبق أثناء المراجعة).
 // مفتاح "all" يمثّل وسم الآية كاملةً.
 export function mistakesForAyah(s: HifzState, ayahId: number): Map<number | "all", HifzMistake> {

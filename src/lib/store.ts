@@ -275,12 +275,10 @@ interface AppStore extends AppData {
   buyShelfItem: (id: string, transactionId: string) => void;
   deleteShelfItem: (id: string) => void;
 
-  addKnowledgeSource: (src: KnowledgeSource) => void;
-  updateKnowledgeSource: (id: string, updates: Partial<KnowledgeSource>) => void;
-  deleteKnowledgeSource: (id: string) => void;
-  addBenefit: (b: Benefit) => void;
-  updateBenefit: (id: string, updates: Partial<Benefit>) => void;
-  deleteBenefit: (id: string) => void;
+  // `knowledgeSources` و`benefits` بلا إجراءات: بابُ «مسار المعرفة» حُذف بقرارٍ
+  // صريح بعد مراجعةٍ شاملة (بُني ولم يُعرض في شاشةٍ قطّ). الحقلان باقيان في
+  // `AppData` وفي اللقطة والترطيب والنسخ الاحتياطي والدمج، فلا تضيع بيانةٌ
+  // لمن سجّل شيئاً، وإن عاد البابُ عادت إليه سليمةً.
 
   addBook: (book: Book) => void;
   updateBook: (id: string, updates: Partial<Book>) => void;
@@ -309,11 +307,12 @@ interface AppStore extends AppData {
   doQada: () => boolean;
   addQadaBacklog: (n?: number) => void;
 
-  // Quran — reflections (تدبّر), memorization (حفظ + مراجعة متباعدة),
-  // daily wird, and the running khatma (مدار الختمة).
-  addReflection: (r: QuranReflection) => void;
-  updateReflection: (id: string, updates: Partial<QuranReflection>) => void;
-  deleteReflection: (id: string) => void;
+  // Quran — memorization (حفظ + مراجعة متباعدة), daily wird, and the running
+  // khatma (مدار الختمة).
+  //
+  // `quranReflections` بلا إجراءات: بابُ التدبّر حُذف بقرارٍ صريح بعد مراجعةٍ
+  // شاملة. الحقلُ باقٍ في `AppData` وفي اللقطة والترطيب والنسخ الاحتياطي
+  // والدمج — وما سُجّل قبلُ يبقى معروضاً في «يومك» ومحسوباً في نشاط القرآن.
   // خطة الحفظ المتتابعة
   startHifzPlan: (startId: number, unit: HifzUnit, amount: number) => void; // fresh plan
   updateHifzPlan: (patch: { unit?: HifzUnit; amount?: number }) => void; // tune without reset
@@ -1655,28 +1654,6 @@ export const useAppStore = create<AppStore>()(
           deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
         })),
 
-      addKnowledgeSource: (src) =>
-        set((st) => ({ knowledgeSources: [src, ...(st.knowledgeSources ?? [])] })),
-      updateKnowledgeSource: (id, updates) =>
-        set((st) => ({
-          knowledgeSources: (st.knowledgeSources ?? []).map((x) => (x.id === id ? { ...x, ...updates } : x)),
-        })),
-      deleteKnowledgeSource: (id) =>
-        set((st) => ({
-          knowledgeSources: (st.knowledgeSources ?? []).filter((x) => x.id !== id),
-          // شاهدُ حذفٍ حتى لا يعيده اتحادُ الدمج من جهازٍ ما زال يحمله.
-          deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
-        })),
-
-      addBenefit: (b) => set((st) => ({ benefits: [b, ...(st.benefits ?? [])] })),
-      updateBenefit: (id, updates) =>
-        set((st) => ({ benefits: (st.benefits ?? []).map((x) => (x.id === id ? { ...x, ...updates } : x)) })),
-      deleteBenefit: (id) =>
-        set((st) => ({
-          benefits: (st.benefits ?? []).filter((x) => x.id !== id),
-          deleted: { ...(st.deleted ?? {}), [id]: Date.now() },
-        })),
-
       addBook: (book) =>
         set((s) => ({ books: [book, ...s.books] })),
 
@@ -1837,17 +1814,6 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({ qadaBacklog: Math.max(0, (s.qadaBacklog ?? 0) + n) })),
 
       // ---------- Quran ----------
-      addReflection: (r) =>
-        set((s) => ({ quranReflections: [r, ...s.quranReflections] })),
-
-      updateReflection: (id, updates) =>
-        set((s) => ({
-          quranReflections: s.quranReflections.map((r) => (r.id === id ? { ...r, ...updates } : r)),
-        })),
-
-      deleteReflection: (id) =>
-        set((s) => ({ quranReflections: s.quranReflections.filter((r) => r.id !== id) })),
-
       // Fresh plan: sets the start point and daily target, and resets the
       // frontier to just before the start (so the first daily portion begins at
       // startId) along with all sessions/reviews.

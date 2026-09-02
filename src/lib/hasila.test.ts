@@ -122,11 +122,6 @@ describe("جَردُ السنة", () => {
         { id: "b2", title: "", author: "", totalPages: 1, currentPage: 1, status: "أنهيت", finishDate: "2025-03-01" } as Book,
       ],
       prayerLogs: [full("2026-04-01"), full("2025-04-01")],
-      benefits: [
-        { createdAt: "2026-05-01", applied: true },
-        { createdAt: "2026-05-02" },
-        { createdAt: "2025-05-01", applied: true },
-      ],
     });
     const by = (l: string) => rows.find((r) => r.label.includes(l))!.value;
     expect(by("يومًا لها أثر")).toBe(1);
@@ -134,14 +129,13 @@ describe("جَردُ السنة", () => {
     expect(by("دقيقةً")).toBe(40);
     expect(by("كتابًا")).toBe(1);
     expect(by("جماعة")).toBe(5);
-    expect(by("فائدةً")).toBe(1);
   });
 
-  it("سنةٌ بلا شيءٍ تُرجع ستّةَ أصفارٍ لا فراغاً", () => {
+  it("سنةٌ بلا شيءٍ تُرجع خمسةَ أصفارٍ لا فراغاً", () => {
     const rows = yearInventory(2026, {
-      journalEntries: [], readingLogs: [], books: [], prayerLogs: [], benefits: [],
+      journalEntries: [], readingLogs: [], books: [], prayerLogs: [],
     });
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(5);
     expect(rows.every((r) => r.value === 0)).toBe(true);
   });
 });

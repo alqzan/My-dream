@@ -4434,6 +4434,23 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-finance-page.is-now .mdr-finance-tools { display: none; }
 .mdr-finance-tool + .mdr-finance-tool,
 .mdr-finance-plan-details + .mdr-finance-tool { border-top: 1px solid var(--line); }
+
+/* عنوانُ مجموعةٍ داخل صندوق الأدوات — سطرٌ مكتومٌ يفصل «مالَ يومك» عن
+   «التزاماتِك ومخزونِك». تسعُ أقسامٍ متساوية الوزن تُقرأ كوماً؛ ومجموعتان
+   تُقرآن نيّةً: ما تفتحه اليوم، وما تفتحه حين يحين. لا قسمَ حُذف. */
+.mdr-finance-group {
+  margin: 0;
+  padding: 0.72rem 1rem 0.42rem;
+  color: var(--ink52);
+  font-size: 0.63rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  background: color-mix(in srgb, var(--gold) 5%, transparent);
+}
+/* المجموعةُ نفسُها هي الفاصل، فلا خطَّ فوق أوّل قسمٍ بعدها ولا فوق أوّلها. */
+.mdr-finance-group + .mdr-finance-tool { border-top: 0; }
+.mdr-finance-tool + .mdr-finance-group { border-top: 1px solid var(--line); }
+.mdr-finance-group:first-child { padding-top: 0.62rem; }
 .mdr-finance-tool > button:first-child {
   min-height: 3.65rem;
   border: 0 !important;

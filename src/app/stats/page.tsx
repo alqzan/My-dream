@@ -160,7 +160,6 @@ export default function StatsPage() {
   /* ═══ حساباتُ الحصيلة المنقولة ═══ */
   const todayStr = today();
   const habits = useAppStore((st) => st.habits);
-  const benefits = useAppStore((st) => st.benefits ?? []);
   const win = useMemo(
     () => windowStats(todayStr, { prayerLogs, journalEntries, readingLogs, habits, transactions }),
     [todayStr, prayerLogs, journalEntries, readingLogs, habits, transactions]
@@ -168,8 +167,8 @@ export default function StatsPage() {
   const petals = useMemo(() => yearPetals(prayerLogs, todayStr), [prayerLogs, todayStr]);
   const yearAvg = yearAverage(petals);
   const inventory = useMemo(
-    () => yearInventory(Number(year), { journalEntries, readingLogs, books, prayerLogs, benefits }),
-    [year, journalEntries, readingLogs, books, prayerLogs, benefits]
+    () => yearInventory(Number(year), { journalEntries, readingLogs, books, prayerLogs }),
+    [year, journalEntries, readingLogs, books, prayerLogs]
   );
 
   const kpis: Kpi[] = [

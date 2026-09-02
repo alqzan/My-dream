@@ -2,14 +2,17 @@
 import { useState } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { HifzSection } from "@/components/quran/HifzSection";
+import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
 import { QuranBanner } from "@/components/quran/QuranBanner";
 import { BookOpenText, Map, Sparkles } from "lucide-react";
 
 type QuranView = "today" | "map" | "drill";
 
-// قسم «القرآن» في هذه المرحلة هو مسار الحفظ وحده. مكوّنات التدبّر والمصحف
-// والبيانات المرتبطة بهما ما زالت في المشروع، لكن لا تُعرض ولا تُحذف من التخزين
-// حتى نضيفها لاحقاً بقرارٍ مستقل.
+// قسم «القرآن» بابان: **الختمة** (تلاوةٌ تدور) و**الحفظ** (مسارٌ يتراكم).
+// وكانت الختمةُ ساقطةً سهواً لا قصداً: `KhatmaOrbit` عاش داخل متصفّح المصحف،
+// فلمّا أُوقف المتصفّحُ سقطت معه ستّةُ إجراءاتٍ في المتجر بلا زرٍّ يبلغها —
+// فلا سبيلَ لتسجيل جزءٍ ولا صفحة. مكانُها الصحيح هنا: تبويب «اليوم»، فوق
+// جلسة الحفظ، لأنّ كلتيهما «ما عليك اليوم».
 
 export default function QuranPage() {
   const [view, setView] = useState<QuranView>("today");
@@ -50,8 +53,10 @@ export default function QuranPage() {
       </div>
 
       <div className="mdr-quran-hifz-only animate-fade-up stagger-3 space-y-4">
+        {/* الختمةُ في «اليوم» وحده: هي حالُ تلاوتك الآن، لا خريطةً ولا مذاكرة. */}
+        {view === "today" && <KhatmaOrbit />}
         <div className="mdr-quran-path-label">
-          <BookOpenText size={15} /> مسار الحفظ فقط
+          <BookOpenText size={15} /> مسار الحفظ
         </div>
         <HifzSection view={view} />
       </div>

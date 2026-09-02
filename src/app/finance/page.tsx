@@ -357,9 +357,14 @@ export default function FinancePage() {
         </div>
       )}
 
-      {/* كل أدوات المال الأصلية باقية، لكنها تُجمع في قائمةٍ هادئة بعد الملخص. */}
+      {/* كل أدوات المال الأصلية باقية بلا نقصان، لكنّها **مجموعتان** لا تسعُ
+          أقسامٍ متساوية الوزن: ما يخصّ إنفاقَ يومك، وما هو التزامٌ أو مخزونٌ
+          لا تفتحه كلَّ يوم. الترتيبُ وحده هو ما تغيّر — لا قسمَ حُذف ولا
+          اختُصر، والروابطُ العميقة (‎#shelf‎ …) تعمل كما كانت. */}
       <div className="mdr-finance-tools">
       <div className="mdr-finance-plan-details">
+
+      <p className="mdr-finance-group">مالُ يومك</p>
 
       {isFinanceSectionVisible("daily") && <CollapsibleSection
         id="daily"
@@ -399,131 +404,6 @@ export default function FinancePage() {
           تصنيفاتي
         </button>
       </CollapsibleSection>}
-
-      {/* «الرفّ»: تأخيرُ الحكم مدّةً تُختار لكلّ عنصر — لا يمنع شراءً، يؤجّله حتى تهدأ
-          الشهوة. ما تُرِكَ يُجمع ثمنُه في «وفَّرت» **اشتقاقاً** من العناصر
-          المتروكة لا بعدّادٍ يتراكم (عدّادٌ يخسر زيادةً عند الدمج بين جهازين). */}
-      {isFinanceSectionVisible("shelf") && <CollapsibleSection
-        id="shelf"
-        title="الرفّ"
-        icon={<Hourglass size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.shelf}
-        onToggle={() => toggleSection("shelf")}
-        summary={shelfSummary.text}
-        badge={shelfSummary.ripe > 0 ? <RipeBadge>{formatAmount(shelfSummary.ripe)} نضج</RipeBadge> : undefined}
-      >
-        <Card>
-          <div className="mdr">
-            <Shelf
-              items={shelfItems ?? []}
-              todayStr={today()}
-              onAdd={(draft) =>
-                addShelfItem({
-                  id: uid(), name: draft.name, price: draft.price, reason: draft.reason,
-                  ripenDays: draft.ripenDays, placedAt: today(),
-                })
-              }
-              onEdit={(id, draft) =>
-                updateShelfItem(id, {
-                  name: draft.name, price: draft.price, reason: draft.reason, ripenDays: draft.ripenDays,
-                })
-              }
-              // الحذف **تصحيحُ إدخالٍ لا حكم**: شيءٌ وُضع سهواً يخرج بلا أن
-              // يُحسب فيما «وفَّرت» (ذلك ثوابُ «دَعْه» وحده). ولذلك تراجعٌ
-              // بضغطة كبقيّة الحذف في التطبيق، لا نافذةُ تأكيد.
-              onDelete={(item) => {
-                deleteShelfItem(item.id);
-                showUndo(`حذفت «${item.name}» من الرفّ`, () => addShelfItem(item));
-              }}
-              onRelease={releaseShelfItem}
-              onRenew={renewShelfItem}
-              onBuy={setBuyingShelf}
-            />
-          </div>
-        </Card>
-      </CollapsibleSection>}
-
-      {isFinanceSectionVisible("recurring") && <CollapsibleSection
-        id="recurring"
-        title="المتكررة والقادم"
-        icon={<Repeat size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.recurring}
-        onToggle={() => toggleSection("recurring")}
-        summary={
-          overview.nearest
-            ? `أقرب: ${overview.nearest.note || getCategoryInfo(categories, overview.nearest.category).label} · ${formatAmount(overview.nearest.amount)} ر.س`
-            : "لا التزامات"
-        }
-      >
-        <Card>
-          <UpcomingRecurring recurring={recurring} categories={categories} />
-          <button
-            onClick={() => setShowRecurring(true)}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-2.5 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press"
-          >
-            <Repeat size={15} className="text-finance" />
-            إدارة المصاريف المتكررة
-          </button>
-        </Card>
-      </CollapsibleSection>}
-
-      {isFinanceSectionVisible("installments") && <CollapsibleSection
-        id="installments"
-        title="الأقساط"
-        icon={<CalendarClock size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.installments}
-        onToggle={() => toggleSection("installments")}
-        summary={
-          overview.installments.activeCount > 0
-            ? `${formatAmount(overview.installments.activeCount)} خطة · متبقٍّ ${formatAmount(overview.installments.remainingTotal)} ر.س`
-            : "لا أقساط"
-        }
-        badge={
-          overview.installments.overdueCount > 0
-            ? <AlertBadge>{formatAmount(overview.installments.overdueCount)} متأخّر</AlertBadge>
-            : undefined
-        }
-      >
-        <Card>
-          <InstallmentPlans />
-        </Card>
-      </CollapsibleSection>}
-
-      {isFinanceSectionVisible("assets") && <CollapsibleSection
-        id="assets"
-        title="الأصول"
-        icon={<Package size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.assets}
-        onToggle={() => toggleSection("assets")}
-        summary={
-          assetsSummary.count > 0
-            ? `${formatAmount(assetsSummary.count)} أصل · قيمتها ${formatAmount(assetsSummary.bookValue)} ر.س · ${formatAmount(assetsSummary.perDay)} ر.س يومياً`
-            : "لا أصول بعد"
-        }
-      >
-        <Card>
-          <Assets />
-        </Card>
-      </CollapsibleSection>}
-
-      {isFinanceSectionVisible("reserves") && <CollapsibleSection
-        id="reserves"
-        title="الاحتياطيات"
-        icon={<Landmark size={16} />}
-        className="mdr-finance-tool"
-        open={openSections.reserves}
-        onToggle={() => toggleSection("reserves")}
-        summary={overview.hasReserves ? `${formatAmount(overview.reservesTotal)} ر.س` : "لا احتياطي بعد"}
-      >
-        <Card>
-          <ReserveFunds />
-        </Card>
-      </CollapsibleSection>}
-      </div>
 
       {/* السجل الكامل باقٍ كما هو، لكنه لا يملأ الصفحة قبل أن يطلبه المستخدم. */}
       {isFinanceSectionVisible("history") && <CollapsibleSection
@@ -619,6 +499,135 @@ export default function FinancePage() {
         )}
       </div>
       </CollapsibleSection>}
+
+      <p className="mdr-finance-group">التزاماتُك ومخزونك</p>
+
+
+      {isFinanceSectionVisible("recurring") && <CollapsibleSection
+        id="recurring"
+        title="المتكررة والقادم"
+        icon={<Repeat size={16} />}
+        className="mdr-finance-tool"
+        open={openSections.recurring}
+        onToggle={() => toggleSection("recurring")}
+        summary={
+          overview.nearest
+            ? `أقرب: ${overview.nearest.note || getCategoryInfo(categories, overview.nearest.category).label} · ${formatAmount(overview.nearest.amount)} ر.س`
+            : "لا التزامات"
+        }
+      >
+        <Card>
+          <UpcomingRecurring recurring={recurring} categories={categories} />
+          <button
+            onClick={() => setShowRecurring(true)}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-2.5 text-sm font-medium text-gray-600 hover:border-finance/40 transition-colors press"
+          >
+            <Repeat size={15} className="text-finance" />
+            إدارة المصاريف المتكررة
+          </button>
+        </Card>
+      </CollapsibleSection>}
+
+      {isFinanceSectionVisible("installments") && <CollapsibleSection
+        id="installments"
+        title="الأقساط"
+        icon={<CalendarClock size={16} />}
+        className="mdr-finance-tool"
+        open={openSections.installments}
+        onToggle={() => toggleSection("installments")}
+        summary={
+          overview.installments.activeCount > 0
+            ? `${formatAmount(overview.installments.activeCount)} خطة · متبقٍّ ${formatAmount(overview.installments.remainingTotal)} ر.س`
+            : "لا أقساط"
+        }
+        badge={
+          overview.installments.overdueCount > 0
+            ? <AlertBadge>{formatAmount(overview.installments.overdueCount)} متأخّر</AlertBadge>
+            : undefined
+        }
+      >
+        <Card>
+          <InstallmentPlans />
+        </Card>
+      </CollapsibleSection>}
+
+      {/* «الرفّ»: تأخيرُ الحكم مدّةً تُختار لكلّ عنصر — لا يمنع شراءً، يؤجّله حتى تهدأ
+          الشهوة. ما تُرِكَ يُجمع ثمنُه في «وفَّرت» **اشتقاقاً** من العناصر
+          المتروكة لا بعدّادٍ يتراكم (عدّادٌ يخسر زيادةً عند الدمج بين جهازين). */}
+      {isFinanceSectionVisible("shelf") && <CollapsibleSection
+        id="shelf"
+        title="الرفّ"
+        icon={<Hourglass size={16} />}
+        className="mdr-finance-tool"
+        open={openSections.shelf}
+        onToggle={() => toggleSection("shelf")}
+        summary={shelfSummary.text}
+        badge={shelfSummary.ripe > 0 ? <RipeBadge>{formatAmount(shelfSummary.ripe)} نضج</RipeBadge> : undefined}
+      >
+        <Card>
+          <div className="mdr">
+            <Shelf
+              items={shelfItems ?? []}
+              todayStr={today()}
+              onAdd={(draft) =>
+                addShelfItem({
+                  id: uid(), name: draft.name, price: draft.price, reason: draft.reason,
+                  ripenDays: draft.ripenDays, placedAt: today(),
+                })
+              }
+              onEdit={(id, draft) =>
+                updateShelfItem(id, {
+                  name: draft.name, price: draft.price, reason: draft.reason, ripenDays: draft.ripenDays,
+                })
+              }
+              // الحذف **تصحيحُ إدخالٍ لا حكم**: شيءٌ وُضع سهواً يخرج بلا أن
+              // يُحسب فيما «وفَّرت» (ذلك ثوابُ «دَعْه» وحده). ولذلك تراجعٌ
+              // بضغطة كبقيّة الحذف في التطبيق، لا نافذةُ تأكيد.
+              onDelete={(item) => {
+                deleteShelfItem(item.id);
+                showUndo(`حذفت «${item.name}» من الرفّ`, () => addShelfItem(item));
+              }}
+              onRelease={releaseShelfItem}
+              onRenew={renewShelfItem}
+              onBuy={setBuyingShelf}
+            />
+          </div>
+        </Card>
+      </CollapsibleSection>}
+
+      {isFinanceSectionVisible("assets") && <CollapsibleSection
+        id="assets"
+        title="الأصول"
+        icon={<Package size={16} />}
+        className="mdr-finance-tool"
+        open={openSections.assets}
+        onToggle={() => toggleSection("assets")}
+        summary={
+          assetsSummary.count > 0
+            ? `${formatAmount(assetsSummary.count)} أصل · قيمتها ${formatAmount(assetsSummary.bookValue)} ر.س · ${formatAmount(assetsSummary.perDay)} ر.س يومياً`
+            : "لا أصول بعد"
+        }
+      >
+        <Card>
+          <Assets />
+        </Card>
+      </CollapsibleSection>}
+
+      {isFinanceSectionVisible("reserves") && <CollapsibleSection
+        id="reserves"
+        title="الاحتياطيات"
+        icon={<Landmark size={16} />}
+        className="mdr-finance-tool"
+        open={openSections.reserves}
+        onToggle={() => toggleSection("reserves")}
+        summary={overview.hasReserves ? `${formatAmount(overview.reservesTotal)} ر.س` : "لا احتياطي بعد"}
+      >
+        <Card>
+          <ReserveFunds />
+        </Card>
+      </CollapsibleSection>}
+      </div>
+
       </div>
 
       <Modal

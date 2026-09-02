@@ -198,7 +198,6 @@ export function yearInventory(
     readingLogs: ReadingLog[];
     books: Book[];
     prayerLogs: PrayerLog[];
-    benefits: { createdAt: string; applied?: boolean }[];
   }
 ): InventoryRow[] {
   const inYear = (d: string) => d.startsWith(String(year));
@@ -209,14 +208,14 @@ export function yearInventory(
   const jamaah = src.prayerLogs
     .filter((l) => inYear(l.date))
     .reduce((a, l) => a + jamaahCount(l), 0);
-  const applied = src.benefits.filter((b) => inYear(b.createdAt) && b.applied).length;
-
   return [
     { label: "يومًا لها أثرٌ مكتوب", value: days.size, unit: "يوم" },
     { label: "صفحةً قرأت", value: pages, unit: "صفحة" },
     { label: "دقيقةً في القراءة", value: minutes, unit: "دقيقة" },
     { label: "كتابًا خُتِم", value: finished, unit: "كتاب" },
     { label: "فرضًا في جماعة", value: jamaah, unit: "فرض" },
-    { label: "فائدةً دخلت في عمل", value: applied, unit: "فائدة" },
+    // «فائدةً دخلت في عمل» حُذف مع بابه: لا مدخلَ لتسجيل فائدةٍ بعد حذف مسار
+    // المعرفة، فالصفُّ كان سيقول صفراً إلى الأبد — ورقمٌ لا يتحرّك أبداً أسوأ
+    // من صفٍّ غائب.
   ];
 }

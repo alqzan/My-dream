@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ } from "@/lib/types";
 import { idToSurahAyah, SURAHS } from "@/lib/quran/meta";
-import { openMistakes, mistakeStreak, MISTAKE_MASTERY } from "@/lib/quran/hifz";
+import { openMistakes, resolvedMistakes, mistakeStreak, MISTAKE_MASTERY } from "@/lib/quran/hifz";
 import { loadAyahText, textsInRange } from "@/lib/quran/text";
 import { loadMutashabihat, similarOf, type SimMap } from "@/lib/quran/mutashabihat";
 import { MutashabihatCompare } from "@/components/quran/MutashabihatCompare";
 import { MistakeDrillModal } from "@/components/quran/MistakeDrill";
-import { AlertTriangle, Check, Trash2, GitCompareArrows, Target } from "lucide-react";
+import { AlertTriangle, Check, Trash2, GitCompareArrows, Target, RotateCcw, ChevronDown } from "lucide-react";
 
 // الآية مع تظليل كلمة الخطأ في موضعها (سياقٌ قبلها وبعدها). عند غياب الكلمة أو
 // تعذّر مطابقتها نصياً نعرض الآية كاملةً — تبقى سياقاً كافياً.
@@ -38,25 +38,41 @@ export function MistakesPanel() {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const items = openMistakes(h);
+  const closed = resolvedMistakes(h);
   const [map, setMap] = useState<SimMap | null>(null);
   const [text, setText] = useState<string[] | null>(null);
   const [compareId, setCompareId] = useState<number | null>(null);
   const [drillId, setDrillId] = useState<string | null>(null);
+  const [showClosed, setShowClosed] = useState(false);
   useEffect(() => { loadMutashabihat().then(setMap); }, []);
   useEffect(() => { loadAyahText().then(setText); }, []);
-  if (items.length === 0) return null;
+  // اللوحةُ تبقى ما دام ثمّة موضعٌ يُذكر — مفتوحاً كان أو مُتقناً يُفتح ثانية.
+  if (items.length === 0 && closed.length === 0) return null;
+  const calm = items.length === 0;
 
   const drill = drillId ? items.find((m) => m.id === drillId) ?? null : null;
 
   return (
-    <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 p-4 space-y-3">
+    <div
+      className={
+        calm
+          ? "rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/10 p-4 space-y-3"
+          : "rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 p-4 space-y-3"
+      }
+    >
       <div className="flex items-center gap-2">
-        <AlertTriangle size={15} className="text-red-500" />
+        {calm
+          ? <Check size={15} className="text-emerald-600" />
+          : <AlertTriangle size={15} className="text-red-500" />}
         <span className="text-sm font-bold text-gray-800">أخطائي</span>
-        <span className="text-[10px] font-bold text-red-700 bg-red-100 dark:bg-red-900/30 rounded-full px-2 py-0.5">{items.length}</span>
+        {!calm && (
+          <span className="text-[10px] font-bold text-red-700 bg-red-100 dark:bg-red-900/30 rounded-full px-2 py-0.5">{items.length}</span>
+        )}
       </div>
       <p className="text-[11px] text-gray-500 leading-relaxed">
-        مواضع تعثّرتَ فيها. «اختبرني» يطمس الموضع ويسألك عنه — ونجاحان متتاليان يُغلقانه تلقائياً. تظهر مواضع اليوم أيضاً ضمن جلسة اليوم.
+        {calm
+          ? "لا موضعَ مفتوحاً الآن. ما أتقنتَه محفوظٌ أدناه — افتحه متى شككتَ فيه."
+          : "مواضع تعثّرتَ فيها. «اختبرني» يطمس الموضع ويسألك عنه — ونجاحان متتاليان يُغلقانه تلقائياً. تظهر مواضع اليوم أيضاً ضمن جلسة اليوم."}
       </p>
       <div className="space-y-1.5">
         {items.map((m) => {
@@ -141,6 +157,56 @@ export function MistakesPanel() {
           );
         })}
       </div>
+      {/* المُتقَنة — «أغلقه بلا اختبار» ضغطةٌ بلا تأكيد، وكانت بلا رجعة: اللوحةُ
+          لا تعرض إلا المفتوح، فالموضعُ المُغلق سهواً لا يُستعاد إلا بخطأٍ جديد
+          فيه. `reopenMistake` كانت في المتجر بلا زرٍّ يبلغها. */}
+      {closed.length > 0 && (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowClosed((v) => !v)}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 hover:text-gray-700 press"
+            aria-expanded={showClosed}
+          >
+            <ChevronDown size={13} className={showClosed ? "rotate-180 transition-transform" : "transition-transform"} />
+            المُتقَنة ({closed.length})
+          </button>
+          {showClosed && (
+            <div className="space-y-1 mt-1.5">
+              {closed.map((m) => {
+                const { surah, ayah } = idToSurahAyah(m.ayahId);
+                const name = SURAHS[surah - 1]?.name ?? "";
+                return (
+                  <div key={m.id} className="flex items-center gap-2 bg-white/70 dark:bg-white/5 rounded-lg px-2.5 py-1.5">
+                    <span className="flex-1 min-w-0 text-[11px] text-gray-500 truncate">
+                      {m.wordIndex == null
+                        ? <span>الآية كاملة</span>
+                        : <span className="font-quran text-gray-700 dark:text-gray-200">{m.word || "—"}</span>}
+                      <span className="mx-1">· {name} · آية {ayah}</span>
+                    </span>
+                    <button
+                      onClick={() => store.reopenMistake(m.id)}
+                      className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 rounded-lg px-1.5 py-1 press"
+                      title="أعِدْه مفتوحاً"
+                    >
+                      <RotateCcw size={12} /> افتحه
+                    </button>
+                    <button
+                      onClick={() => store.deleteMistake(m.id)}
+                      className="shrink-0 p-1 rounded-lg text-gray-300 hover:text-red-500 press"
+                      title="حذف"
+                      aria-label="حذف"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {compareId != null && <MutashabihatCompare baseIds={[compareId]} onClose={() => setCompareId(null)} />}
       {drill && text && (
         <MistakeDrillModal

@@ -29,24 +29,10 @@ const SRC = fileURLToPath(new URL("..", import.meta.url)); // …/src
  * القائمة يعني أحدَ أمرين لا ثالثَ لهما — أن يُوصل بشاشة، أو أن يُحذف.
  */
 const PARKED_COMPONENTS: Record<string, string> = {
-  // قسمُ القرآن معروضٌ الآن كمسارِ حفظٍ فقط (انظر تعليق `src/app/quran/page.tsx`).
-  "TadabburSection.tsx": "التدبّر — بياناته محفوظة، والعرض مؤجّل بقرار",
-  "MushafBrowser.tsx": "تصفّحُ المصحف — مؤجّل مع التدبّر",
-  "PageReader.tsx": "قارئُ الصفحة — لا يبلغه إلا MushafBrowser الموقوف",
-  "HifzReminder.tsx": "تذكيرُ الحفظ — مؤجّل",
-  "AyahPicker.tsx": "منتقي الآية — لا يبلغه إلا TadabburSection الموقوف",
-  // بقايا نقلِ التصميم: بدائلُ حيّة تعمل مكانها.
-  "DailyHabits.tsx": "بطاقةُ العادات القديمة — بديلُها الحيّ DayDigestCard",
-  "MemoryDome.tsx": "قبّةُ الذكريات — أُعيدت MemorySky مكانها (انظر ROADMAP)",
-  "FinanceGlance.tsx": "لمحةُ المال — بديلُها FinanceCycleDashboard",
-  "PrayerOrbit.tsx": "مدارُ الصلاة — بديلُه PrayerScreen",
-  "HikmaCard.tsx": "بطاقةُ الحكمة — بديلُها QuranBanner",
-  "WeeklyWrap.tsx": "الملخّصُ الأسبوعي — بديلُه WeeklySummary",
-  "InstallHint.tsx": "تلميحُ التثبيت — مؤجّل",
-  "CycleCurve.tsx": "منحنى الدورة (نسخةُ mal) — بديلُه الحيّ FinanceCycleDashboard",
-  // ⚠️ هذه وحدها ليست بديلاً مكرّراً بل **ميزةٌ فقدت مدخلها**: لا سبيل الآن
-  // لتتبّع الختمة (جزءاً أو صفحة) — كانت داخل MushafBrowser الموقوف.
-  "KhatmaOrbit.tsx": "مدارُ الختمة — لا يبلغه إلا MushafBrowser الموقوف (ميزةٌ بلا مدخل، تنتظر قرار العرض)",
+  // فارغةٌ الآن — وهذه هي الحالُ الصحيحة. ما وقفَ بعد مراجعة ٠٫١٫٣٨٥ حُسم:
+  // أُعيد إلى شاشته (الختمة) أو حُذف من الشجرة (التدبّر · المصحف · مسارُ
+  // المعرفة · بقايا نقلِ التصميم). فإن اضطُرّ اسمٌ للوقوف هنا يوماً، فليُكتب
+  // معه سببُه وموعدُ حسمه.
 };
 
 /**
@@ -55,25 +41,7 @@ const PARKED_COMPONENTS: Record<string, string> = {
  * أكثرُها تابعٌ لمكوّنٍ موقوفٍ أعلاه؛ وما ليس كذلك فسببُه مكتوب.
  */
 const PARKED_ACTIONS: Record<string, string> = {
-  addReflection: "تابعٌ للتدبّر الموقوف",
-  updateReflection: "تابعٌ للتدبّر الموقوف",
-  deleteReflection: "تابعٌ للتدبّر الموقوف",
-  reopenMistake: "إعادةُ فتح خطأٍ — لا مدخلَ لها في لوحة الأخطاء بعد",
-  addKnowledgeSource: "المحبرة: المصادر والفوائد — بُنيت ولم تُعرض بعد",
-  updateKnowledgeSource: "المحبرة: المصادر والفوائد — بُنيت ولم تُعرض بعد",
-  deleteKnowledgeSource: "المحبرة: المصادر والفوائد — بُنيت ولم تُعرض بعد",
-  addBenefit: "المحبرة: المصادر والفوائد — بُنيت ولم تُعرض بعد",
-  updateBenefit: "المحبرة: المصادر والفوائد — بُنيت ولم تُعرض بعد",
-  deleteBenefit: "المحبرة: المصادر والفوائد — بُنيت ولم تُعرض بعد",
-  autoLinkTransaction: "يُنادى من داخل المتجر نفسه (ربطُ دفعةِ قسطٍ تلقائياً)",
-  // ⚠️ الختمةُ كلُّها بلا مدخل — تابعةٌ لـKhatmaOrbit الموقوف. ليست قراراً
-  // قديماً بل أثرٌ جانبيّ لنقل التصميم؛ إعادتُها بانتظار قرار العرض.
-  addKhatmaJuz: "الختمة — تابعةٌ لـKhatmaOrbit الموقوف",
-  setKhatmaJuz: "الختمة — تابعةٌ لـKhatmaOrbit الموقوف",
-  setKhatmaPage: "الختمة — تابعةٌ لـKhatmaOrbit الموقوف",
-  setKhatmaPageGoal: "الختمة — تابعةٌ لـKhatmaOrbit الموقوف",
-  completeKhatma: "الختمة — تابعةٌ لـKhatmaOrbit الموقوف",
-  resetKhatma: "الختمة — تابعةٌ لـKhatmaOrbit الموقوف",
+  autoLinkTransaction: "يُنادى من داخل المتجر نفسه (ربطُ دفعةِ قسطٍ تلقائياً)، لا من الواجهة",
 };
 
 function walk(dir: string, out: string[] = []): string[] {
