@@ -982,3 +982,21 @@ export const audiosCount = (n: number): string =>
 
 export const filesCount = (n: number): string =>
   arabicCount(n, { one: "ملف واحد", two: "ملفان", few: "ملفات", many: "ملفاً" });
+
+/**
+ * أوّلُ إيموجي كاملٍ ممّا كُتب — عنقودُ محارفٍ واحد لا نصفَ زوجٍ بديل.
+ *
+ * كلُّ حقلِ أيقونةٍ في التطبيق (العادات · التصنيفات · الاحتياطي · الاستيراد
+ * البنكي) يمرّ من هنا: الإيموجي المركّب (علَمٌ أو أسرةٌ أو لونُ بشرة) يُقصّ
+ * بـ`[...s][0]` إلى نصفِ محرفٍ يُرسم مربّعاً — و`Intl.Segmenter` هي القاعدة
+ * التي تُبقيه كاملاً، مع تراجُعٍ لمن لا يملكها.
+ */
+export function firstGrapheme(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    for (const s of seg.segment(trimmed)) return s.segment;
+  }
+  return [...trimmed][0] ?? "";
+}

@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { spendWindow } from "@/lib/budgetCycle";
 import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate } from "@/lib/bankParser";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
-import { today, formatAmount, getCategoryInfo, cn, uid, toLatinDigits } from "@/lib/utils";
+import { today, formatAmount, getCategoryInfo, cn, uid, toLatinDigits, firstGrapheme } from "@/lib/utils";
 import { budgetWarningFor } from "@/lib/budgetStatus";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -293,15 +293,6 @@ function CategorySelect({
 const QUICK_ICONS = ["🏷️", "🧺", "✨", "🍽️", "☕", "🚗", "🏠", "💊", "🎁", "📌"];
 const QUICK_COLORS = ["#c1663f", "#c9852a", "#3d9640", "#1f7a6c", "#8a6fb0", "#c94f6d"];
 
-function firstGrapheme(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    for (const s of seg.segment(trimmed)) return s.segment;
-  }
-  return [...trimmed][0] ?? "";
-}
 
 // Inline "add a category" form shown right on a bank row, so a message that
 // fits nothing existing can get its own section without leaving the review.

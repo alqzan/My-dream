@@ -1,34 +1,48 @@
 /**
- * **الرفّ** — شراءٌ يَنضج ثلاثين يوماً قبل أن تحكم عليه.
+ * **الرفّ** — شراءٌ يَنضج مدّةً تختارها قبل أن تحكم عليه.
  *
  * أكثرُ ما نندم عليه شراءٌ قُرِّر في دقيقة. فالرفُّ لا يمنعك — يؤخّر الحكمَ
  * حتى تهدأ الشهوة، ثمّ يسألك وأنت صاحٍ. ولذلك **لا يُشترى قبل النضوج**: زرُّ
- * الشراء معطَّلٌ حتى تتمّ الثلاثون، وهو كلُّ ما تفعله هذه الميزة.
+ * الشراء معطَّلٌ حتى تتمّ المدّة، وهو كلُّ ما تفعله هذه الميزة. والمدّةُ ثلاثون
+ * يوماً افتراضاً وتُختار لكلّ عنصرٍ على حدة (`ripenDays`).
  *
  * نقيٌّ بلا DOM ولا متجر، كبقيّة `src/lib/*.ts`.
  */
 import type { ShelfItem } from "./types";
-import { SHELF_RIPEN_DAYS } from "./types";
+import { SHELF_RIPEN_DAYS, SHELF_RIPEN_CHOICES } from "./types";
 import { parseDate, toIndicDigits } from "./utils";
 
-export { SHELF_RIPEN_DAYS };
+export { SHELF_RIPEN_DAYS, SHELF_RIPEN_CHOICES };
 
-/** عمرُ العنصر على الرفّ بالأيام، محصوراً في [٠، ٣٠]. */
+/**
+ * مدّةُ نضوجِ هذا العنصر — ما اختير له يوم وُضع، وإلا فالثلاثون.
+ *
+ * المدّةُ **على العنصر لا في الإعدادات**: إعدادٌ عامّ يغيّر بأثرٍ رجعيّ نضوجَ
+ * كلّ ما ينتظر، فيَنضج ما لم يصبر أو يعود ناضجٌ خامّاً — والرفُّ كلُّه صبرٌ
+ * موقوت. وتُصان القيمة هنا لا في المكوّن: قيمةٌ مشوّهة من نسخةٍ قديمة أو من
+ * دمجٍ لا تُنتج نضوجاً فورياً ولا أبدياً.
+ */
+export function ripenDaysOf(item: ShelfItem): number {
+  const d = item.ripenDays;
+  return Number.isFinite(d) && (d as number) > 0 ? Math.round(d as number) : SHELF_RIPEN_DAYS;
+}
+
+/** عمرُ العنصر على الرفّ بالأيام، محصوراً في [٠، مدّته]. */
 export function shelfAge(item: ShelfItem, todayStr: string): number {
   const days = Math.floor(
     (parseDate(todayStr).getTime() - parseDate(item.placedAt).getTime()) / 86400000
   );
-  return Math.max(0, Math.min(SHELF_RIPEN_DAYS, days));
+  return Math.max(0, Math.min(ripenDaysOf(item), days));
 }
 
 /** هل نضج؟ */
 export function isRipe(item: ShelfItem, todayStr: string): boolean {
-  return shelfAge(item, todayStr) >= SHELF_RIPEN_DAYS;
+  return shelfAge(item, todayStr) >= ripenDaysOf(item);
 }
 
 /** ما بقي من أيام النضوج. */
 export function daysLeft(item: ShelfItem, todayStr: string): number {
-  return SHELF_RIPEN_DAYS - shelfAge(item, todayStr);
+  return ripenDaysOf(item) - shelfAge(item, todayStr);
 }
 
 /** ما زال ينتظر الحكم — لا تُرك ولا اشتُري. */
@@ -53,10 +67,17 @@ export function waitingTotal(items: ShelfItem[]): number {
   return waitingItems(items).reduce((a, i) => a + (i.price || 0), 0);
 }
 
-/** ثلاثون شرطةً تُري نضوجَ العنصر بنظرة. */
+/**
+ * شرطةٌ لكلّ يومٍ من مدّة العنصر — تُري نضوجَه بنظرة.
+ *
+ * تُحصر في ثلاثين شرطةً على الأكثر: ستّون شرطةً في عرض الهاتف تصير خيطاً لا
+ * يُقرأ. فالشرطةُ في المدد الطويلة تمثّل أكثر من يوم، والنسبةُ هي المقروءة.
+ */
 export function ripenTicks(item: ShelfItem, todayStr: string): { filled: boolean }[] {
-  const age = shelfAge(item, todayStr);
-  return Array.from({ length: SHELF_RIPEN_DAYS }, (_, i) => ({ filled: i < age }));
+  const span = ripenDaysOf(item);
+  const ticks = Math.min(span, SHELF_RIPEN_DAYS);
+  const filled = Math.round((shelfAge(item, todayStr) / span) * ticks);
+  return Array.from({ length: ticks }, (_, i) => ({ filled: i < filled }));
 }
 
 /**
@@ -78,6 +99,6 @@ export function shelfState(item: ShelfItem, todayStr: string): string {
   if (item.boughtAt) return "اشتريتَه بعد نضوجه";
   if (item.releasedAt) return "تركتَه فوفَّرتَ ثمنَه";
   const left = daysLeft(item, todayStr);
-  if (left <= 0) return "نضجَ بعد ثلاثين يومًا — احكُم الآن";
+  if (left <= 0) return `نضجَ بعد ${arDays(ripenDaysOf(item))} — احكُم الآن`;
   return `يبقى ${arDays(left)}`;
 }

@@ -18,6 +18,7 @@ import {
 import { biggestCashExpense } from "@/lib/financeOverview";
 import type { Transaction } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
+import { GroupLabel } from "@/components/ui/GroupLabel";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { SpendingPatternCard } from "@/components/finance/SpendingPatternCard";
 import { FinancePace } from "@/components/finance/FinancePace";
@@ -80,17 +81,6 @@ function periodRanges(period: Period, todayStr: string) {
 }
 
 const inRange = (t: Transaction, start: string, end: string) => t.date >= start && t.date <= end;
-
-// عنوانٌ خفيفٌ يجمّع البطاقات بصريًّا (نفس نمط صفحة المصاريف: «يومياتك»/«سجلّك») —
-// مسمّى مكتوم صغير مع خيطٍ ذهبيٍّ باهت، ليفصل قسم «هذا الشهر» عمّا فوقه من الفترة.
-function GroupLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2.5 pt-2 -mb-1">
-      <h2 className="shrink-0 text-xs font-semibold tracking-wide text-gray-400">{children}</h2>
-      <span className="h-px flex-1 bg-brand-500/25" aria-hidden />
-    </div>
-  );
-}
 
 export default function SpendInsightsPage() {
   const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome, salaryDay, lastSalaryConfirm, budgetWindow } = useAppStore();

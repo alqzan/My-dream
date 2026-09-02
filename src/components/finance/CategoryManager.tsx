@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { uid, getSubCategories, cn } from "@/lib/utils";
+import { uid, getSubCategories, cn, firstGrapheme } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Plus, Trash2, CornerDownLeft, Pencil, ChevronUp, ChevronDown } from "lucide-react";
 
@@ -10,15 +10,6 @@ const ICONS = ["🧺", "✨", "📊", "🤲", "🎁", "🏠", "🚗", "🍽️",
 // green / teal / soft purple / rose).
 const COLORS = ["#c1663f", "#c9852a", "#e07b39", "#3d9640", "#256128", "#1f7a6c", "#8a6fb0", "#c94f6d"];
 
-function firstGrapheme(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    for (const s of seg.segment(trimmed)) return s.segment;
-  }
-  return [...trimmed][0] ?? "";
-}
 
 // Small up/down reorder control. Disabled at the ends of the sibling list.
 function Reorder({ onUp, onDown, first, last }: { onUp: () => void; onDown: () => void; first: boolean; last: boolean }) {

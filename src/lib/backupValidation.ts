@@ -285,6 +285,7 @@ function validShelfItem(value: unknown): value is ShelfItem {
     && optionalString(value.releasedAt)
     && optionalString(value.boughtAt)
     && optionalString(value.transactionId)
+    && optionalFiniteNumber(value.ripenDays)
     && optionalFiniteNumber(value.updatedAt);
 }
 

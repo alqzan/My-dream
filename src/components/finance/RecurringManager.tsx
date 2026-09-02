@@ -6,7 +6,7 @@ import { RECURRING_PRESETS } from "@/lib/types";
 import { uid, today, getCategoryInfo, formatAmount, generationModeOf } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { Plus, Trash2, Power } from "lucide-react";
+import { Plus, Trash2, Power, Pencil } from "lucide-react";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -20,6 +20,8 @@ export function describeFrequency(unit: RecurringUnit, every: number): string {
 export function RecurringManager({ onClose }: { onClose: () => void }) {
   const { categories, recurring, addRecurring, deleteRecurring, updateRecurring, runRecurring } = useAppStore();
   const [adding, setAdding] = useState(false);
+  // معرّفُ القاعدة التي تُحرَّر الآن — غيابُه يعني أنّ النموذج للإضافة.
+  const [editId, setEditId] = useState<string | null>(null);
   const [category, setCategory] = useState<string>(categories[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -28,17 +30,52 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
   const [customEvery, setCustomEvery] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState(1); // day-of-month (شهري) or weekday index (أسبوعي)
 
+  function resetForm() {
+    setEditId(null);
+    setCategory(categories[0]?.id ?? "");
+    setAmount(""); setNote("");
+    setUnit("شهري"); setEvery(1); setCustomEvery(false); setDayOfMonth(1);
+  }
+
+  /**
+   * فتحُ قاعدةٍ قائمة للتحرير. تغييرُ الالتزام كان يعني حذفَه وإعادةَ إنشائه —
+   * وذلك يفقد `lastGenerated` فيعيد توليدَ ما وُلّد أصلاً، ويفقد `anchorDate`
+   * فتنزاح الوتيرةُ إلى اليوم. التحريرُ في مكانه يحفظ الاثنين.
+   */
+  function openEdit(r: RecurringTransaction) {
+    setEditId(r.id);
+    setCategory(r.category);
+    setAmount(String(r.amount));
+    setNote(r.note);
+    setUnit(r.unit);
+    setEvery(r.every);
+    setCustomEvery(!RECURRING_PRESETS.some((p) => p.unit === r.unit && p.every === r.every));
+    setDayOfMonth(r.dayOfMonth);
+    setAdding(true);
+  }
+
   function handleAdd() {
     const parsed = parseFloat(amount);
     if (!parsed || parsed <= 0) return;
-    const r: RecurringTransaction = {
-      id: uid(),
+    const shape = {
       amount: parsed,
       category,
       note,
       unit,
       every: Math.max(1, every || 1),
       dayOfMonth,
+    };
+    if (editId) {
+      // `anchorDate` و`lastGenerated` لا يُمسّان: الأوّل طَورُ الوتيرة، والثاني
+      // ذاكرةُ ما وُلّد — وإعادةُ ضبطهما تُعيد توليد التزامٍ سُجّل مرّة.
+      updateRecurring(editId, shape);
+      setAdding(false);
+      resetForm();
+      return;
+    }
+    const r: RecurringTransaction = {
+      id: uid(),
+      ...shape,
       anchorDate: today(),
       active: true,
     };
@@ -46,7 +83,7 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
     // Immediately generate any due instance
     setTimeout(() => runRecurring(), 0);
     setAdding(false);
-    setAmount(""); setNote("");
+    resetForm();
   }
 
   return (
@@ -92,6 +129,14 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
               >
                 <Power size={15} />
               </button>
+              <button
+                onClick={() => openEdit(r)}
+                className="p-1 text-gray-300 hover:text-finance"
+                title="تعديل"
+                aria-label={`تعديل ${r.note || info.label}`}
+              >
+                <Pencil size={14} />
+              </button>
               <button onClick={() => deleteRecurring(r.id)} className="p-1 text-gray-300 hover:text-red-400">
                 <Trash2 size={14} />
               </button>
@@ -103,6 +148,9 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
       {/* Add form */}
       {adding ? (
         <div className="bg-gray-50 rounded-xl p-3 space-y-3">
+          {editId && (
+            <div className="text-xs font-semibold text-gray-500">تعديل الالتزام المتكرر</div>
+          )}
           <div className="grid grid-cols-3 gap-1.5">
             {categories.filter((c) => !c.parentId).map((cat) => (
               <button
@@ -210,12 +258,14 @@ export function RecurringManager({ onClose }: { onClose: () => void }) {
           )}
 
           <div className="flex gap-2">
-            <Button onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90" size="sm">حفظ</Button>
-            <Button variant="secondary" size="sm" onClick={() => setAdding(false)}>إلغاء</Button>
+            <Button onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90" size="sm">
+              {editId ? "حفظ التعديل" : "حفظ"}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => { setAdding(false); resetForm(); }}>إلغاء</Button>
           </div>
         </div>
       ) : (
-        <Button onClick={() => setAdding(true)} variant="secondary" className="w-full gap-1.5">
+        <Button onClick={() => { resetForm(); setAdding(true); }} variant="secondary" className="w-full gap-1.5">
           <Plus size={16} /> إضافة مصروف متكرر
         </Button>
       )}

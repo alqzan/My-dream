@@ -259,6 +259,14 @@ interface AppStore extends AppData {
   // ---------- المحبرة: المصادر والفوائد ----------
   // ---------- الرفّ ----------
   addShelfItem: (item: ShelfItem) => void;
+  /**
+   * تصحيحُ ما كُتب: الاسم والثمن والسبب والمدّة.
+   *
+   * **لا يمسّ `placedAt`** — التعديل تصحيحُ وصفٍ لا إعادةُ وضعٍ على الرفّ؛
+   * وإلا لأمكن تصفيرُ العدّاد بتغيير حرفٍ في الاسم، و«ثلاثون أخرى»
+   * (`renewShelfItem`) هي البابُ الصريحُ الوحيد لإعادة العدّ.
+   */
+  updateShelfItem: (id: string, updates: Partial<Omit<ShelfItem, "id" | "placedAt">>) => void;
   /** «دَعْه» — يبقى محفوظاً ليُجمع ثمنُه فيما وفَّرت. */
   releaseShelfItem: (id: string) => void;
   /** «ثلاثون أخرى» — يُعيد عدّ النضوج من اليوم. */
@@ -1612,7 +1620,17 @@ export const useAppStore = create<AppStore>()(
       deleteFutureLetter: (id) =>
         set((s) => ({ futureLetters: s.futureLetters.filter((l) => l.id !== id) })),
 
-      addShelfItem: (item) => set((st) => ({ shelfItems: [item, ...(st.shelfItems ?? [])] })),
+      addShelfItem: (item) =>
+        set((st) => ({
+          shelfItems: [item, ...(st.shelfItems ?? [])],
+          // إعادةُ معرّفٍ حُذف للتوّ (تراجعٌ عن حذف) ترفع شاهدَ حذفه، وإلا أعاده
+          // الدمجُ إلى العدم في أوّل مزامنة — كما في `addTransaction`.
+          ...clearTombstone(st.deleted, item.id),
+        })),
+      updateShelfItem: (id, updates) =>
+        set((st) => ({
+          shelfItems: (st.shelfItems ?? []).map((x) => (x.id === id ? { ...x, ...updates } : x)),
+        })),
       releaseShelfItem: (id) =>
         set((st) => ({
           shelfItems: (st.shelfItems ?? []).map((x) =>

@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent, cn } from "@/lib/utils";
+import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent, cn, firstGrapheme } from "@/lib/utils";
 import type { ReserveFund, Transaction } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X } from "lucide-react";
+import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X, Pencil, ChevronDown } from "lucide-react";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -17,17 +17,6 @@ const DRAINED = "#e05555";
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-}
-
-// First full emoji of whatever the user types — any emoji is welcome.
-function firstGrapheme(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    for (const s of seg.segment(trimmed)) return s.segment;
-  }
-  return [...trimmed][0] ?? "";
 }
 
 // الاحتياطي: قافلةٌ من الأهداف تسير على خيطٍ ذهبي — كل هدف قُرصٌ دائري يمتلئ
@@ -61,7 +50,7 @@ export function ReserveFunds() {
         </button>
       </div>
 
-      {adding && <AddFundForm onDone={() => setAdding(false)} onAdd={addReserve} onDeposit={addReserveDeposit} />}
+      {adding && <FundForm onDone={() => setAdding(false)} onAdd={addReserve} onDeposit={addReserveDeposit} />}
 
       {reserves.length === 0 && !adding && (
         <button
@@ -246,9 +235,14 @@ function FundDial({
 // ————————————————————————————————————————————————————————————————
 // تفاصيل الهدف المفتوح — نفس نموذج التعبئة/السحب والحذف القديم بالحرف.
 function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void }) {
-  const { transactions, deleteReserve, addReserveDeposit, dailyBudget, pullFromReserve } = useAppStore();
+  const {
+    transactions, deleteReserve, updateReserve, addReserveDeposit, deleteReserveDeposit,
+    dailyBudget, pullFromReserve,
+  } = useAppStore();
   const [amount, setAmount] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [showDeposits, setShowDeposits] = useState(false);
 
   const balance = reserveBalance(fund, transactions);
   const spent = reserveSpent(fund, transactions);
@@ -375,9 +369,51 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
       )}
 
       <div className="flex justify-between text-[10px] text-gray-400">
-        <span>الإيداعات: {formatAmount(deposited)} ر.س</span>
+        <button
+          type="button"
+          onClick={() => setShowDeposits((v) => !v)}
+          className="flex items-center gap-1 hover:text-finance press"
+          aria-expanded={showDeposits}
+        >
+          <ChevronDown size={11} className={cn("transition-transform", showDeposits && "rotate-180")} />
+          الإيداعات: {formatAmount(deposited)} ر.س
+        </button>
         <span>المصروف منه: {formatAmount(spent)} ر.س</span>
       </div>
+
+      {/* سجلُّ التعبئة والسحب — تعبئةٌ بمبلغٍ خاطئ كانت تعلق للأبد لأنّ الرصيد
+          مشتقٌّ من هذه القيود لا من عدّاد. الحذف هنا يصحّح الرصيد من جذره. */}
+      {showDeposits && (
+        fund.deposits.length === 0 ? (
+          <p className="text-[10px] text-gray-400 px-1">لا إيداعات بعد.</p>
+        ) : (
+          <div className="space-y-1">
+            {[...fund.deposits]
+              .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+              .map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-2 text-[11px] text-gray-500 bg-white/60 dark:bg-white/5 rounded-lg px-2 py-1"
+                >
+                  <span className="truncate">{d.note || (d.amount >= 0 ? "تعبئة" : "سحب")} · {formatDateShort(d.date)}</span>
+                  <span className="flex items-center gap-1.5 shrink-0">
+                    <span className={cn("font-bold tabular-nums", d.amount >= 0 ? "text-finance" : "text-amber-600")}>
+                      {d.amount >= 0 ? "+" : "−"}{formatAmount(Math.abs(d.amount))}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => deleteReserveDeposit(fund.id, d.id)}
+                      className="text-gray-300 hover:text-red-500 press"
+                      aria-label="حذف القيد"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                </div>
+              ))}
+          </div>
+        )
+      )}
 
       {charges.length > 0 && (
         <div className="space-y-1">
@@ -397,6 +433,14 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
         </div>
       )}
 
+      {editing && (
+        <FundForm
+          initial={fund}
+          onDone={() => setEditing(false)}
+          onSave={(updates) => updateReserve(fund.id, updates)}
+        />
+      )}
+
       {confirmDelete ? (
         <div className="flex items-center justify-between gap-2 bg-red-50 dark:bg-red-500/10 rounded-lg px-2.5 py-2">
           <span className="text-[11px] text-red-600">حذف «{fund.name}»؟ المصاريف المرتبطة تنتقل لليومية.</span>
@@ -406,47 +450,75 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
           </div>
         </div>
       ) : (
-        <button
-          onClick={() => setConfirmDelete(true)}
-          className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 press"
-        >
-          <Trash2 size={12} /> حذف الاحتياطي
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setEditing((v) => !v)}
+            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-finance press"
+            aria-expanded={editing}
+          >
+            <Pencil size={12} /> تعديل الاحتياطي
+          </button>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 press"
+          >
+            <Trash2 size={12} /> حذف الاحتياطي
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-function AddFundForm({
+/**
+ * نموذجُ الاحتياطي — **إضافةً وتعديلاً بالحقول نفسها**، فلا يتباعد الشكلان.
+ *
+ * `initial` غيابُه إضافةٌ جديدة (فيظهر «الرصيد الافتتاحي» ويُنشأ الصندوق)،
+ * ووجودُه تعديلٌ للاسم والأيقونة واللون والهدف وحدها: **الرصيد لا يُحرَّر هنا**
+ * لأنّه مشتقٌّ من قيود التعبئة والسحب، وتحريرُه رقماً يُنشئ رصيداً بلا قيدٍ
+ * يفسّره — تصحيحُ الرصيد بحذف قيده من سجلّ الإيداعات.
+ */
+function FundForm({
+  initial: fund,
   onDone,
   onAdd,
   onDeposit,
+  onSave,
 }: {
+  initial?: ReserveFund;
   onDone: () => void;
-  onAdd: (f: ReserveFund) => void;
-  onDeposit: (fundId: string, d: { id: string; date: string; amount: number; note?: string }) => void;
+  onAdd?: (f: ReserveFund) => void;
+  onDeposit?: (fundId: string, d: { id: string; date: string; amount: number; note?: string }) => void;
+  onSave?: (updates: Partial<ReserveFund>) => void;
 }) {
-  const [name, setName] = useState("");
-  const [icon, setIcon] = useState("🏠");
-  const [color, setColor] = useState(COLORS[0]);
-  const [target, setTarget] = useState("");
-  const [initial, setInitial] = useState("");
+  const editing = fund !== undefined;
+  const [name, setName] = useState(fund?.name ?? "");
+  const [icon, setIcon] = useState(fund?.icon ?? "🏠");
+  const [color, setColor] = useState(fund?.color ?? COLORS[0]);
+  const [target, setTarget] = useState(fund?.target ? String(fund.target) : "");
+  const [initialDeposit, setInitialDeposit] = useState("");
 
   function handleAdd() {
     if (!name.trim()) return;
-    const fund: ReserveFund = {
+    const goal = parseFloat(target) > 0 ? parseFloat(target) : undefined;
+    if (editing) {
+      onSave?.({ name: name.trim(), icon, color, target: goal });
+      onDone();
+      return;
+    }
+    const created: ReserveFund = {
       id: uid(),
       name: name.trim(),
       icon,
       color,
-      target: parseFloat(target) > 0 ? parseFloat(target) : undefined,
+      target: goal,
       deposits: [],
       createdAt: today(),
     };
-    onAdd(fund);
-    const first = parseFloat(initial);
+    onAdd?.(created);
+    const first = parseFloat(initialDeposit);
     if (first > 0) {
-      onDeposit(fund.id, { id: uid(), date: today(), amount: first, note: "رصيد افتتاحي" });
+      onDeposit?.(created.id, { id: uid(), date: today(), amount: first, note: "رصيد افتتاحي" });
     }
     onDone();
   }
@@ -497,7 +569,7 @@ function AddFundForm({
           />
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className={cn("grid gap-2", editing ? "grid-cols-1" : "grid-cols-2")}>
         <div>
           <label className="block text-[10px] text-gray-400 mb-1">الهدف (اختياري)</label>
           <NumberInput
@@ -506,17 +578,26 @@ function AddFundForm({
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
           />
         </div>
-        <div>
-          <label className="block text-[10px] text-gray-400 mb-1">رصيد افتتاحي (اختياري)</label>
-          <NumberInput
-            value={initial} onChange={setInitial}
-            placeholder="مثلاً 5000" inputMode="decimal"
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
-          />
-        </div>
+        {!editing && (
+          <div>
+            <label className="block text-[10px] text-gray-400 mb-1">رصيد افتتاحي (اختياري)</label>
+            <NumberInput
+              value={initialDeposit} onChange={setInitialDeposit}
+              placeholder="مثلاً 5000" inputMode="decimal"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
+            />
+          </div>
+        )}
       </div>
+      {editing && (
+        <p className="text-[10px] text-gray-400">
+          الرصيد لا يُحرَّر هنا — هو حصيلةُ التعبئة والسحب. لتصحيحه احذف قيدَه من «الإيداعات».
+        </p>
+      )}
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90">إضافة</Button>
+        <Button size="sm" onClick={handleAdd} className="flex-1 bg-finance hover:bg-finance/90">
+          {editing ? "حفظ التعديل" : "إضافة"}
+        </Button>
         <Button size="sm" variant="secondary" onClick={onDone}>إلغاء</Button>
       </div>
     </div>

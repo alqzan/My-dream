@@ -11,7 +11,9 @@ import {
   Flame,
   Hourglass,
   MoreHorizontal,
+  Pencil,
   Play,
+  Plus,
   Snowflake,
   Sprout,
   Trash2,
@@ -21,7 +23,13 @@ import { useAppStore } from "@/lib/store";
 import { buildDayDigest } from "@/lib/assistantContext";
 import { arNum } from "@/lib/madar/format";
 import { SECTION } from "@/lib/palette";
-import { buzz, cn, graceStreak, quranActivityDates, today, type GraceStreak } from "@/lib/utils";
+import {
+  buzz, cn, firstGrapheme, graceStreak, quranActivityDates, today, uid, type GraceStreak,
+} from "@/lib/utils";
+
+// المقترحاتُ وحدها — وحقلُ الإيموجي مفتوحٌ لأيّ محرفٍ من لوحة المفاتيح.
+const HABIT_ICONS = ["⭐", "💪", "🧠", "🙏", "🏃", "📖", "💧", "🥗", "🎯", "😴", "🕌", "✍️", "🚶", "☀️", "🧘"];
+const HABIT_COLORS = [SECTION.brand, SECTION.finance, SECTION.journal, SECTION.reading, "#4a9fbd", "#c94f6d"];
 
 interface RitualSpec {
   key: string;
@@ -36,6 +44,13 @@ interface RitualSpec {
   streak: GraceStreak;
   href?: string;
   onToggle?: () => void;
+  /**
+   * تعليمُ الطقس منجزاً من علامة الحالة نفسها — لطقسٍ يفتح صفحته بالضغط
+   * (`href`) فيبقى بلا وسيلةِ تعليمٍ يدويّة. غيابُها يعني أنّ الإنجاز مشتقٌّ
+   * من عملٍ مسجَّلٍ فعلاً، فالعلامةُ خبرٌ لا زرّ.
+   */
+  onMark?: () => void;
+  onEdit?: () => void;
   isCustom?: boolean;
 }
 
@@ -67,14 +82,29 @@ function StreakLine({ streak }: { streak: GraceStreak }) {
   );
 }
 
-function StatusMark({ done, name }: { done: boolean; name: string }) {
+function StatusMark({ done, name, onMark }: { done: boolean; name: string; onMark?: () => void }) {
+  const mark = done ? <Check size={14} strokeWidth={3} /> : <span aria-hidden="true" />;
+  if (!onMark) {
+    return (
+      <span
+        className={cn("mdr-daily-rhythm-status", done && "is-done")}
+        aria-label={done ? `${name}: أُنجزت اليوم` : `${name}: لم تُنجز اليوم`}
+      >
+        {mark}
+      </span>
+    );
+  }
   return (
-    <span
-      className={cn("mdr-daily-rhythm-status", done && "is-done")}
-      aria-label={done ? `${name}: أُنجزت اليوم` : `${name}: لم تُنجز اليوم`}
+    <button
+      type="button"
+      className={cn("mdr-daily-rhythm-status is-tappable press", done && "is-done")}
+      onClick={(event) => { event.stopPropagation(); buzz(); onMark(); }}
+      aria-pressed={done}
+      aria-label={done ? `${name}: أُنجزت اليوم — اضغط للتراجع` : `${name}: علّمها منجزة اليوم`}
+      title={done ? "تراجَع" : "علّمها منجزة"}
     >
-      {done ? <Check size={14} strokeWidth={3} /> : <span aria-hidden="true" />}
-    </span>
+      {mark}
+    </button>
   );
 }
 
@@ -126,6 +156,19 @@ function RitualActions({
             <Snowflake size={14} aria-hidden="true" />
             {custom ? "تجميد اليوم" : "إخفاء اليوم"}
           </button>
+          {ritual.onEdit && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                ritual.onEdit?.();
+                setOpen(false);
+              }}
+            >
+              <Pencil size={14} aria-hidden="true" />
+              تعديل العادة
+            </button>
+          )}
           {onDelete && (
             <button
               type="button"
@@ -198,7 +241,7 @@ function RitualRow({
           {content}
         </button>
       )}
-      <StatusMark done={ritual.done} name={ritual.name} />
+      <StatusMark done={ritual.done} name={ritual.name} onMark={ritual.onMark} />
       <RitualActions ritual={ritual} onFreeze={onFreeze} onDelete={onDelete} />
     </div>
   );
@@ -255,6 +298,97 @@ function HiddenItemRow({
   );
 }
 
+/**
+ * محرّرُ العادة — إضافةً وتعديلاً.
+ *
+ * لا شاشةَ إدارةٍ منفصلة: العادةُ تُضاف وتُسمّى من المكان الذي تُعلَّم فيه.
+ * (كانت هذه القدرة معلّقةً بلا مدخل بعد نقل التصميم: `addHabit` و`updateHabit`
+ * موجودتان في المتجر ولا زرَّ يبلغهما، فتعذّر إنشاءُ عادةٍ جديدة أصلاً.)
+ */
+function HabitEditor({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: { id: string; name: string; icon: string; color: string };
+  onSave: (draft: { name: string; icon: string; color: string }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [icon, setIcon] = useState(initial?.icon || "⭐");
+  const [color, setColor] = useState(initial?.color || HABIT_COLORS[0]);
+
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onSave({ name: trimmed, icon, color });
+  }
+
+  return (
+    <div className="mdr-daily-rhythm-editor" role="group" aria-label={initial ? "تعديل العادة" : "عادة جديدة"}>
+      <div className="mdr-daily-rhythm-editor-top">
+        <span className="mdr-daily-rhythm-editor-preview" style={{ ["--rhythm-color" as string]: color }}>
+          {icon}
+        </span>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") submit(); }}
+          placeholder="اسم العادة"
+          lang="ar"
+          dir="rtl"
+          aria-label="اسم العادة"
+          autoFocus
+        />
+      </div>
+
+      <div className="mdr-daily-rhythm-editor-icons" role="group" aria-label="أيقونة العادة">
+        {HABIT_ICONS.map((ic) => (
+          <button
+            key={ic}
+            type="button"
+            onClick={() => setIcon(ic)}
+            className={cn(icon === ic && "is-active")}
+            aria-pressed={icon === ic}
+          >
+            {ic}
+          </button>
+        ))}
+        <input
+          value=""
+          onChange={(event) => {
+            const emoji = firstGrapheme(event.target.value);
+            if (emoji) setIcon(emoji);
+          }}
+          placeholder="أو أي إيموجي"
+          aria-label="إيموجي مخصص"
+        />
+      </div>
+
+      <div className="mdr-daily-rhythm-editor-colors" role="group" aria-label="لون العادة">
+        {HABIT_COLORS.map((c, i) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setColor(c)}
+            className={cn(color === c && "is-active")}
+            style={{ backgroundColor: c }}
+            aria-label={`اللون ${arNum(i + 1)}`}
+            aria-pressed={color === c}
+          />
+        ))}
+      </div>
+
+      <div className="mdr-daily-rhythm-editor-actions">
+        <button type="button" className="is-primary press" onClick={submit} disabled={!name.trim()}>
+          {initial ? "احفظ التعديل" : "أضِف العادة"}
+        </button>
+        <button type="button" className="press" onClick={onCancel}>إلغاء</button>
+      </div>
+    </div>
+  );
+}
+
 // قائمة اليوم ليست شاشة إدارة ولا مقتطفات من المصحف؛ هي حالة مختصرة وصادقة
 // تربط كل طقس بقسمه. عرض القرآن الفعلي يبقى داخل صفحة المصحف حتى لا نقتطع آية
 // أو نستخدم نصاً قرآنياً للزينة داخل البهو.
@@ -273,6 +407,11 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
   const toggleHabitLog = useAppStore((s) => s.toggleHabitLog);
   const toggleFreezeHabit = useAppStore((s) => s.toggleFreezeHabit);
   const deleteHabit = useAppStore((s) => s.deleteHabit);
+  const addHabit = useAppStore((s) => s.addHabit);
+  const updateHabit = useAppStore((s) => s.updateHabit);
+  const toggleWird = useAppStore((s) => s.toggleWird);
+  // `null` مغلق · `"new"` عادةٌ جديدة · معرّفٌ = تعديلُ عادةٍ قائمة.
+  const [editing, setEditing] = useState<string | null>(null);
   const [hiddenOpen, setHiddenOpen] = useState(false);
   const hiddenPanelRef = useRef<HTMLDivElement>(null);
 
@@ -336,19 +475,32 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
     ]
   );
 
+  // الوِردُ يُنجَز بأحد أمرين: عملٌ مسجَّلٌ في قسم القرآن (حفظٌ أو مراجعةٌ أو
+  // ختمة)، أو تعليمُك إيّاه بيدك. والتفريقُ بينهما مقصود: ما أنجزَته بعملٍ
+  // مسجَّل لا يُلغى بضغطةٍ هنا (وإلا نقضت علامةُ اليوم سجلَّ الحفظ)، وما
+  // علّمتَه بيدك تتراجع عنه بالضغطة نفسها. وبلا هذا الزرّ كان «اليوم المكتمل»
+  // مستحيلاً على من لا خطّةَ حفظٍ له — وهو ثلثُ تعريفه في `dayAggregator`.
+  const wirdMarked = (quranWird ?? []).includes(todayStr);
+  const wirdByActivity = digest.wirdDone && !wirdMarked;
+
   const coreRituals: RitualSpec[] = [
     {
       key: "quran",
       freezeKey: "core:wird",
       name: "القرآن",
       status: digest.wirdDone ? "أُنجز القرآن اليوم" : "لم تقرأ وردك اليوم",
-      hint: digest.wirdDone ? "نشاطك محفوظ في قسم القرآن" : "افتح المصحف وأكمل وردك",
+      hint: wirdByActivity
+        ? "نشاطك محفوظ في قسم القرآن"
+        : digest.wirdDone
+          ? "علّمتَ وردك اليوم"
+          : "افتح المصحف وأكمل وردك",
       color: SECTION.quran,
       wash: "#e2efe8",
       icon: <Sprout size={18} strokeWidth={1.9} />,
       done: digest.wirdDone,
       streak: wirdStreak,
       href: "/quran",
+      onMark: wirdByActivity ? undefined : () => toggleWird(todayStr),
     },
     {
       key: "journal",
@@ -404,6 +556,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
         done,
         isCustom: true,
         streak: graceStreak(habit.logs ?? []),
+        onEdit: () => setEditing(habit.id),
         onToggle: () => {
           if (!done) buzz();
           toggleHabitLog(habit.id, todayStr);
@@ -442,6 +595,16 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
         </div>
         <div ref={hiddenPanelRef} className="mdr-daily-rhythm-head-actions">
           <span className="mdr-daily-rhythm-count">{countLabel}</span>
+          <button
+            type="button"
+            className="mdr-daily-rhythm-manage press"
+            onClick={() => { setHiddenOpen(false); setEditing((v) => (v === "new" ? null : "new")); }}
+            aria-label="إضافة عادة"
+            aria-expanded={editing === "new"}
+            title="إضافة عادة"
+          >
+            <Plus size={17} strokeWidth={2.4} aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="mdr-daily-rhythm-manage press"
@@ -493,6 +656,26 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
         </div>
       </header>
 
+      {editing !== null && (
+        <HabitEditor
+          key={editing}
+          initial={
+            editing === "new"
+              ? undefined
+              : (() => {
+                  const h = habits.find((x) => x.id === editing);
+                  return h ? { id: h.id, name: h.name, icon: h.icon, color: h.color } : undefined;
+                })()
+          }
+          onCancel={() => setEditing(null)}
+          onSave={(draft) => {
+            if (editing === "new") addHabit({ id: uid(), ...draft, logs: [] });
+            else updateHabit(editing, draft);
+            setEditing(null);
+          }}
+        />
+      )}
+
       <div className="mdr-daily-rhythm-list">
         {activeRituals.map((ritual) => (
           <RitualRow
@@ -503,7 +686,7 @@ export function DayDigestCard({ compact = false }: { compact?: boolean } = {}) {
           />
         ))}
         {activeRituals.length === 0 && (
-          <p className="mdr-daily-rhythm-empty">ما عليك شيء الآن؛ العناصر المخفية تجدها من زر الإدارة.</p>
+          <p className="mdr-daily-rhythm-empty">ما عليك شيء الآن؛ أضِف عادةً بزرّ ＋، والمخفيّ تجده من زرّ الإدارة.</p>
         )}
       </div>
     </section>

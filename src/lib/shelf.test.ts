@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   shelfAge, isRipe, daysLeft, isWaiting, waitingItems, savedTotal, waitingTotal,
-  ripenTicks, shelfState, arDays, SHELF_RIPEN_DAYS,
+  ripenTicks, shelfState, arDays, ripenDaysOf, SHELF_RIPEN_DAYS, SHELF_RIPEN_CHOICES,
 } from "./shelf";
 import type { ShelfItem } from "./types";
 
@@ -112,5 +112,64 @@ describe("عدُّ الأيام بعربيّةٍ سليمة", () => {
   it("جملةُ الحال تستعمله فلا يُقرأ «يبقى ٤ يومًا»", () => {
     expect(shelfState(item("a", "2026-08-15"), "2026-08-19")).toBe("يبقى ٢٦ يومًا");
     expect(shelfState(item("b", "2026-07-27"), "2026-08-19")).toBe("يبقى ٧ أيام");
+  });
+});
+
+/**
+ * المدّةُ على العنصر لا في الإعدادات: تبديلُ إعدادٍ عامّ كان يُنضج ما لم يصبر
+ * ويُعيد الناضجَ خامّاً بأثرٍ رجعيّ — والرفُّ كلُّه صبرٌ موقوت.
+ */
+describe("مدّةُ نضوجٍ لكلّ عنصر", () => {
+  it("غيابُها ثلاثون — فما وُضع قبل الحقل يبقى كما كان", () => {
+    expect(ripenDaysOf(item("a", "2026-08-01"))).toBe(SHELF_RIPEN_DAYS);
+  });
+
+  it("قيمةٌ مشوّهة لا تُنضج فوراً ولا تُخلّد", () => {
+    for (const bad of [0, -5, NaN, Infinity, undefined]) {
+      expect(ripenDaysOf(item("a", "2026-08-01", { ripenDays: bad as number }))).toBe(SHELF_RIPEN_DAYS);
+    }
+  });
+
+  it("الستّونَ لا تنضج في الثلاثين", () => {
+    const long = item("a", "2026-07-20", { ripenDays: 60 }); // ٣٠ يوماً مضت
+    expect(shelfAge(long, "2026-08-19")).toBe(30);
+    expect(isRipe(long, "2026-08-19")).toBe(false);
+    expect(daysLeft(long, "2026-08-19")).toBe(30);
+    expect(isRipe(long, "2026-09-18")).toBe(true);
+  });
+
+  it("عنصران على الرفّ لكلٍّ مدّتُه — لا مدّةَ واحدة تحكمهما", () => {
+    const short = item("a", "2026-07-20", { ripenDays: 30 });
+    const long = item("b", "2026-07-20", { ripenDays: 90 });
+    expect(isRipe(short, "2026-08-19")).toBe(true);
+    expect(isRipe(long, "2026-08-19")).toBe(false);
+  });
+
+  it("جملةُ الحال تذكر المدّة الحقيقية لا «ثلاثين» دائماً", () => {
+    expect(shelfState(item("a", "2026-01-01", { ripenDays: 90 }), "2026-08-19"))
+      .toBe("نضجَ بعد ٩٠ يومًا — احكُم الآن");
+  });
+
+  it("الشرطاتُ تُحصر بثلاثين فلا تصير خيطاً على الهاتف، والنسبةُ محفوظة", () => {
+    const long = item("a", "2026-07-20", { ripenDays: 90 });
+    const ticks = ripenTicks(long, "2026-08-19"); // ٣٠ من ٩٠ = الثلث
+    expect(ticks).toHaveLength(30);
+    expect(ticks.filter((t) => t.filled)).toHaveLength(10);
+
+    const plain = ripenTicks(item("b", "2026-08-09"), "2026-08-19");
+    expect(plain).toHaveLength(30);
+    expect(plain.filter((t) => t.filled)).toHaveLength(10);
+  });
+
+  it("الناضجُ تمتلئ كلُّ شرطاته مهما طالت مدّته", () => {
+    const long = item("a", "2026-01-01", { ripenDays: 60 });
+    const ticks = ripenTicks(long, "2026-08-19");
+    expect(ticks.every((t) => t.filled)).toBe(true);
+  });
+
+  it("المددُ المعروضة كلُّها صالحة", () => {
+    for (const d of SHELF_RIPEN_CHOICES) {
+      expect(ripenDaysOf(item("a", "2026-08-01", { ripenDays: d }))).toBe(d);
+    }
   });
 });

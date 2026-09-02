@@ -76,7 +76,7 @@ export default function FinancePage() {
   const {
     transactions, recurring, installmentPlans, assets, categories, dailyBudget, reserves, budgets, salaryDay, lastSalaryConfirm, budgetWindow, monthlyIncome,
     shelfItems, deleteTransaction, addTransaction,
-    addShelfItem, releaseShelfItem, renewShelfItem, buyShelfItem,
+    addShelfItem, updateShelfItem, deleteShelfItem, releaseShelfItem, renewShelfItem, buyShelfItem,
   } = useAppStore();
 
   // Instant delete + 5s undo window.
@@ -400,7 +400,7 @@ export default function FinancePage() {
         </button>
       </CollapsibleSection>}
 
-      {/* «الرفّ»: تأخيرُ الحكم ثلاثين يوماً — لا يمنع شراءً، يؤجّله حتى تهدأ
+      {/* «الرفّ»: تأخيرُ الحكم مدّةً تُختار لكلّ عنصر — لا يمنع شراءً، يؤجّله حتى تهدأ
           الشهوة. ما تُرِكَ يُجمع ثمنُه في «وفَّرت» **اشتقاقاً** من العناصر
           المتروكة لا بعدّادٍ يتراكم (عدّادٌ يخسر زيادةً عند الدمج بين جهازين). */}
       {isFinanceSectionVisible("shelf") && <CollapsibleSection
@@ -419,8 +419,23 @@ export default function FinancePage() {
               items={shelfItems ?? []}
               todayStr={today()}
               onAdd={(draft) =>
-                addShelfItem({ id: uid(), name: draft.name, price: draft.price, reason: draft.reason, placedAt: today() })
+                addShelfItem({
+                  id: uid(), name: draft.name, price: draft.price, reason: draft.reason,
+                  ripenDays: draft.ripenDays, placedAt: today(),
+                })
               }
+              onEdit={(id, draft) =>
+                updateShelfItem(id, {
+                  name: draft.name, price: draft.price, reason: draft.reason, ripenDays: draft.ripenDays,
+                })
+              }
+              // الحذف **تصحيحُ إدخالٍ لا حكم**: شيءٌ وُضع سهواً يخرج بلا أن
+              // يُحسب فيما «وفَّرت» (ذلك ثوابُ «دَعْه» وحده). ولذلك تراجعٌ
+              // بضغطة كبقيّة الحذف في التطبيق، لا نافذةُ تأكيد.
+              onDelete={(item) => {
+                deleteShelfItem(item.id);
+                showUndo(`حذفت «${item.name}» من الرفّ`, () => addShelfItem(item));
+              }}
               onRelease={releaseShelfItem}
               onRenew={renewShelfItem}
               onBuy={setBuyingShelf}

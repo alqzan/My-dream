@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import {
-  today, calcStreak, uid, cn, toDateStr, buzz,
+  today, calcStreak, uid, cn, toDateStr, buzz, firstGrapheme,
   getJournalStreak, getReadingStreak, quranActivityDates,
 } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
@@ -12,18 +12,6 @@ import { SECTION } from "@/lib/palette";
 
 const ICONS = ["⭐", "💪", "🧠", "🙏", "🏃", "📖", "💧", "🥗", "🎯", "😴", "🕌", "✍️", "🚶", "☀️", "🧘"];
 const COLORS = [SECTION.brand, SECTION.finance, SECTION.journal, SECTION.reading, "#4a9fbd", "#c94f6d"];
-
-// First full emoji (grapheme cluster) of a string — so a composed emoji is
-// kept whole instead of split into surrogate halves.
-function firstGrapheme(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    for (const s of seg.segment(trimmed)) return s.segment;
-  }
-  return [...trimmed][0] ?? "";
-}
 
 // Last 7 days, oldest first (renders oldest on the right in RTL).
 function last7Days(): string[] {
