@@ -5,7 +5,7 @@ import { PRAYERS } from "./types";
 export const PRAYER_REMINDER_DELAY_MS = 30 * 60 * 1000;
 
 /** لا نوقظ المستخدم بسبب صلاةٍ قديمة جداً عند فتح التطبيق. */
-export const PRAYER_REMINDER_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+export const PRAYER_REMINDER_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 export interface PrayerReminderCandidate {
   date: string;

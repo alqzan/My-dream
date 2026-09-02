@@ -47,6 +47,11 @@ describe("duePrayerReminders", () => {
     expect(pickSmartPrayerReminder(due, at(14))?.prayer).toBe("الظهر");
   });
 
+  it("يبقي التذكير الحديث متاحاً خلال اليوم حتى لا تضيع فرصة التسجيل", () => {
+    const due = duePrayerReminders(at(11), date, times, undefined);
+    expect(pickSmartPrayerReminder(due, at(11))?.prayer).toBe("الفجر");
+  });
+
   it("لا يفتح مطالبة لصلاة أقدم من العمر المسموح", () => {
     const due = duePrayerReminders(at(23), date, times, undefined);
     expect(pickSmartPrayerReminder(due, at(23), 60 * 60 * 1000)).toBeNull();

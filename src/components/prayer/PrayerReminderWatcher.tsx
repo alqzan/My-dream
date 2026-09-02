@@ -18,7 +18,7 @@ import { Clock3 } from "lucide-react";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 
 const STORAGE_KEY = "madar-prayer-reminders-v1";
-const SNOOZE_MS = 2 * 60 * 60 * 1000;
+const SNOOZE_MS = 90 * 60 * 1000;
 const DAY_QUIET_SUFFIX = ":day-quiet";
 
 type SnoozeMap = Record<string, number>;
@@ -65,9 +65,9 @@ function prayerLabel(prayer: PrayerReminderCandidate): string {
 
 /**
  * مطالبةٌ عامةٌ خفيفة: بعد نصف ساعة من كل أذانٍ غير مسجّل، تسأل عن طريقة
- * الصلاة. تعمل حين تكون الصفحة مفتوحة، وتلحق بالصلوات التي فات وقت تذكيرها
- * عند فتح التطبيق أو عودته من الخلفية. لا تُنشئ سجلاً جديداً ولا تغيّر أي
- * بيانات إلا بعد ضغط «جماعة» أو «مفرد».
+ * الصلاة. تعمل حين تكون الصفحة مفتوحة، وتلحق بآخر تذكير حديث عند فتح التطبيق
+ * أو عودته من الخلفية، مع تأجيلٍ متدرّج حتى لا تضيع فرصة التسجيل. لا تُنشئ
+ * سجلاً جديداً ولا تغيّر أي بيانات إلا بعد ضغط «جماعة» أو «مفرد».
  */
 export function PrayerReminderWatcher() {
   const prayerLogs = useAppStore((s) => s.prayerLogs);
@@ -194,15 +194,6 @@ export function PrayerReminderWatcher() {
     setCandidate(null);
   }
 
-  function dismissCurrent() {
-    if (!candidate) return;
-    handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
-    const next = { ...snoozesRef.current, [candidate.token]: endOfLocalDay(candidate.date) };
-    snoozesRef.current = next;
-    writeSnoozes(next);
-    setCandidate(null);
-  }
-
   function quietForToday() {
     if (!candidate) return;
     handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
@@ -219,7 +210,7 @@ export function PrayerReminderWatcher() {
   const title = candidate ? `تذكير ${candidate.prayer}` : "تذكير الصلاة";
 
   return (
-    <Modal open={!!candidate} onClose={dismissCurrent} title={title} className="mdr-prayer-reminder-modal">
+    <Modal open={!!candidate} onClose={later} title={title} className="mdr-prayer-reminder-modal">
       {candidate && (
         <div className="mdr-prayer-reminder">
           <div className="mdr-prayer-reminder-banner">
@@ -249,7 +240,7 @@ export function PrayerReminderWatcher() {
             onClick={later}
             className="mdr-prayer-reminder-later press"
           >
-            ذكّرني بعد ساعتين
+            ذكّرني بعد ساعة ونصف
           </button>
           <button
             type="button"
