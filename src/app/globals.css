@@ -1072,7 +1072,9 @@ body {
   font: inherit;
   font-size: clamp(1.28rem, 4vw, 1.55rem);
   font-weight: 950;
-  line-height: 1.55;
+  /* ١٫٩ لا ١٫٥٥: نازلُ Black يبلغ ‎0.641em‎ تحت القاعدة، و`input` يقصّ ما يخرج
+     من صندوقه — فكانت ياءُ العنوان تُقطع من أسفلها. */
+  line-height: 1.9;
   text-align: start;
   unicode-bidi: plaintext;
   caret-color: var(--gold);
@@ -1127,14 +1129,26 @@ body {
   cursor: pointer;
 }
 .mdr-journal-formatting button:hover { border-color: var(--gline); color: var(--gold); }
+/* ===== سطرُ الكتابة: مقاسٌ على مقاييس خطّ «ثمانية» لا على رقمٍ مستحسَن =====
+   للخطّ ملفّان اثنان فقط: Regular عند ٤٠٠ وBlack عند ٧٠٠/٩٠٠. فأيّ وزنٍ فوق
+   ٥٠٠ — و650 منها — يقع على **Black**: كان نصُّ المذكرة كلُّه عريضاً افتراضياً،
+   فلا يبقى لزرّ «عريض» أثرٌ يُرى.
+   ومقاييسُه المعلَنة (صعود ١٫٠em · نزول ٠٫٢٥em) أضيقُ من رسمه الفعليّ
+   (yMin ‎−0.574em‎ في Regular و‎−0.641em‎ في Black): النازلُ يخرج من صندوق
+   السطر ٠٫٣٢em‎ فأكثر. ومع `line-height: 2rem` كان خطُّ القاعدة عند ١٫٣٧٥rem‎
+   فيهبط ذيلُ الياء إلى ٢٫٠rem‎ فأكثر — أي **على المسطرة تماماً**، تقصّه ويختفي،
+   والنصُّ فوقها معلَّقٌ لا مستقرٌّ عليها.
+   ٢٫٢٥rem‎ تضع القاعدة عند ١٫٥rem‎ وقاعَ الياء عند ٢٫٠٧rem‎: ٠٫١٨rem‎ متنفَّسٌ
+   قبل المسطرة، والحرفُ يجلس عليها كما تُكتب العربية بخطّ اليد. أيُّ تغييرٍ في
+   `font-size` أو `line-height` هنا يعيد الحساب: النازلُ ‎0.574em‎ تحت القاعدة. */
 .mdr-journal-writing-field {
   position: relative;
   z-index: 1;
   display: block;
   width: 100%;
-  min-height: clamp(20rem, 46vh, 32rem);
+  min-height: clamp(20.25rem, 46vh, 31.5rem);
   margin-top: 0.75rem;
-  padding: 0.1rem 0 0;
+  padding: 0;
   overflow-y: auto;
   scrollbar-width: thin;
   border: 0;
@@ -1144,16 +1158,16 @@ body {
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
-    transparent calc(2rem - 1px),
-    var(--line) calc(2rem - 1px),
-    var(--line) 2rem
+    transparent calc(2.25rem - 1px),
+    var(--line) calc(2.25rem - 1px),
+    var(--line) 2.25rem
   );
-  background-size: 100% 2rem;
+  background-size: 100% 2.25rem;
   color: var(--ink);
   font: inherit;
   font-size: 1rem;
-  font-weight: 650;
-  line-height: 2rem;
+  font-weight: 400;
+  line-height: 2.25rem;
   text-align: start;
   unicode-bidi: plaintext;
   caret-color: var(--gold);

@@ -2,8 +2,10 @@
    The base journal theme stays in globals.css; these are the performance and
    wrapping overrides for the composer only. */
 .mdr-journal-composer .mdr-journal-writing-field {
-  height: clamp(20rem, 46vh, 32rem);
-  min-height: 20rem;
+  /* مضاعفاتُ سطر ٢٫٢٥rem‎ (٩ أسطر … ١٤ سطراً) فينتهي الحقلُ عند مسطرةٍ كاملة
+     لا في منتصف سطرٍ مقصوص. */
+  height: clamp(20.25rem, 46vh, 31.5rem);
+  min-height: 20.25rem;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;

@@ -63,6 +63,12 @@ interface JournalFormProps {
 }
 
 import { createJournalDraftWriter, type JournalDraftWriter } from "@/lib/journalDraft";
+import {
+  toggleEmphasis,
+  toggleBlockPrefix,
+  clearFormatting as stripFormatting,
+  type MarkdownEdit,
+} from "@/lib/markdownEdit";
 
 function nowHHMM() {
   const d = new Date();
@@ -388,51 +394,34 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     onClose();
   }
 
-  // Markdown helpers for the formatting toolbar — wrap the selection
-  // (bold/italic) or prefix the current line (heading/list/quote).
-  function wrapSelection(before: string, after = before) {
+  // شريطُ التنسيق: الحسابُ كلُّه في `src/lib/markdownEdit.ts` (نقيٌّ ومختبَر)،
+  // وهنا وضعُ الناتج في الحقل وإعادةُ التحديد إليه. كان الشريطُ **يضيف** العلامةَ
+  // دائماً، فضغطتان على «عريض» تُخرجان `****نص****` — نجومٌ لا يعرضها العارضُ
+  // عريضةً أصلاً — وتحديدُ فقرتين يلفّهما بعلامةٍ واحدةٍ لا تعبر السطر فلا
+  // يُنسَّق منهما شيء. الآن: يُشعل ويُطفئ، ويلفّ كلّ سطرٍ على حدة.
+  function applyEdit(edit: MarkdownEdit) {
     const ta = contentRef.current;
     if (!ta) return;
-    const s = ta.selectionStart, e = ta.selectionEnd;
-    const sel = content.slice(s, e) || "نص";
-    setContent(content.slice(0, s) + before + sel + after + content.slice(e));
+    setContent(edit.text);
     requestAnimationFrame(() => {
       ta.focus();
-      ta.setSelectionRange(s + before.length, s + before.length + sel.length);
+      ta.setSelectionRange(edit.start, edit.end);
     });
   }
-  function prefixLine(token: string) {
+  function emphasize(token: string) {
     const ta = contentRef.current;
     if (!ta) return;
-    const s = ta.selectionStart;
-    const lineStart = content.lastIndexOf("\n", s - 1) + 1;
-    setContent(content.slice(0, lineStart) + token + content.slice(lineStart));
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(s + token.length, s + token.length);
-    });
+    applyEdit(toggleEmphasis(content, ta.selectionStart, ta.selectionEnd, token));
+  }
+  function blockPrefix(token: string) {
+    const ta = contentRef.current;
+    if (!ta) return;
+    applyEdit(toggleBlockPrefix(content, ta.selectionStart, ta.selectionEnd, token));
   }
   function clearFormatting() {
     const ta = contentRef.current;
     if (!ta) return;
-    const selectionStart = ta.selectionStart;
-    const selectionEnd = ta.selectionEnd;
-    const start = selectionStart === selectionEnd
-      ? content.lastIndexOf("\n", selectionStart - 1) + 1
-      : selectionStart;
-    const nextBreak = content.indexOf("\n", selectionEnd);
-    const end = selectionStart === selectionEnd
-      ? (nextBreak === -1 ? content.length : nextBreak)
-      : selectionEnd;
-    const selected = content.slice(start, end);
-    const plain = selected
-      .replace(/^\s*(?:#{1,6}|>|[-*+])\s+/gmu, "")
-      .replace(/\*\*|__|_/gu, "");
-    setContent(content.slice(0, start) + plain + content.slice(end));
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start, start + plain.length);
-    });
+    applyEdit(stripFormatting(content, ta.selectionStart, ta.selectionEnd));
   }
 
   const titleIdeas = useMemo(
@@ -686,11 +675,11 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
             )}
             <div className="mdr-journal-formatting" aria-label="أدوات تنسيق النص">
               {[
-                { icon: Bold, label: "عريض", action: () => wrapSelection("**") },
-                { icon: Italic, label: "مائل", action: () => wrapSelection("_") },
-                { icon: Heading, label: "عنوان", action: () => prefixLine("## ") },
-                { icon: List, label: "قائمة", action: () => prefixLine("- ") },
-                { icon: Quote, label: "اقتباس", action: () => prefixLine("> ") },
+                { icon: Bold, label: "عريض", action: () => emphasize("**") },
+                { icon: Italic, label: "مائل", action: () => emphasize("_") },
+                { icon: Heading, label: "عنوان", action: () => blockPrefix("## ") },
+                { icon: List, label: "قائمة", action: () => blockPrefix("- ") },
+                { icon: Quote, label: "اقتباس", action: () => blockPrefix("> ") },
                 { icon: RemoveFormatting, label: "عادي", action: clearFormatting },
               ].map((tool) => (
                 <button key={tool.label} type="button" onClick={tool.action} aria-label={tool.label} title={tool.label} className="press">
