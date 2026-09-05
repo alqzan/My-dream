@@ -118,7 +118,7 @@ describe("buildTodayPlan — مسارٌ واحد مرتّب لعمل اليوم"
     expect(plan.summary).toContain("لا شيء");
   });
 
-  it("الملخّص يذكر الجديد والمراجعة والأخطاء بأرقامٍ لاتينية", () => {
+  it("الملخّص يذكر الجديد والمراجعة والأخطاء بأرقامٍ هندية", () => {
     const p8 = pageRange(8);
     const s = hz({
       frontierId: p8.end,
@@ -128,7 +128,10 @@ describe("buildTodayPlan — مسارٌ واحد مرتّب لعمل اليوم"
     const { summary } = buildTodayPlan(s, "2026-01-10");
     expect(summary).toContain("للمراجعة");
     expect(summary).toContain("موضعان للاختبار".slice(0, 6));
-    expect(summary).toMatch(/[0-9]/); // أرقام لاتينية لا هندية
+    // قاعدةُ مدار: الأرقام كلُّها هندية (٠٫١٫٣٥٨). كان هذا الملخّص آخرَ ما بقي
+    // لاتينياً في القسم، فيظهر رقمٌ شاذّ وسط شاشةٍ هندية.
+    expect(summary).not.toMatch(/[0-9]/);
+    expect(summary).toMatch(/[٠-٩]/);
   });
 
   it("الوقت التقريبي موجبٌ دائماً حين يوجد عمل", () => {
@@ -141,7 +144,9 @@ describe("buildTodayPlan — مسارٌ واحد مرتّب لعمل اليوم"
     const p30 = pageRange(30);
     const s = hz({ frontierId: p30.end, sessions: [sess(1, p30.end, "2026-01-01")] });
     const plan = buildTodayPlan(s, "2026-01-10");
-    expect(plan.duePages).toBe(7); // سقف «متوازن»
+    // السقف يتكيّف مع المواظبة: جلسةٌ واحدة في أسبوعين ⇒ أقلُّ من سقف «متوازن».
+    expect(plan.duePages).toBe(plan.dueCap);
+    expect(plan.dueCap).toBe(5);
     expect(plan.dueHidden).toBeGreaterThan(0);
   });
 });

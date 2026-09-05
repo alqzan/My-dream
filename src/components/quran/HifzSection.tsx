@@ -6,12 +6,12 @@ import { SURAHS, surahAyahToId, describeRange } from "@/lib/quran/meta";
 import { loadAyahText } from "@/lib/quran/text";
 import { today } from "@/lib/utils";
 import { plannedPortion, hifzProgress, smartTestPortion, type Portion } from "@/lib/quran/hifz";
-import { INTENSITY_LABEL, intensityOf } from "@/lib/quran/intensity";
+import { INTENSITY_LABEL, intensityOf, presetOf } from "@/lib/quran/intensity";
 import type { HifzIntensity } from "@/lib/types";
-import { buildTodayPlan } from "@/lib/quran/session";
+import { buildTodayPlan, type TodayPlan } from "@/lib/quran/session";
 import { HifzCoach } from "@/components/quran/HifzCoach";
 import { TodaySessionCard, TodaySessionFlow } from "@/components/quran/TodaySession";
-import { MushafSheet } from "@/components/quran/MushafSheet";
+import { MushafSheet, MushafStage } from "@/components/quran/MushafSheet";
 import { HifzMap } from "@/components/quran/HifzMap";
 import { HifzChart } from "@/components/quran/HifzChart";
 import { HifzLog } from "@/components/quran/HifzLog";
@@ -22,6 +22,7 @@ import { NumberInput } from "@/components/ui/NumberInput";
 import {
   Sprout, Check, Target, GraduationCap, Shuffle, Minus, Plus, SlidersHorizontal, RefreshCw,
 } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // نوع جلسة المُدرّب خارج «جلسة اليوم»: حفظٌ جديد (زِد حفظك)، تسميعٌ من الخريطة،
 // أو اختبارٌ من زرّ «اختبرني الآن».
@@ -35,14 +36,14 @@ const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
 
 export type HifzView = "today" | "map" | "drill";
 
-export function HifzSection({ onRead, view = "today" }: { onRead?: (surah: number) => void; view?: HifzView } = {}) {
+export function HifzSection({ view = "today" }: { view?: HifzView } = {}) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [text, setText] = useState<string[] | null>(null);
   useEffect(() => { loadAyahText().then(setText); }, []);
 
   if (!h.plan) return <PlanSetup onStart={store.startHifzPlan} />;
-  return <HifzDashboard text={text} onRead={onRead} view={view} />;
+  return <HifzDashboard text={text} view={view} />;
 }
 
 // ---------------- إعداد الخطة ----------------
@@ -125,13 +126,15 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
 }
 
 // ---------------- لوحة الحفظ ----------------
-function HifzDashboard({ text, onRead, view }: { text: string[] | null; onRead?: (surah: number) => void; view: HifzView }) {
+function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
   // المُدرّب الموجّه خارج جلسة اليوم — للزيادة، أو للتسميع من الخريطة، أو للاختبار.
   const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; kind: CoachKind } | null>(null);
   const [flow, setFlow] = useState<{ resume: boolean } | null>(null); // تدفّق «جلسة اليوم» مفتوح؟
+  // قراءةُ مقطعٍ من الخريطة في المصحف — وجهٌ يملأ الشاشة، لا تسميعَ ولا تسجيل.
+  const [read, setRead] = useState<Portion | null>(null);
 
   const prog = hifzProgress(h);
   const portion = plannedPortion(h);
@@ -159,11 +162,9 @@ function HifzDashboard({ text, onRead, view }: { text: string[] | null; onRead?:
 
   return (
     <div className={`mdr-hifz-dashboard mdr-hifz-dashboard--${view} space-y-4`}>
-      <div className="mdr-quran-kpis" aria-label="ملخص الحفظ">
-        <div><strong>{plan.steps.filter((s) => s.kind === "due").length}</strong><span>أوجه المراجعة</span></div>
-        <div><strong>{plan.steps.filter((s) => s.kind === "memorize").length}</strong><span>آيات جديدة</span></div>
-        <div><strong>{plan.steps.filter((s) => s.kind === "drill").length}</strong><span>مواضع اختبار</span></div>
-      </div>
+      {/* شريطُ الأرقام الثلاثة رُفع: كان يكرّر ما تقوله بطاقةُ الجلسة تحته
+          بالحرف («٣ آيات جديدة · وجهان للمراجعة») ثمّ يُعيده رقماً مجرّداً بلا
+          فعل. ما لا يُضيف معلومةً ولا زرّاً لا يستحقّ صفّاً في أعلى الشاشة. */}
       {/* 1) جلسة اليوم — المدخل الوحيد لعمل اليوم (سبق + مراجعة + اختبار أخطاء) */}
       {(showToday || showDrill) && hasSession ? (
         <>
@@ -252,15 +253,16 @@ function HifzDashboard({ text, onRead, view }: { text: string[] | null; onRead?:
       {/* 4) أخطائي — عرضٌ لمواضع التعثّر مع اختبارٍ عليها */}
       {showDrill && <MistakesPanel />}
 
-      {/* 5) شدّة التمرين — الإعداد الوحيد في القسم */}
-      <IntensityCard />
+      {/* 5) شدّة التمرين — الإعداد الوحيد في القسم. في «اليوم» وحده: الإعداد
+             يتبع الفعل، ولا يُعاد في كلّ تبويبٍ فيصير أثاثاً دائماً. */}
+      {showToday && <IntensityCard plan={plan} />}
 
       {/* 6) خريطة الحفظ — لوحة كاملة: المحفوظ، المتقن، المحتاج للمراجعة، والضعف */}
       {showMap && (
         <HifzMap
           text={text}
           onReview={(p) => setCoach({ portion: p, mode: "recall", kind: "review" })}
-          onRead={onRead}
+          onRead={setRead}
         />
       )}
 
@@ -272,6 +274,10 @@ function HifzDashboard({ text, onRead, view }: { text: string[] | null; onRead?:
 
       {/* 9) رسم تقدّم الحفظ عبر الزمن */}
       {showMap && <HifzChart />}
+
+      {read && text && (
+        <MushafStage text={text} fromId={read.fromId} toId={read.toId} onClose={() => setRead(null)} />
+      )}
 
       {coach && text && (
         <HifzCoach
@@ -299,12 +305,13 @@ function HifzDashboard({ text, onRead, view }: { text: string[] | null; onRead?:
 // المباعدة) مشتقّةٌ من هذا الاختيار — راجع src/lib/quran/intensity.ts.
 const INTENSITIES: HifzIntensity[] = ["light", "balanced", "intense"];
 
-function IntensityCard() {
+function IntensityCard({ plan }: { plan: TodayPlan }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [open, setOpen] = useState(false);
   const cur = intensityOf(h.plan);
   if (!h.plan) return null;
+  const preset = presetOf(h.plan);
 
   return (
     <div className="rounded-2xl border border-gray-100 dark:border-[#3a2e1e] bg-white dark:bg-[#241c12] p-4 space-y-3">
@@ -312,7 +319,7 @@ function IntensityCard() {
         <SlidersHorizontal size={15} className="text-gray-400" />
         <span className="text-sm font-bold text-gray-800">إعدادات الحفظ</span>
         <span className="ms-auto text-[11px] font-semibold text-quran">
-          {h.plan.amount} {UNIT_LABEL[h.plan.unit]} · {INTENSITY_LABEL[cur].name}
+          {arNum(h.plan.amount)} {UNIT_LABEL[h.plan.unit]} · {INTENSITY_LABEL[cur].name}
         </span>
       </button>
 
@@ -329,7 +336,7 @@ function IntensityCard() {
                 aria-label="أنقص"
               ><Minus size={13} /></button>
               <span className="min-w-[72px] text-center font-bold text-gray-700 dark:text-gray-200 tabular-nums">
-                {h.plan.amount} {UNIT_LABEL[h.plan.unit]}
+                {arNum(h.plan.amount)} {UNIT_LABEL[h.plan.unit]}
               </span>
               <button
                 onClick={() => store.updateHifzPlan({ amount: h.plan!.amount + 1 })}
@@ -359,6 +366,19 @@ function IntensityCard() {
               يضبط عدد التكرار في الحفظ الموجّه · حجم المراجعة القريبة · كم وجهاً تراجع يومياً · تباعد المراجعات.
             </p>
           </div>
+
+          {/* سقفُ اليوم لا يُقرأ من الشدّة وحدها بعد اليوم: يدور مع مواظبتك.
+              نُظهره صريحاً — رقمٌ يتحرّك بلا تفسيرٍ يُقرأ عطلاً لا ذكاءً. */}
+          <div className="mdr-quran-smart">
+            <div className="mdr-quran-smart-row">
+              <span>سقف مراجعة اليوم</span>
+              <strong>{arNum(plan.dueCap)} وجه</strong>
+            </div>
+            <p>
+              سقفُ «{INTENSITY_LABEL[cur].name}» {arNum(preset.dailyReviewPages)} وجه، ويدور بين ٧٠٪ و١٥٠٪ منه
+              بحسب مواظبتك في آخر أسبوعين — فمن انقطع يعود إلى حملٍ ألطف، ومن واظب يلحق متأخّراته.
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -368,7 +388,7 @@ function IntensityCard() {
 // ---------------- عناصر مساعدة ----------------
 // نصّ المقطع في وجهه من المصحف (لوحٌ واحد مشترك — راجع `MushafSheet`).
 function PortionText({ text, portion }: { text: string[] | null; portion: Portion }) {
-  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={300} />;
+  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} maxHeight={340} expandable />;
 }
 
 function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {

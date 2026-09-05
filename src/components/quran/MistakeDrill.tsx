@@ -10,6 +10,7 @@ import { LeadPrompt } from "@/components/quran/LeadPrompt";
 import { MushafSheet } from "@/components/quran/MushafSheet";
 import { tokenizeRun } from "@/lib/quran/mushafLayout";
 import { Eye, Check, X, RotateCcw, ShieldCheck, Target } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // ===================== اختبار موضع الخطأ =====================
 // كانت «جلسة أخطائي» تعرض الآية مكشوفةً وتحتها زرّ «أتقنته» — لا اختبار فيها.
@@ -58,7 +59,7 @@ export function MistakeDrill({
         <span className="text-[11px] text-quran font-semibold">{name} · آية {ayah}</span>
         {(mistake?.hits.length ?? 0) >= 2 && (
           <span className="text-[10px] font-bold text-red-700 bg-red-100 dark:bg-red-900/30 rounded-full px-2 py-0.5">
-            تكرّر ×{mistake?.hits.length}
+            تكرّر ×{arNum(mistake?.hits.length ?? 0)}
           </span>
         )}
       </div>

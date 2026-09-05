@@ -13,7 +13,7 @@ import { downloadPlainBackup } from "@/lib/backupFile";
 import {
   MapPin, Gauge, Flame, Pencil, RotateCcw, Headphones, BookOpen, X, CheckCircle2, RefreshCw, TriangleAlert, Sprout, Download,
 } from "lucide-react";
-import { SECTION } from "@/lib/palette";
+import { arNum } from "@/lib/madar/format";
 
 const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
 const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
@@ -27,7 +27,11 @@ const MAP_UNITS: { key: MapUnit; label: string; word: string }[] = [
 const COLS: Record<Exclude<MapUnit, "page">, string> = { juz: "grid-cols-6", hizb: "grid-cols-10" };
 
 const STATE: Record<JuzState, { fill: string; text: string; label: string; dot: string }> = {
-  fresh:   { fill: SECTION.quran, text: "#fff",     label: "متقن",         dot: SECTION.quran },
+  // لونُ القسم يُؤخذ من رمز السمة لا من الثابت السداسيّ: شاشاتُ «مدار» تُبدّل
+  // لونَ القسم بين الفاتح والداكن (‏`--green`‎)، والثابتُ لا يعرف ذلك — فكانت
+  // خلايا «متقن» تخرج خضراءَ وسط صفحةٍ ذهبية. `SECTION.quran` يبقى المصدرَ
+  // لِما هو خارج شجرة `.mdr`.
+  fresh:   { fill: "var(--green)", text: "#fff",     label: "متقن",         dot: "var(--green)" },
   due:     { fill: "#d99a2b", text: "#fff",     label: "محتاج مراجعة", dot: "#d99a2b" },
   weak:    { fill: "#d9534f", text: "#fff",     label: "يحتاج إتقان",  dot: "#d9534f" },
   partial: { fill: "#59b98f", text: "#1f2937",  label: "جارٍ حفظه",    dot: "#59b98f" },
@@ -36,7 +40,7 @@ const STATE: Record<JuzState, { fill: string; text: string; label: string; dot: 
 
 // لوحة «خريطة الحفظ» — وحدات القرآن (أجزاء/أحزاب/أوجه) كشبكة ملوّنة بحالة كلٍّ،
 // مع إحصاءات وتفاصيل ومراجعة وقراءة مباشرة.
-export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onReview: (p: Portion) => void; onRead?: (surah: number) => void }) {
+export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onReview: (p: Portion) => void; onRead?: (p: Portion) => void }) {
   const store = useAppStore();
   const h = store.quranHifz ?? EMPTY_HIFZ;
   const [unit, setUnit] = useState<MapUnit>("juz");
@@ -69,10 +73,10 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
         onClick={() => setSel(active ? null : c.n)}
         className={`relative ${tiny ? "" : "aspect-square"} rounded-${tiny ? "sm" : "lg"} overflow-hidden border press transition-transform ${active ? "ring-2 ring-quran ring-offset-1 z-10 scale-110" : ""} ${c.state === "none" ? "border-gray-200 dark:border-[#3a2e1e]" : "border-transparent"}`}
         style={tiny ? { height: 13, flex: 1, minWidth: 0 } : undefined}
-        title={`${MAP_UNITS.find((m) => m.key === unit)!.word} ${c.n} — ${st.label}${mk ? ` · ${mk} خطأ` : ""}`}
+        title={`${MAP_UNITS.find((m) => m.key === unit)!.word} ${arNum(c.n)} — ${st.label}${mk ? ` · ${arNum(mk)} خطأ` : ""}`}
       >
         {c.state !== "none" && <span className="absolute inset-x-0 bottom-0" style={{ height: `${fillH}%`, backgroundColor: st.fill }} />}
-        {!tiny && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums" style={{ color: st.text }}>{c.n}</span>}
+        {!tiny && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums" style={{ color: st.text }}>{arNum(c.n)}</span>}
         {mk > 0 && <span className={`absolute top-0 start-0 rounded-full bg-red-500 ${tiny ? "w-1 h-1" : "w-1.5 h-1.5 m-0.5"}`} />}
       </button>
     );
@@ -101,10 +105,10 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
       )}
 
       <div className="grid grid-cols-4 gap-2">
-        <StatTile icon={<BookOpen size={14} />} color={SECTION.quran} value={`${prog.pct}%`} label={`${prog.spanPages} وجه`} />
-        <StatTile icon={<CheckCircle2 size={14} />} color={SECTION.quran} value={String(counts.fresh)} label="متقن" />
-        <StatTile icon={<RefreshCw size={14} />} color="#d99a2b" value={String(counts.due)} label="للمراجعة" />
-        <StatTile icon={<TriangleAlert size={14} />} color="#d9534f" value={String(counts.weak)} label="ضعف" />
+        <StatTile icon={<BookOpen size={14} />} color="var(--green)" value={`${arNum(prog.pct)}٪`} label={`${arNum(prog.spanPages)} وجه`} />
+        <StatTile icon={<CheckCircle2 size={14} />} color="var(--green)" value={arNum(counts.fresh)} label="متقن" />
+        <StatTile icon={<RefreshCw size={14} />} color="#d99a2b" value={arNum(counts.due)} label="للمراجعة" />
+        <StatTile icon={<TriangleAlert size={14} />} color="#d9534f" value={arNum(counts.weak)} label="ضعف" />
       </div>
 
       {/* مبدّل الحبيبة */}
@@ -180,8 +184,8 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
                 <TriangleAlert size={14} /> بدء خطة جديدة يمسح الحالية
               </div>
               <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
-                سيُحذف: الخطة الحالية، وجبهة الحفظ ({prog.spanPages} وجه)، و{h.sessions.length} جلسة حفظ،
-                و{h.reviews.length} مراجعة، و{(h.mistakes ?? []).length} موضع خطأ. لا يمكن التراجع.
+                سيُحذف: الخطة الحالية، وجبهة الحفظ ({arNum(prog.spanPages)} وجه)، و{arNum(h.sessions.length)} جلسة حفظ،
+                و{arNum(h.reviews.length)} مراجعة، و{arNum((h.mistakes ?? []).length)} موضع خطأ. لا يمكن التراجع.
                 خُذ نسخة احتياطية أولاً حفاظاً على تاريخك.
               </p>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -206,7 +210,7 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
 
 function StatTile({ icon, color, value, label }: { icon: React.ReactNode; color: string; value: string; label: string }) {
   return (
-    <div className="rounded-xl p-2 flex flex-col items-center gap-0.5" style={{ backgroundColor: color + "14" }}>
+    <div className="rounded-xl p-2 flex flex-col items-center gap-0.5" style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)` }}>
       <span style={{ color }}>{icon}</span>
       <span className="text-sm font-bold text-gray-800 tabular-nums leading-none">{value}</span>
       <span className="text-[9px] text-gray-500">{label}</span>
@@ -215,7 +219,7 @@ function StatTile({ icon, color, value, label }: { icon: React.ReactNode; color:
 }
 
 function UnitDetail({ cell, word, mistakes, onReview, onRead, onClose }: {
-  cell: UnitCell; word: string; mistakes: number; onReview: (p: Portion) => void; onRead?: (surah: number) => void; onClose: () => void;
+  cell: UnitCell; word: string; mistakes: number; onReview: (p: Portion) => void; onRead?: (p: Portion) => void; onClose: () => void;
 }) {
   const st = STATE[cell.state];
   const a = idToSurahAyah(cell.start), b = idToSurahAyah(cell.end);
@@ -224,20 +228,20 @@ function UnitDetail({ cell, word, mistakes, onReview, onRead, onClose }: {
     <div className="rounded-xl border border-quran/20 bg-white dark:bg-[#241c12] p-3.5 animate-fade-up">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-800">{word} {cell.n}</span>
-          <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ backgroundColor: st.dot + "22", color: st.dot }}>{st.label}</span>
+          <span className="text-sm font-bold text-gray-800">{word} {arNum(cell.n)}</span>
+          <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ backgroundColor: `color-mix(in srgb, ${st.dot} 13%, transparent)`, color: st.dot }}>{st.label}</span>
         </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 press" aria-label="إغلاق"><X size={15} /></button>
       </div>
       <div className="text-[11px] text-gray-500 space-y-1">
-        <div>{a.surah === b.surah ? `${startName} ${a.ayah}–${b.ayah}` : `من ${startName} ${a.ayah} إلى ${endName} ${b.ayah}`} · الصفحات {idToPage(cell.start)}–{idToPage(cell.end)}</div>
+        <div>{a.surah === b.surah ? `${startName} ${a.ayah}–${b.ayah}` : `من ${startName} ${a.ayah} إلى ${endName} ${b.ayah}`} · الصفحات {arNum(idToPage(cell.start))}–{arNum(idToPage(cell.end))}</div>
         {cell.state === "none" ? (
           <div className="text-gray-400">لم تصل إليه خطتك بعد.</div>
         ) : (
           <>
-            <div>محفوظ منه: {cell.memorizedAyat}/{cell.totalAyat} آية ({Math.round(cell.fill * 100)}%)</div>
-            <div>آخر حفظ/مراجعة: {cell.lastDate ? `${formatDate(cell.lastDate)}${cell.daysSince != null ? ` (قبل ${cell.daysSince} يوم)` : ""}` : "—"}</div>
-            {mistakes > 0 && <div className="text-red-500 font-semibold">مواضع خطأ مفتوحة: {mistakes}</div>}
+            <div>محفوظ منه: {arNum(cell.memorizedAyat)}/{arNum(cell.totalAyat)} آية ({arNum(Math.round(cell.fill * 100))}٪)</div>
+            <div>آخر حفظ/مراجعة: {cell.lastDate ? `${formatDate(cell.lastDate)}${cell.daysSince != null ? ` (قبل ${arNum(cell.daysSince)} يوم)` : ""}` : "—"}</div>
+            {mistakes > 0 && <div className="text-red-500 font-semibold">مواضع خطأ مفتوحة: {arNum(mistakes)}</div>}
           </>
         )}
       </div>
@@ -249,7 +253,7 @@ function UnitDetail({ cell, word, mistakes, onReview, onRead, onClose }: {
           </button>
         )}
         {onRead && (
-          <button onClick={() => onRead(a.surah)}
+          <button onClick={() => onRead({ fromId: cell.start, toId: cell.end })}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-100 dark:bg-[#2c2318] text-gray-600 text-xs font-semibold press">
             <BookOpen size={14} /> اقرأ في المصحف
           </button>

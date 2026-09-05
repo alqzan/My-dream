@@ -5,6 +5,7 @@ import { EMPTY_HIFZ, type HifzRating, type HifzSession, type HifzReviewLog } fro
 import { describeRange } from "@/lib/quran/meta";
 import { formatDate } from "@/lib/utils";
 import { History, ChevronDown, ChevronUp, Trash2, Undo2, Sprout, RefreshCw } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 type Row =
   | { kind: "session"; id: string; date: string; fromId: number; toId: number; rating?: HifzRating }
@@ -61,7 +62,7 @@ export function HifzLog() {
       <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-2 press">
         <History size={15} className="text-quran" />
         <span className="text-sm font-bold text-gray-800 dark:text-gray-100">سجل الحفظ والمراجعة</span>
-        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-[#382c1d] rounded-full px-2 py-0.5">{rows.length}</span>
+        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-[#382c1d] rounded-full px-2 py-0.5">{arNum(rows.length)}</span>
         <span className="ms-auto text-gray-400">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
       </button>
 

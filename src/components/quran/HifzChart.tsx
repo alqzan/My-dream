@@ -6,7 +6,7 @@ import { today, formatDateShort } from "@/lib/utils";
 import { hifzSeries, memorizedInWindow, paceCompare, hifzReport } from "@/lib/quran/hifz";
 import { showToast } from "@/components/ui/UndoToast";
 import { TrendingUp, TrendingDown, Copy } from "lucide-react";
-import { SECTION } from "@/lib/palette";
+import { arNum } from "@/lib/madar/format";
 
 // رسم تقدّم الحفظ عبر الزمن — منحنى تراكمي (بالأوجه) منذ بداية الخطة، مع ملخّص
 // «اليوم/الأسبوع/الشهر». مرسومٌ بـSVG بلغة أدوات التطبيق (تدرّج أخضر، طرفٌ لامع).
@@ -60,7 +60,7 @@ export function HifzChart() {
       {cmp.deltaPct != null && (
         <div className={`flex items-center justify-center gap-1.5 text-[11px] font-semibold ${cmp.faster ? "text-quran" : "text-amber-600"}`}>
           {cmp.faster ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-          هذا الشهر {cmp.faster ? "أسرع" : "أبطأ"} من الماضي بـ{Math.abs(cmp.deltaPct)}%
+          هذا الشهر {cmp.faster ? "أسرع" : "أبطأ"} من الماضي بـ{arNum(Math.abs(cmp.deltaPct))}٪
         </div>
       )}
 
@@ -77,8 +77,8 @@ function WinTile({ value, label }: { value: number; label: string }) {
   const pages = Math.round(toPages(value) * 10) / 10;
   return (
     <div className="rounded-xl bg-quran/[0.06] p-2 text-center">
-      <div className="text-sm font-bold text-quran tabular-nums leading-none">{value}</div>
-      <div className="text-[9px] text-gray-500 mt-0.5">آية · {pages} وجه</div>
+      <div className="text-sm font-bold text-quran tabular-nums leading-none">{arNum(value)}</div>
+      <div className="text-[9px] text-gray-500 mt-0.5">آية · {arNum(pages)} وجه</div>
       <div className="text-[9px] text-gray-400">{label}</div>
     </div>
   );
@@ -100,21 +100,21 @@ function Curve({ series }: { series: { date: string; cumAyat: number }[] }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full block overflow-visible">
         <defs>
           <linearGradient id="hifzArea" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={SECTION.quran} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={SECTION.quran} stopOpacity="0" />
+            <stop offset="0%" style={{ stopColor: "var(--green)", stopOpacity: 0.28 }} />
+            <stop offset="100%" style={{ stopColor: "var(--green)", stopOpacity: 0 }} />
           </linearGradient>
           <linearGradient id="hifzLine" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#2f9c73" />
-            <stop offset="100%" stopColor={SECTION.quran} />
+            <stop offset="0%" style={{ stopColor: "color-mix(in srgb, var(--green) 70%, #fff)" }} />
+            <stop offset="100%" style={{ stopColor: "var(--green)" }} />
           </linearGradient>
         </defs>
         <path d={area} fill="url(#hifzArea)" />
         <path d={line} fill="none" stroke="url(#hifzLine)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={tip.x} cy={tip.y} r="3" fill={SECTION.quran} stroke="#fff" strokeWidth="1.5" />
+        <circle cx={tip.x} cy={tip.y} r="3" style={{ fill: "var(--green)" }} stroke="#fff" strokeWidth="1.5" />
       </svg>
       <div className="flex items-center justify-between text-[9px] text-gray-400 mt-1">
         <span>{formatDateShort(series[0].date)}</span>
-        <span className="font-bold text-quran">{Math.round(toPages(series[n - 1].cumAyat))} وجه</span>
+        <span className="font-bold text-quran">{arNum(Math.round(toPages(series[n - 1].cumAyat)))} وجه</span>
         <span>{formatDateShort(series[n - 1].date)}</span>
       </div>
     </div>

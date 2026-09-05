@@ -5,6 +5,7 @@ import { formatAmount, formatDate, today } from "@/lib/utils";
 import { khatmaPct, khatmaEta, khatmaDaysForGoal, pagesReadOn, DEFAULT_KHATMA_GOAL } from "@/lib/quran/khatma";
 import { Confetti } from "@/components/ui/Confetti";
 import { Plus, Minus, RotateCcw, Check, BookOpen, Target } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // «مدار الختمة» — أداةٌ إبداعية على عائلة أدوات التطبيق (PrayerOrbit، مدار
 // السنة، سباق المدارين): حلقةٌ ذهبية من ٣٠ جزءاً، كل جزءٍ مقروء يُضيء قوسه.
@@ -105,10 +106,10 @@ export function KhatmaOrbit() {
             })}
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-4xl font-black text-quran tabular-nums leading-none">{k.juz}</span>
-            <span className="text-[11px] text-gray-400 mt-1">من {JUZ} جزءاً</span>
+            <span className="text-4xl font-black text-quran tabular-nums leading-none">{arNum(k.juz)}</span>
+            <span className="text-[11px] text-gray-400 mt-1">من {arNum(JUZ)} جزءاً</span>
             <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
-              {k.page != null && k.page > 0 ? `صفحة ${k.page} · ${pct}%` : `${pct}%`}
+              {k.page != null && k.page > 0 ? `صفحة ${arNum(k.page)} · ${arNum(pct)}٪` : `${arNum(pct)}٪`}
             </span>
           </div>
         </div>
@@ -127,7 +128,7 @@ export function KhatmaOrbit() {
         {/* تقدير الإتمام على الوتيرة الأخيرة (عند تسجيل الصفحة وكفاية البيانات) */}
         {eta.daysLeft != null && !full && (
           <p className="text-[11px] text-quran font-semibold mt-1 text-center">
-            على وتيرتك الأخيرة (~{Math.round(eta.perDay)} صفحة/يوم{eta.window ? ` — آخر ${eta.window} يوماً` : ""}) تُتمّ خلال ~{eta.daysLeft} يوماً
+            على وتيرتك الأخيرة (~{arNum(Math.round(eta.perDay))} صفحة/يوم{eta.window ? ` — آخر ${arNum(eta.window)} يوماً` : ""}) تُتمّ خلال ~{arNum(eta.daysLeft)} يوماً
           </p>
         )}
 
@@ -136,8 +137,8 @@ export function KhatmaOrbit() {
           <div className="w-full mt-2 rounded-xl border border-quran/15 bg-quran/[0.04] px-3 py-2">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600">
-                <Target size={13} className="text-quran" /> هدف اليوم: {goal} صفحة
-                <span className="text-gray-400 font-normal">· ختمة خلال ~{khatmaDaysForGoal(goal)} يوماً</span>
+                <Target size={13} className="text-quran" /> هدف اليوم: {arNum(goal)} صفحة
+                <span className="text-gray-400 font-normal">· ختمة خلال ~{arNum(khatmaDaysForGoal(goal))} يوماً</span>
               </span>
               <button onClick={() => setEditGoal((v) => !v)} className="text-[10px] text-quran font-bold press">
                 {editGoal ? "تم" : "عدّل"}
@@ -153,7 +154,7 @@ export function KhatmaOrbit() {
                       goal === g ? "bg-quran text-white" : "bg-white dark:bg-[#241c12] border border-gray-200 dark:border-transparent text-gray-600"
                     }`}
                   >
-                    {g}
+                    {arNum(g)}
                   </button>
                 ))}
               </div>
@@ -163,7 +164,7 @@ export function KhatmaOrbit() {
                   <div className="h-full bg-quran rounded-full transition-all" style={{ width: `${goalPct}%` }} />
                 </div>
                 <p className="text-[10px] text-gray-400 mt-1 tabular-nums">
-                  {readToday >= goal ? "بلغت هدف اليوم 🎯" : `قرأت اليوم ${readToday} من ${goal} صفحة`}
+                  {readToday >= goal ? "بلغت هدف اليوم 🎯" : `قرأت اليوم ${arNum(readToday)} من ${arNum(goal)} صفحة`}
                 </p>
               </>
             )}

@@ -18,6 +18,7 @@ import {
   Sparkles, Sprout, RefreshCw, Check, X, ChevronLeft,
   GraduationCap, Headphones, Timer, Play, Shuffle, RotateCcw,
 } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // ===================== بطاقة «جلسة اليوم» =====================
 // المدخل الوحيد لعمل اليوم: جملةٌ واحدة تقول ما ينتظرك، سلسلةُ خطواتٍ مرئية،
@@ -47,7 +48,7 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
         <Sparkles size={17} className="text-quran" />
         <span className="text-sm font-bold text-gray-800 dark:text-gray-100">جلسة اليوم</span>
         <span className="ms-auto inline-flex items-center gap-1 text-[11px] font-semibold text-quran">
-          <Timer size={12} /> ~{plan.estMinutes} دقيقة
+          <Timer size={12} /> ~{arNum(plan.estMinutes)} دقيقة
         </span>
       </div>
 
@@ -84,7 +85,7 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
         onClick={() => onStart(resume)}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press shadow-sm"
       >
-        {resume ? <><RotateCcw size={16} /> أكمل جلسة اليوم (خطوة {doneCount + 1})</> : <><Play size={16} /> ابدأ جلسة اليوم</>}
+        {resume ? <><RotateCcw size={16} /> أكمل جلسة اليوم (خطوة {arNum(doneCount + 1)})</> : <><Play size={16} /> ابدأ جلسة اليوم</>}
       </button>
     </div>
   );
@@ -242,11 +243,23 @@ function StepView({
         <span className="text-[11px] text-quran font-semibold">{describeRange(portion.fromId, portion.toId)}</span>
         {step.kind === "due" && step.overdueDays > 0 && (
           <span className="text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-full px-2 py-0.5">
-            متأخّر {step.overdueDays} يوم
+            متأخّر {arNum(step.overdueDays)} يوم
           </span>
         )}
         {step.kind === "due" && step.never && (
           <span className="text-[10px] font-bold text-quran bg-quran/10 rounded-full px-2 py-0.5">لم يُراجَع بعد</span>
+        )}
+        {/* لماذا هذا الوجه الآن؟ الطابور يرتّب بالخطر لا بالتأخّر وحده، فيُقال
+            سببُه صراحةً: تعثّرٌ سابق أو موضعُ خطأٍ مفتوحٌ فيه. */}
+        {step.kind === "due" && (step.lapses ?? 0) > 0 && (
+          <span className="text-[10px] font-bold text-red-600 bg-red-500/10 rounded-full px-2 py-0.5">
+            تعثّرت فيه {arNum(step.lapses ?? 0)}×
+          </span>
+        )}
+        {step.kind === "due" && (step.mistakes ?? 0) > 0 && (
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-500/10 rounded-full px-2 py-0.5">
+            {arNum(step.mistakes ?? 0)} موضع مفتوح
+          </span>
         )}
       </div>
       <p className="hifz-step-hint text-xs text-gray-500 leading-relaxed">{meta.hint}</p>
@@ -264,7 +277,7 @@ function StepView({
           context="shape"
           leadId={leadOnPage(portion.fromId)}
           hidden={() => true}
-          className="hifz-mushaf-stage"
+          className="hifz-mushaf-stage" expandable
         />
       )}
       <MutashabihatAlert portion={portion} />
@@ -324,7 +337,7 @@ function ResultStat({ label, value }: { label: string; value: number }) {
 // ورد اليوم يُعرض في وجهه من المصحف لا مقتطعاً في صندوق: تراه حيث ستراه في
 // المصحف الورقيّ، فتبدأ الذاكرة التصويرية عملها من أوّل نظرة.
 function PortionBlock({ text, portion }: { text: string[]; portion: Portion }) {
-  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" />;
+  return <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" expandable />;
 }
 
 function RatingRow({ onRate }: { onRate: (r: HifzRating) => void }) {

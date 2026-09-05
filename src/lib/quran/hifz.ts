@@ -1,5 +1,5 @@
 import type { HifzState, HifzUnit, HifzRating, HifzMistake } from "../types";
-import { calcStreak, parseDate, toDateStr, today } from "../utils";
+import { calcStreak, toIndicDigits, parseDate, toDateStr, today } from "../utils";
 import { presetOf } from "./intensity";
 import {
   TOTAL_AYAT, TOTAL_PAGES, TOTAL_JUZ, TOTAL_HIZB, idToPage, idToJuz, idToHizb, idToSurahAyah,
@@ -339,23 +339,25 @@ export function explainGrade(marks: number, ayatCount: number): string {
   return `${countSpots(marks)} في ${countAyat(ayatCount)}`;
 }
 
+// العدُّ في القسم بعربيةٍ سليمة و**أرقامٍ هندية** كسائر أرقام مدار: كانت هذه
+// الصيغ الأربع تُخرج رقماً لاتينياً وحيداً وسط شاشةٍ هندية — وهو الخلط الذي
+// رفضه المالك (٠٫١٫٣٥٨). التحويل عبر البوّابة وحدها.
 export function countAyat(n: number): string {
   if (n === 1) return "آية واحدة";
   if (n === 2) return "آيتين";
-  return n <= 10 ? `${n} آيات` : `${n} آية`;
+  return n <= 10 ? `${toIndicDigits(String(n))} آيات` : `${toIndicDigits(String(n))} آية`;
 }
 
 export function countSpots(n: number): string {
   if (n === 1) return "موضعٌ واحد";
   if (n === 2) return "موضعان";
-  return n <= 10 ? `${n} مواضع` : `${n} موضعاً`;
+  return n <= 10 ? `${toIndicDigits(String(n))} مواضع` : `${toIndicDigits(String(n))} موضعاً`;
 }
 
-// صيغة الأوجه بعربيةٍ سليمة وأرقامٍ لاتينية (تُستعمل في ملخّص الجلسة).
 export function countPages(n: number): string {
   if (n === 1) return "وجه واحد";
   if (n === 2) return "وجهان";
-  return n <= 10 ? `${n} أوجه` : `${n} وجهاً`;
+  return n <= 10 ? `${toIndicDigits(String(n))} أوجه` : `${toIndicDigits(String(n))} وجهاً`;
 }
 
 // صيغة الأيام (لعرض موعد المراجعة القادمة).
@@ -363,7 +365,7 @@ export function countDays(n: number): string {
   if (n <= 0) return "اليوم";
   if (n === 1) return "غداً";
   if (n === 2) return "بعد يومين";
-  return n <= 10 ? `بعد ${n} أيام` : `بعد ${n} يوماً`;
+  return n <= 10 ? `بعد ${toIndicDigits(String(n))} أيام` : `بعد ${toIndicDigits(String(n))} يوماً`;
 }
 
 // أحدث تقييمٍ مسّ كلَّ وجهٍ محفوظ (بتداخل الوجه لا بمطابقة المدى النصّي). هكذا

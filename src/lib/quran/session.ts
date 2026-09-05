@@ -5,7 +5,8 @@
 // الأوجه المكرّرة، فتمشي في الجلسة خطوةً خطوة حتى تنتهي.
 //
 // الترتيب مقصود: الجديد أوّلاً والذهن صافٍ ← تثبيت القريب ← المستحقّ بالجدول
-// (الأشدّ تأخّراً أوّلاً) ← اختبار مواضع الخطأ ← لقمة اختبارٍ من القديم.
+// (**الأخطرُ أوّلاً** لا الأقدمُ فحسب — راجع `pageRisk`) ← اختبار مواضع الخطأ
+// ← لقمة اختبارٍ من القديم.
 
 import type { HifzState } from "../types";
 import type { Portion } from "./hifz";
@@ -19,7 +20,9 @@ import { idToPage, TOTAL_AYAT, TOTAL_PAGES } from "./meta";
 export type SessionStep =
   | { kind: "memorize"; portion: Portion }
   | { kind: "recent"; portion: Portion }
-  | { kind: "due"; portion: Portion; page: number; overdueDays: number; never: boolean }
+  // `lapses`/`mistakes` اختياريّان عمداً: لقطةُ جلسةٍ محفوظةٌ من نسخةٍ أقدم لا
+  // تحملهما، ورفضُها لأجل وسمٍ تفسيريّ يُضيّع جلسةً في منتصفها.
+  | { kind: "due"; portion: Portion; page: number; overdueDays: number; never: boolean; lapses?: number; mistakes?: number }
   | { kind: "drill"; mistakeId: string; ayahId: number; wordIndex: number | null; word?: string }
   | { kind: "test"; portion: Portion };
 
@@ -28,6 +31,7 @@ export interface TodayPlan {
   newPortion: Portion | null; // السَّبْق (null إن أُنجز اليوم أو خُتم المصحف)
   duePages: number; // الأوجه المستحقّة المعروضة اليوم
   dueHidden: number; // مؤجَّلٌ لغدٍ حتى لا يتراكم عبء يومٍ واحد
+  dueCap: number; // سقفُ اليوم المتكيّف مع المواظبة (راجع adaptiveReviewCap)
   drills: number; // مواضع الخطأ المُختبَر عليها اليوم
   openMistakes: number; // كلّ المواضع المفتوحة (للعرض لا للاختبار)
   estMinutes: number;
@@ -59,7 +63,10 @@ export function buildTodayPlan(s: HifzState, todayStr: string): TodayPlan {
   if (newPortion) steps.push({ kind: "memorize", portion: newPortion });
   if (recentBand) steps.push({ kind: "recent", portion: recentBand });
   for (const d of due.pages as DuePage[]) {
-    steps.push({ kind: "due", portion: d.portion, page: d.page, overdueDays: d.overdueDays, never: d.neverReviewed });
+    steps.push({
+      kind: "due", portion: d.portion, page: d.page, overdueDays: d.overdueDays,
+      never: d.neverReviewed, lapses: d.lapses, mistakes: d.mistakes,
+    });
   }
   for (const m of drills) {
     steps.push({ kind: "drill", mistakeId: m.id, ayahId: m.ayahId, wordIndex: m.wordIndex, word: m.word });
@@ -83,6 +90,7 @@ export function buildTodayPlan(s: HifzState, todayStr: string): TodayPlan {
     newPortion,
     duePages: due.pages.length,
     dueHidden: due.hidden,
+    dueCap: due.cap,
     drills: drills.length,
     openMistakes: openMistakes(s).length,
     estMinutes: Math.max(1, Math.round(est)),
@@ -137,8 +145,10 @@ function isSessionStep(value: unknown): value is SessionStep {
     return isPortion(step.portion);
   }
   if (step.kind === "due") {
+    const tag = (v: unknown) => v === undefined || isFiniteInteger(v);
     return isPortion(step.portion) && isFiniteInteger(step.page, 1, TOTAL_PAGES) &&
-      isFiniteInteger(step.overdueDays) && typeof step.never === "boolean";
+      isFiniteInteger(step.overdueDays) && typeof step.never === "boolean" &&
+      tag(step.lapses) && tag(step.mistakes);
   }
   if (step.kind === "drill") {
     return typeof step.mistakeId === "string" && step.mistakeId.length > 0 &&

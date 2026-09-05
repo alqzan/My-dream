@@ -5,6 +5,7 @@ import { EMPTY_HIFZ } from "@/lib/types";
 import { today } from "@/lib/utils";
 import { quranWeeklyReport } from "@/lib/quran/schedule";
 import { CalendarRange, Sprout, RefreshCw, Clock, Target, ArrowLeftCircle } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // تقرير قرآني أسبوعي صغير: ما حُفظ، ما رُوجع، عدد الجلسات، أقدم مراجعة مستحقّة،
 // أكثر موضعٍ تكرّر خطؤه، وخطوة الأسبوع القادم — بلغة اللوحة وهوية القرآن.
@@ -15,7 +16,7 @@ export function QuranWeekReport() {
 
   // خطوة الأسبوع القادم — قاعدة بسيطة على حالة المراجعة والأخطاء.
   const nextStep = r.dueTotal > 0
-    ? `راجِع ${r.dueTotal} وجهاً مستحقاً${r.oldestDueDays > 0 ? ` (أقدمها متأخّر ${r.oldestDueDays} يوم)` : ""}.`
+    ? `راجِع ${arNum(r.dueTotal)} وجهاً مستحقاً${r.oldestDueDays > 0 ? ` (أقدمها متأخّر ${arNum(r.oldestDueDays)} يوم)` : ""}.`
     : r.topMistake
       ? `ثبّت موضع «${r.topMistake.ref}» الذي تكرّر خطؤه.`
       : "واصِل سبقك اليومي وثبّت القريب — مراجعتك منضبطة، أحسنت.";
@@ -39,10 +40,10 @@ export function QuranWeekReport() {
 
       <div className="space-y-1.5 text-[11px] text-gray-500">
         {r.oldestDueDays > 0 && (
-          <div className="flex items-center gap-1.5"><Clock size={12} className="text-amber-600" /> أقدم مراجعة مستحقّة متأخّرة {r.oldestDueDays} يوم.</div>
+          <div className="flex items-center gap-1.5"><Clock size={12} className="text-amber-600" /> أقدم مراجعة مستحقّة متأخّرة {arNum(r.oldestDueDays)} يوم.</div>
         )}
         {r.topMistake && (
-          <div className="flex items-center gap-1.5"><Target size={12} className="text-red-500" /> أكثر موضعٍ تكرّر خطؤه: {r.topMistake.ref} ({r.topMistake.hits}×).</div>
+          <div className="flex items-center gap-1.5"><Target size={12} className="text-red-500" /> أكثر موضعٍ تكرّر خطؤه: {r.topMistake.ref} ({arNum(r.topMistake.hits)}×).</div>
         )}
       </div>
 
@@ -57,7 +58,7 @@ export function QuranWeekReport() {
 function Stat({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
   return (
     <div className="rounded-xl bg-white/70 dark:bg-[#241c12] border border-quran/10 px-2 py-2 text-center">
-      <div className="flex items-center justify-center gap-1 mb-0.5">{icon}<span className="text-base font-bold text-gray-800 dark:text-gray-100 tabular-nums">{value}</span></div>
+      <div className="flex items-center justify-center gap-1 mb-0.5">{icon}<span className="text-base font-bold text-gray-800 dark:text-gray-100 tabular-nums">{arNum(value)}</span></div>
       <div className="text-[9px] text-gray-500">{label}</div>
     </div>
   );

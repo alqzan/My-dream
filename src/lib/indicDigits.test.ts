@@ -9,6 +9,7 @@ import {
   toIndicDigits, toLatinDigits, formatAmount, formatDate, formatDateShort,
   formatClock, hijriDate, entriesCount, hijriDay, hijriDayNumber,
 } from "./utils";
+import { countAyat, countPages, countSpots, countDays } from "./quran/hifz";
 
 const hasLatinDigit = (s: string) => /[0-9]/.test(s);
 
@@ -39,6 +40,18 @@ describe("قاعدةُ الأرقام الهندية", () => {
 
   it("العدُّ العربيُّ هنديّ", () => {
     expect(hasLatinDigit(entriesCount(148))).toBe(false);
+  });
+
+  it("عدُّ القرآن هنديٌّ كذلك — لا يُستثنى قسمٌ من القاعدة", () => {
+    // كانت هذه الأربع تُخرج رقماً لاتينياً («8 أوجه» وسط شاشةٍ هندية) بتعليقٍ
+    // صريح يقول «أرقامٍ لاتينية» — بقيّةُ قاعدةٍ قديمة انقلبت.
+    for (const s of [countAyat(8), countPages(12), countSpots(4), countDays(9)]) {
+      expect(hasLatinDigit(s)).toBe(false);
+    }
+    expect(countPages(12)).toMatch(/[٠-٩]/);
+    // والصيغُ المفردة والمثنّاة بلا رقمٍ أصلاً — تبقى كما هي.
+    expect(countPages(1)).toBe("وجه واحد");
+    expect(countDays(1)).toBe("غداً");
   });
 
   it("من احتاج الرقمَ يناديه رقماً — لا يمرّر نصَّ العرض على Number", () => {

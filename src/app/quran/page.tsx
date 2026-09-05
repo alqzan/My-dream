@@ -3,6 +3,7 @@ import { useState } from "react";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import { HifzSection } from "@/components/quran/HifzSection";
 import { KhatmaOrbit } from "@/components/quran/KhatmaOrbit";
+import { QuranHero } from "@/components/quran/QuranHero";
 import { QuranBanner } from "@/components/quran/QuranBanner";
 import { BookOpenText, Map, Sparkles } from "lucide-react";
 
@@ -13,14 +14,20 @@ type QuranView = "today" | "map" | "drill";
 // فلمّا أُوقف المتصفّحُ سقطت معه ستّةُ إجراءاتٍ في المتجر بلا زرٍّ يبلغها —
 // فلا سبيلَ لتسجيل جزءٍ ولا صفحة. مكانُها الصحيح هنا: تبويب «اليوم»، فوق
 // جلسة الحفظ، لأنّ كلتيهما «ما عليك اليوم».
+//
+// **وترتيبُ الصفحة قُصد به سلّمٌ لا كومة**: لوحُ الموضع (أين أنت من المصحف) ثمّ
+// التبويبات ثمّ **الفعل** (جلسة اليوم) ثمّ ما دونه، والآيةُ ختاماً في الذيل.
+// كانت الزخرفةُ (الدعاء والآية) تتصدّر، ويليها شريطُ أرقامٍ يكرّر ما في بطاقة
+// الجلسة — ثلاث بطاقاتٍ متساوية الوزن قبل الزرّ الذي يُضغط فعلاً.
+
+const TABS: { id: QuranView; label: string; hint: string; icon: typeof BookOpenText }[] = [
+  { id: "today", label: "اليوم", hint: "ما عليك الآن", icon: BookOpenText },
+  { id: "drill", label: "المذاكرة", hint: "مواضع تعثّرك", icon: Sparkles },
+  { id: "map", label: "الخريطة", hint: "محفوظك كلّه", icon: Map },
+];
 
 export default function QuranPage() {
   const [view, setView] = useState<QuranView>("today");
-  const tabs: { id: QuranView; label: string; icon: typeof BookOpenText }[] = [
-    { id: "today", label: "اليوم", icon: BookOpenText },
-    { id: "drill", label: "المذاكرة", icon: Sparkles },
-    { id: "map", label: "الخريطة", icon: Map },
-  ];
 
   return (
     <div className="page-shell mdr mdr-quran-page">
@@ -33,11 +40,11 @@ export default function QuranPage() {
       </div>
 
       <div className="animate-fade-up stagger-1">
-        <QuranBanner />
+        <QuranHero />
       </div>
 
       <div className="mdr-quran-tabs animate-fade-up stagger-2" role="tablist" aria-label="أقسام الحفظ">
-        {tabs.map(({ id, label, icon: Icon }) => (
+        {TABS.map(({ id, label, hint, icon: Icon }) => (
           <button
             key={id}
             type="button"
@@ -47,18 +54,21 @@ export default function QuranPage() {
             className={view === id ? "is-active" : ""}
           >
             <Icon size={15} />
-            {label}
+            <span className="mdr-quran-tab-label">{label}</span>
+            <span className="mdr-quran-tab-hint">{hint}</span>
           </button>
         ))}
       </div>
 
-      <div className="mdr-quran-hifz-only animate-fade-up stagger-3 space-y-4">
-        {/* الختمةُ في «اليوم» وحده: هي حالُ تلاوتك الآن، لا خريطةً ولا مذاكرة. */}
-        {view === "today" && <KhatmaOrbit />}
-        <div className="mdr-quran-path-label">
-          <BookOpenText size={15} /> مسار الحفظ
-        </div>
+      <div className="mdr-quran-body animate-fade-up stagger-3 space-y-4">
         <HifzSection view={view} />
+        {/* الختمةُ في «اليوم» وحده: هي حالُ تلاوتك الآن، لا خريطةً ولا مذاكرة.
+            وموضعُها تحت جلسة اليوم لا فوقها — الفعلُ المطلوب أوّلاً. */}
+        {view === "today" && <KhatmaOrbit />}
+      </div>
+
+      <div className="mdr-quran-seal animate-fade-up stagger-4">
+        <QuranBanner />
       </div>
     </div>
   );

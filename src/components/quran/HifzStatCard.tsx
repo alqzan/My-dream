@@ -7,6 +7,7 @@ import { today } from "@/lib/utils";
 import { hifzProgress, hifzStreak, memorizedInWindow } from "@/lib/quran/hifz";
 import { Card } from "@/components/ui/Card";
 import { BookOpenText, Flame, ChevronLeft } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // بطاقة الحفظ في صفحة الإحصائيات — ملخّصٌ سريع لتقدّم الحفظ (تظهر متى وُجدت خطة).
 export function HifzStatCard() {
@@ -35,7 +36,7 @@ export function HifzStatCard() {
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-3">
-        <Tile value={`${prog.pct}%`} label={`${prog.spanPages} من ${TOTAL_PAGES} وجه`} />
+        <Tile value={`${arNum(prog.pct)}٪`} label={`${arNum(prog.spanPages)} من ${arNum(TOTAL_PAGES)} وجه`} />
         <Tile value={String(completed)} label="جزء مكتمل" />
         <Tile value={<span className="flex items-center justify-center gap-1">{streak}{streak > 0 && <Flame size={13} className="text-amber-500" />}</span>} label="سلسلة الحفظ" />
       </div>
@@ -44,7 +45,7 @@ export function HifzStatCard() {
         <div className="h-full rounded-full bg-gradient-to-l from-quran to-[#2f9c73] transition-all duration-700" style={{ width: `${prog.pct}%` }} />
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
-        {prog.at ? `موضعك: ${prog.at.surahName} ${prog.at.ayah}` : "—"}
+        {prog.at ? `موضعك: ${prog.at.surahName} ${arNum(prog.at.ayah)}` : "—"}
         {month > 0 && <span className="text-quran"> · حفظت {month} آية هذا الشهر</span>}
       </p>
     </Card>

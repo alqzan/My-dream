@@ -9,6 +9,7 @@ import { loadMutashabihat, similarOf, type SimMap } from "@/lib/quran/mutashabih
 import { MutashabihatCompare } from "@/components/quran/MutashabihatCompare";
 import { MistakeDrillModal } from "@/components/quran/MistakeDrill";
 import { AlertTriangle, Check, Trash2, GitCompareArrows, Target, RotateCcw, ChevronDown } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // الآية مع تظليل كلمة الخطأ في موضعها (سياقٌ قبلها وبعدها). عند غياب الكلمة أو
 // تعذّر مطابقتها نصياً نعرض الآية كاملةً — تبقى سياقاً كافياً.
@@ -93,13 +94,13 @@ export function MistakesPanel() {
                     )}
                   </div>
                   <div className="text-[11px] text-gray-400">
-                    {name} · آية {ayah}
+                    {name} · آية {arNum(ayah)}
                     {lastHit && <span className="mx-1">· آخر مرّة {lastHit}</span>}
                   </div>
                 </div>
                 {repeats >= 2 && (
                   <span className="shrink-0 text-[10px] font-bold text-red-700 bg-red-100 dark:bg-red-900/30 rounded-full px-2 py-0.5" title="عدد مرّات الخطأ">
-                    تكرّر ×{repeats}
+                    تكرّر ×{arNum(repeats)}
                   </span>
                 )}
                 <div className="flex items-center gap-1 shrink-0">
@@ -150,7 +151,7 @@ export function MistakesPanel() {
                   {Array.from({ length: MISTAKE_MASTERY }, (_, i) => (
                     <span key={i} className={`w-1.5 h-1.5 rounded-full ${i < streak ? "bg-emerald-500" : "bg-emerald-500/25"}`} />
                   ))}
-                  نجحتَ فيه {streak}× متتالية — نجاحٌ آخر يُغلقه.
+                  نجحتَ فيه {arNum(streak)}× متتالية — نجاحٌ آخر يُغلقه.
                 </div>
               )}
             </div>
@@ -169,7 +170,7 @@ export function MistakesPanel() {
             aria-expanded={showClosed}
           >
             <ChevronDown size={13} className={showClosed ? "rotate-180 transition-transform" : "transition-transform"} />
-            المُتقَنة ({closed.length})
+            المُتقَنة ({arNum(closed.length)})
           </button>
           {showClosed && (
             <div className="space-y-1 mt-1.5">
@@ -182,7 +183,7 @@ export function MistakesPanel() {
                       {m.wordIndex == null
                         ? <span>الآية كاملة</span>
                         : <span className="font-quran text-gray-700 dark:text-gray-200">{m.word || "—"}</span>}
-                      <span className="mx-1">· {name} · آية {ayah}</span>
+                      <span className="mx-1">· {name} · آية {arNum(ayah)}</span>
                     </span>
                     <button
                       onClick={() => store.reopenMistake(m.id)}

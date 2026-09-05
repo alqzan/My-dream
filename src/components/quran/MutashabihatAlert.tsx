@@ -4,6 +4,7 @@ import { loadMutashabihat, similarInRange, type SimMap } from "@/lib/quran/mutas
 import { MutashabihatCompare } from "@/components/quran/MutashabihatCompare";
 import type { Portion } from "@/lib/quran/hifz";
 import { GitCompareArrows, ChevronLeft } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // تنبيه المتشابهات — يظهر إن كان في المقطع آياتٌ لها نظائر، فينبّه الحافظ عند
 // المرور بها ويفتح شاشة المقارنة. لا يظهر شيء إن لا متشابهات.
@@ -23,7 +24,7 @@ export function MutashabihatAlert({ portion, compact }: { portion: Portion; comp
       >
         <GitCompareArrows size={compact ? 14 : 15} className="text-amber-600 shrink-0" />
         <span className={`flex-1 text-right font-semibold text-amber-800 dark:text-amber-200 ${compact ? "text-[11px]" : "text-xs"}`}>
-          {ids.length === 1 ? "في هذا المقطع آيةٌ لها متشابهات" : `في هذا المقطع ${ids.length} آيات لها متشابهات`}
+          {ids.length === 1 ? "في هذا المقطع آيةٌ لها متشابهات" : `في هذا المقطع ${arNum(ids.length)} آيات لها متشابهات`}
           <span className="font-normal text-amber-600/80"> — انتبه للفروق</span>
         </span>
         <span className="flex items-center gap-0.5 text-[11px] font-bold text-amber-700 shrink-0">قارن <ChevronLeft size={13} /></span>

@@ -21,6 +21,7 @@ import {
   X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick,
   CalendarClock, SlidersHorizontal, Undo2,
 } from "lucide-react";
+import { arNum } from "@/lib/madar/format";
 
 // المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعدد مرّاتٍ تحدّده شدّة التمرين،
 // ثم تسميعٌ بتلقين الآية السابقة، ثم «أتقنتها» للانتقال، وأخيراً مرحلة ربطٍ
@@ -99,7 +100,7 @@ export function HifzCoach({
               context="shape"
               leadId={recallLeadId}
               hidden={() => true}
-              className="hifz-mushaf-stage"
+              className="hifz-mushaf-stage" expandable
             />
             <p className="text-[11px] text-gray-400 text-center mt-2 flex items-center justify-center gap-1">
               <EyeOff size={12} /> سمّع المقطع من حفظك…
@@ -129,7 +130,7 @@ export function HifzCoach({
   return (
     <Shell
       title="احفظ بطريقة موجّهة"
-      subtitle={`${describeRange(portion.fromId, portion.toId)} · آية ${idx + 1}/${ayat.length}`}
+      subtitle={`${describeRange(portion.fromId, portion.toId)} · آية ${arNum(idx + 1)}/${arNum(ayat.length)}`}
       onClose={onClose}
       progress={(idx + (phase === "link" ? 1 : 0)) / ayat.length}
     >
@@ -137,7 +138,7 @@ export function HifzCoach({
         <>
           <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-2 flex items-center justify-center gap-1"><Link2 size={13} /> اربط المقطع كاملاً</div>
           <p className="text-[11px] text-gray-400 text-center mb-3">اقرأ المقطع كله مرّةً موصولاً لتثبيت الربط بين الآيات.</p>
-          <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" />
+          <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" expandable />
           <div className="mt-4">
             <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف تقيّم حفظك للورد؟</div>
             <RatingRow onRate={(r) => onDone(r)} />
@@ -149,14 +150,14 @@ export function HifzCoach({
           <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
           {/* الآية مُبرَزةٌ في وجهها والباقي خافت: تحفظها وأنت ترى أين تقع من
               الوجه — لا مقتطعةً في صندوق. */}
-          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} className="hifz-mushaf-stage" />
+          <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} className="hifz-mushaf-stage" expandable />
           <div className="mt-3"><MutashabihatAlert portion={{ fromId: cur.id, toId: cur.id }} compact /></div>
           <RepsDots reps={reps} target={repTarget} />
           <button
             onClick={() => setReps((r) => r + 1)}
             className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press"
           >
-            <Repeat size={15} /> كرّرت ({reps}/{repTarget})
+            <Repeat size={15} /> كرّرت ({arNum(reps)}/{arNum(repTarget)})
           </button>
           <div className="flex items-center justify-between mt-3">
             <span className="flex items-center gap-1 text-[10px] text-gray-400">
@@ -184,7 +185,7 @@ export function HifzCoach({
             context={revealed ? "text" : "shape"}
             leadId={leadOnPage(cur.id)}
             hidden={() => !revealed}
-            className="hifz-mushaf-stage"
+            className="hifz-mushaf-stage" expandable
           />
           <div className="flex gap-2 mt-4">
             <button onClick={() => setRevealed((v) => !v)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran/10 text-quran font-semibold press">
@@ -377,6 +378,8 @@ function MarkableSheet({
       toId={portion.toId}
       renderAyah={renderAyah}
       renderNumber={renderNumber}
+      className="hifz-mushaf-stage"
+      expandable
     />
   );
 }
@@ -420,7 +423,7 @@ function SpotStrip({
               <span className="font-semibold">
                 {m.wordIndex == null ? `آية ${ayah} كاملة` : <span className="font-quran text-[13px]">{m.word || `آية ${ayah}`}</span>}
               </span>
-              {m.hits.length >= 2 && <span className="font-sans font-bold opacity-70">×{m.hits.length}</span>}
+              {m.hits.length >= 2 && <span className="font-sans font-bold opacity-70">×{arNum(m.hits.length)}</span>}
               <button
                 type="button"
                 onClick={() => onClear(m.id)}
