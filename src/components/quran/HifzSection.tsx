@@ -5,7 +5,7 @@ import { EMPTY_HIFZ, type HifzUnit, type HifzRating } from "@/lib/types";
 import { SURAHS, surahAyahToId, describeRange } from "@/lib/quran/meta";
 import { loadAyahText } from "@/lib/quran/text";
 import { today } from "@/lib/utils";
-import { plannedPortion, hifzProgress, smartTestPortion, type Portion } from "@/lib/quran/hifz";
+import { plannedPortion, hifzProgress, smartTestPortion, UNIT_LABEL, type Portion } from "@/lib/quran/hifz";
 import { INTENSITY_LABEL, intensityOf, presetOf } from "@/lib/quran/intensity";
 import type { HifzIntensity } from "@/lib/types";
 import { buildTodayPlan, type TodayPlan } from "@/lib/quran/session";
@@ -31,7 +31,6 @@ const RECALL_TITLE: Record<Exclude<CoachKind, "memorize">, string> = {
   review: "سمّع مراجعتك", test: "اختبار",
 };
 
-const UNIT_LABEL: Record<HifzUnit, string> = { ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه" };
 const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
 
 export type HifzView = "today" | "map" | "drill";

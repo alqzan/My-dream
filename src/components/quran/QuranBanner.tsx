@@ -1,33 +1,48 @@
 "use client";
 import { useEffect, useState } from "react";
-import { shortVerseOfDay, verseRef, dayOfYear, type QuranVerse } from "@/lib/quranVerses";
+import { shortVerseOfDay, dayOfYear, type QuranVerse } from "@/lib/quranVerses";
+import { AyahNumber } from "@/components/quran/MushafSheet";
 
-// خِتامُ القسم — آيةٌ قصيرة موثوقة تتغيّر كلّ يوم، وتحتها الدعاء. الاختيار على
-// العميل فقط لثبات SSR.
+// ===================== ختمُ الصفحة: آيةُ اليوم =====================
+// الآيةُ كانت تُعرض كأيّ نصٍّ في بطاقة: سطرٌ رماديّ، ثمّ مرجعٌ بين قوسين
+// `﴿ الأحزاب 41 ﴾` — وهي صيغةُ اقتباسٍ في مقال، لا صورةُ آيةٍ في مصحف.
 //
-// **موضعُها الذيل لا الصدر**: كانت تتصدّر الصفحة فيقرأ الرأسُ زخرفةً قبل أن يبلغ
-// «ما عليّ اليوم»، ويهبط الفعلُ (زرّ الجلسة) تحت طيّة الشاشة في الجوّال. والآن
-// الدعاء سطرٌ صغير تحت الآية لا عنواناً فوقها — الآيةُ هي المتن، والدعاء تعقيب.
+// الآن تُعرض **بلسان المصحف نفسه**، وكلُّ عنصرٍ هنا مأخوذٌ من الورقة المطبوعة
+// لا مخترَعاً: **إطارٌ مزدوج** (خطّان متوازيان بينهما فرجة) بزوايا مذهَّبة —
+// وهو تأطيرُ صفحات المصاحف؛ و**اسمُ السورة في طُرّةٍ** فوق الآية بالإطار
+// المزدوج نفسه الذي يرسمه `.mushaf-sura` داخل الوجه؛ و**رقمُ الآية في وردته**
+// (`۝` — نفس `AyahNumber` في اللوح) في آخر النصّ حيث موضعه في المصحف، لا
+// مرجعاً بين قوسين تحته. والدعاء تحت فاصلٍ بمعيَّنٍ ذهبيّ — إشارةُ «مدار»
+// المتكرّرة (`.mdr-diamond`).
+//
+// النصُّ بخطّ المصحف وبحبر الصفحة لا رمادياً: هي متنُ البطاقة لا حاشيتها.
 export function QuranBanner() {
   const [verse, setVerse] = useState<QuranVerse | null>(null);
   // إزاحة 5 لتختلف عبارة اللافتة عن «آية اليوم» في التدبّر بنفس اليوم.
   useEffect(() => setVerse(shortVerseOfDay(dayOfYear(), 5)), []);
 
   return (
-    <div className="mdr-quran-banner relative overflow-hidden rounded-2xl border border-quran/25 p-4">
-      {/* هالةٌ زخرفية خفيفة */}
-      <div className="mdr-quran-banner-glow pointer-events-none absolute -top-8 -left-6 w-28 h-28 rounded-full bg-quran/10 blur-2xl" aria-hidden />
+    <section className="mdr-ayah-seal" aria-label="آية اليوم">
+      <span className="mdr-ayah-seal-frame" aria-hidden>
+        <i className="mdr-ayah-seal-corner is-ts" />
+        <i className="mdr-ayah-seal-corner is-te" />
+        <i className="mdr-ayah-seal-corner is-bs" />
+        <i className="mdr-ayah-seal-corner is-be" />
+      </span>
+
       {verse && (
-        <div className="relative">
-          <p className="font-quran text-center text-[17px] font-bold text-gray-800 dark:text-gray-100 leading-[2.1]">
-            {verse.text}
+        <>
+          <span className="mdr-ayah-seal-sura">سورة {verse.surah}</span>
+          <p className="mdr-ayah-seal-text font-quran">
+            {verse.text} <AyahNumber num={verse.ayah} />
           </p>
-          <p className="text-center text-[11px] text-quran font-semibold mt-2">﴿ {verseRef(verse)} ﴾</p>
-        </div>
+        </>
       )}
-      <p className="relative mt-3 pt-3 border-t border-quran/15 text-center text-[11px] font-bold text-quran/80">
-        اللهم اجعل القرآن ربيع قلبي
-      </p>
-    </div>
+
+      <span className="mdr-ayah-seal-rule" aria-hidden>
+        <i /><span className="mdr-diamond" /><i />
+      </span>
+      <p className="mdr-ayah-seal-dua">اللهم اجعل القرآن ربيع قلبي</p>
+    </section>
   );
 }

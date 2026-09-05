@@ -43,7 +43,7 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
   const doneCount = saved?.idx ?? 0;
 
   return (
-    <div className="rounded-2xl border border-quran/30 bg-gradient-to-b from-quran/[0.09] to-quran/[0.03] p-4 space-y-3.5">
+    <div className="mdr-today-card rounded-2xl p-4 space-y-3.5">
       <div className="flex items-center gap-2">
         <Sparkles size={17} className="text-quran" />
         <span className="text-sm font-bold text-gray-800 dark:text-gray-100">جلسة اليوم</span>
@@ -52,23 +52,18 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
         </span>
       </div>
 
-      {/* «ماذا ينتظرني» — سطرٌ واحد بلغةٍ واضحة بدل ثلاث بطاقات أرقام */}
-      <div className="rounded-xl bg-white/70 dark:bg-[#241c12] border border-quran/10 px-3 py-2.5 text-center">
-        <div className="text-[10px] text-gray-500 mb-0.5">ينتظرك اليوم</div>
-        <div className="text-[13px] font-bold text-gray-800 dark:text-gray-100 leading-relaxed">{plan.summary}</div>
+      {/* «ماذا ينتظرني» — سطرٌ واحد بلغةٍ واضحة بدل ثلاث بطاقات أرقام. لا صندوقَ
+          داخل صندوق: كِبَرُ الخطّ وفاصلٌ بمعيَّنٍ يكفيان لتمييزه. */}
+      <div className="mdr-today-summary">
+        <span className="mdr-today-summary-kicker">ينتظرك اليوم</span>
+        <strong>{plan.summary}</strong>
       </div>
 
-      {/* سلسلة الخطوات — تعرف مسبقاً ما ستمرّ به وبأيّ ترتيب */}
-      <div className="flex items-center justify-center gap-1 flex-wrap">
+      {/* سلسلة الخطوات — **خيطٌ يصلها** فتُقرأ مساراً مرتّباً لا وسوماً متناثرة،
+          وما مضى منها مطفأٌ بعلامته. */}
+      <div className={`mdr-today-path ${plan.steps.length < 2 ? "is-lone" : ""}`}>
         {plan.steps.map((st, i) => (
-          <span
-            key={i}
-            className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${
-              i < doneCount
-                ? "bg-quran/15 text-quran/50 line-through"
-                : "bg-white/70 dark:bg-[#241c12] text-gray-500 border border-quran/10"
-            }`}
-          >
+          <span key={i} className={`mdr-today-step ${i < doneCount ? "is-done" : ""}`}>
             {STEP_LABEL[st.kind]}
           </span>
         ))}

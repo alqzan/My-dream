@@ -8,6 +8,11 @@ import {
 
 export interface Portion { fromId: number; toId: number }
 
+/** مسمّى وحدة الورد — تعريفٌ واحد تشترك فيه الإعدادات ولوحُ الموضع. */
+export const UNIT_LABEL: Record<HifzUnit, string> = {
+  ayah: "آية", quarter: "ربع وجه", half: "نصف وجه", page: "وجه",
+};
+
 // نهاية المقطع اليومي انطلاقاً من startId حسب وحدة الخطة ومقدارها.
 export function portionEnd(startId: number, unit: HifzUnit, amount: number): number {
   const amt = Math.max(1, Math.floor(amount) || 1);

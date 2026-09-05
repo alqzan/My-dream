@@ -1,7 +1,7 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ } from "@/lib/types";
-import { hifzProgress, hifzStreak } from "@/lib/quran/hifz";
+import { hifzProgress, hifzStreak, posOf, UNIT_LABEL } from "@/lib/quran/hifz";
 import { arNum } from "@/lib/madar/format";
 import { BookOpen, Flame, Layers, Sprout } from "lucide-react";
 
@@ -21,6 +21,7 @@ export function QuranHero() {
   const prog = hifzProgress(h);
   const streak = hifzStreak(h);
   const started = prog.spanPages > 0 && prog.at != null;
+  const start = posOf(h.plan.startId);
 
   return (
     <section className="mdr-quran-hero" aria-label="موضعك من المصحف">
@@ -43,6 +44,7 @@ export function QuranHero() {
         </svg>
         <span className="mdr-quran-hero-ring-label">
           <strong>{arNum(prog.pct)}٪</strong>
+          <small>من الخطة</small>
         </span>
       </div>
 
@@ -53,12 +55,19 @@ export function QuranHero() {
         <strong className="mdr-quran-hero-place">
           {prog.at ? `${prog.at.surahName} · آية ${arNum(prog.at.ayah)}` : "لم تسجّل حفظاً بعد"}
         </strong>
+        {/* الحبّاتُ لا تخلو أبداً: قبل أوّل جلسةٍ لا موضعَ ولا سلسلة، فتقول
+            اللوحةُ ما اخترتَه — وردُك ونقطةُ بدايتك — بدل شريطٍ فارغٍ عريض. */}
         <div className="mdr-quran-hero-chips">
-          {started && (
+          {started ? (
             <>
               <span><BookOpen size={12} /> صفحة {arNum(prog.page)}</span>
               <span><Layers size={12} /> جزء {arNum(prog.juz)}</span>
               <span><Sprout size={12} /> {arNum(prog.spanPages)} وجه محفوظ</span>
+            </>
+          ) : (
+            <>
+              <span><Sprout size={12} /> وردك {arNum(h.plan.amount)} {UNIT_LABEL[h.plan.unit]}</span>
+              <span><BookOpen size={12} /> تبدأ من {start.surahName}</span>
             </>
           )}
           {streak > 0 && (

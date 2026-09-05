@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { formatAmount, formatDate, today } from "@/lib/utils";
 import { khatmaPct, khatmaEta, khatmaDaysForGoal, pagesReadOn, DEFAULT_KHATMA_GOAL } from "@/lib/quran/khatma";
 import { Confetti } from "@/components/ui/Confetti";
-import { Plus, Minus, RotateCcw, Check, BookOpen, Target } from "lucide-react";
+import { Plus, Minus, RotateCcw, Check, BookOpen, Target, Sparkle } from "lucide-react";
 import { arNum } from "@/lib/madar/format";
 
 // «مدار الختمة» — أداةٌ إبداعية على عائلة أدوات التطبيق (PrayerOrbit، مدار
@@ -68,10 +68,12 @@ export function KhatmaOrbit() {
   }
 
   return (
-    <div className="rounded-2xl border border-quran/20 bg-gradient-to-b from-quran/[0.06] to-transparent p-4">
+    <div className="mdr-khatma-card rounded-2xl border border-quran/20 p-4">
       {celebrate && <Confetti />}
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-semibold text-gray-700">مدار الختمة</span>
+        <span className="inline-flex items-center gap-2 text-sm font-bold text-gray-700">
+          <Sparkle size={14} className="text-quran" /> مدار الختمة
+        </span>
         {k.completed > 0 && (
           <span className="text-[11px] font-bold text-quran bg-quran/10 rounded-full px-2.5 py-0.5">
             أتممت {formatAmount(k.completed)} {k.completed === 1 ? "ختمة" : "ختمات"} 🌙
@@ -106,7 +108,12 @@ export function KhatmaOrbit() {
             })}
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-4xl font-black text-quran tabular-nums leading-none">{arNum(k.juz)}</span>
+            {/* صفرٌ كبيرٌ في وسط حلقةٍ فارغة يقرأ خيبةً لا بداية. */}
+            {k.juz === 0 ? (
+              <span className="mdr-khatma-invite">ابدأ ختمتك</span>
+            ) : (
+              <span className="text-4xl font-black text-quran tabular-nums leading-none">{arNum(k.juz)}</span>
+            )}
             <span className="text-[11px] text-gray-400 mt-1">من {arNum(JUZ)} جزءاً</span>
             <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
               {k.page != null && k.page > 0 ? `صفحة ${arNum(k.page)} · ${arNum(pct)}٪` : `${arNum(pct)}٪`}

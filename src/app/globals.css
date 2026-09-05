@@ -760,12 +760,21 @@ body {
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
+  place-content: center;
+  justify-items: center;
+  gap: 0.1rem;
 }
 .mdr-quran-hero-ring-label strong {
   color: var(--gold);
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 900;
+  line-height: 1;
+}
+/* الحلقةُ وحدها تقول «نسبة» ولا تقول «نسبةُ ماذا» — فسطرٌ صغيرٌ داخلها. */
+.mdr-quran-hero-ring-label small {
+  color: var(--ink52);
+  font-size: 0.47rem;
+  font-weight: 700;
   line-height: 1;
 }
 .mdr-quran-hero-body { min-width: 0; display: grid; gap: 0.22rem; }
@@ -843,8 +852,163 @@ body {
 }
 .mdr-quran-tabs button.is-active .mdr-quran-tab-hint { opacity: 0.85; }
 
-/* ذيلُ الصفحة: الآيةُ ختامٌ لا مقدّمة. */
+/* ===================== ختمُ الصفحة: آيةُ اليوم =====================
+   الآيةُ لا تُعرض كاقتباسٍ في مقال (سطرٌ رماديّ ومرجعٌ بين قوسين) بل بلسان
+   الورقة المطبوعة: إطارٌ مزدوجٌ بزوايا مذهَّبة، وطُرّةُ اسم السورة بالإطار
+   المزدوج نفسه الذي يرسمه `.mushaf-sura`، ورقمُ الآية في وردته آخرَ النصّ،
+   وفاصلٌ بمعيَّنِ «مدار» يفصل الدعاء. */
 .mdr-quran-seal { margin-top: 1.1rem; }
+.mdr-ayah-seal {
+  position: relative;
+  padding: 1.7rem 1.5rem 1.15rem;
+  border: 1px solid var(--gline);
+  border-radius: 1.4rem;
+  background:
+    radial-gradient(120% 100% at 50% 0%, var(--greenw), transparent 68%),
+    var(--paper2);
+}
+/* الخطُّ الثاني من الإطار — فرجةٌ بينه وبين الحافّة كما في تأطير المصاحف. */
+.mdr-ayah-seal-frame {
+  position: absolute;
+  inset: 0.42rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  border-radius: 1.05rem;
+  pointer-events: none;
+}
+.mdr-ayah-seal-corner {
+  position: absolute;
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 0 solid var(--gold);
+  opacity: 0.55;
+}
+.mdr-ayah-seal-corner.is-ts { top: -1px; inset-inline-start: -1px; border-top-width: 2px; border-inline-start-width: 2px; border-start-start-radius: 1rem; }
+.mdr-ayah-seal-corner.is-te { top: -1px; inset-inline-end: -1px; border-top-width: 2px; border-inline-end-width: 2px; border-start-end-radius: 1rem; }
+.mdr-ayah-seal-corner.is-bs { bottom: -1px; inset-inline-start: -1px; border-bottom-width: 2px; border-inline-start-width: 2px; border-end-start-radius: 1rem; }
+.mdr-ayah-seal-corner.is-be { bottom: -1px; inset-inline-end: -1px; border-bottom-width: 2px; border-inline-end-width: 2px; border-end-end-radius: 1rem; }
+
+/* طُرّةُ اسم السورة — الإطارُ المزدوج نفسه الذي في وجه المصحف. */
+.mdr-ayah-seal-sura {
+  position: relative;
+  display: block;
+  width: fit-content;
+  margin: 0 auto 0.95rem;
+  padding: 0.1rem 1.5rem;
+  border: 3px double color-mix(in srgb, var(--gold) 74%, transparent);
+  border-radius: 0.65rem;
+  color: var(--gold);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.mdr-ayah-seal-text {
+  position: relative;
+  color: var(--ink);
+  font-size: 1.2rem;
+  line-height: 2.35;
+  text-align: center;
+  text-wrap: balance;
+}
+/* وردةُ رقم الآية تأخذ لون القسم كما في اللوح. */
+.mdr-ayah-seal-text .text-quran { color: var(--gold); }
+
+.mdr-ayah-seal-rule {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.05rem;
+}
+.mdr-ayah-seal-rule i {
+  flex: 1;
+  max-width: 5.5rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gold) 38%, transparent));
+}
+.mdr-ayah-seal-rule i:last-child { background: linear-gradient(270deg, transparent, color-mix(in srgb, var(--gold) 38%, transparent)); }
+.mdr-ayah-seal-rule .mdr-diamond { width: 5px; height: 5px; opacity: 0.75; }
+.mdr-ayah-seal-dua {
+  position: relative;
+  margin-top: 0.6rem;
+  color: color-mix(in srgb, var(--gold) 88%, transparent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* ===================== بطاقةُ جلسة اليوم =====================
+   الفعلُ المطلوب اليوم — فلها وزنُ البطاقة الأولى: ورقةٌ أدفأ بحدٍّ ذهبيّ.
+   و«ينتظرك اليوم» بلا صندوقٍ داخل صندوق (كِبَرُ الخطّ يكفي)، والخطواتُ خيطٌ
+   يصلها فتُقرأ مساراً لا وسوماً متناثرة. */
+.mdr-quran-page .mdr-today-card {
+  border: 1px solid var(--gline);
+  background:
+    radial-gradient(120% 100% at 50% 0%, var(--greenw), transparent 72%),
+    var(--paper2);
+}
+.mdr-today-summary { text-align: center; }
+.mdr-today-summary-kicker {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--ink52);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+.mdr-today-summary strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.7;
+}
+.mdr-today-path {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem 0.45rem;
+  padding-top: 0.15rem;
+}
+/* الخيطُ خلف الحبّات — يقف عند حافّتَي الصفّ فلا يخرج عن الأولى والأخيرة. */
+.mdr-today-path::before {
+  content: "";
+  position: absolute;
+  inset-inline: 1.4rem;
+  top: 50%;
+  height: 1px;
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+}
+/* خطوةٌ واحدة لا مسارَ لها — الخيطُ خلفها يقرأ كسطرٍ مشطوب. */
+.mdr-today-path.is-lone::before { display: none; }
+.mdr-today-step {
+  position: relative;
+  padding: 0.2rem 0.62rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink52);
+  font-size: 0.64rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.mdr-today-step.is-done {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  color: color-mix(in srgb, var(--gold) 70%, transparent);
+  text-decoration: line-through;
+}
+
+/* الختمة: ورقُ القسم نفسه، ووسطُ الحلقة دعوةٌ لا صفرٌ كبير. */
+.mdr-quran-page .mdr-khatma-card {
+  border-color: var(--line);
+  background: var(--paper2);
+}
+.mdr-khatma-invite {
+  color: color-mix(in srgb, var(--gold) 78%, transparent);
+  font-size: 0.9rem;
+  font-weight: 900;
+}
 
 /* سطرُ الجدولة الذكيّة داخل الإعدادات — رقمٌ يتحرّك يحتاج جملةً تفسّره. */
 .mdr-quran-smart {
@@ -2623,18 +2787,6 @@ body,
   background: var(--paper2) !important;
 }
 
-/* القرآن: خِتامُ الصفحة — شريطُ الآية والدعاء بالورق نفسه، هادئاً في الذيل. */
-.mdr-quran-page .mdr-quran-banner {
-  background: linear-gradient(180deg, var(--greenw), var(--paper2) 82%) !important;
-  border-color: color-mix(in srgb, var(--green) 30%, var(--line)) !important;
-  border-radius: 1.35rem !important;
-  box-shadow: none !important;
-}
-.mdr-quran-page .mdr-quran-banner-glow {
-  background: var(--greenw) !important;
-  opacity: 0.4;
-  filter: none;
-}
 /* المال: الرقم/الأزرار/الملخص فقط في السطح، بألوان ورقية بدلاً من كتلة خضراء. */
 .mdr-finance-page .mdr-finance-balance {
   color: var(--ink) !important;
@@ -2800,15 +2952,10 @@ body,
 
 /* القرآن: اللون الأخضر يبقى علامة الحفظ والدعاء فقط، أما المساحة فتبقى
    ورقية مثل شاشة «الحفظ» في التصميم المرجعي. */
-.mdr-quran-page .mdr-quran-banner,
 .mdr-quran-page .hifz-step-card,
 .mdr-quran-page .hifz-drill-card,
 .mdr-quran-page .hifz-result-screen {
   box-shadow: none !important;
-}
-.mdr-quran-page .mdr-quran-banner h1,
-.mdr-quran-page .mdr-quran-banner strong {
-  color: var(--green) !important;
 }
 .mdr-finance-page .mdr-finance-glance-tile .text-finance {
   color: var(--gold) !important;
@@ -3106,7 +3253,7 @@ body,
   .mdr-home-year-countdown .mdr-year-progress,
   .mdr-home-year-countdown .mdr-season-card,
   .mdr-finance-page .mdr-finance-balance,
-  .mdr-quran-page .mdr-quran-banner { border-radius: 1.15rem !important; }
+  .mdr-quran-page .mdr-ayah-seal { border-radius: 1.15rem !important; }
 }
 
 /* ===================== بهو اليوم — النسخة الهادئة ===================== */
