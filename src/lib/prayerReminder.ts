@@ -4,9 +4,6 @@ import { PRAYERS } from "./types";
 /** مدة الانتظار بعد الأذان قبل مطالبة التسجيل. */
 export const PRAYER_REMINDER_DELAY_MS = 30 * 60 * 1000;
 
-/** لا نوقظ المستخدم بسبب صلاةٍ قديمة جداً عند فتح التطبيق. */
-export const PRAYER_REMINDER_MAX_AGE_MS = 8 * 60 * 60 * 1000;
-
 export interface PrayerReminderCandidate {
   date: string;
   prayer: PrayerName;
@@ -16,40 +13,21 @@ export interface PrayerReminderCandidate {
 }
 
 /**
- * يختار تذكيراً واحداً حديثاً فقط.
+ * يعيد كل الصلوات المستحقّة اليوم مرتّبةً بترتيب اليوم.
  *
- * عندما يعود المستخدم بعد ساعات قد تكون عدة صلوات غير مسجلة. اختيار أقدمها
- * يجعل النافذة تبدو كأنها تتراكم وتعيد نفسها، لذلك نأخذ آخر صلاة مستحقة ضمن
- * عمرٍ معقول ونترك الصلوات الأقدم للسجل اليدوي داخل شاشة الصلاة.
+ * قبلَها كنّا نختار آخر صلاةٍ فقط ضمن نافذة ثماني ساعات، فمن فتح التطبيق مساءً
+ * لم يُسأل إلا عن آخر صلاة وضاع ما قبلها بلا تسجيل. المطالبةُ الآن واحدةٌ
+ * تجمعها كلَّها — والحدُّ الطبيعيّ هو اليومُ نفسه، إذ `duePrayerReminders`
+ * محصورةٌ أصلاً في تاريخٍ واحد، ولمن لا يريدها زرُّ «لا تذكرني اليوم».
  */
-export function pickSmartPrayerReminder(
+export function pickPrayerReminderGroup(
   candidates: PrayerReminderCandidate[],
-  now: Date,
-  maxAgeMs = PRAYER_REMINDER_MAX_AGE_MS
-): PrayerReminderCandidate | null {
+  now: Date
+): PrayerReminderCandidate[] {
   const nowMs = now.getTime();
-  const ageLimit = Math.max(0, maxAgeMs);
   return candidates
-    .filter((candidate) => {
-      const age = nowMs - candidate.remindAt.getTime();
-      return age >= 0 && age <= ageLimit;
-    })
-    .sort((a, b) => b.adhanAt.getTime() - a.adhanAt.getTime())[0] ?? null;
-}
-
-/** آخر وقت أذانٍ حُسمت صلاته، حتى لا نعيد فتح سجلٍ أقدم بعد إجابة الأحدث. */
-export function latestRecordedPrayerAt(
-  times: Record<PrayerName, Date> | null,
-  log: PrayerLog | undefined
-): number {
-  if (!times || !log) return 0;
-  return PRAYERS.reduce((latest, prayer) => {
-    const status = log.prayers[prayer];
-    const adhanAt = times[prayer];
-    if (status === undefined || status === "لم" || !(adhanAt instanceof Date)) return latest;
-    const timestamp = adhanAt.getTime();
-    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
-  }, 0);
+    .filter((candidate) => candidate.remindAt.getTime() <= nowMs)
+    .sort((a, b) => a.adhanAt.getTime() - b.adhanAt.getTime());
 }
 
 /**

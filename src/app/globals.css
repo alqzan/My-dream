@@ -4354,6 +4354,64 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-prayer-reminder-actions button:first-child {
   background: var(--green) !important;
 }
+/* قائمةُ الصلوات غير المسجّلة — صفٌّ لكلّ صلاة باسمها ووقتها وزرَّي تسجيلها،
+   حتى تُحسم كلُّها من نافذةٍ واحدة بدل مطالبةٍ تتناوب صلاةً بعد صلاة. */
+.mdr-prayer-reminder-list {
+  display: grid;
+  gap: 0.42rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mdr-prayer-reminder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--paper2);
+}
+.mdr-prayer-reminder-row-name {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.mdr-prayer-reminder-row-name strong {
+  font-size: 0.86rem;
+  font-weight: 950;
+}
+.mdr-prayer-reminder-row-name small {
+  color: var(--ink52);
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+.mdr-prayer-reminder-row-actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+}
+.mdr-prayer-reminder-chip {
+  min-height: 2.2rem;
+  padding-inline: 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+.mdr-prayer-reminder-chip.is-jamaah {
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
+  background: var(--green);
+  color: #fff;
+}
+.mdr-prayer-reminder-chip:focus-visible {
+  outline: 2px solid var(--gline);
+  outline-offset: 2px;
+}
 .mdr-prayer-reminder-later {
   min-height: 2.65rem;
   border: 0;

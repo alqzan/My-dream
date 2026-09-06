@@ -41,3 +41,26 @@ export function isPlainClick(e: {
     !e.altKey
   );
 }
+
+/**
+ * شبكةُ أمان التنقّل: هل نُسقط النقرة على انتقالٍ أصليّ؟
+ *
+ * لا نفعل إلا إذا بقيت النقرةُ هي الأحدث **و** لم نصل إلى وجهتها بعد **و**
+ * الصفحةُ ما زالت أمام المالك. المهلةُ وحدها لا تكفي حكماً: على شبكةٍ بطيئة
+ * تصل حمولةُ المسار متأخّرةً، فكان التنقّلُ الداخليّ يُقطَع بإعادةِ تحميلٍ
+ * كاملة تُظهر شاشةَ «مدار» من جديد مع كلّ ضغطةِ تبويب — وهي العلّة نفسها التي
+ * وُجدت الشبكةُ لتجنّبها. فالمهلةُ سخيّة، والإلغاءُ يقع فور وصول التنقّل.
+ */
+export function shouldHardNavigate(params: {
+  pending: string | null;
+  target: string;
+  currentPath: string;
+  visible: boolean;
+}): boolean {
+  const norm = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
+  return (
+    params.visible &&
+    params.pending === params.target &&
+    norm(params.currentPath) !== norm(params.target)
+  );
+}

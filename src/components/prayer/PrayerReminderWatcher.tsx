@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { PrayerName, PrayerStatus } from "@/lib/types";
-import { computePrayerTimes, getCachedCoords, getPrayerLog, parseDate, today, formatClock } from "@/lib/utils";
+import { arabicCount, computePrayerTimes, getCachedCoords, getPrayerLog, parseDate, today, formatClock } from "@/lib/utils";
 import {
   duePrayerReminders,
-  latestRecordedPrayerAt,
-  pickSmartPrayerReminder,
+  pickPrayerReminderGroup,
   type PrayerReminderCandidate,
 } from "@/lib/prayerReminder";
 import { Modal } from "@/components/ui/Modal";
@@ -59,15 +58,25 @@ function dayQuietKey(date: string): string {
   return `${date}${DAY_QUIET_SUFFIX}`;
 }
 
-function prayerLabel(prayer: PrayerReminderCandidate): string {
-  return `${prayer.prayer} (${arClock(prayer.adhanAt, formatClock)})`;
+/** «صلاة · صلاتان · ٣ صلوات · ١١ صلاة» — تمييزُ العدد في ترويسة المطالبة. */
+const prayersCount = (n: number): string =>
+  arabicCount(n, { one: "صلاةٌ واحدة", two: "صلاتان", few: "صلوات", many: "صلاة" });
+
+function clockOf(candidate: PrayerReminderCandidate): string {
+  return arClock(candidate.adhanAt, formatClock);
 }
 
 /**
  * مطالبةٌ عامةٌ خفيفة: بعد نصف ساعة من كل أذانٍ غير مسجّل، تسأل عن طريقة
- * الصلاة. تعمل حين تكون الصفحة مفتوحة، وتلحق بآخر تذكير حديث عند فتح التطبيق
- * أو عودته من الخلفية، مع تأجيلٍ متدرّج حتى لا تضيع فرصة التسجيل. لا تُنشئ
- * سجلاً جديداً ولا تغيّر أي بيانات إلا بعد ضغط «جماعة» أو «مفرد».
+ * الصلاة. تعمل حين تكون الصفحة مفتوحة، وتلحق بالتذكيرات المستحقّة عند فتح
+ * التطبيق أو عودته من الخلفية.
+ *
+ * **نافذةٌ واحدة لكلّ الصلوات غير المسجّلة**: إن فتح المالك التطبيق وقد مرّت
+ * عليه صلاتان أو ثلاث، رآها كلَّها في قائمةٍ واحدة وسجّل ما يشاء منها في مكانٍ
+ * واحد — بدل مطالبةٍ بآخر صلاةٍ فقط تُسقِط ما قبلها من التسجيل. وإن كانت صلاةً
+ * واحدة بقيت النافذة سؤالاً مباشراً بزرّين كما كانت.
+ *
+ * لا تُنشئ سجلاً جديداً ولا تغيّر أي بيانات إلا بعد ضغط «جماعة» أو «مفرد».
  */
 export function PrayerReminderWatcher() {
   const prayerLogs = useAppStore((s) => s.prayerLogs);
@@ -76,14 +85,10 @@ export function PrayerReminderWatcher() {
   const snoozesRef = useRef<SnoozeMap>({});
   // The store update is synchronous, but React may render the old selector
   // snapshot once more while a reminder is being answered. Keep the answer
-  // local too, so that race cannot reopen the same sheet in this session.
+  // local too, so that race cannot reopen the same row in this session.
   const answeredTokensRef = useRef<Set<string>>(new Set());
-  // After answering or dismissing the latest prayer, do not walk backwards
-  // through older due prayers in the same session. A newer prayer can still
-  // advance the reminder naturally.
-  const handledAtRef = useRef<Map<string, number>>(new Map());
   const [hydrated, setHydrated] = useState(() => useAppStore.persist.hasHydrated());
-  const [candidate, setCandidate] = useState<PrayerReminderCandidate | null>(null);
+  const [candidates, setCandidates] = useState<PrayerReminderCandidate[]>([]);
 
   useEffect(() => {
     snoozesRef.current = readSnoozes();
@@ -110,26 +115,25 @@ export function PrayerReminderWatcher() {
     const times = computePrayerTimes(parseDate(date), coords.lat, coords.lng);
     const log = getPrayerLog(prayerLogs, date);
     const due = duePrayerReminders(current, date, times, log);
-    const smartCandidate = pickSmartPrayerReminder(due, current);
-    const handledThrough = Math.max(
-      latestRecordedPrayerAt(times, log),
-      ...handledAtRef.current.values(),
-    );
     const quietUntil = snoozesRef.current[dayQuietKey(date)] ?? 0;
     // نافذة مراجعة البنك أولويةٌ أعلى؛ لا نضع نافذتين فوق بعضهما. بعد إغلاقها
     // يعيد الأثر نفسه الحساب فتظهر مطالبة الصلاة إن بقيت مستحقة.
-    // لا نرجع إلى صلاةٍ أقدم إذا كان آخر تذكير حديثاً لكنه مؤجّل؛ هذا يمنع
-    // النافذة من الالتفاف على اختيار المستخدم وعرض سلسلةٍ من المطالبات القديمة.
-    const next = bankReviewing || quietUntil > current.getTime() || !smartCandidate
-      ? null
-      : smartCandidate.adhanAt.getTime() <= handledThrough ||
-          answeredTokensRef.current.has(smartCandidate.token) ||
-          (snoozesRef.current[smartCandidate.token] ?? 0) > current.getTime()
-        ? null
-        : smartCandidate;
-    // Keep the same candidate object while its sheet is open; this avoids
-    // resetting the modal's focus every minute.
-    setCandidate((previous) => previous?.token === next?.token ? previous : next);
+    const next =
+      bankReviewing || quietUntil > current.getTime()
+        ? []
+        : pickPrayerReminderGroup(due, current).filter(
+            (candidate) =>
+              !answeredTokensRef.current.has(candidate.token) &&
+              (snoozesRef.current[candidate.token] ?? 0) <= current.getTime()
+          );
+    // Keep the same array while the sheet is open and nothing changed; this
+    // avoids resetting the modal's focus every minute.
+    setCandidates((previous) =>
+      previous.length === next.length &&
+      previous.every((item, index) => item.token === next[index].token)
+        ? previous
+        : next
+    );
   }, [bankReviewing, prayerLogs]);
 
   useEffect(() => {
@@ -147,17 +151,18 @@ export function PrayerReminderWatcher() {
   }, [hydrated, refresh]);
 
   // A prayer can also be logged from the main prayer screen while this sheet
-  // is open. Close immediately when its store value becomes recorded; waiting
-  // for the 30-second timer made the prompt feel as if it ignored the user.
+  // is open. Drop its row immediately when its store value becomes recorded;
+  // waiting for the 30-second timer made the prompt feel as if it ignored the
+  // user.
   useEffect(() => {
-    if (!candidate) return;
-    const status = getPrayerLog(prayerLogs, candidate.date)?.prayers[candidate.prayer];
-    if (status !== undefined && status !== "لم") {
-      answeredTokensRef.current.add(candidate.token);
-      handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
-      setCandidate(null);
-    }
-  }, [candidate, prayerLogs]);
+    setCandidates((previous) => {
+      const next = previous.filter((candidate) => {
+        const status = getPrayerLog(prayerLogs, candidate.date)?.prayers[candidate.prayer];
+        return status === undefined || status === "لم";
+      });
+      return next.length === previous.length ? previous : next;
+    });
+  }, [prayerLogs]);
 
   // If the owner later clears a prayer back to «لم» from the prayer screen,
   // release the session guard so a genuinely unanswered prayer can be asked
@@ -167,73 +172,108 @@ export function PrayerReminderWatcher() {
       const date = token.slice(0, 10);
       const prayer = token.slice(11) as PrayerName;
       const status = getPrayerLog(prayerLogs, date)?.prayers[prayer];
-      if (status === undefined || status === "لم") {
-        answeredTokensRef.current.delete(token);
-        handledAtRef.current.delete(token);
-      }
+      if (status === undefined || status === "لم") answeredTokensRef.current.delete(token);
     }
   }, [prayerLogs]);
 
-  function answer(status: Extract<PrayerStatus, "جماعة" | "منفردة">) {
-    if (!candidate) return;
+  function answer(candidate: PrayerReminderCandidate, status: Extract<PrayerStatus, "جماعة" | "منفردة">) {
     answeredTokensRef.current.add(candidate.token);
-    handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
     setPrayerStatus(candidate.date, candidate.prayer, status);
     const next = { ...snoozesRef.current };
     delete next[candidate.token];
     snoozesRef.current = next;
     writeSnoozes(next);
-    setCandidate(null);
+    setCandidates((previous) => previous.filter((item) => item.token !== candidate.token));
   }
 
   function later() {
-    if (!candidate) return;
-    const next = { ...snoozesRef.current, [candidate.token]: Date.now() + SNOOZE_MS };
+    if (!candidates.length) return;
+    const until = Date.now() + SNOOZE_MS;
+    const next = { ...snoozesRef.current };
+    for (const candidate of candidates) next[candidate.token] = until;
     snoozesRef.current = next;
     writeSnoozes(next);
-    setCandidate(null);
+    setCandidates([]);
   }
 
   function quietForToday() {
-    if (!candidate) return;
-    handledAtRef.current.set(candidate.token, candidate.adhanAt.getTime());
-    const next = {
-      ...snoozesRef.current,
-      [candidate.token]: endOfLocalDay(candidate.date),
-      [dayQuietKey(candidate.date)]: endOfLocalDay(candidate.date),
-    };
+    if (!candidates.length) return;
+    const next = { ...snoozesRef.current };
+    for (const candidate of candidates) {
+      next[candidate.token] = endOfLocalDay(candidate.date);
+      next[dayQuietKey(candidate.date)] = endOfLocalDay(candidate.date);
+    }
     snoozesRef.current = next;
     writeSnoozes(next);
-    setCandidate(null);
+    setCandidates([]);
   }
 
-  const title = candidate ? `تذكير ${candidate.prayer}` : "تذكير الصلاة";
+  const single = candidates.length === 1 ? candidates[0] : null;
+  const title = useMemo(() => {
+    if (single) return `تذكير ${single.prayer}`;
+    if (candidates.length > 1) return "تذكير الصلوات";
+    return "تذكير الصلاة";
+  }, [single, candidates.length]);
 
   return (
-    <Modal open={!!candidate} onClose={later} title={title} className="mdr-prayer-reminder-modal">
-      {candidate && (
+    <Modal open={candidates.length > 0} onClose={later} title={title} className="mdr-prayer-reminder-modal">
+      {candidates.length > 0 && (
         <div className="mdr-prayer-reminder">
           <div className="mdr-prayer-reminder-banner">
             <span className="mdr-prayer-reminder-icon" aria-hidden="true"><MosqueIcon size={20} /></span>
             <span className="mdr-prayer-reminder-banner-copy">
-              <strong>تذكير الصلاة</strong>
-              <small><Clock3 size={12} aria-hidden="true" /> مرّت ٣٠ دقيقة على الأذان</small>
+              <strong>{single ? "تذكير الصلاة" : "صلواتٌ ما سجّلتها"}</strong>
+              <small>
+                <Clock3 size={12} aria-hidden="true" />
+                {single ? "مرّت ٣٠ دقيقة على الأذان" : `${prayersCount(candidates.length)} تنتظر التسجيل`}
+              </small>
             </span>
           </div>
 
-          <div className="mdr-prayer-reminder-question">
-            <strong>هل صلّيت {candidate.prayer}؟</strong>
-            <span>{prayerLabel(candidate)} — سجّلها عشان ما تتكرر المطالبة.</span>
-          </div>
+          {single ? (
+            <>
+              <div className="mdr-prayer-reminder-question">
+                <strong>هل صلّيت {single.prayer}؟</strong>
+                <span>{single.prayer} ({clockOf(single)}) — سجّلها عشان ما تتكرر المطالبة.</span>
+              </div>
 
-          <div className="mdr-prayer-reminder-actions">
-            <MdrButton kind="ink" onClick={() => answer("جماعة")} style={{ width: "100%" }}>
-              صليتها جماعة
-            </MdrButton>
-            <MdrButton kind="ghost" onClick={() => answer("منفردة")} style={{ width: "100%" }}>
-              صليتها مفرد
-            </MdrButton>
-          </div>
+              <div className="mdr-prayer-reminder-actions">
+                <MdrButton kind="ink" onClick={() => answer(single, "جماعة")} style={{ width: "100%" }}>
+                  صليتها جماعة
+                </MdrButton>
+                <MdrButton kind="ghost" onClick={() => answer(single, "منفردة")} style={{ width: "100%" }}>
+                  صليتها مفرد
+                </MdrButton>
+              </div>
+            </>
+          ) : (
+            <ul className="mdr-prayer-reminder-list">
+              {candidates.map((candidate) => (
+                <li key={candidate.token} className="mdr-prayer-reminder-row">
+                  <span className="mdr-prayer-reminder-row-name">
+                    <strong>{candidate.prayer}</strong>
+                    <small>{clockOf(candidate)}</small>
+                  </span>
+                  <span className="mdr-prayer-reminder-row-actions">
+                    <button
+                      type="button"
+                      className="mdr-prayer-reminder-chip is-jamaah press"
+                      onClick={() => answer(candidate, "جماعة")}
+                    >
+                      جماعة
+                    </button>
+                    <button
+                      type="button"
+                      className="mdr-prayer-reminder-chip press"
+                      onClick={() => answer(candidate, "منفردة")}
+                    >
+                      مفرد
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <button
             type="button"

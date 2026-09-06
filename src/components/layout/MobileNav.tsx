@@ -1,9 +1,9 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
-import { isPlainClick, nativeNavHref } from "@/lib/navHref";
+import { isPlainClick, nativeNavHref, shouldHardNavigate } from "@/lib/navHref";
 import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
 
 // Static export uses trailingSlash, so usePathname() returns "/journal/" while
@@ -15,7 +15,12 @@ const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
 // شبكةُ الأمان: إن لم يقع التنقّل الداخليّ خلال هذه المهلة (حمولةُ المسار
 // متعلّقةٌ على شبكةٍ نائمة) ننتقل انتقالاً أصلياً بالرابط نفسه. فالنقرة لا تذهب
 // سدىً أبداً — وهي العلّة التي وُلدت منها الروابط الأصلية أوّلاً.
-const SOFT_NAV_FALLBACK_MS = 1200;
+//
+// المهلةُ سخيّة عن قصد: على شبكةِ الجوال (4G) تستغرق حمولةُ المسار أكثر من
+// ثانيةٍ كثيراً، فكانت مهلةُ ١٫٢ ثانية تقطع تنقّلاً سليماً وتُعيد تحميل المستند
+// كاملاً — فتظهر شاشةُ «مدار» وتُعاد المزامنة مع كلّ ضغطةِ تبويب. والإلغاء لا
+// ينتظرها أصلاً: وصولُ المسار يلغيها فوراً (`useEffect` على `pathname`).
+const SOFT_NAV_FALLBACK_MS = 6000;
 
 export function MobileNav() {
   const pathname = normPath(usePathname());
@@ -44,16 +49,34 @@ export function MobileNav() {
   // يبقى `href` أصلياً على الرابط: يعمل قبل الترطيب، ومع الضغط المطوّل وفتحِ
   // تبويبٍ جديد، وهو نفسُه ما تستعمله شبكةُ الأمان أدناه. فلا تعود نقرةٌ ميّتة.
   const pendingRef = useRef<string | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  // وصلَ التنقّل الداخليّ → ألغِ الشبكة. هذا هو الإشارةُ الموثوقة (لا المهلة):
+  // `pathname` لا يتغيّر إلا بعد أن يلتزم المسار فعلاً.
+  useEffect(() => {
+    pendingRef.current = null;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [pathname]);
+
   const go = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!isPlainClick(e)) return; // ضغطةٌ بمُعدِّل — سلوكُ الرابط للمستخدم
     e.preventDefault();
     const target = nativeNavHref(href, basePath);
     pendingRef.current = target;
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     router.push(href);
-    window.setTimeout(() => {
-      if (pendingRef.current !== target) return; // ألغتها نقرةٌ أحدث
-      if (normPath(window.location.pathname) === normPath(target)) return; // وصلنا
-      window.location.href = target;
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      const hard = shouldHardNavigate({
+        pending: pendingRef.current,
+        target,
+        currentPath: window.location.pathname,
+        visible: document.visibilityState === "visible",
+      });
+      if (hard) window.location.href = target;
     }, SOFT_NAV_FALLBACK_MS);
   };
 

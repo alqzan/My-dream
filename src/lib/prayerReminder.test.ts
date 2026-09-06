@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PRAYER_REMINDER_DELAY_MS,
   duePrayerReminders,
-  latestRecordedPrayerAt,
-  pickSmartPrayerReminder,
+  pickPrayerReminderGroup,
 } from "./prayerReminder";
 import type { PrayerName } from "./types";
 
@@ -42,26 +41,24 @@ describe("duePrayerReminders", () => {
     expect(duePrayerReminders(at(23), date, null, undefined)).toEqual([]);
   });
 
-  it("يختار آخر صلاة حديثة بدل تراكم الصلوات القديمة", () => {
-    const due = duePrayerReminders(at(14), date, times, undefined);
-    expect(pickSmartPrayerReminder(due, at(14))?.prayer).toBe("الظهر");
+  it("يجمع كل الصلوات المستحقّة في مطالبةٍ واحدة بترتيب اليوم", () => {
+    const due = duePrayerReminders(at(19, 30), date, times, undefined);
+    expect(pickPrayerReminderGroup(due, at(19, 30)).map((x) => x.prayer)).toEqual([
+      "الفجر",
+      "الظهر",
+      "العصر",
+      "المغرب",
+    ]);
   });
 
   it("يبقي التذكير الحديث متاحاً خلال اليوم حتى لا تضيع فرصة التسجيل", () => {
     const due = duePrayerReminders(at(11), date, times, undefined);
-    expect(pickSmartPrayerReminder(due, at(11))?.prayer).toBe("الفجر");
+    expect(pickPrayerReminderGroup(due, at(11)).map((x) => x.prayer)).toEqual(["الفجر"]);
   });
 
-  it("لا يفتح مطالبة لصلاة أقدم من العمر المسموح", () => {
+  it("يجمع صلوات اليوم كلها لمن فتح التطبيق متأخراً", () => {
     const due = duePrayerReminders(at(23), date, times, undefined);
-    expect(pickSmartPrayerReminder(due, at(23), 60 * 60 * 1000)).toBeNull();
+    expect(pickPrayerReminderGroup(due, at(23))).toHaveLength(5);
   });
 
-  it("يعرف آخر صلاة حُسمت كي لا يعيد فتح ما قبلها", () => {
-    expect(latestRecordedPrayerAt(times, {
-      date,
-      prayers: { الفجر: "لم", الظهر: "جماعة", العصر: "لم" },
-    })).toBe(times.الظهر.getTime());
-    expect(latestRecordedPrayerAt(times, undefined)).toBe(0);
-  });
 });

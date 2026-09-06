@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPlainClick, nativeNavHref } from "./navHref";
+import { isPlainClick, nativeNavHref, shouldHardNavigate } from "./navHref";
 
 describe("nativeNavHref", () => {
   it("keeps root-hosted routes under the static export root", () => {
@@ -41,5 +41,24 @@ describe("isPlainClick", () => {
 
   it("نقرةٌ سبقنا إليها غيرُنا لا نبني عليها", () => {
     expect(isPlainClick(click({ defaultPrevented: true }))).toBe(false);
+  });
+});
+
+describe("shouldHardNavigate", () => {
+  const base = { pending: "/journal/", target: "/journal/", currentPath: "/", visible: true };
+
+  it("يسقط على الانتقال الأصلي إن بقيت النقرة معلّقة ولم نصل", () => {
+    expect(shouldHardNavigate(base)).toBe(true);
+  });
+
+  it("لا يقطع تنقّلاً وصل ولو تأخّر", () => {
+    expect(shouldHardNavigate({ ...base, currentPath: "/journal" })).toBe(false);
+    expect(shouldHardNavigate({ ...base, currentPath: "/journal/" })).toBe(false);
+  });
+
+  it("لا يعمل بعد نقرةٍ أحدث أو حين تغيب الصفحة", () => {
+    expect(shouldHardNavigate({ ...base, pending: "/prayers/" })).toBe(false);
+    expect(shouldHardNavigate({ ...base, pending: null })).toBe(false);
+    expect(shouldHardNavigate({ ...base, visible: false })).toBe(false);
   });
 });
