@@ -20,31 +20,37 @@ const thamaniah = localFont({
   display: "swap",
 });
 
-// خط «أميري قرآن» — مصمَّم للرسم العثماني بعلامات الضبط الكاملة والتوصيل
-// الصحيح. خطّ العرض العام (ثمانية) لا يشكّل هذه العلامات فتنفصل الحروف؛ نطبّق
-// هذا الخط على نصّ الآيات فقط عبر صنف .font-quran. يُحمَّل عبر next/font ليحترم
-// basePath على GitHub Pages.
-const amiriQuran = localFont({
+// نصُّ الآية **خارج** وجه المصحف (صنف `.font-quran`): آيةُ الختام، وموضعُ الخطأ
+// في لوحة الأخطاء، والمتشابهات. خطُّ العرض العام (ثمانية) لا يشكّل علامات الضبط
+// فتنفصل الحروف — ولا بدّ من خطٍّ قرآنيّ.
+//
+// **ولماذا لم يوحَّد مع خطّ الوجه (حفص)؟** جُرِّب فلم يصحّ: نصُّ `ayahText.json`
+// يستعمل علاماتٍ لا وجود لها في نصّ المصحف المقيس (U+06E1 · U+065E · U+0656 ·
+// U+06E4 · U+065C)، وخطُّ الوجه مقصورٌ على ما في المصحف — فتُرسم تلك العلامات
+// وحدها من خطٍّ بديل: علامةٌ غريبةٌ فوق حرفٍ عربيّ، وهو أقبح من اختلاف خطّين
+// بين شاشتين. يُوحَّدان يوم يُوحَّد مصدر النصّ.
+// يُحمَّل عبر next/font ليحترم basePath على GitHub Pages.
+const quranText = localFont({
   src: [{ path: "../../public/fonts/amiri-quran.woff2", weight: "400", style: "normal" }],
-  variable: "--font-amiri-quran",
+  variable: "--font-quran-text",
   display: "swap",
 });
 
-// خطّ وجه المصحف — نسخة «أميري قرآن» الكاملة التي **قِيس عليها** تخطيط الأسطر
-// (راجع `src/lib/quran/mushafLayout.ts`). ليست ترفاً ولا تكراراً: عرضُ السطر
-// المحفوظ في البيانات هو عرضُه بهذا الملفّ بالذات، فنسخةٌ أخرى من الخطّ نفسه
-// بمقاييس مختلفة تُخرج الأسطر عن حدّها. النسخة الأخرى (`amiri-quran.woff2`)
-// تبقى للنصّ المقتبس خارج الوجه.
+// خطّ وجه المصحف — **خطّ مجمّع الملك فهد (حفص/عثمان طه)**، وهو خطُّ المصحف
+// المطبوع الذي يحفظ منه الحافظ، وهو الذي **قِيس عليه** تخطيط الأسطر (راجع
+// `src/lib/quran/mushafLayout.ts`). الخطّ والبيانات صنوان: عرضُ السطر المحفوظ في
+// البيانات هو عرضُه بهذا الملفّ بالذات، فأيُّ خطٍّ آخر — ولو نسخةٌ أخرى منه —
+// يُخرج الأسطر عن حدّها. (كان «أميري قرآن» ومعه بياناتُ قياسه؛ بُدِّلا معاً.)
 // و`display` هنا **"block" لا "swap"**، وهذا الخطّ وحده: تخطيطُ الأسطر مقيسٌ على
 // مقاييس هذا الملفّ بعينه (عرضُ السطر المحفوظ في البيانات هو عرضُه به). ومع
 // `swap` يُرسم الوجه أوّلاً بخطٍّ بديلٍ مختلف المقاييس — فتفيض الأسطر عن عرضها
-// وتنكسر صورةُ الوجه — ثمّ يقفز كلُّ شيء إلى مكانه حين يصل أميري. و«صورة الوجه»
+// وتنكسر صورةُ الوجه — ثمّ يقفز كلُّ شيء إلى مكانه حين يصل خطُّ المصحف. و«صورة الوجه»
 // هي رأس مال الحافظ، فوميضٌ بخطٍّ مخالف أسوأ من انتظارٍ قصير. مع "block" لا
 // يُرسم النصّ حتى يجهز الخطّ (والهيكل في `MushafSheet` يملأ المكان ريثما يصل)،
 // فلا يرى القارئ وجهاً بخطٍّ ليس خطَّه. الخطوط الأخرى تبقى على "swap".
-const amiriQuranMushaf = localFont({
-  src: [{ path: "../../public/fonts/AmiriQuranMushaf.woff2", weight: "400", style: "normal" }],
-  variable: "--font-amiri-mushaf",
+const mushafHafs = localFont({
+  src: [{ path: "../../public/fonts/MushafHafs.woff2", weight: "400", style: "normal" }],
+  variable: "--font-mushaf",
   display: "block",
 });
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -104,7 +110,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl" className={`${thamaniah.variable} ${amiriQuran.variable} ${amiriQuranMushaf.variable}`}>
+    <html lang="ar" dir="rtl" className={`${thamaniah.variable} ${quranText.variable} ${mushafHafs.variable}`}>
       <body dir="rtl">
         <ClientOnly>
           <SWRegister bp={bp} />

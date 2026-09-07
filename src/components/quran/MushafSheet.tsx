@@ -187,8 +187,9 @@ export function MushafSheet(props: MushafSheetProps) {
               renderNumber={renderNumber}
               text={text}
             />
-            <span className="mushaf-page-number absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold text-quran/50 tabular-nums">
-              {arNum(pg.page)}
+            {/* رقمُ الوجه في طُرّته، متوسّطاً أسفلَ الورقة كالمطبوع. */}
+            <span className="absolute bottom-1.5 inset-x-0 text-center text-[11px] font-bold tabular-nums">
+              <span className="mushaf-page-number">{arNum(pg.page)}</span>
             </span>
           </Leaf>
         </div>
@@ -613,13 +614,19 @@ function RunSpan({
   );
 }
 
-// رقمُ الآية: علامةُ نهاية الآية (U+06DD) يليها الرقم — والخطّ يركّبهما وردةً
-// مزخرفة كالمطبوع. لا نرسم `﴿رقم﴾` بحروفٍ عادية، فتلك زخرفةُ اقتباسٍ لا علامةُ
-// وقفٍ في المصحف، وعرضُها يخالف ما قِيس عليه السطر.
+// رقمُ الآية **كما يكتبه مصدر التخطيط نفسه**: قوسان مزخرفان (U+FD3F/U+FD3E)
+// بينهما الرقم بأرقامٍ هندية — والخطّ (حفص) يركّبهما طُرّةً مؤطَّرة كالمطبوع.
+//
+// وهذا ليس ذوقاً بل قياس: عرضُ السطر في البيانات مقيسٌ **بالرقم على هذه الصورة**
+// داخل النصّ، فرسمُه بصورةٍ أخرى (وردةُ ۝ مثلاً) يغيّر عرض السطر عمّا قِيس فتفيض
+// الأسطر أو تقصر. كان المصدر السابق («أميري قرآن») يكتبه `۝49` فكان هذا هو
+// الصواب حينها — بُدِّل المصدر والخطّ معاً، فتبدّلت معهما صورةُ الرقم.
+//
+// والأرقامُ هندية من `arNum` — البوّابة الوحيدة للتحويل (راجع CLAUDE.md).
 export function AyahNumber({ num, dimmed = false }: { num: number; dimmed?: boolean }) {
   return (
     <span className={`mushaf-num ${dimmed ? "is-dim" : ""}`} aria-label={`آية ${num}`}>
-      {`۝${num}`}
+      {`\uFD3F${arNum(num)}\uFD3E`}
     </span>
   );
 }

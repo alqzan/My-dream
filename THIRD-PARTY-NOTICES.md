@@ -23,8 +23,8 @@
 | **المستودع** | <https://github.com/tarekeldeeb/quran-madina-html> |
 | **npm** | <https://www.npmjs.com/package/quran-madina-html> |
 | **المؤلّف** | Tarek Eldeeb |
-| **النسخة المستعملة (variant)** | `Madina05-Amiri_Quran-16px` |
-| **مصدر البيانات داخل الحزمة** | `assets/db/Madina05-Amiri_Quran-16px/juz-01.json … juz-30.json` |
+| **النسخة المستعملة (variant)** | `Madina05-Hafs-16px` |
+| **مصدر البيانات داخل الحزمة** | `assets/db/Madina05-Hafs-16px/juz-01.json … juz-30.json` |
 
 **البصمات** (الحزمة كما نشرتها npm):
 
@@ -86,43 +86,59 @@ tarball sha256  83adba91d990ff3bbac783e46c1f5d8540073ab8c2f412e320c2a97a58884307
    مقيسٌ على السطر ناقصاً فيفيض عن عرض الوجه. المعامل الصحيح للصفحة ٢٥٤ السطر ٧
    هو `0.884`، مقيساً في المتصفّح بعد الإعادة. سطرٌ واحدٌ في المصحف كلّه.
    (`STRETCH_OVERRIDES` في المولّد.)
+4. **رقمُ الآية يُرسم من الكود لا من النصّ**: يُنزَع من نصّ المقطع ويُحفظ عدداً
+   (`num`)، ثمّ يُعاد رسمُه في `AyahNumber` **بالصورة نفسها** التي قِيس بها
+   (`﴿` + أرقامٌ هندية + `﴾`) — فيبقى عرضُ السطر هو المقيس، ويصير الرقمُ عنصراً
+   يُنقر ويُوسَم في شاشة التسميع.
+
+> **النسخةُ المستعملة تبدّلت** (بناء ٣٩٤): كانت `Madina05-Amiri_Quran-16px`
+> وصارت `Madina05-Hafs-16px` — البياناتُ والخطُّ صنوان يُبدَّلان معاً، لأنّ عرض
+> السطر المحفوظ هو عرضُه بخطٍّ بعينه. وتبدّلت معهما صورةُ رقم الآية في المصدر
+> (كان `۝49` فصار `﴿٤٩﴾`).
 
 ---
 
-## ٢ · خطّ «أميري قرآن» (وجه المصحف)
+## ٢ · خطّ المصحف — KFGQPC HAFS Uthmanic Script
 
-**ما هو:** `public/fonts/AmiriQuranMushaf.woff2` — الخطّ الذي **قِيس عليه**
+**ما هو:** `public/fonts/MushafHafs.woff2` — خطّ **مجمّع الملك فهد لطباعة المصحف
+الشريف** (يد الخطّاط عثمان طه)، وهو خطُّ المصحف المطبوع، وهو الذي **قِيس عليه**
 تخطيطُ الأسطر أعلاه (عرضُ السطر المحفوظ في البيانات هو عرضُه بهذا الملفّ بعينه،
 بحجم ١٦px وعرض سطرٍ ٢٧٠px).
 
 | | |
 |---|---|
-| **مأخوذ عن** | `assets/fonts/AmiriQuran.woff2` داخل `quran-madina-html@1.0.1` |
-| **مطابقٌ للأصل** | نعم — بايتةً بايتة (SHA-256 واحد، ٦٢٧٩٢ بايت) |
-| **SHA-256** | `42a4934e67ff1891ead0193c91786dc34ccee3f6da575522861b844c58cdf905` |
-| **معدَّل** | لا. لم يُمَسّ الملفّ ولا مقاييسه. |
+| **مأخوذ عن** | `assets/fonts/Hafs.woff2` داخل `quran-madina-html@1.0.1` |
+| **مطابقٌ لما في الحزمة** | نعم — بايتةً بايتة (SHA-256 واحد، 62996 بايت) |
+| **SHA-256** | `cdf573984fc6b17d0be4a16061efad0666c8839bc157111f01633326276d4f92` |
+| **معدَّل عندنا** | لا. لم يُمَسّ الملفّ ولا مقاييسه. |
+| **اسمُه في جدول `name`** | `KFGQPC HAFS Uthmanic Script` — Version 1.001 |
 
 **والترخيصُ هنا محسومٌ ولا يتبع تعارضَ الحزمة أعلاه**، لأنّ الخطّ ليس من عمل
-الحزمة بل مُضمَّنٌ فيها، ويحمل ترخيصَه **داخل ملفّه** (جدول `name`):
+الحزمة بل مُضمَّنٌ فيها، ويحمل ترخيصَه **داخل ملفّه** (جدول `name`). نصُّه كاملاً
+منسوخٌ في `licenses/KFGQPC-HAFS-EULA.txt`، وخلاصتُه:
 
-```
-copyright (0)   Copyright 2010-2022 The Amiri Project Authors (https://github.com/aliftype/amiri).
-family    (1)   Amiri Quran
-designer  (9)   Khaled Hosny
-vendorURL (11)  http://www.amirifont.org
-license   (13)  This Font Software is licensed under the SIL Open Font License, Version 1.1.
-licenseURL(14)  https://scripts.sil.org/OFL
-```
+> Permission is hereby granted, **Free of Cost**, to any person obtaining a copy
+> of this Font accompanying this license, the rights to **Use, Copy, Distribute**,
+> subject to the following conditions:
+> 1. The Font Software cannot be **Sold, Modified, Altered, Translated, Reverse
+>    Engineered, Decompiled, Disassembled, Reproduced** …
 
-فهو **SIL Open Font License 1.1**، ونصُّها كاملاً في
-`licenses/OFL-1.1-AmiriQuran.txt`. ومقتضاها هنا: النسخ والتوزيع مباحان مع
-إبقاء إشعار حقوق النشر ونصّ الرخصة (وهذا ما يفعله هذا الملفّ)، ولا يُباع الخطّ
-وحده، ولا يُستعمل اسمُ «Amiri» للترويج لنسخةٍ معدَّلة — ونحن لم نعدّله أصلاً.
+فالاستعمال والنسخ والتوزيع **مباحةٌ بلا مقابل** — وهو ما نفعله بالضبط: نشحن
+الملفّ كما هو مع تطبيقٍ شخصيّ مفتوح المصدر لا يُباع. والممنوعُ هو البيع والتعديل
+وفكُّ الترميز، ولم نفعل شيئاً منها.
 
-المشروع الأصليّ: <https://github.com/aliftype/amiri>
+**نقطةٌ تُذكر ولا تُطوى:** الملفّ الذي نشحنه **WOFF2** لا TTF الأصليّ — والتحويل
+إلى WOFF2 وقع في الحزمة الأعلى (`quran-madina-html`) لا عندنا، ونحن ننسخه بايتةً
+بايتة. وقارئٌ متشدّد قد يعدّ تحويلَ الصيغة نفسه «تعديلاً» بمعنى الشرط الأول.
+فالموقفُ المسجَّل: التحويلُ ليس من فعلنا، ولا نعدّل الملفّ، والغرضُ نشرُ المصحف
+بخطّه لا الاتّجارُ به. وإن أُريد الاحتياط التامّ فالبديلُ إحضارُ الخطّ من موقع
+المجمّع نفسه (<http://fonts.qurancomplex.gov.sa/>) وتحويلُه بإذنٍ صريح.
 
-> النسخةُ الثانية `public/fonts/amiri-quran.woff2` (للنصّ المقتبس خارج وجه
-> المصحف) من المشروع نفسه وتحت الرخصة نفسها.
+> `public/fonts/amiri-quran.woff2` (خطّ «أميري قرآن» — للنصّ المقتبس **خارج** وجه
+> المصحف: آيةُ الختام والمتشابهات ولوحة الأخطاء) باقٍ كما هو تحت **SIL Open Font
+> License 1.1**، ونصُّها في `licenses/OFL-1.1-AmiriQuran.txt`. وسببُ بقائه أنّ
+> نصّ `ayahText.json` يستعمل علاماتِ ضبطٍ لا وجود لها في خطّ المصحف المقصور على
+> نصّ المصحف المقيس. المشروع الأصليّ: <https://github.com/aliftype/amiri>
 
 ---
 

@@ -1,9 +1,9 @@
 // ===================== سلامةُ مصدر المصحف =====================
 // بياناتُ أوجه المصحف وخطُّها ليسا كوداً يُراجَع في diff: 31 ملفّ JSON مضغوطة
 // الشكل، وملفُّ خطٍّ ثنائيّ. تغيّرٌ فيها بحادثٍ — أداةُ تنسيقٍ أعادت كتابة JSON،
-// تحريرٌ بيد، ملفٌّ تلف في دمج، خطٌّ استُبدل بنسخةٍ أخرى من «أميري قرآن»
-// بمقاييس مختلفة — يمرّ بلا أن يوقفه شيء، ثمّ يظهر عند القارئ سطراً يفيض عن
-// عرضه أو وجهاً بترقيمٍ منزلق.
+// تحريرٌ بيد، ملفٌّ تلف في دمج، خطٌّ استُبدل بنسخةٍ أخرى منه بمقاييس مختلفة —
+// يمرّ بلا أن يوقفه شيء، ثمّ يظهر عند القارئ سطراً يفيض عن عرضه أو وجهاً
+// بترقيمٍ منزلق. والخطُّ والبيانات صنوان: من بدّل أحدهما وحده كسَر الوجه.
 //
 // وهو أيضاً حارسُ **الإسناد**: هذه الملفّات مشتقّةٌ من مصدرٍ خارجيّ له ترخيصه
 // (راجع `THIRD-PARTY-NOTICES.md`)، فتبدّلُها بلا قصدٍ يعني أنّ ما نوثّقه لم يعد
@@ -35,7 +35,7 @@ describe("خطّ وجه المصحف", () => {
     const p = path.join(ROOT, manifest.font.path);
     expect(fs.existsSync(p), manifest.font.path).toBe(true);
     expect(fs.statSync(p).size, "حجم الخطّ").toBe(manifest.font.bytes);
-    // نسخةٌ أخرى من «أميري قرآن» بمقاييس مختلفة تُخرج الأسطر عن عرضها المحفوظ.
+    // نسخةٌ أخرى من الخطّ نفسه بمقاييس مختلفة تُخرج الأسطر عن عرضها المحفوظ.
     expect(sha256(p), "بصمة الخطّ").toBe(manifest.font.sha256);
   });
 });
@@ -63,7 +63,7 @@ describe("وصفُ المصدر", () => {
   it("مثبَّتٌ على إصدارٍ ونسخةٍ بعينهما", () => {
     expect(manifest.source.package).toBe("quran-madina-html");
     expect(manifest.source.version).toBe("1.0.1");
-    expect(manifest.source.variant).toBe("Madina05-Amiri_Quran-16px");
+    expect(manifest.source.variant).toBe("Madina05-Hafs-16px");
     expect(manifest.source.integrity).toMatch(/^sha512-/);
     expect(manifest.source.tarballSha256).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -87,6 +87,7 @@ describe("ملفّات الإشعارات والتراخيص", () => {
       "licenses/Waqf-GPL-2.0-AR.txt",
       "licenses/Waqf-GPL-2.0-EN.txt",
       "licenses/OFL-1.1-AmiriQuran.txt",
+      "licenses/KFGQPC-HAFS-EULA.txt",
     ]) {
       const p = path.join(ROOT, f);
       expect(fs.existsSync(p), f).toBe(true);

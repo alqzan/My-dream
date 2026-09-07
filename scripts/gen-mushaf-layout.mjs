@@ -4,7 +4,7 @@
 // ليملأ عرضه — هذه بيانات طباعةٍ لا تُشتقّ من النصّ، فلا بدّ من مصدرٍ يحملها.
 //
 // المصدر: حزمة `quran-madina-html` — مصحف المدينة، الإصدار القديم
-// (مجمّع الملك فهد، 1405هـ)، مقيسٌ على خطّ «أميري قرآن» بحجم 16px وعرض سطرٍ
+// (مجمّع الملك فهد، 1405هـ)، مقيسٌ على خطّ المجمّع «حفص» بحجم 16px وعرض سطرٍ
 // 270px. النصّ فيها يحمل **تطويلاً (ـ) مدسوساً** لملء السطر، ولكلّ سطرٍ معامل
 // تمدّدٍ أفقيّ (`s`) يُكمل ما بقي من الفرق — بهذين معاً يستوي السطر على عرضه
 // تماماً كالمطبوع.
@@ -31,12 +31,28 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "src/lib/quran/mushaf");
-const FONT_OUT = path.join(ROOT, "public/fonts/AmiriQuranMushaf.woff2");
+const FONT_OUT = path.join(ROOT, "public/fonts/MushafHafs.woff2");
 const PKG = "quran-madina-html";
 // الإصدار مثبَّت: البيانات مقيسةٌ على خطٍّ بعينه، وأيّ ترقيةٍ للحزمة قد تغيّر
 // القياس — فتُراجَع يدوياً لا أن تنزلق مع `latest`.
 const PKG_VERSION = "1.0.1";
-const VARIANT = "Madina05-Amiri_Quran-16px";
+// ===================== لماذا خطُّ «حفص» لا «أميري قرآن» =====================
+// الحزمة تحمل خمسةَ خطوطٍ لكلٍّ منها **قياسُه الخاصّ** (أين ينكسر السطر وكم
+// يتمدّد): فالخطُّ والبيانات صنوان لا يُفرَّق بينهما — من أخذ بيانات خطٍّ ورسمها
+// بخطٍّ آخر أخرج أسطراً لا تستوي على عرضها.
+//
+// و«حفص» (خطّ مجمّع الملك فهد — يد عثمان طه) هو **خطُّ المصحف المطبوع نفسه**:
+// أشكالُ الحروف ووضعُ الضبط ووردةُ رقم الآية كما يعرفها الحافظ من ورقه. و«أميري
+// قرآن» — وهو ما كنّا عليه — خطٌّ جميل لكنّه خطُّ كتابٍ لا خطُّ مصحف: أنحف
+// وأوسع، فيقرأ الوجهُ «نصّاً قرآنياً في تطبيق» لا صفحةً من المصحف.
+//
+// ورقمُ الآية يتبع المصدر: بيانات «حفص» تكتبه ﴿٤٩﴾ (بالقوسين المزخرفين وأرقامٍ
+// هندية) لا ۝49 — وهو المقيسُ في عرض السطر، فيُرسم كما هو (راجع `AyahNumber`).
+const VARIANT = "Madina05-Hafs-16px";
+const FONT_SRC = "assets/fonts/Hafs.woff2";
+/** رقمُ الآية في آخر المقطع كما يكتبه هذا المصدر. */
+const MARKER_RE = /﴿[٠-٩]+﴾$/;
+const INDIC = "٠١٢٣٤٥٦٧٨٩";
 const PAGES_PER_CHUNK = 20;
 
 // آيةٌ سقط رقمُها من بيانات المصدر (الرعد 37). نعيده ونسجّله هنا صراحةً بدل أن
@@ -46,6 +62,8 @@ const MISSING_MARKERS = [{ sura: 13, ayah: 37 }];
 // وإعادةُ الرقم تزيد عرض سطره، ومعاملُ تمدّد المصدر مقيسٌ على السطر ناقصاً —
 // فيفيض عن عرض الوجه. هنا معاملُه الصحيح، مقيساً في المتصفّح بعد الإعادة
 // (عرض المحتوى ÷ عرض الوجه). سطرٌ واحدٌ في المصحف كلّه.
+// (أُعيد قياسُه على خطّ «حفص» بعد تبديل النسخة: السطر بهذا المعامل يملأ 99.9%
+// من عرض الوجه — راجع `THIRD-PARTY-NOTICES.md` §١.)
 const STRETCH_OVERRIDES = [{ page: 254, line: 7, stretch: 0.884 }];
 
 // ===================== إحضار الحزمة =====================
@@ -70,7 +88,7 @@ function surahFirsts() {
 }
 
 // ===================== التحويل =====================
-const MARKER = /۝[0-9]+$/; // رقم الآية في آخر المقطع (يُرسم ﴿رقم﴾ في الخط)
+const toNum = (indic) => [...indic].reduce((n, c) => n * 10 + INDIC.indexOf(c), 0);
 
 function build(pkgDir) {
   const db = path.join(pkgDir, "assets/db", VARIANT);
@@ -104,9 +122,9 @@ function build(pkgDir) {
       let text = run.t;
       if (text === "") return; // صفٌّ حاجز في أول الفاتحة
       let num = 0;
-      const m = text.match(MARKER);
+      const m = text.match(MARKER_RE);
       if (m) {
-        num = +m[0].slice(1);
+        num = toNum(m[0].slice(1, -1));
         text = text.slice(0, m.index);
         markers++;
       } else if (i === runs.length - 1 && id > 0 && missing.has(`${surah.num}:${ayah}`)) {
@@ -169,8 +187,8 @@ const pkgDir = process.argv[2] ?? fetchPackage();
 const data = build(pkgDir);
 const info = write(data);
 
-// الخطّ نفسه الذي قِيس عليه التخطيط — نسخةٌ أخرى من «أميري قرآن» بمقاييس مختلفة
-// تكسر انطباق الأسطر على عرضها.
-fs.copyFileSync(path.join(pkgDir, "assets/fonts/AmiriQuran.woff2"), FONT_OUT);
+// الخطّ نفسه الذي قِيس عليه التخطيط — أيُّ نسخةٍ أخرى منه بمقاييس مختلفة تكسر
+// انطباق الأسطر على عرضها.
+fs.copyFileSync(path.join(pkgDir, FONT_SRC), FONT_OUT);
 console.log(`✓ الخط → ${path.relative(ROOT, FONT_OUT)}`);
 console.log(`   PAGES_PER_CHUNK=${PAGES_PER_CHUNK} · LINE_WIDTH=${info.lineWidth} · FONT_SIZE=${info.fontSize}`);

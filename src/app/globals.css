@@ -1953,8 +1953,8 @@ body {
 
 /* ===================== وجهُ المصحف بأسطره الحقيقية =====================
    أسطرُ الوجه معلومةٌ مقيسة لا نتيجةَ عرضِ الشاشة (راجع
-   `src/lib/quran/mushafLayout.ts`): قِيست على سطرٍ عرضُه 270px بخطّ «أميري
-   قرآن» حجم 16px. فالمقاس هنا **نسبةٌ من عرض الوجه** لا رقمٌ ثابت:
+   `src/lib/quran/mushafLayout.ts`): قِيست على سطرٍ عرضُه 270px بخطّ مجمّع الملك
+   فهد «حفص» حجم 16px. فالمقاس هنا **نسبةٌ من عرض الوجه** لا رقمٌ ثابت:
    `container-type: inline-size` يجعل عرض اللوح وحدةَ القياس، و`cqw` تترجم
    النسبة إلى أيّ شاشة — فتنطبق الأسطر على عرضها في الجوال والحاسوب سواء.
 
@@ -1966,7 +1966,7 @@ body {
   margin-inline: auto;
 }
 .mushaf-page {
-  font-family: var(--font-amiri-mushaf), "Amiri Quran", "Amiri", serif;
+  font-family: var(--font-mushaf), "KFGQPC Uthmanic Script HAFS", "Amiri Quran", serif;
   /* عرضُ الوجه هو عرضُ السطر نفسه، فتستوي الأسطر على حافّتيه كالمطبوع.
      والتمدّد المقيس يقارب العرض ولا يصيبه تماماً (مسحُ الأسطر التسعة آلاف:
      بين 98.2% و102.5%)، فما زاد يسيرٌ يبتلعه حشوُ الورقة حوله. */
@@ -2039,9 +2039,15 @@ body {
     inset 0 0 0 1px rgba(255, 255, 255, 0.54),
     inset 0 0 28px rgba(126, 98, 54, 0.045));
 }
+/* رقمُ الوجه في طُرّةٍ مؤطَّرة كما في المطبوع — لا رقماً سائباً تحت النصّ.
+   الإطارُ من جنس إطار اسم السورة (حدٌّ مزدوج) فيقرأ الوجهُ كلُّه بيدٍ واحدة. */
 .mushaf-page-number {
+  display: inline-block;
+  color: color-mix(in srgb, var(--reader-accent) 70%, transparent);
+  padding: 0.02em 0.75em;
+  border: 0.09em double currentColor;
+  border-radius: 0.6em;
   letter-spacing: 0.04em;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 /* ===================== الوجه على ملء الشاشة =====================
@@ -2222,7 +2228,6 @@ body {
 
 .dark .mushaf-index-title { color: #efe6d5; }
 .dark .mushaf-index-copy { color: #a2947a; }
-.dark .mushaf-page-number { text-shadow: none; }
 .dark .mushaf-index-count { background: rgba(36, 28, 18, 0.72); }
 
 /* ===================== الحفظ والمراجعة — جلسة مركّزة =====================
@@ -2517,7 +2522,7 @@ body {
 
 /* نصُّ الآية داخل الشاشات المنقولة. */
 .mdr-ayah {
-  font-family: var(--font-amiri-quran), "Amiri Quran", "Amiri", serif;
+  font-family: var(--font-quran-text), "Amiri Quran", "Amiri", serif;
   line-height: 2.3;
 }
 
@@ -5792,7 +5797,7 @@ button.mdr-daily-rhythm-status:focus-visible {
   padding-inline: 0.32em;
   margin-inline: -0.32em;
   background-repeat: no-repeat;
-  /* **الشريطُ يهبط على جسم الحرف لا على صندوق السطر**: خطّ «أميري قرآن» يحجز
+  /* **الشريطُ يهبط على جسم الحرف لا على صندوق السطر**: خطّ المصحف يحجز
      فوق الحرف وتحته حيّزاً واسعاً لعلامات الضبط، فلونٌ يملأ صندوقه يصير سبيكةً
      مصمتة بين سطرين — وهي التي كانت تجعل التحديد «صناديق». ولذلك التلوينُ كلُّه
      صورةٌ (`background-image`) لا لوناً (`background-color`): اللونُ يملأ
