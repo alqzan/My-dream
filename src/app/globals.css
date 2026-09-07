@@ -2030,14 +2030,14 @@ body {
 .mushaf-leaf-page {
   overflow: hidden;
   border: 1px solid var(--reader-line, rgba(126, 98, 54, 0.18));
-  color: #3c3326;
+  color: var(--reader-ink, #3c3326);
   background:
-    linear-gradient(90deg, rgba(112, 83, 42, 0.06), transparent 5%, transparent 95%, rgba(112, 83, 42, 0.04)),
+    linear-gradient(90deg, var(--reader-fold, rgba(112, 83, 42, 0.06)), transparent 5%, transparent 95%, var(--reader-fold, rgba(112, 83, 42, 0.04))),
     linear-gradient(180deg, var(--reader-paper, #fffdf7), var(--reader-paper-deep, #f8f0e1));
-  box-shadow:
-    0 16px 30px var(--reader-shadow, rgba(76, 54, 26, 0.12)),
+  box-shadow: var(--reader-lift,
+    0 16px 30px rgba(76, 54, 26, 0.12),
     inset 0 0 0 1px rgba(255, 255, 255, 0.54),
-    inset 0 0 28px rgba(126, 98, 54, 0.045);
+    inset 0 0 28px rgba(126, 98, 54, 0.045));
 }
 .mushaf-page-number {
   letter-spacing: 0.04em;
@@ -2081,40 +2081,41 @@ body {
   color: #d9c9a6;
 }
 
+/* الطور طبقةٌ واحدة: الوجه يملؤها، والأدواتُ تعلوه ولا تقتطع من ارتفاعه —
+   فارتفاعُ الشاشة كلُّه هو ما يُقاس منه عرضُ الوجه. و`100dvh` لا `100%`: شريطُ
+   المتصفّح في الجوّال يقتطع من `vh` فيقع أسفلُ الورقة تحته. */
 .mushaf-stage {
   position: fixed;
   inset: 0;
   z-index: 90;
-  display: flex;
-  flex-direction: column;
-  --reader-paper: #fffdf7;
-  --reader-paper-deep: #f8f0e1;
-  --reader-line: rgba(126, 98, 54, 0.18);
-  --reader-shadow: rgba(76, 54, 26, 0.12);
-  background:
-    radial-gradient(circle at 50% -10%, var(--greenw), transparent 30rem),
-    #f4eee2;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: 100dvh;
+  background: var(--reader-void);
 }
-.dark .mushaf-stage {
-  --reader-paper: #2c2419;
-  --reader-paper-deep: #241c12;
-  --reader-line: rgba(224, 190, 126, 0.22);
-  --reader-shadow: rgba(0, 0, 0, 0.28);
-  background:
-    radial-gradient(circle at 50% -12%, var(--greenw), transparent 34rem),
-    #171009;
-}
+/* الشريطان معلّقان فوق الوجه بستارةٍ خفيفة تحتهما ليُقرأ نصُّهما على الورق،
+   وينزلقان خارج الإطار حين تنسحب الأدوات — فلا يبقى على الزجاج إلا المصحف. */
 .mushaf-stage-bar {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.45rem 0.6rem;
+  padding: calc(0.45rem + env(safe-area-inset-top, 0px)) 0.6rem 1.5rem;
+  background: linear-gradient(to bottom, var(--reader-scrim) 0 72%, transparent);
+  backdrop-filter: blur(2px);
+  transition: transform 0.24s ease, opacity 0.24s ease;
 }
-/* الإخفاء حذفٌ للحيّز لا شفافية: الوجه يكبر حين يخلو له الشريط. */
-.mushaf-stage-bar.is-hidden,
-.mushaf-stage-nav.is-hidden { display: none; }
+.mushaf-stage-bar.is-hidden {
+  transform: translateY(-115%);
+  opacity: 0;
+  pointer-events: none;
+}
+.mushaf-stage-nav.is-hidden {
+  transform: translateY(115%);
+  opacity: 0;
+  pointer-events: none;
+}
 .mushaf-stage-title {
   flex: 1;
   min-width: 0;
@@ -2153,8 +2154,8 @@ body {
 .mushaf-stage-tools { display: flex; gap: 0.3rem; }
 
 .mushaf-stage-fit {
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   container-type: size;
   display: flex;
   overflow: auto;
@@ -2173,23 +2174,21 @@ body {
 }
 .mushaf-stage-fit .mushaf-leaf-page {
   border-radius: 1rem;
-  box-shadow:
-    0 18px 34px var(--reader-shadow),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
-    inset 0 0 28px rgba(126, 98, 54, 0.045);
-}
-.dark .mushaf-stage-fit .mushaf-leaf-page {
-  box-shadow:
-    0 18px 34px rgba(0, 0, 0, 0.28),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
-    inset 0 0 28px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--reader-lift);
 }
 .mushaf-stage-nav {
+  position: absolute;
+  bottom: 0;
+  inset-inline: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.35rem 0.6rem 0.6rem;
+  padding: 1.5rem 0.6rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--reader-scrim) 0 72%, transparent);
+  backdrop-filter: blur(2px);
+  transition: transform 0.24s ease, opacity 0.24s ease;
 }
 .mushaf-stage-turn {
   display: inline-flex;
@@ -2223,20 +2222,6 @@ body {
 
 .dark .mushaf-index-title { color: #efe6d5; }
 .dark .mushaf-index-copy { color: #a2947a; }
-.dark .mushaf-leaf-page {
-  --reader-paper: #2c2419;
-  --reader-paper-deep: #241c12;
-  --reader-line: rgba(224, 190, 126, 0.22);
-  --reader-shadow: rgba(0, 0, 0, 0.28);
-  color: #eee4d2;
-  background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.16), transparent 5%, transparent 95%, rgba(0, 0, 0, 0.1)),
-    linear-gradient(180deg, var(--reader-paper), var(--reader-paper-deep));
-  box-shadow:
-    0 16px 30px var(--reader-shadow),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
-    inset 0 0 28px rgba(0, 0, 0, 0.08);
-}
 .dark .mushaf-page-number { text-shadow: none; }
 .dark .mushaf-index-count { background: rgba(36, 28, 18, 0.72); }
 
@@ -2343,10 +2328,7 @@ body {
 .hifz-session-shell .mushaf-leaf-page,
 .hifz-drill-modal .mushaf-leaf-page {
   border-radius: 1rem;
-  box-shadow:
-    0 18px 34px rgba(76, 54, 26, 0.13),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
-    inset 0 0 28px rgba(126, 98, 54, 0.045);
+  box-shadow: var(--reader-lift);
 }
 .hifz-step-card {
   padding: 1rem;
@@ -2426,14 +2408,6 @@ body {
 .dark .hifz-step-heading,
 .dark .hifz-drill-heading,
 .dark .hifz-direct-rating { border-color: rgba(224, 190, 126, 0.12); }
-.dark .hifz-coach-shell .mushaf-leaf-page,
-.dark .hifz-session-shell .mushaf-leaf-page,
-.dark .hifz-drill-modal .mushaf-leaf-page {
-  box-shadow:
-    0 18px 34px rgba(0, 0, 0, 0.28),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
-    inset 0 0 28px rgba(0, 0, 0, 0.08);
-}
 
 @media (max-width: 520px) {
   .hifz-coach-body,
@@ -5631,4 +5605,432 @@ button.mdr-daily-rhythm-status:focus-visible {
 @media (max-width: 520px) {
   .mdr-daily-rhythm-menu { width: 8.9rem; }
   .mdr-daily-rhythm-hidden-panel { width: min(18.5rem, calc(100vw - 2rem)); }
+}
+
+/* ===================== نماذجُ عرض المصحف =====================
+   وجهُ المصحف واحد وأسطرُه مقيسةٌ لا تتغيّر (راجع `mushafLayout.ts`) — والذي
+   يتغيّر هنا **ورقُه وحبرُه وشكلُ تحديده**. أربعةُ نماذج، كلٌّ منها طقمُ رموزٍ
+   كامل يقرأه `.mushaf-leaf-page` والتحديدُ والأرقام، فلا لونَ مكتوباً في
+   المكوّن ولا في صنفٍ مبعثر:
+
+     ورق    — الكريميّ الدافئ، والتحديدُ قلمٌ برأسين مستديرين.
+     المدينة — ورقٌ ناصع وحبرٌ حادّ، والتحديدُ وشاحٌ تحت الكلمة لا صندوقٌ حولها.
+     ليل    — حبرٌ داكن مهما كان وضعُ التطبيق، والتحديدُ هالةٌ ذهبية.
+     سادة   — بلا ورقٍ ولا ظلٍّ ولا كعب: النصُّ على ورق التطبيق نفسه.
+
+   الرموز: `--reader-paper/-deep` الورق · `--reader-ink/-dim` الحبر وسياقُه ·
+   `--reader-accent` الوردة واسم السورة · `--reader-line` الحافّة ·
+   `--reader-lift` ظلُّ الورقة · `--reader-void` ما حول الورقة في الطور ·
+   `--reader-scrim` ستارةُ الأدوات · `--mark-*`/`--pick-*` شكلُ التحديد.
+   اختيارُ النموذج يُحفظ في تفضيلات القراءة فيسري على كلّ لوحٍ في التطبيق. */
+
+.mushaf-skin-warm {
+  --reader-base: #fbf6ea;
+  --reader-paper: #fffdf7;
+  --reader-paper-deep: #f7efdf;
+  --reader-fold: rgba(112, 83, 42, 0.06);
+  --reader-line: rgba(126, 98, 54, 0.18);
+  --reader-ink: #3b3226;
+  --reader-dim: rgba(59, 50, 38, 0.4);
+  --reader-accent: #8a6224;
+  --reader-lift:
+    0 16px 30px rgba(76, 54, 26, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.54),
+    inset 0 0 28px rgba(126, 98, 54, 0.045);
+  --reader-void:
+    radial-gradient(circle at 50% -10%, rgba(185, 134, 47, 0.13), transparent 30rem),
+    linear-gradient(#f4eee2, #f4eee2);
+  --reader-scrim: rgba(244, 238, 226, 0.94);
+  /* القلم: كتلةٌ دافئة برأسين مستديرين تمرّ على الكلمة كما يمرّ القلم الفسفوريّ
+     على الورق — لا صندوقٌ شفّاف بزاويةٍ حادّة. */
+  --mark-swatch: rgba(160, 116, 44, 0.45);
+}
+.dark .mushaf-skin-warm {
+  --reader-base: #281f15;
+  --reader-paper: #2c2419;
+  --reader-paper-deep: #241c12;
+  --reader-fold: rgba(0, 0, 0, 0.16);
+  --reader-line: rgba(224, 190, 126, 0.22);
+  --reader-ink: #eee4d2;
+  --reader-dim: rgba(238, 228, 210, 0.34);
+  --reader-accent: #d9ae5f;
+  --reader-lift:
+    0 16px 30px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    inset 0 0 28px rgba(0, 0, 0, 0.08);
+  --reader-void:
+    radial-gradient(circle at 50% -12%, rgba(223, 174, 94, 0.15), transparent 34rem),
+    linear-gradient(#171009, #171009);
+  --reader-scrim: rgba(23, 16, 9, 0.94);
+  --mark-swatch: rgba(223, 174, 94, 0.5);
+}
+
+.mushaf-skin-madina {
+  --reader-base: #fefdfa;
+  --reader-paper: #fffefc;
+  --reader-paper-deep: #fdfbf5;
+  --reader-fold: rgba(120, 100, 60, 0.05);
+  --reader-line: rgba(120, 100, 60, 0.16);
+  --reader-ink: #17150f;
+  --reader-dim: rgba(23, 21, 15, 0.32);
+  --reader-accent: #7a5a22;
+  --reader-lift:
+    0 12px 28px rgba(60, 45, 20, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  --reader-void:
+    radial-gradient(circle at 50% -10%, rgba(122, 90, 34, 0.07), transparent 32rem),
+    linear-gradient(#eeeae1, #eeeae1);
+  --reader-scrim: rgba(238, 234, 225, 0.94);
+  /* الوشاح: خطٌّ عريضٌ تحت الكلمة والباقي ورق — أهدأ ما يكون التحديدُ في نصٍّ
+     ناصع، ولا يخفت معه الحبر. */
+  --mark-swatch: rgba(122, 90, 34, 0.55);
+}
+.dark .mushaf-skin-madina {
+  --reader-base: #232019;
+  --reader-paper: #26241f;
+  --reader-paper-deep: #201e19;
+  --reader-fold: rgba(0, 0, 0, 0.18);
+  --reader-line: rgba(230, 216, 186, 0.18);
+  --reader-ink: #f6efe0;
+  --reader-dim: rgba(246, 239, 224, 0.3);
+  --reader-accent: #dcbb78;
+  --reader-lift:
+    0 12px 28px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --reader-void: linear-gradient(#141310, #141310);
+  --reader-scrim: rgba(20, 19, 16, 0.94);
+  --mark-swatch: rgba(220, 187, 120, 0.6);
+}
+
+/* ليل: لا يتبع وضعَ التطبيق — من اختاره اختار قراءةً في العتمة نهاراً وليلاً. */
+.mushaf-skin-night,
+.dark .mushaf-skin-night {
+  --reader-base: #131009;
+  --reader-paper: #16120c;
+  --reader-paper-deep: #100c07;
+  --reader-fold: rgba(0, 0, 0, 0.4);
+  --reader-line: rgba(217, 174, 95, 0.16);
+  --reader-ink: #ecdfc4;
+  --reader-dim: rgba(236, 223, 196, 0.28);
+  --reader-accent: #d9ae5f;
+  --reader-lift:
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(217, 174, 95, 0.07),
+    inset 0 0 40px rgba(0, 0, 0, 0.4);
+  --reader-void:
+    radial-gradient(circle at 50% -8%, rgba(217, 174, 95, 0.1), transparent 30rem),
+    linear-gradient(#0b0906, #0b0906);
+  --reader-scrim: rgba(11, 9, 6, 0.94);
+  /* الهالة: الكلمةُ نفسها تُضيء، والخلفيةُ خفيفةٌ جداً — في العتمة يكفي أثرُ
+     الضوء ولا يحتاج الأمرُ صندوقاً. */
+  --pick-glow: 0 0 0.6em rgba(217, 174, 95, 0.6);
+  --mark-swatch: rgba(217, 174, 95, 0.55);
+}
+
+/* سادة: ورقُ التطبيق نفسه بلا حافّةٍ ولا ظلٍّ ولا كعب — لمن يريد النصّ وحده. */
+.mushaf-skin-plain {
+  --reader-base: var(--paper);
+  --reader-paper: transparent;
+  --reader-paper-deep: transparent;
+  --reader-fold: transparent;
+  --reader-line: transparent;
+  --reader-ink: var(--ink);
+  --reader-dim: var(--ink34);
+  --reader-accent: var(--gold);
+  --reader-lift: none;
+  --reader-void: linear-gradient(var(--paper), var(--paper));
+  --reader-scrim: color-mix(in srgb, var(--paper) 94%, transparent);
+  --mark-swatch: color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.mushaf-skin-plain .mushaf-leaf-page { background-image: none; }
+/* الكعبُ وظلُّه وحافّةُ الأوراق: زخرفةُ المجلَّد كلُّها تسقط في «سادة». */
+.mushaf-skin-plain .mushaf-leaf span[aria-hidden] { display: none; }
+
+/* لونُ التحديد **مصمتٌ ممزوجٌ على الورق** لا شفّافاً فوقه: الشريطُ يُرسم لكلّ
+   آيةٍ على حدة، والحشوُ يجعل شريطَين متجاورين يتراكبان قليلاً — فلونٌ شفّاف
+   يتضاعف عند التراكب فيظهر «درج» فاتحٌ بين كلّ آيتين. المزيجُ المصمت لا يتضاعف. */
+.mushaf-skin-warm,
+.dark .mushaf-skin-warm,
+.mushaf-skin-madina,
+.dark .mushaf-skin-madina,
+.mushaf-skin-night,
+.dark .mushaf-skin-night,
+.mushaf-skin-plain {
+  --mark-tint: color-mix(in srgb, var(--reader-accent) 15%, var(--reader-base));
+  --pick-cap: color-mix(in srgb, var(--reader-accent) 28%, var(--reader-base));
+  --mark-image: linear-gradient(var(--mark-tint), var(--mark-tint));
+  --pick-image: linear-gradient(var(--pick-cap), var(--pick-cap));
+}
+/* المدينة وحدها وشاحٌ تحت الكلمة لا شريطٌ عليها — ورقُها ناصعٌ لا يحتمل كتلة. */
+.mushaf-skin-madina,
+.dark .mushaf-skin-madina {
+  --mark-image: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--reader-accent) 45%, var(--reader-base)) 0 0.09em,
+    transparent 0.09em);
+}
+
+/* ===================== التحديد =====================
+   كان الإبرازُ صندوقاً شفّافاً يملأ صندوقَ السطر بزاويةٍ ٣px، فيقرأ سبائكَ
+   مرصوصةً بين الأسطر لا تحديداً. ثلاثةُ أشياء صحّحته:
+     • الشريطُ يُقاس ويُوضع على جسم الحرف (`background-size`/`-position`)
+       بدل لونٍ يملأ الصندوق كلَّه — راجع التعليق أسفله.
+     • لونُه مزيجٌ مصمت لا شفّافٌ يتضاعف عند تراكب شريطَين.
+     • الحشوُ الأفقيّ يقابله هامشٌ سالبٌ مساوٍ له، فلا يزيد عرضُ السطر بذرّة —
+       وعرضُ السطر معلومةٌ مقيسة لا يجوز أن تتحرّك (`mushafLayout.ts`). */
+.mushaf-run {
+  border-radius: 0.42em;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.mushaf-ink { color: var(--reader-ink); }
+.mushaf-dim { color: var(--reader-dim); }
+.mushaf-focus,
+.mushaf-pick {
+  /* حشوٌ يبتلع الفراغَ بين آيتين متجاورتين (الفراغُ يقع بين المقطعين لا داخل
+     أحدهما، فيبقى بلا لونٍ وينقطع الشريطُ عند كلّ وردة)، ويقابله هامشٌ سالبٌ
+     مساوٍ له فلا يزيد عرضُ السطر بذرّة. */
+  padding-inline: 0.32em;
+  margin-inline: -0.32em;
+  background-repeat: no-repeat;
+  /* **الشريطُ يهبط على جسم الحرف لا على صندوق السطر**: خطّ «أميري قرآن» يحجز
+     فوق الحرف وتحته حيّزاً واسعاً لعلامات الضبط، فلونٌ يملأ صندوقه يصير سبيكةً
+     مصمتة بين سطرين — وهي التي كانت تجعل التحديد «صناديق». ولذلك التلوينُ كلُّه
+     صورةٌ (`background-image`) لا لوناً (`background-color`): اللونُ يملأ
+     الصندوق مهما قِيس، والصورةُ تُقاس وتُوضع. */
+  background-size: 100% var(--mark-band, 1.3em);
+  background-position: center calc(50% + 0.04em);
+}
+.mushaf-focus { background-image: var(--mark-image, none); }
+/* الآيةُ المحدَّدة **حبّةٌ برأسين مستديرين** لا مستطيلاً: طبقتان دائريّتان على
+   الطرفين وشريطٌ بينهما — وهي الفرق بين «آيةٌ اخترتَها» و«صندوقٌ وقع عليها».
+   و`box-decoration-clone` في المكوّن يعطي كلَّ سطرٍ من الآية رأسيه. */
+.mushaf-pick {
+  background-image:
+    radial-gradient(circle at 0.36em 50%, var(--pick-cap) 0.35em, transparent 0.36em),
+    radial-gradient(circle at calc(100% - 0.36em) 50%, var(--pick-cap) 0.35em, transparent 0.36em),
+    var(--pick-image, none);
+  background-size:
+    100% var(--mark-band, 1.3em),
+    100% var(--mark-band, 1.3em),
+    calc(100% - 0.72em) var(--mark-band, 1.3em);
+  background-position:
+    center calc(50% + 0.04em),
+    center calc(50% + 0.04em),
+    center calc(50% + 0.04em);
+  text-shadow: var(--pick-glow, none);
+  color: var(--reader-ink);
+}
+.mushaf-num { color: var(--reader-accent); }
+.mushaf-num.is-dim { color: color-mix(in srgb, var(--reader-accent) 45%, transparent); }
+.mushaf-basmala { color: var(--reader-accent); }
+.mushaf-skin-warm .mushaf-sura,
+.mushaf-skin-madina .mushaf-sura,
+.mushaf-skin-night .mushaf-sura,
+.mushaf-skin-plain .mushaf-sura,
+.dark .mushaf-skin-warm .mushaf-sura,
+.dark .mushaf-skin-madina .mushaf-sura,
+.dark .mushaf-skin-night .mushaf-sura,
+.dark .mushaf-skin-plain .mushaf-sura { color: var(--reader-accent); }
+
+/* ===================== ملء الطول =====================
+   شاشةُ الجوّال أطول من نسبة الوجه المطبوع، فيقف الوجه في وسطها ويبقى تحته
+   فراغٌ لا يملؤه تكبير (التكبير يوسّع العرض فيخرج الوجه عن الشاشة). هنا
+   تتوزّع الأسطر على الارتفاع كلّه: **مواضعُها من المطبوع لا تتغيّر** — لا سطرٌ
+   ينكسر ولا كلمةٌ تنتقل — والذي يتغيّر ما بين الأسطر وحده. والورقةُ تلامس
+   حافّات الزجاج فلا يبقى إطارٌ يقول «هذه نافذة». */
+.mushaf-stage-fit[data-fill="1"] { padding: 0; }
+.mushaf-stage-fit[data-fill="1"] .mushaf-leaf {
+  display: flex;
+  min-height: 100cqh;
+}
+.mushaf-stage-fit[data-fill="1"] .mushaf-leaf-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.mushaf-stage-fit[data-fill="1"] .mushaf-scroll,
+.mushaf-stage-fit[data-fill="1"] .mushaf-sheet,
+.mushaf-stage-fit[data-fill="1"] .mushaf-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.mushaf-stage-fit[data-fill="1"] .mushaf-page { justify-content: space-between; }
+.mushaf-stage-fit[data-fill="1"] .mushaf-page[data-short="1"] { justify-content: center; gap: 0.6em; }
+
+/* ===================== ورقةُ النماذج =====================
+   تُفتح من زرّ اللوحة أسفلَ الشاشة ولا تحجب إلا أسفلها، فالاختيار يقع على
+   الوجه الظاهر خلفها فوراً — تُرى النتيجةُ قبل أن تُقرَّ. وكلُّ عيّنةٍ ترسم
+   نموذجَها بورقه وحبره وتحديده لا باسمه. */
+.mushaf-models {
+  position: absolute;
+  z-index: 4;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 0.7rem 0.75rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--reader-line);
+  border-radius: 1.25rem 1.25rem 0 0;
+  background: var(--reader-scrim);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, 0.14);
+  animation: mushaf-models-in 0.22s ease;
+}
+@keyframes mushaf-models-in {
+  from { transform: translateY(18%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.mushaf-models-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.55rem;
+  color: var(--reader-ink);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+.mushaf-models-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--reader-line);
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--reader-dim);
+  cursor: pointer;
+}
+.mushaf-models-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.mushaf-model {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border: 1px solid var(--reader-line);
+  border-radius: 0.85rem;
+  background: transparent;
+  color: var(--reader-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.mushaf-model.is-on {
+  border-color: var(--reader-accent);
+  box-shadow: 0 0 0 1px var(--reader-accent) inset;
+}
+.mushaf-model-swatch {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.18rem;
+  height: 2.5rem;
+  padding: 0.4rem 0.35rem;
+  border: 1px solid var(--reader-line);
+  border-radius: 0.55rem;
+  background:
+    linear-gradient(180deg, var(--reader-paper), var(--reader-paper-deep)),
+    linear-gradient(var(--paper), var(--paper));
+}
+.mushaf-model-swatch i {
+  height: 0.18rem;
+  border-radius: 0.09rem;
+  background: var(--reader-ink);
+  opacity: 0.5;
+}
+.mushaf-model-swatch i:last-child { width: 62%; }
+.mushaf-model-swatch i.is-mark {
+  background: var(--mark-swatch);
+  opacity: 1;
+}
+.mushaf-model-name {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+.mushaf-model-hint {
+  color: var(--reader-dim);
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.mushaf-models-fill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--reader-line);
+  border-radius: 0.85rem;
+  background: transparent;
+  color: var(--reader-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.mushaf-models-fill.is-on { border-color: var(--reader-accent); }
+.mushaf-models-fill > span:nth-child(2) { flex: 1; display: grid; }
+.mushaf-models-fill strong { font-size: 0.72rem; font-weight: 900; }
+.mushaf-models-fill small { color: var(--reader-dim); font-size: 0.6rem; font-weight: 700; }
+.mushaf-switch {
+  flex: none;
+  position: relative;
+  width: 2.1rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reader-ink) 18%, transparent);
+  transition: background-color 0.18s ease;
+}
+.mushaf-switch::after {
+  content: "";
+  position: absolute;
+  top: 0.15rem;
+  inset-inline-start: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: var(--reader-paper, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease;
+}
+.mushaf-switch.is-on { background: var(--reader-accent); }
+.mushaf-switch.is-on::after { transform: translateX(-0.9rem); }
+
+/* أدواتُ الطور تأخذ ألوانَها من النموذج أيضاً — زرٌّ كريميٌّ على ورقٍ ليليّ
+   يقرأ غريباً عنه. */
+.mushaf-stage .mushaf-stage-icon,
+.mushaf-stage .mushaf-stage-turn {
+  border-color: var(--reader-line);
+  background: color-mix(in srgb, var(--reader-paper) 78%, transparent);
+  color: var(--reader-ink);
+}
+.mushaf-stage .mushaf-stage-icon.is-on {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+.mushaf-stage .mushaf-stage-title strong { color: var(--reader-ink); }
+.mushaf-stage .mushaf-stage-title small,
+.mushaf-stage .mushaf-stage-count { color: var(--reader-dim); }
+
+@media (max-width: 380px) {
+  .mushaf-models-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mushaf-models { animation: none; }
+  .mushaf-run { transition: none; }
+}
+
+/* في ملء الطول تلامس الورقةُ الحافّات، فالحشوُ الرأسيُّ يحمل الأمان: أوّلُ سطرٍ
+   لا يقع تحت نتوء الشاشة، وآخرُه لا يقع تحت شريط الإيماءة. */
+.mushaf-stage-fit[data-fill="1"] .mushaf-leaf-page {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
 }

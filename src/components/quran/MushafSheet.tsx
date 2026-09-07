@@ -10,9 +10,14 @@ import {
 } from "@/lib/quran/mushafLayout";
 import {
   loadReadPrefs, saveReadPrefs, clampZoom, ZOOM_RANGE, DEFAULT_READ_PREFS,
+  MUSHAF_SKINS, type MushafSkin, type ReadPrefs,
 } from "@/lib/quran/readPrefs";
+import { enterFullscreen, exitFullscreen } from "@/lib/platform/fullscreen";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
-import { Maximize2, Minimize2, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  Maximize2, Minimize2, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
+  Palette, Check, StretchVertical,
+} from "lucide-react";
 import { arNum } from "@/lib/madar/format";
 
 // ===================== لوح المصحف — العارض الوحيد لنصّ الآيات =====================
@@ -79,6 +84,8 @@ export interface MushafSheetProps {
   zoom?: number;
   /** ارتفاعٌ أقصى بالبكسل مع تمرير — للبطاقات داخل الصفحات. */
   maxHeight?: number;
+  /** نموذجُ العرض — يُمرَّر حين يقوده الطور، وإلا فمن تفضيلات القراءة. */
+  skin?: MushafSkin;
   /** سماكةُ الأوراق على الطرف الخارجيّ (تُطفأ في المساحات الضيّقة جداً). */
   stack?: boolean;
   /** زرُّ «ملء الشاشة» فوق اللوح — يفتح الوجه على الشاشة كلّها بحالته نفسها. */
@@ -100,6 +107,7 @@ export function MushafSheet(props: MushafSheetProps) {
     onAyahClick,
     zoom,
     maxHeight,
+    skin,
     stack = true,
     expandable = false,
     className = "",
@@ -109,6 +117,7 @@ export function MushafSheet(props: MushafSheetProps) {
   const [prefs, setPrefs] = useState(DEFAULT_READ_PREFS);
   useEffect(() => { setPrefs(loadReadPrefs()); }, []);
   const pageZoom = zoom ?? prefs.zoom;
+  const pageSkin = skin ?? prefs.skin;
   const [full, setFull] = useState(false);
 
   const pages = useMemo(() => portionPages(fromId, toId), [fromId, toId]);
@@ -129,7 +138,7 @@ export function MushafSheet(props: MushafSheetProps) {
   const sheet = (
     <div
       ref={scroller}
-      className={`space-y-3 ${maxHeight ? "overflow-y-auto" : ""} ${className}`}
+      className={`mushaf-skin-${pageSkin} space-y-3 ${maxHeight ? "overflow-y-auto" : ""} ${className}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
       {pages.map((pg) => (
@@ -209,22 +218,39 @@ export function MushafSheet(props: MushafSheetProps) {
 
 // ===================== الوجه على ملء الشاشة =====================
 // المصحف الورقيّ لا يُقرأ في نافذةٍ بارتفاع ثلاثمئة بكسل: صورةُ الوجه هي رأس مال
-// الحافظ، وكلّما صغرت ضاعت. هنا يُفتح **وجهٌ واحد يملأ الشاشة** — يُقاس عرضُه
-// من ارتفاعها (‏`container-type: size`‎ و`cqh` في `globals.css`) فيقع الوجه كلّه
-// بلا تمرير، بنسبته المطبوعة نفسها.
+// الحافظ، وكلّما صغرت ضاعت. هنا يُفتح **وجهٌ واحد يملأ الشاشة**، وثلاثةُ أشياء
+// تجعله ملءاً حقيقياً لا طبقةً فوق الصفحة:
 //
+// ١) **`Fullscreen API`** عند الفتح (خلف واجهة `@/lib/platform/fullscreen`):
+//    يطوي شريطَ المتصفّح وشريطَ النظام، فلا يبقى على الزجاج إلا الورقة. وحيث لا
+//    يُدعَم (iOS Safari) تبقى الطبقةُ الغاطية كما كانت — زيادةٌ لا شرط.
+// ٢) **الأدواتُ تعلو الوجه ولا تقتطع منه**: الشريطُ والتنقّل طبقتان معلّقتان
+//    تنسحبان وحدهما بعد لحظتين ويعودان باللمس. كانا يأكلان مئةَ بكسلٍ من
+//    الارتفاع دائماً، وهي عين ما يُقاس منه عرضُ الوجه.
+// ٣) **«ملء الطول»**: شاشةُ الجوّال أطول من نسبة الوجه المطبوع، فيبقى تحته فراغ
+//    مهما كبّرت. حين يُشغَّل تتوزّع الأسطرُ الخمسةَ عشر على الارتفاع كلّه —
+//    مواضعُها من المطبوع لا تتغيّر، والذي يتغيّر ما بينها.
+//
+// و**النماذج** أربعة (ورق · المدينة · ليل · سادة): ورقٌ وحبرٌ وشكلُ تحديد،
+// تُبدَّل من زرّ اللوحة وتُحفظ في تفضيلات القراءة فتسري على كلّ لوحٍ في التطبيق.
 // وحالةُ اللوح تعبر كما هي: السترُ والإبرازُ ووسمُ الكلمات — الطورُ يمرّر كلّ
-// خصائصه إلى `MushafSheet` نفسه، فما تراه في البطاقة تراه على الشاشة كلّها.
-// والتنقّل بين أوجه المقطع سحباً أو بالسهمين أو بالأزرار، والتكبير يُحفظ في
-// تفضيلات القراءة (بوّابةُ `readPrefs` وحدها).
+// خصائصه إلى `MushafSheet` نفسه. والتنقّل بين أوجه المقطع سحباً أو بالسهمين.
 export function MushafStage({ onClose, ...props }: MushafSheetProps & { onClose: () => void }) {
   const pages = useMemo(() => portionPages(props.fromId, props.toId), [props.fromId, props.toId]);
   const [i, setI] = useState(0);
-  const [zoom, setZoom] = useState(DEFAULT_READ_PREFS.zoom);
+  const [prefs, setPrefs] = useState(DEFAULT_READ_PREFS);
   const [chrome, setChrome] = useState(true);
+  const [models, setModels] = useState(false);
   const down = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => { setZoom(loadReadPrefs().zoom); }, []);
+  useEffect(() => { setPrefs(loadReadPrefs()); }, []);
+
+  // الملءُ الحقيقيّ يُطلب من داخل الإيماءة التي فتحت الطور (نافذةُ التفعيل
+  // المؤقّت ما تزال مفتوحة هنا)، ويُترك عند الإغلاق مهما كان سببُه.
+  useEffect(() => {
+    void enterFullscreen();
+    return () => { void exitFullscreen(); };
+  }, []);
 
   const idx = Math.min(i, Math.max(0, pages.length - 1));
   const pg = pages[idx];
@@ -242,53 +268,45 @@ export function MushafStage({ onClose, ...props }: MushafSheetProps & { onClose:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages.length, onClose]);
 
-  const setZoomSaved = (z: number) => {
-    const next = clampZoom(z);
-    setZoom(next);
-    saveReadPrefs({ zoom: next });
+  // الأدواتُ تنسحب وحدها فيخلو الزجاج للورقة — إلا وورقةُ النماذج مفتوحة.
+  useEffect(() => {
+    if (!chrome || models) return;
+    const t = window.setTimeout(() => setChrome(false), 2600);
+    return () => window.clearTimeout(t);
+  }, [chrome, models, idx]);
+
+  const patch = (p: Partial<ReadPrefs>) => {
+    setPrefs((v) => ({ ...v, ...p }));
+    saveReadPrefs(p);
   };
+  const setZoomSaved = (z: number) => patch({ zoom: clampZoom(z) });
 
   if (!pg) return null;
 
   return (
-    <div className="mushaf-stage" dir="rtl" role="dialog" aria-modal="true" aria-label="المصحف — ملء الشاشة">
-      <div className={`mushaf-stage-bar ${chrome ? "" : "is-hidden"}`}>
-        <button type="button" onClick={onClose} className="mushaf-stage-icon press" aria-label="إغلاق"><X size={18} /></button>
-        <div className="mushaf-stage-title">
-          <strong>{SURAHS[idToSurahAyah(pg.fromId).surah - 1].name}</strong>
-          <small>صفحة {arNum(pg.page)} · {pg.side} · جزء {arNum(idToJuz(pg.fromId))}</small>
-        </div>
-        <div className="mushaf-stage-tools">
-          <button
-            type="button" onClick={() => setZoomSaved(zoom - ZOOM_RANGE.step)}
-            disabled={zoom <= ZOOM_RANGE.min} className="mushaf-stage-icon press" aria-label="تصغير"
-          ><ZoomOut size={16} /></button>
-          <button
-            type="button" onClick={() => setZoomSaved(zoom + ZOOM_RANGE.step)}
-            disabled={zoom >= ZOOM_RANGE.max} className="mushaf-stage-icon press" aria-label="تكبير"
-          ><ZoomIn size={16} /></button>
-          <button
-            type="button" onClick={() => setChrome((v) => !v)} className="mushaf-stage-icon press"
-            aria-label={chrome ? "أخفِ الشريط" : "أظهر الشريط"}
-          >{chrome ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
-        </div>
-      </div>
-
+    <div
+      className={`mushaf-stage mushaf-skin-${prefs.skin}`}
+      dir="rtl" role="dialog" aria-modal="true" aria-label="المصحف — ملء الشاشة"
+    >
       <div
         className="mushaf-stage-fit"
-        style={{ ["--mushaf-zoom" as string]: zoom }}
+        data-fill={prefs.fill ? "1" : undefined}
+        style={{ ["--mushaf-zoom" as string]: prefs.zoom }}
         onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY }; }}
         onPointerUp={(e) => {
           const s = down.current;
           down.current = null;
           if (!s) return;
           const dx = e.clientX - s.x;
-          // سحبةٌ أفقيّة صريحة وحدها تقلب الورقة؛ وما دونها لمسةٌ تُخفي الشريط.
+          // سحبةٌ أفقيّة صريحة وحدها تقلب الورقة؛ وما دونها لمسةٌ تُظهر الأدوات.
           if (Math.abs(dx) > Math.abs(e.clientY - s.y)) {
             const step = turnStep(dx);
             if (step) { go(step); return; }
           }
-          if (Math.abs(dx) < 6 && Math.abs(e.clientY - s.y) < 6) setChrome((v) => !v);
+          if (Math.abs(dx) < 6 && Math.abs(e.clientY - s.y) < 6) {
+            if (models) { setModels(false); return; }
+            setChrome((v) => !v);
+          }
         }}
         onPointerCancel={() => { down.current = null; }}
       >
@@ -298,10 +316,34 @@ export function MushafStage({ onClose, ...props }: MushafSheetProps & { onClose:
           toId={pg.toId}
           header={false}
           zoom={1}
+          skin={prefs.skin}
           expandable={false}
           maxHeight={undefined}
           className=""
         />
+      </div>
+
+      <div className={`mushaf-stage-bar ${chrome ? "" : "is-hidden"}`}>
+        <button type="button" onClick={onClose} className="mushaf-stage-icon press" aria-label="إغلاق"><X size={18} /></button>
+        <div className="mushaf-stage-title">
+          <strong>{SURAHS[idToSurahAyah(pg.fromId).surah - 1].name}</strong>
+          <small>صفحة {arNum(pg.page)} · {pg.side} · جزء {arNum(idToJuz(pg.fromId))}</small>
+        </div>
+        <div className="mushaf-stage-tools">
+          <button
+            type="button" onClick={() => setZoomSaved(prefs.zoom - ZOOM_RANGE.step)}
+            disabled={prefs.zoom <= ZOOM_RANGE.min} className="mushaf-stage-icon press" aria-label="تصغير"
+          ><ZoomOut size={16} /></button>
+          <button
+            type="button" onClick={() => setZoomSaved(prefs.zoom + ZOOM_RANGE.step)}
+            disabled={prefs.zoom >= ZOOM_RANGE.max} className="mushaf-stage-icon press" aria-label="تكبير"
+          ><ZoomIn size={16} /></button>
+          <button
+            type="button" onClick={() => setModels((v) => !v)}
+            className={`mushaf-stage-icon press ${models ? "is-on" : ""}`}
+            aria-pressed={models} aria-label="نماذج العرض"
+          ><Palette size={16} /></button>
+        </div>
       </div>
 
       {pages.length > 1 && (
@@ -315,6 +357,76 @@ export function MushafStage({ onClose, ...props }: MushafSheetProps & { onClose:
           </button>
         </div>
       )}
+
+      {models && (
+        <SkinSheet
+          skin={prefs.skin}
+          fill={prefs.fill}
+          onSkin={(skin) => patch({ skin })}
+          onFill={(fill) => patch({ fill })}
+          onClose={() => setModels(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ورقةُ النماذج: أربعُ صفحاتٍ للوجه الواحد، كلٌّ منها بعيّنةِ ورقٍ وحبرٍ وتحديد
+// تُرى قبل أن تُختار — والاختيار يقع على الوجه خلفها فوراً، فالورقةُ لا تحجب إلا
+// أسفلَ الشاشة. الاختيار يُحفظ في تفضيلات القراءة فيسري على كلّ لوحٍ في التطبيق
+// (بطاقةُ الحفظ · التسميع · اختبار المواضع) لا على هذا الطور وحده.
+function SkinSheet({
+  skin, fill, onSkin, onFill, onClose,
+}: {
+  skin: MushafSkin;
+  fill: boolean;
+  onSkin: (s: MushafSkin) => void;
+  onFill: (v: boolean) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mushaf-models" role="group" aria-label="نماذج عرض المصحف">
+      <div className="mushaf-models-head">
+        <span>نماذج العرض</span>
+        <button type="button" onClick={onClose} className="mushaf-models-x press" aria-label="إغلاق النماذج">
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="mushaf-models-row">
+        {MUSHAF_SKINS.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onSkin(m.id)}
+            aria-pressed={skin === m.id}
+            className={`mushaf-model press ${skin === m.id ? "is-on" : ""}`}
+          >
+            <span className={`mushaf-model-swatch mushaf-skin-${m.id}`} aria-hidden>
+              <i /><i /><i className="is-mark" /><i />
+            </span>
+            <span className="mushaf-model-name">
+              {m.label}
+              {skin === m.id && <Check size={12} />}
+            </span>
+            <span className="mushaf-model-hint">{m.hint}</span>
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onFill(!fill)}
+        aria-pressed={fill}
+        className={`mushaf-models-fill press ${fill ? "is-on" : ""}`}
+      >
+        <StretchVertical size={15} />
+        <span>
+          <strong>ملء الطول</strong>
+          <small>توزيع الأسطر على ارتفاع الشاشة كاملاً</small>
+        </span>
+        <span className={`mushaf-switch ${fill ? "is-on" : ""}`} aria-hidden />
+      </button>
     </div>
   );
 }
@@ -397,11 +509,14 @@ function PageLines({
 
   return (
     <div
-      className={zoom > 1 ? "overflow-x-auto" : undefined}
+      className={`mushaf-scroll ${zoom > 1 ? "overflow-x-auto" : ""}`}
       style={zoom > 1 ? { scrollbarWidth: "none" } : undefined}
     >
       <div className="mushaf-sheet" style={{ width: `${zoom * 100}%` }}>
-        <div className="mushaf-page">
+        {/* وجهُ الفاتحة وأوّلِ البقرة ثمانيةُ أسطرٍ لا خمسةَ عشر: توزيعُها على
+            ارتفاع الشاشة يفتح بينها فجواتٍ لا وجود لها في المطبوع. فالوجهُ
+            القصير يتوسّط بتباعده الطبيعيّ، والتوزيعُ للوجه التامّ وحده. */}
+        <div className="mushaf-page" data-short={lines.length < 12 ? "1" : undefined}>
           {lines.map((line, i) => {
             const centered = line.stretch === CENTERED;
             return (
@@ -454,7 +569,7 @@ function RunSpan({
   renderNumber?: (a: SheetAyah) => React.ReactNode;
 }) {
   if (run.id === SURA_HEADER) return <span className="mushaf-sura">{run.text}</span>;
-  if (run.id === BASMALA) return <span className="text-quran">{run.text}</span>;
+  if (run.id === BASMALA) return <span className="mushaf-basmala">{run.text}</span>;
 
   const { surah, ayah } = idToSurahAyah(run.id);
   const mine = inPortion(run.id);
@@ -474,17 +589,21 @@ function RunSpan({
     ? renderAyah(a, { text: run.text, wordOffset: run.wordOffset })
     : run.text;
 
+  // شكلُ التحديد من النموذج لا من صنفٍ مكتوبٍ هنا: `mushaf-focus` (المقطع
+  // المطلوب) و`mushaf-pick` (الآية المحدَّدة) يرسمهما `globals.css` لكلّ نموذجٍ
+  // بطريقته — قلمَ تحديدٍ برأسين مستديرين، أو وشاحاً هادئاً، أو هالةً في الليل.
+  // كانا صندوقين شفّافين بزاويةٍ ٣px يقطعهما انكسارُ السطر فيبدوان قصاصات.
   return (
     <span
       id={run.wordOffset === 0 ? `q-page-ayah-${run.id}` : undefined}
       onClick={onAyahClick ? () => onAyahClick(run.id) : undefined}
-      className={`box-decoration-clone rounded-[3px] transition-colors ${onAyahClick ? "cursor-pointer" : ""} ${
+      className={`mushaf-run box-decoration-clone ${onAyahClick ? "cursor-pointer" : ""} ${
         selected
-          ? "bg-quran/15"
+          ? "mushaf-pick"
           : highlight && mine && !veiled
-          ? "bg-quran/[0.07]" // المقطع المطلوب مُبرَزٌ داخل وجهه
+          ? "mushaf-focus" // المقطع المطلوب مُبرَزٌ داخل وجهه
           : ""
-      } ${dimmed && !veiled && !traced ? "text-gray-400 dark:text-gray-500" : "text-gray-800 dark:text-gray-100"}`}
+      } ${dimmed && !veiled && !traced ? "mushaf-dim" : "mushaf-ink"}`}
     >
       {body}
       {run.num > 0 && (renderNumber && mine
@@ -499,7 +618,7 @@ function RunSpan({
 // وقفٍ في المصحف، وعرضُها يخالف ما قِيس عليه السطر.
 export function AyahNumber({ num, dimmed = false }: { num: number; dimmed?: boolean }) {
   return (
-    <span className={dimmed ? "text-quran/50" : "text-quran"} aria-label={`آية ${num}`}>
+    <span className={`mushaf-num ${dimmed ? "is-dim" : ""}`} aria-label={`آية ${num}`}>
       {`۝${num}`}
     </span>
   );
