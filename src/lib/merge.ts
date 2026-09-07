@@ -2,7 +2,7 @@
 // has NO Firebase imports and can be unit-tested in plain Node. sync.ts re-
 // exports mergeAppData, so existing importers are unaffected. Pure functions of
 // (local, cloud) → merged AppData; touches no I/O.
-import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, PrayerName } from "./types";
+import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, KhushuLevel, PrayerName } from "./types";
 import { EMPTY_HIFZ } from "./types";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
 
@@ -375,6 +375,26 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
       const newest = Math.max(pt, st);
       if (newest) stamps[name] = newest;
     }
+    // درجاتُ الخشوع تُحسم كالحالات: كلُّ فرضٍ بطابعه هو، وغيابُ القيمة عند
+    // الفائز يعني مسحاً يجب أن ينتشر (تخطَّى السؤالَ بعد أن أجاب) لا فراغاً
+    // تملؤه نسخةٌ قديمة.
+    const khushu: Partial<Record<PrayerName, KhushuLevel>> = {
+      ...sMatch.khushu, ...pl.khushu,
+    };
+    const kStamps: Partial<Record<PrayerName, number>> = {
+      ...sMatch.khushuUpdatedAt, ...pl.khushuUpdatedAt,
+    };
+    for (const name of Object.keys(khushu) as PrayerName[]) {
+      const pt = pl.khushuUpdatedAt?.[name] ?? 0;
+      const st = sMatch.khushuUpdatedAt?.[name] ?? 0;
+      const winner = st > pt ? sMatch : pl;
+      const val = winner.khushu?.[name];
+      if (val === undefined) delete khushu[name];
+      else khushu[name] = val;
+      const newest = Math.max(pt, st);
+      if (newest) kStamps[name] = newest;
+    }
+
     // السننُ والقيامُ قيمتان مستقلّتان في اليوم نفسِه، فتُحسمان بطابعيهما لا
     // بفوز اليوم كلِّه لجهةٍ واحدة — وإلّا ضاعت ركعاتُ ليلةٍ سُجّلت على الجوّال
     // لمجرّد أنّ تصحيحَ سنّةٍ على الآيباد جعل نسختَه هي الأولى في الاتحاد.
@@ -388,6 +408,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
       ...pl,
       prayers,
       ...(Object.keys(stamps).length ? { prayerUpdatedAt: stamps } : {}),
+      // الخشوعُ يبقى غائباً حين لا درجةَ لأيٍّ من الطرفين — لا يُحقن حقلٌ فارغ
+      // في كلّ يومٍ قديم، تماماً كما لا تُحقن السننُ الغائبة.
+      // تُكتب صراحةً لا بالانتشار: لو مُسِحت آخرُ درجةٍ في اليوم لبقيت نسخةُ
+      // `pl` القديمة ظاهرةً من الانتشار أعلاه — وهو المسحُ الذي لا ينتشر.
+      khushu: Object.keys(khushu).length ? khushu : undefined,
+      ...(Object.keys(kStamps).length ? { khushuUpdatedAt: kStamps } : {}),
       // القيمةُ الفائزة تُؤخذ كما هي حتى لو كانت غائبة — فمسحُها ينتشر بدل أن
       // تعيدها نسخةٌ قديمة، تماماً كمسح حالةِ فرض.
       ...(sunanWin.sunan === undefined ? { sunan: undefined } : { sunan: sunanWin.sunan }),

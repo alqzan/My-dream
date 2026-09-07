@@ -3,7 +3,8 @@
  * المحراب — قوسُ اليوم وعليه الفروضُ الخمسة في مواقيتها.
  *
  * القوسُ الذهبيُّ يمتلئ بقدر ما سُجّل، وشمسٌ تجري عليه بالنسبة نفسِها.
- * ضغطةٌ على الفرض: صلَّيت · ضغطتان: في جماعة · ثالثة: تمسح.
+ * والضغطةُ على الفرض تفتح ورقتَه (`PrayerSheet`) — الحالةُ تُختار بالاسم لا
+ * تُصادَف بدورة ضغطات، ويليها سؤالُ القلب.
  *
  * الإحداثياتُ مقيسةٌ من التصميم (لوحةُ 300×268، نصفُ قطر 114، أوّلُ زاويةٍ ١٥°
  * وبينها ٣٧٫٥°) — لا تُقرَّب، فالعقدُ تجلس على القوس بها بالضبط.
@@ -28,10 +29,10 @@ function dotColor(v: PrayerStatus | undefined): string {
 
 export function Mihrab({
   log,
-  onCycle,
+  onOpen,
 }: {
   log: PrayerLog | undefined;
-  onCycle: (prayer: PrayerName) => void;
+  onOpen: (prayer: PrayerName) => void;
 }) {
   const prayed = prayedCount(log);
   const left = 5 - prayed;
@@ -103,7 +104,7 @@ export function Mihrab({
             <button
               key={name}
               type="button"
-              onClick={() => onCycle(name)}
+              onClick={() => onOpen(name)}
               title={`${name} — ${set ? v : "لم تُسجَّل"}`}
               style={{
                 position: "absolute",
@@ -147,7 +148,7 @@ export function Mihrab({
         </div>
       </div>
       <p style={{ margin: "2px 0 10px", textAlign: "center", fontSize: 11.5, color: "var(--ink52)" }}>
-        ضغطةٌ على القوس: صلَّيت · ضغطتان: في جماعة
+        اضغط صلاةً على القوس لتسجيلها
       </p>
     </div>
   );

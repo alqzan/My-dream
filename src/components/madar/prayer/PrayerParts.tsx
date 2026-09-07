@@ -1,8 +1,9 @@
 "use client";
 /** القِطعُ الباقية من شاشة الصلاة: الصفوف · حلقةُ السنة · سجلُّ الأسبوع. */
 import type { PrayerLog, PrayerName, PrayerStatus } from "@/lib/types";
-import { PRAYERS, PRAYER_STATUS_GLYPH } from "@/lib/types";
+import { PRAYERS, PRAYER_STATUS_GLYPH, KHUSHU_META } from "@/lib/types";
 import { yearRingSpokes, YEAR_SPOKES } from "@/lib/prayerExtras";
+import { khushuOf } from "@/lib/khushu";
 import { arNum, arPct } from "@/lib/madar/format";
 import { toDateStr, parseDate } from "@/lib/utils";
 
@@ -37,14 +38,13 @@ const STATUS_TONE: Partial<Record<PrayerStatus, string>> = {
 export function PrayerRows({
   log,
   times,
-  onCycle,
-  onOpenStates,
+  onOpen,
 }: {
   log: PrayerLog | undefined;
   /** وقتُ كلّ فرضٍ منسَّقاً + هل مضى — من مواقيت الجهاز الحقيقية. */
   times: Record<PrayerName, { label: string; passed: boolean }>;
-  onCycle: (p: PrayerName) => void;
-  onOpenStates: (p: PrayerName) => void;
+  /** الصفُّ كلُّه يفتح ورقةَ التسجيل — لا دورةَ ضغطاتٍ ولا زرَّ «⋯» ثانٍ. */
+  onOpen: (p: PrayerName) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 7, margin: "14px 0 0" }}>
@@ -59,56 +59,57 @@ export function PrayerRows({
                 : v === "قضاء" ? "rgba(63,111,143,.09)"
                   : "var(--paper2)";
         const rowBd = v === "جماعة" ? "rgba(28,99,80,.34)" : set ? "var(--gline)" : "var(--line)";
+        const k = khushuOf(log, name);
+        const km = k ? KHUSHU_META[k] : undefined;
         return (
-          <div
+          <button
             key={name}
+            type="button"
+            onClick={() => onOpen(name)}
+            className="press"
+            aria-label={`${name} — ${set ? v : "لم تُسجَّل"}${km ? ` · ${km.label}` : ""}`}
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
-              padding: "10px 12px", boxSizing: "border-box",
+              minHeight: 60, padding: "10px 12px", boxSizing: "border-box",
               background: rowBg, border: `1px solid ${rowBd}`, borderRadius: 19,
+              textAlign: "right", cursor: "pointer", fontFamily: "inherit", color: "inherit",
             }}
           >
-            <button
-              type="button"
-              onClick={() => onCycle(name)}
+            <span
               style={{
-                flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12,
-                minHeight: 44, background: "transparent", border: "none",
-                textAlign: "right", padding: 0, cursor: "pointer",
-                fontFamily: "inherit", color: "inherit",
+                width: 22, height: 22, flex: "none",
+                border: `1.5px solid ${c.bd}`, borderRadius: 7, background: c.bg,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, fontWeight: 900, color: c.fg,
               }}
             >
+              {c.glyph}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>{name}</span>
+              <span style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--ink34)" }}>
+                {times[name].label}
+              </span>
+            </span>
+            {/* درجةُ الخشوع نقطةٌ ملوّنةٌ باسمها — تُقرأ في لمحةٍ ولا تُزاحم
+                الحالةَ التي هي أصلُ الصفّ. وغيابُها لا يُرسم فراغاً موبِّخاً. */}
+            {km && (
               <span
                 style={{
-                  width: 22, height: 22, flex: "none",
-                  border: `1.5px solid ${c.bd}`, borderRadius: 7, background: c.bg,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 11, fontWeight: 900, color: c.fg,
+                  display: "flex", alignItems: "center", gap: 5, flex: "none",
+                  padding: "3px 9px", borderRadius: 99,
+                  border: `1px solid ${km.color}`, color: km.color,
+                  fontSize: 10.5, fontWeight: 700,
                 }}
               >
-                {c.glyph}
+                <span aria-hidden style={{ fontSize: 9 }}>{km.glyph}</span>
+                {km.label}
               </span>
-              <span style={{ flex: 1, fontSize: 16, fontWeight: 700 }}>{name}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: set ? STATUS_TONE[v!] : "var(--ink34)" }}>
-                {v === "منفردة" ? "صلَّيت" : set ? v : "لم تُسجَّل"}
-              </span>
-            </button>
-            <span style={{ fontSize: 11, color: "var(--ink34)", flex: "none" }}>{times[name].label}</span>
-            <button
-              type="button"
-              onClick={() => onOpenStates(name)}
-              title={`حالاتٌ أخرى لـ${name}`}
-              aria-label={`حالاتٌ أخرى لـ${name}`}
-              style={{
-                width: 34, height: 34, flex: "none", background: "transparent",
-                border: "1px solid var(--line)", borderRadius: 11,
-                color: "var(--ink52)", fontSize: 14, fontWeight: 900, lineHeight: 1,
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              ⋯
-            </button>
-          </div>
+            )}
+            <span style={{ fontSize: 12.5, fontWeight: 700, flex: "none", color: set ? STATUS_TONE[v!] : "var(--ink34)" }}>
+              {v === "منفردة" ? "وحدي" : set ? v : "لم تُسجَّل"}
+            </span>
+          </button>
         );
       })}
     </div>

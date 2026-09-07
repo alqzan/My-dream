@@ -11,43 +11,36 @@
  */
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { PrayerName, PrayerStatus } from "@/lib/types";
+import type { PrayerName } from "@/lib/types";
 import { PRAYERS } from "@/lib/types";
 import {
-  qadaOwed, qadaDoneOn, sunanOf, stepSunan, SUNAN_MAX,
+  qadaOwed, qadaDoneOn, sunanOf, stepSunan,
 } from "@/lib/prayerExtras";
+import { unansweredOn } from "@/lib/khushu";
 import {
   today, computePrayerTimes, getCachedCoords, formatClock, parseDate, buzz,
 } from "@/lib/utils";
 import { arNum, arCount, arClock, arSpan } from "@/lib/madar/format";
-import { Modal } from "@/components/ui/Modal";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
-import { MdrScreen, SectionHead, HeadMeta, Stepper, MdrButton } from "../primitives";
+import { MdrScreen, Stepper, MdrButton } from "../primitives";
 import { Mihrab } from "./Mihrab";
 import { QiyamPanel } from "./QiyamPanel";
-import { PrayerRows, YearRing, WeekLog, cellSkin } from "./PrayerParts";
-
-/** الحالاتُ التي تُختار يدوياً من «⋯» — «لم» تعني المسح. */
-const MANUAL_STATES: { v: PrayerStatus; n: string; d: string }[] = [
-  { v: "جماعة", n: "في جماعة", d: "صلَّيتها مع الناس" },
-  { v: "منفردة", n: "صلَّيت", d: "صلَّيتها وحدك في وقتها" },
-  { v: "فائتة", n: "فاتت", d: "مضى وقتُها ولم تُصلَّ — تُعَدُّ عليك" },
-  { v: "قضاء", n: "قضيتُها", d: "صلَّيتها بعد وقتها" },
-  { v: "لم", n: "امسح التسجيل", d: "تعود بلا حالة" },
-];
+import { PrayerSheet } from "./PrayerSheet";
+import { PrayerRows, YearRing, WeekLog } from "./PrayerParts";
 
 export function PrayerScreen() {
   const prayerLogs = useAppStore((s) => s.prayerLogs);
   const qadaBacklog = useAppStore((s) => s.qadaBacklog ?? 0);
-  const cyclePrayerStatus = useAppStore((s) => s.cyclePrayerStatus);
   const setPrayerStatus = useAppStore((s) => s.setPrayerStatus);
+  const setKhushu = useAppStore((s) => s.setKhushu);
   const setSunan = useAppStore((s) => s.setSunan);
   const setQiyam = useAppStore((s) => s.setQiyam);
   const clearQiyam = useAppStore((s) => s.clearQiyam);
   const doQada = useAppStore((s) => s.doQada);
   const addQadaBacklog = useAppStore((s) => s.addQadaBacklog);
 
-  const [statesFor, setStatesFor] = useState<PrayerName | null>(null);
+  // الفرضُ المفتوحة ورقتُه — كلُّ تسجيلٍ يمرّ بها، فلا حالةَ تُصادَف بضغطةٍ دوّارة.
+  const [sheetFor, setSheetFor] = useState<PrayerName | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const todayStr = today();
   const log = prayerLogs.find((l) => l.date === todayStr);
@@ -78,6 +71,10 @@ export function PrayerScreen() {
   const doneToday = qadaDoneOn(prayerLogs, todayStr);
   const sunan = sunanOf(log);
 
+  // ما أُدِّي اليومَ ولم يُسأل عن قلبه بعد. دعوةٌ واحدةٌ هادئة لا خمسُ نوافذ:
+  // السؤالُ يُطرح في وقته داخل الورقة، وهذا ذيلُ ما فات.
+  const pending = unansweredOn(log);
+
   // ما مضى وقتُه اليومَ ولم يُسجَّل — دعوةٌ للتسجيل لا توبيخ.
   const late = PRAYERS.filter((p) => {
     const v = log?.prayers[p];
@@ -94,10 +91,7 @@ export function PrayerScreen() {
 
   return (
     <MdrScreen>
-      <Mihrab
-        log={log}
-        onCycle={(p) => { buzz(); cyclePrayerStatus(todayStr, p); }}
-      />
+      <Mihrab log={log} onOpen={setSheetFor} />
 
       {late.length > 0 && (
         <div
@@ -120,7 +114,7 @@ export function PrayerScreen() {
             {late.map((p) => (
               <MdrButton
                 key={p}
-                onClick={() => { buzz(); cyclePrayerStatus(todayStr, p); }}
+                onClick={() => { buzz(); setSheetFor(p); }}
                 kind="ghost"
                 style={{ background: "var(--paper)", color: "var(--ink)", fontSize: 12.5, padding: "0 14px" }}
               >
@@ -131,12 +125,31 @@ export function PrayerScreen() {
         </div>
       )}
 
-      <PrayerRows
-        log={log}
-        times={times}
-        onCycle={(p) => { buzz(); cyclePrayerStatus(todayStr, p); }}
-        onOpenStates={setStatesFor}
-      />
+      <PrayerRows log={log} times={times} onOpen={setSheetFor} />
+
+      {pending.length > 0 && (
+        <button
+          type="button"
+          onClick={() => { buzz(); setSheetFor(pending[0]); }}
+          className="press"
+          style={{
+            display: "flex", alignItems: "center", gap: 10, width: "100%",
+            margin: "10px 0 0", padding: "13px 16px", boxSizing: "border-box",
+            border: "1px solid var(--gline)", borderRadius: 20, background: "var(--goldw)",
+            textAlign: "right", cursor: "pointer", fontFamily: "inherit", color: "var(--ink)",
+          }}
+        >
+          <span className="mdr-star" style={{ width: 11, height: 11, background: "var(--gold)", flex: "none" }} />
+          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 900, lineHeight: 1.7 }}>
+            {pending.length === 1
+              ? `بقي سؤالُ القلب عن ${pending[0]}.`
+              : `بقي سؤالُ القلب عن ${arCount(pending.length, {
+                  one: "صلاةٍ واحدة", two: "صلاتين", few: "صلوات", many: "صلاةً",
+                })}.`}
+          </span>
+          <span style={{ fontSize: 11.5, color: "var(--gold)", fontWeight: 700, flex: "none" }}>أجِب</span>
+        </button>
+      )}
 
       <QiyamPanel
         logs={prayerLogs}
@@ -188,47 +201,15 @@ export function PrayerScreen() {
         <WeekLog logs={prayerLogs} todayStr={todayStr} />
       </CollapsibleSection>
 
-      <Modal open={statesFor !== null} onClose={() => setStatesFor(null)} title={statesFor ?? ""}>
-        <div className="mdr">
-          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--ink52)", lineHeight: 1.75 }}>
-            حالاتٌ لا تصلها الضغطةُ على القوس. «فاتت» تُعَدُّ عليك حتى تقضيها.
-          </p>
-          {MANUAL_STATES.map((o) => {
-            const current = statesFor ? log?.prayers[statesFor] ?? "لم" : "لم";
-            const on = current === o.v;
-            const c = cellSkin(o.v);
-            return (
-              <button
-                key={o.v}
-                type="button"
-                onClick={() => {
-                  if (statesFor) setPrayerStatus(todayStr, statesFor, o.v);
-                  setStatesFor(null);
-                }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12, width: "100%",
-                  minHeight: 52, padding: "12px 10px",
-                  background: on ? "var(--goldw)" : "transparent",
-                  border: "none", borderTop: "1px solid var(--line)",
-                  textAlign: "right", cursor: "pointer", fontFamily: "inherit", color: "var(--ink)",
-                }}
-              >
-                <span style={{ width: 7, height: 7, transform: "rotate(45deg)", background: c.bd, flex: "none" }} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>{o.n}</span>
-                  <span style={{ display: "block", fontSize: 11.5, color: "var(--ink52)", lineHeight: 1.6, marginTop: 2 }}>
-                    {o.d}
-                  </span>
-                </span>
-                {on && <span style={{ fontSize: 12, color: "var(--gold)", fontWeight: 700 }}>الحالي</span>}
-              </button>
-            );
-          })}
-          <p style={{ margin: "14px 0 0", fontSize: 11.5, color: "var(--ink34)", lineHeight: 1.75 }}>
-            السننُ الرواتب اليومَ: {arNum(sunan)} من {arNum(SUNAN_MAX)}
-          </p>
-        </div>
-      </Modal>
+      <PrayerSheet
+        prayer={sheetFor}
+        log={log}
+        timeLabel={sheetFor ? times[sheetFor].label : undefined}
+        onSetStatus={(p, v) => setPrayerStatus(todayStr, p, v)}
+        onSetKhushu={(p, l) => setKhushu(todayStr, p, l)}
+        onClose={() => setSheetFor(null)}
+      />
+
     </MdrScreen>
   );
 }

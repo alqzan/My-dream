@@ -16,11 +16,13 @@ import {
   today, getPrayerLog, countDayPrayers, getPrayerStreak, getMosqueStreak, formatDate,
 } from "@/lib/utils";
 import { PRAYERS, type PrayerName, type PrayerStatus } from "@/lib/types";
+import { khushuOf } from "@/lib/khushu";
 import { PrayerScreen } from "@/components/madar/prayer/PrayerScreen";
 import { PrayerRow } from "@/components/prayer/PrayerRow";
 import { PrayerCalendar } from "@/components/prayer/PrayerCalendar";
 import { PrayerYearRing } from "@/components/prayer/PrayerYearRing";
 import { PrayerInsight } from "@/components/prayer/PrayerInsight";
+import { KhushuCard } from "@/components/prayer/KhushuCard";
 import { Modal } from "@/components/ui/Modal";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { SectionHead, HeadMeta } from "@/components/madar/primitives";
@@ -29,6 +31,7 @@ import { arNum, arPct } from "@/lib/madar/format";
 export default function PrayersPage() {
   const prayerLogs = useAppStore((s) => s.prayerLogs);
   const setPrayerStatus = useAppStore((s) => s.setPrayerStatus);
+  const setKhushu = useAppStore((s) => s.setKhushu);
   const [editDate, setEditDate] = useState<string | null>(null);
   const todayStr = today();
   const ringYear = Number(todayStr.slice(0, 4));
@@ -64,6 +67,10 @@ export default function PrayersPage() {
       <PrayerScreen />
 
       <div className="mdr mdr-prayer-page" style={{ padding: "0 20px 32px" }}>
+        {/* ظاهرةٌ لا مطويّة: هذه البطاقةُ هي ثمرةُ سؤالِ الخشوع، وطيُّها تحت
+            «السجل والتحليل» يجعل الإجابةَ اليوميّة بلا مقابلٍ يُرى. */}
+        <KhushuCard prayerLogs={prayerLogs} todayStr={todayStr} />
+
         <CollapsibleSection
           className="mdr-prayer-history"
           title="السجل والتحليل"
@@ -132,7 +139,9 @@ export default function PrayersPage() {
                   key={prayer}
                   prayer={prayer}
                   status={statusFor(editDate, prayer)}
+                  khushu={khushuOf(editLog, prayer)}
                   onChange={(status) => setPrayerStatus(editDate, prayer, status)}
+                  onKhushu={(level) => setKhushu(editDate, prayer, level)}
                 />
               ))}
             </div>

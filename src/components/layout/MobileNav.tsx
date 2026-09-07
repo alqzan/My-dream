@@ -32,7 +32,6 @@ export function MobileNav() {
 
   // كل الأبواب تظهر في شريط واحد قابل للتمرير أفقيًا؛ لا توجد قائمة «المزيد».
   const count = visible.length;
-  const activeIndex = visible.findIndex((item) => normPath(item.href) === pathname);
   const slot = 100 / count;
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -51,21 +50,54 @@ export function MobileNav() {
   const pendingRef = useRef<string | null>(null);
   const timerRef = useRef<number | null>(null);
 
+  // ===== النقرةُ تُرى قبل أن تصل =====
+  // `router.push` انتقالٌ (transition) في App Router: الصفحةُ القديمة تبقى
+  // معروضةً حتى تجهز الجديدة. فبين الضغطة والوصول **لا يتغيّر في الشاشة شيء**
+  // — لا مؤشّرٌ ينزلق ولا أيقونةٌ تُضاء — فيظنّ المالك أنّ الزرّ لم يُضغط
+  // فيضغط ثانيةً وثالثة. وصفحاتُ مدار ثقيلةُ الرسم (الصلاة والقرآن خاصّةً)،
+  // فالفجوةُ محسوسة. هذا `pending` يُشعل التبويبَ المضغوط **فوراً** بلا انتظار
+  // المسار: ردٌّ بصريٌّ صادق («وصلتْ ضغطتُك، أنا في الطريق») لا كذبٌ بانتقالٍ
+  // لم يقع. يُمسح فور وصول `pathname` — أو فور فشل التنقّل.
+  const [pending, setPending] = useState<string | null>(null);
+
   // وصلَ التنقّل الداخليّ → ألغِ الشبكة. هذا هو الإشارةُ الموثوقة (لا المهلة):
   // `pathname` لا يتغيّر إلا بعد أن يلتزم المسار فعلاً.
   useEffect(() => {
     pendingRef.current = null;
+    setPending(null);
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
   }, [pathname]);
 
+  // ===== تسخينُ المسارات عند الفراغ =====
+  // الشريطُ السفلي لا يستعمل `next/link`، فلا يرث تحميلَه المسبق. وبدونه تبدأ
+  // كلُّ نقرةِ تبويبٍ من الصفر: جلبُ حمولة المسار وتنفيذُ حزمته قبل أن يقع
+  // الانتقال. `prefetch` يملأ ذاكرةَ الموجّه بعد أن تهدأ الشاشة، فتصير النقرةُ
+  // التالية فوريّةً بلا شبكة. و`requestIdleCallback` لا `useEffect` مباشرةً:
+  // لا نزاحم الرسمَ الأوّل بسبع حمولاتٍ دفعةً واحدة (وهي نفسُها العلّة التي
+  // كانت تُعلّق التبويبات عند الإقلاع البارد).
+  useEffect(() => {
+    const hrefs = visible.map((i) => i.href);
+    const warm = () => { for (const href of hrefs) router.prefetch(href); };
+    const idle = window.requestIdleCallback;
+    if (typeof idle === "function") {
+      const id = idle(warm, { timeout: 3000 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(warm, 1200);
+    return () => window.clearTimeout(t);
+    // القائمةُ تُقرأ مرّةً عند التركيب (تفضيلُ الترتيب يُعيد تحميل الصفحة).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const go = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!isPlainClick(e)) return; // ضغطةٌ بمُعدِّل — سلوكُ الرابط للمستخدم
     e.preventDefault();
     const target = nativeNavHref(href, basePath);
     pendingRef.current = target;
+    setPending(normPath(href));
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     router.push(href);
     timerRef.current = window.setTimeout(() => {
@@ -77,8 +109,15 @@ export function MobileNav() {
         visible: document.visibilityState === "visible",
       });
       if (hard) window.location.href = target;
+      // لم ننتقل ولم نُعِد التحميل → أعِد التبويبَ إلى حقيقته بدل أن يبقى
+      // مُضاءً على وجهةٍ لم نصلها. الكذبُ البصريُّ أسوأ من الانتظار.
+      else setPending(null);
     }, SOFT_NAV_FALLBACK_MS);
   };
+
+  // ما يُرسم نشِطاً: الوجهةُ المضغوطة إن كانت في الطريق، وإلّا المسارُ الفعليّ.
+  const shownPath = pending ?? pathname;
+  const activeIndex = visible.findIndex((item) => normPath(item.href) === shownPath);
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f4eee2]/85 dark:bg-[#171009]/85 backdrop-blur-lg border-t border-gray-100/70 pb-safe">
@@ -101,7 +140,7 @@ export function MobileNav() {
           }}
         />
         {visible.map((item) => {
-          const active = normPath(item.href) === pathname;
+          const active = normPath(item.href) === shownPath;
           return (
             <a
               key={item.href}

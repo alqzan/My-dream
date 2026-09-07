@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
-  Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, DailyBudget,
+  Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, KhushuLevel, DailyBudget,
   KnowledgeSource, Benefit,
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
@@ -112,6 +112,35 @@ function liftRecordTomb(h: HifzState, id: string): Record<string, number> | unde
   return Object.keys(next).length ? next : undefined;
 }
 
+// ===================== يومُ الصلاة: كتابةٌ واحدةٌ متّسقة =====================
+// حالةُ الفرض ودرجةُ خشوعه حقلان في يومٍ واحد، وبينهما شرطٌ لا يُخرق: **لا
+// درجةَ إلّا لفرضٍ أُدِّي**. كتابتُهما في مكانين متفرّقين هي بالضبط ما يترك
+// درجةً يتيمةً على فرضٍ مُسِح — فتظهر في الإحصاء صلاةٌ خاشعةٌ لم تقع.
+
+/** يومٌ بعد ضبط حالةِ فرض؛ الدرجةُ تسقط مع كلّ حالةٍ ليست أداءً. */
+function withStatus(log: PrayerLog, prayer: PrayerName, status: PrayerStatus): PrayerLog {
+  const out: PrayerLog = { ...log, prayers: { ...log.prayers, [prayer]: status } };
+  const prayed = status === "جماعة" || status === "منفردة" || status === "قضاء";
+  if (!prayed && out.khushu?.[prayer] !== undefined) {
+    const khushu = { ...out.khushu };
+    delete khushu[prayer];
+    if (Object.keys(khushu).length) out.khushu = khushu;
+    else delete out.khushu;
+  }
+  return out;
+}
+
+/** يومٌ بعد ضبط درجةِ خشوعِ فرض؛ `undefined` تمسحها («تخطَّيت»). */
+function withKhushu(log: PrayerLog, prayer: PrayerName, level: KhushuLevel | undefined): PrayerLog {
+  const khushu = { ...(log.khushu ?? {}) };
+  if (level === undefined) delete khushu[prayer];
+  else khushu[prayer] = level;
+  const out: PrayerLog = { ...log };
+  if (Object.keys(khushu).length) out.khushu = khushu;
+  else delete out.khushu;
+  return out;
+}
+
 // Outcome of a Day One import: `added` = new entries, `completed` = existing
 // entries whose partially-missing media was filled, and how many of the touched
 // entries carry photos/audio (for an honest summary — not a slice() guess).
@@ -215,8 +244,11 @@ interface AppStore extends AppData {
   toggleFreezeHabit: (key: string) => void;
 
   // Prayers
+  // تسجيلُ حالةِ فرض. الحالةُ غيرُ المؤدَّاة تمسح معها درجةَ الخشوع — درجةٌ
+  // باقيةٌ على فرضٍ مُسِح بقايا تسجيلٍ لا خبرٌ عن قلب.
   setPrayerStatus: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
-  cyclePrayerStatus: (date: string, prayer: PrayerName) => void;
+  // طبقةُ الخشوع: درجةٌ لكلّ فرضٍ أُدِّي، و`undefined` تعني «تخطَّيت السؤال».
+  setKhushu: (date: string, prayer: PrayerName, level: KhushuLevel | undefined) => void;
   // السننُ الرواتب وقيامُ الليل — قيمتان في يوم الصلاة نفسِه، لكلٍّ طابعُها.
   setSunan: (date: string, count: number) => void;
   setQiyam: (date: string, patch: Partial<QiyamNight>) => void;
@@ -387,6 +419,23 @@ export const useAppStore = create<AppStore>()(
             stamps![name] = Date.now();
           }
           let out = touched ? { ...p, prayerUpdatedAt: stamps } : p;
+          // درجةُ الخشوع طابعُها مستقلٌّ عن طابع الحالة، بالمنطق نفسِه الذي
+          // فرّق طابعَ السنن عن طابع الفرض: الإجابةُ تأتي بعد التسجيل بلحظةٍ
+          // أو بساعة، فلو حملت طابعَ الحالة لَغلبت — عند الدمج — تصحيحَ الحالة
+          // نفسِها على الجهاز الآخر، فيعود «جماعة» إلى «منفردة» لمجرّد أنّك
+          // أجبت عن خشوعك هنا متأخّراً.
+          let kStamps = p.khushuUpdatedAt;
+          let kTouched = false;
+          const names = new Set<PrayerName>([
+            ...(Object.keys(p.khushu ?? {}) as PrayerName[]),
+            ...(Object.keys(was?.khushu ?? {}) as PrayerName[]),
+          ]);
+          for (const name of names) {
+            if (was?.khushu?.[name] === p.khushu?.[name]) continue;
+            if (!kTouched) { kStamps = { ...(p.khushuUpdatedAt ?? {}) }; kTouched = true; }
+            kStamps![name] = Date.now();
+          }
+          if (kTouched) out = { ...out, khushuUpdatedAt: kStamps };
           // السننُ والقيامُ قيمتان مستقلّتان عن الخمس في اليوم نفسِه، فلكلٍّ
           // طابعُه — بالمنطق ذاته الذي جعل لكلّ فرضٍ طابعَه. بطابعِ اليومِ
           // الواحد كان تسجيلُ ركعاتِ القيام على الجوّال يطغى على تصحيح سنّةٍ
@@ -1168,7 +1217,7 @@ export const useAppStore = create<AppStore>()(
           if (existing) {
             return {
               prayerLogs: s.prayerLogs.map((l) =>
-                l.date === date ? { ...l, prayers: { ...l.prayers, [prayer]: status } } : l
+                l.date === date ? withStatus(l, prayer, status) : l
               ),
             };
           }
@@ -1180,21 +1229,13 @@ export const useAppStore = create<AppStore>()(
         void persistedIdbStorage.flush().catch(() => {});
       },
 
-      cyclePrayerStatus: (date, prayer) => {
-        set((s) => {
-          const order: PrayerStatus[] = ["لم", "منفردة", "جماعة"];
-          const existing = s.prayerLogs.find((l) => l.date === date);
-          const current = existing?.prayers[prayer] ?? "لم";
-          const next = order[(order.indexOf(current) + 1) % order.length];
-          if (existing) {
-            return {
-              prayerLogs: s.prayerLogs.map((l) =>
-                l.date === date ? { ...l, prayers: { ...l.prayers, [prayer]: next } } : l
-              ),
-            };
-          }
-          return { prayerLogs: [...s.prayerLogs, { date, prayers: { [prayer]: next } }] };
-        });
+      // درجةُ الخشوع تُكتب على يومٍ قائم فقط: السؤال يلي تسجيلاً وقع، فلا يوجد
+      // مسارٌ يُنشئ يوماً بدرجةٍ بلا صلاة. و`undefined` تمسح الحقل بدل أن تكتب
+      // صفراً — «تخطَّيت» ليست درجةً رابعة.
+      setKhushu: (date, prayer, level) => {
+        set((s) => ({
+          prayerLogs: s.prayerLogs.map((l) => (l.date === date ? withKhushu(l, prayer, level) : l)),
+        }));
         void persistedIdbStorage.flush().catch(() => {});
       },
 
