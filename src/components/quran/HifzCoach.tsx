@@ -366,7 +366,7 @@ function MarkableSheet({
         title="وسم الآية كاملةً كخطأ"
         className={`press ${ayahMark ? (ayahNow ? "text-red-500" : "text-amber-600") : "text-quran"}`}
       >
-        <AyahNumber num={a.ayah} />
+        <AyahNumber num={a.ayah} spacer />
       </button>
     );
   };

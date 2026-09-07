@@ -2003,13 +2003,15 @@ body {
 }
 .dark .mushaf-trace { background-color: rgba(255, 255, 255, 0.07); }
 
-/* اسم السورة: شريطٌ مؤطّر في وسط السطر كما في المصحف. */
+/* اسم السورة: **بلا إطار**. كان شريطاً مؤطّراً بحدٍّ مزدوج كالمطبوع، لكنّ
+   الإطارات الثلاثة معاً (اسمُ السورة · رقمُ الوجه · قوسا رقم الآية) صيّرت الوجهَ
+   محبوساً في صناديق — وقرارُ المالك أن تسقط كلُّها. بقي التمييز باللون
+   والتباعد والمقاس، وهو أهدأ وأقرب إلى ورقٍ بلا حبس. */
 .mushaf-sura {
   display: inline-block;
-  padding: 0 1.6em;
-  border: 0.09em double currentColor;
-  border-radius: 0.5em;
-  font-size: 0.82em;
+  padding: 0 0.6em;
+  letter-spacing: 0.06em;
+  font-size: 0.86em;
   /* بلون القسم لا بأخضرَ ثابت: الورقةُ ذهبيةٌ حولها، فإطارُ اسم السورة أخضرَ
      يقرأ غريباً عنها (بقيّةُ الجدول القديم `#1b6b4c`). */
   color: color-mix(in srgb, var(--gold) 86%, transparent);
@@ -2039,15 +2041,12 @@ body {
     inset 0 0 0 1px rgba(255, 255, 255, 0.54),
     inset 0 0 28px rgba(126, 98, 54, 0.045));
 }
-/* رقمُ الوجه في طُرّةٍ مؤطَّرة كما في المطبوع — لا رقماً سائباً تحت النصّ.
-   الإطارُ من جنس إطار اسم السورة (حدٌّ مزدوج) فيقرأ الوجهُ كلُّه بيدٍ واحدة. */
+/* رقمُ الوجه: رقمٌ هادئ أسفل الورقة بلا طُرّةٍ حوله (جُرِّب الإطارُ فرفضه
+   المالك مع بقيّة الإطارات). */
 .mushaf-page-number {
   display: inline-block;
-  color: color-mix(in srgb, var(--reader-accent) 70%, transparent);
-  padding: 0.02em 0.75em;
-  border: 0.09em double currentColor;
-  border-radius: 0.6em;
-  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--reader-accent) 55%, transparent);
+  letter-spacing: 0.08em;
 }
 
 /* ===================== الوجه على ملء الشاشة =====================
@@ -5761,7 +5760,18 @@ button.mdr-daily-rhythm-status:focus-visible {
 .mushaf-skin-night,
 .dark .mushaf-skin-night,
 .mushaf-skin-plain {
+  /* نصفُ ارتفاع الشريط: رأسُه دائرةٌ بهذا القطر فيصير الطرفُ نصفَ دائرةٍ تامّة.
+     أصغرُ منه يترك «خصراً» عند الطرفين، وهو ما يقرأ حدّاً مسنّناً. ويُعرَّف مع
+     الرموز لا على `.mushaf-run`: الشريطُ يُلبَس مجموعةَ الآيات لا الآيةَ، فلو
+     عاش الرمزُ على المجموعة وحدها لَما وجده حفيدُها ولا العكس. */
+  --mark-band: 1.3em;
+  --mark-cap: calc(var(--mark-band) / 2);
   --mark-tint: color-mix(in srgb, var(--reader-accent) 15%, var(--reader-base));
+  /* لونُ رأسَي الشريط — يُطفأ في النموذج الذي تحديدُه وشاحٌ تحت الكلمة لا شريطٌ
+     عليها، وإلا ظهر رأسان مصمتان عند طرفَي وشاحٍ رفيع. */
+  --mark-cap-color: var(--mark-tint);
+  /* والشريطُ بين الرأسين يُزاح بقدرهما — فإن أُطفئا امتدّ الوشاحُ إلى الطرفين. */
+  --mark-bar-inset: var(--mark-band);
   --pick-cap: color-mix(in srgb, var(--reader-accent) 28%, var(--reader-base));
   --mark-image: linear-gradient(var(--mark-tint), var(--mark-tint));
   --pick-image: linear-gradient(var(--pick-cap), var(--pick-cap));
@@ -5773,6 +5783,8 @@ button.mdr-daily-rhythm-status:focus-visible {
     to top,
     color-mix(in srgb, var(--reader-accent) 45%, var(--reader-base)) 0 0.09em,
     transparent 0.09em);
+  --mark-cap-color: transparent;
+  --mark-bar-inset: 0px;
 }
 
 /* ===================== التحديد =====================
@@ -5789,13 +5801,14 @@ button.mdr-daily-rhythm-status:focus-visible {
 }
 .mushaf-ink { color: var(--reader-ink); }
 .mushaf-dim { color: var(--reader-dim); }
+.mushaf-focus { display: inline; }
 .mushaf-focus,
 .mushaf-pick {
-  /* حشوٌ يبتلع الفراغَ بين آيتين متجاورتين (الفراغُ يقع بين المقطعين لا داخل
-     أحدهما، فيبقى بلا لونٍ وينقطع الشريطُ عند كلّ وردة)، ويقابله هامشٌ سالبٌ
-     مساوٍ له فلا يزيد عرضُ السطر بذرّة. */
-  padding-inline: 0.32em;
-  margin-inline: -0.32em;
+  /* حشوٌ يفتح للحرف الأوّل والأخير متنفَّساً داخل الشريط، ويقابله هامشٌ سالبٌ
+     مساوٍ له فلا يزيد عرضُ السطر بذرّة. وهو يسيرٌ عمداً: الشريطُ يُلبَس المجموعةَ
+     فلا فراغَ داخليّاً يُبتلَع، وما زاد يمتدّ على جارٍ غير مُبرَز. */
+  padding-inline: 0.2em;
+  margin-inline: -0.2em;
   background-repeat: no-repeat;
   /* **الشريطُ يهبط على جسم الحرف لا على صندوق السطر**: خطّ المصحف يحجز
      فوق الحرف وتحته حيّزاً واسعاً لعلامات الضبط، فلونٌ يملأ صندوقه يصير سبيكةً
@@ -5805,19 +5818,35 @@ button.mdr-daily-rhythm-status:focus-visible {
   background-size: 100% var(--mark-band, 1.3em);
   background-position: center calc(50% + 0.04em);
 }
-.mushaf-focus { background-image: var(--mark-image, none); }
+/* الإبرازُ برأسين مستديرين كالمحدَّدة: كان يُقصّ مربّعاً عند نهاية السطر وعند
+   حافّة الورقة فيقرأ «حدّاً» لا تحديداً. الطبقتان الدائريّتان على الطرفين
+   والشريطُ بينهما — والتراكبُ بين آيتين متجاورتين يذيب رأسيهما فيتّصل الشريط. */
+.mushaf-focus {
+  background-image:
+    radial-gradient(circle at var(--mark-cap) 50%, var(--mark-cap-color) var(--mark-cap), transparent calc(var(--mark-cap) + 0.5px)),
+    radial-gradient(circle at calc(100% - var(--mark-cap)) 50%, var(--mark-cap-color) var(--mark-cap), transparent calc(var(--mark-cap) + 0.5px)),
+    var(--mark-image, none);
+  background-size:
+    100% var(--mark-band, 1.3em),
+    100% var(--mark-band, 1.3em),
+    calc(100% - var(--mark-bar-inset, 1.3em)) var(--mark-band, 1.3em);
+  background-position:
+    center calc(50% + 0.04em),
+    center calc(50% + 0.04em),
+    center calc(50% + 0.04em);
+}
 /* الآيةُ المحدَّدة **حبّةٌ برأسين مستديرين** لا مستطيلاً: طبقتان دائريّتان على
    الطرفين وشريطٌ بينهما — وهي الفرق بين «آيةٌ اخترتَها» و«صندوقٌ وقع عليها».
    و`box-decoration-clone` في المكوّن يعطي كلَّ سطرٍ من الآية رأسيه. */
 .mushaf-pick {
   background-image:
-    radial-gradient(circle at 0.36em 50%, var(--pick-cap) 0.35em, transparent 0.36em),
-    radial-gradient(circle at calc(100% - 0.36em) 50%, var(--pick-cap) 0.35em, transparent 0.36em),
+    radial-gradient(circle at var(--mark-cap) 50%, var(--pick-cap) var(--mark-cap), transparent calc(var(--mark-cap) + 0.5px)),
+    radial-gradient(circle at calc(100% - var(--mark-cap)) 50%, var(--pick-cap) var(--mark-cap), transparent calc(var(--mark-cap) + 0.5px)),
     var(--pick-image, none);
   background-size:
     100% var(--mark-band, 1.3em),
     100% var(--mark-band, 1.3em),
-    calc(100% - 0.72em) var(--mark-band, 1.3em);
+    calc(100% - var(--mark-band, 1.3em)) var(--mark-band, 1.3em);
   background-position:
     center calc(50% + 0.04em),
     center calc(50% + 0.04em),
@@ -5825,7 +5854,25 @@ button.mdr-daily-rhythm-status:focus-visible {
   text-shadow: var(--pick-glow, none);
   color: var(--reader-ink);
 }
-.mushaf-num { color: var(--reader-accent); }
+/* رقمُ الآية: الشبحُ يحجز عرضَ المصدر المقيس (`﴿٩﴾`) ولا يُرى، والرقمُ وحده
+   يُرسم في وسطه — فالسطر على عرضه، والوجه بلا قوسين ثقيلين. (راجع `AyahNumber`.)
+   `visibility: hidden` لا `display: none`: الأوّل يُبقي الحيّز، والثاني يمحوه. */
+.mushaf-num {
+  position: relative;
+  display: inline-block;
+  color: var(--reader-accent);
+}
+.mushaf-num.is-bare { position: static; font-size: 0.86em; }
+.mushaf-num-ghost { visibility: hidden; }
+.mushaf-num-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+}
 .mushaf-num.is-dim { color: color-mix(in srgb, var(--reader-accent) 45%, transparent); }
 .mushaf-basmala { color: var(--reader-accent); }
 .mushaf-skin-warm .mushaf-sura,
@@ -6033,9 +6080,16 @@ button.mdr-daily-rhythm-status:focus-visible {
   .mushaf-run { transition: none; }
 }
 
-/* في ملء الطول تلامس الورقةُ الحافّات، فالحشوُ الرأسيُّ يحمل الأمان: أوّلُ سطرٍ
-   لا يقع تحت نتوء الشاشة، وآخرُه لا يقع تحت شريط الإيماءة. */
+/* في ملء الطول تلامس الورقةُ الحافّات، فالحشوُ هو ما يمنعها أن تخنق النصّ:
+   رأسياً يحمل الأمان (أوّلُ سطرٍ لا يقع تحت نتوء الشاشة، وآخرُه لا يقع تحت شريط
+   الإيماءة)، وأفقياً يفتح هامشاً يتنفّس فيه الحرف وينتهي عنده شريطُ الإبراز —
+   كان النصّ يلتصق بالزجاج فيقرأ الوجهُ مقصوصاً عند حدوده. */
 .mushaf-stage-fit[data-fill="1"] .mushaf-leaf-page {
-  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
+  padding-inline: 1.15rem;
+  padding-top: calc(0.85rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1.85rem + env(safe-area-inset-bottom, 0px));
 }
+/* وأثاثُ المجلَّد يسقط: ظلُّ الطيّة وخيطُ الكعب (وحافّةُ الأوراق تسقط من
+   المكوّن نفسه بـ`stack`). ورقةٌ تملأ الشاشة ليست ورقةً في مجلَّد — والخيطُ
+   الذهبيّ على حافّة الزجاج شريطٌ غريب لا كعبُ كتاب. */
+.mushaf-stage-fit[data-fill="1"] .mushaf-leaf-page > span[aria-hidden] { display: none; }

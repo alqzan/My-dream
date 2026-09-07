@@ -320,6 +320,10 @@ export function MushafStage({ onClose, ...props }: MushafSheetProps & { onClose:
           skin={prefs.skin}
           expandable={false}
           maxHeight={undefined}
+          // في ملء الطول تلامس الورقةُ حوافّ الزجاج، فأثاثُ المجلَّد (حافّةُ
+          // الأوراق والكعب) يصير شرائطَ غريبةً على حدود الشاشة لا كتاباً بين
+          // يديك — يبقى في البطاقة حيث الورقةُ ورقةٌ عائمة، ويسقط هنا.
+          stack={!prefs.fill && props.stack !== false}
           className=""
         />
       </div>
@@ -508,6 +512,11 @@ function PageLines({
     );
   }
 
+  // آيةٌ يقع عليها شريطُ الإبراز: من المقطع المطلوب، والوجهُ ليس كلُّه المقطع،
+  // وليست مستورةً (الستر له لونُه فلا يجتمعان).
+  const focused = (run: MushafRun) =>
+    highlight && run.id > 0 && inPortion(run.id) && !hidden?.(run.id);
+
   return (
     <div
       className={`mushaf-scroll ${zoom > 1 ? "overflow-x-auto" : ""}`}
@@ -526,22 +535,49 @@ function PageLines({
                 className={`mushaf-line ${centered ? "mushaf-line--center" : ""}`}
                 style={centered ? undefined : { transform: `scaleX(${line.stretch})` }}
               >
-                {line.runs.map((run, j) => (
-                  <RunSpan
-                    key={j}
-                    run={run}
-                    text={text}
-                    highlight={highlight}
-                    inPortion={inPortion}
-                    context={context}
-                    leadId={leadId}
-                    hidden={hidden}
-                    spotlightId={spotlightId}
-                    selectedId={selectedId}
-                    onAyahClick={onAyahClick}
-                    renderAyah={renderAyah}
-                    renderNumber={renderNumber}
-                  />
+                {/* الإبرازُ **يُلبس المجموعةَ لا كلَّ آيةٍ على حدة**: شريطٌ لكلّ
+                    آية يعني شريطين متجاورين، وبينهما فراغُ الكلمة لا يحمل لوناً
+                    فينقطع الشريط، فإن أُلبس الحشوَ ليبتلع الفراغ تراكب الشريطان
+                    وظهر الدرج. ومجموعةُ الآيات المتّصلة في السطر شريطٌ واحد:
+                    يبدأ برأسٍ مستدير وينتهي بمثله، ولا قطعَ بينهما ولا تراكب. */}
+                {focusGroups(line.runs, focused).map((g, j) => (
+                  g.focus ? (
+                    <span key={j} className="mushaf-focus box-decoration-clone">
+                      {g.runs.map((run, k) => (
+                        <RunSpan
+                          key={k}
+                          run={run}
+                          text={text}
+                          inPortion={inPortion}
+                          context={context}
+                          leadId={leadId}
+                          hidden={hidden}
+                          spotlightId={spotlightId}
+                          selectedId={selectedId}
+                          onAyahClick={onAyahClick}
+                          renderAyah={renderAyah}
+                          renderNumber={renderNumber}
+                        />
+                      ))}
+                    </span>
+                  ) : (
+                    g.runs.map((run, k) => (
+                      <RunSpan
+                        key={`${j}-${k}`}
+                        run={run}
+                        text={text}
+                        inPortion={inPortion}
+                        context={context}
+                        leadId={leadId}
+                        hidden={hidden}
+                        spotlightId={spotlightId}
+                        selectedId={selectedId}
+                        onAyahClick={onAyahClick}
+                        renderAyah={renderAyah}
+                        renderNumber={renderNumber}
+                      />
+                    ))
+                  )
                 ))}
               </div>
             );
@@ -552,13 +588,24 @@ function PageLines({
   );
 }
 
+/** قسمةُ أسطرِ السطر إلى مجموعاتٍ متّصلة: مُبرَزةٍ وغيرِ مُبرَزة. */
+function focusGroups(runs: MushafRun[], focused: (r: MushafRun) => boolean) {
+  const groups: { focus: boolean; runs: MushafRun[] }[] = [];
+  for (const run of runs) {
+    const f = focused(run);
+    const last = groups[groups.length - 1];
+    if (last && last.focus === f) last.runs.push(run);
+    else groups.push({ focus: f, runs: [run] });
+  }
+  return groups;
+}
+
 function RunSpan({
-  run, text, highlight, inPortion, context, leadId,
+  run, text, inPortion, context, leadId,
   hidden, spotlightId, selectedId, onAyahClick, renderAyah, renderNumber,
 }: {
   run: MushafRun;
   text: string[];
-  highlight: boolean;
   inPortion: (id: number) => boolean;
   context: SheetContext;
   leadId: number | null;
@@ -590,43 +637,55 @@ function RunSpan({
     ? renderAyah(a, { text: run.text, wordOffset: run.wordOffset })
     : run.text;
 
-  // شكلُ التحديد من النموذج لا من صنفٍ مكتوبٍ هنا: `mushaf-focus` (المقطع
-  // المطلوب) و`mushaf-pick` (الآية المحدَّدة) يرسمهما `globals.css` لكلّ نموذجٍ
-  // بطريقته — قلمَ تحديدٍ برأسين مستديرين، أو وشاحاً هادئاً، أو هالةً في الليل.
-  // كانا صندوقين شفّافين بزاويةٍ ٣px يقطعهما انكسارُ السطر فيبدوان قصاصات.
+  // شكلُ التحديد من النموذج لا من صنفٍ مكتوبٍ هنا: `mushaf-pick` (الآية
+  // المحدَّدة) يرسمه `globals.css` لكلّ نموذجٍ بطريقته. وشريطُ المقطع المطلوب
+  // (`mushaf-focus`) يُلبَس **المجموعةَ** في `PageLines` لا كلَّ آيةٍ هنا.
   return (
     <span
       id={run.wordOffset === 0 ? `q-page-ayah-${run.id}` : undefined}
       onClick={onAyahClick ? () => onAyahClick(run.id) : undefined}
       className={`mushaf-run box-decoration-clone ${onAyahClick ? "cursor-pointer" : ""} ${
-        selected
-          ? "mushaf-pick"
-          : highlight && mine && !veiled
-          ? "mushaf-focus" // المقطع المطلوب مُبرَزٌ داخل وجهه
-          : ""
+        selected ? "mushaf-pick" : ""
       } ${dimmed && !veiled && !traced ? "mushaf-dim" : "mushaf-ink"}`}
     >
       {body}
       {run.num > 0 && (renderNumber && mine
         ? renderNumber(a)
-        : <AyahNumber num={run.num} dimmed={dimmed} />)}
+        : <AyahNumber num={run.num} dimmed={dimmed} spacer />)}
     </span>
   );
 }
 
-// رقمُ الآية **كما يكتبه مصدر التخطيط نفسه**: قوسان مزخرفان (U+FD3F/U+FD3E)
-// بينهما الرقم بأرقامٍ هندية — والخطّ (حفص) يركّبهما طُرّةً مؤطَّرة كالمطبوع.
+// ===================== رقمُ الآية =====================
+// **العرضُ مقيسٌ والصورةُ مختارة، وهذان لا يجتمعان بلا حيلة.** عرضُ السطر في
+// البيانات مقيسٌ ورقمُ الآية داخله على صورة المصدر: قوسان مزخرفان (U+FD3F/U+FD3E)
+// بينهما الرقم. فلو رسمناه بصورةٍ أخرى تغيّر عرضُ السطر عمّا قِيس فتفيض الأسطر
+// أو تقصر — والقوسان في خطّ «حفص» ثقيلان: قوسان كبيران حول رقمٍ صغير، يقطعان
+// السطر أكثر ممّا يعلّمانه.
 //
-// وهذا ليس ذوقاً بل قياس: عرضُ السطر في البيانات مقيسٌ **بالرقم على هذه الصورة**
-// داخل النصّ، فرسمُه بصورةٍ أخرى (وردةُ ۝ مثلاً) يغيّر عرض السطر عمّا قِيس فتفيض
-// الأسطر أو تقصر. كان المصدر السابق («أميري قرآن») يكتبه `۝49` فكان هذا هو
-// الصواب حينها — بُدِّل المصدر والخطّ معاً، فتبدّلت معهما صورةُ الرقم.
+// فالحلّ: **نصٌّ شبحٌ يحجز العرض، ورقمٌ مرسومٌ فوقه**. الشبح هو نصُّ المصدر نفسه
+// (`﴿٩﴾`) مخفيّاً بـ`visibility` — لا يُرى ويأخذ عرضه كاملاً — والرقمُ وحده
+// يُرسم في وسطه. فالسطر يبقى على عرضه المقيس بالبكسل، والوجهُ يهدأ.
+// (وردةُ `۝` ليست بديلاً: خطّ «حفص» يرسمها بيضاويةً فارغة والرقمُ خارجها.)
 //
 // والأرقامُ هندية من `arNum` — البوّابة الوحيدة للتحويل (راجع CLAUDE.md).
-export function AyahNumber({ num, dimmed = false }: { num: number; dimmed?: boolean }) {
+export function AyahNumber({
+  num, dimmed = false, spacer = false,
+}: { num: number; dimmed?: boolean; spacer?: boolean }) {
+  // الشبحُ لوجه المصحف وحده (`spacer`): هناك عرضُ السطر مقيسٌ فيجب أن يُحجز.
+  // وخارجه — آيةُ الختام مثلاً — لا سطرَ مقيساً، فالشبحُ يوسّع الرقم بلا سبب
+  // حتى يدفع النصّ إلى سطرٍ ثانٍ ويتباعد ما قبله.
+  if (!spacer) {
+    return (
+      <span className={`mushaf-num is-bare ${dimmed ? "is-dim" : ""}`} aria-label={`آية ${num}`}>
+        {arNum(num)}
+      </span>
+    );
+  }
   return (
     <span className={`mushaf-num ${dimmed ? "is-dim" : ""}`} aria-label={`آية ${num}`}>
-      {`\uFD3F${arNum(num)}\uFD3E`}
+      <span className="mushaf-num-ghost" aria-hidden>{`\uFD3F${arNum(num)}\uFD3E`}</span>
+      <span className="mushaf-num-face" aria-hidden>{arNum(num)}</span>
     </span>
   );
 }

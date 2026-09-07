@@ -17,7 +17,7 @@ const config: Config = {
       fontFamily: {
         arabic: ["var(--font-thamaniah)", "Tajawal", "sans-serif"],
         // خط الرسم العثماني — يُطبَّق على نصّ الآيات فقط عبر font-quran.
-        quran: ["var(--font-amiri-quran)", "Amiri Quran", "Amiri", "serif"],
+        quran: ["var(--font-quran-text)", "Amiri Quran", "Amiri", "serif"],
       },
       colors: {
         // Warm Andalusian gold/amber as the primary brand accent
