@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import type { PrayerName, PrayerStatus } from "@/lib/types";
+import type { KhushuLevel, PrayerName, PrayerStatus } from "@/lib/types";
+import { KHUSHU_LEVELS, KHUSHU_META } from "@/lib/types";
 import { arabicCount, computePrayerTimes, getCachedCoords, getPrayerLog, parseDate, today, formatClock } from "@/lib/utils";
 import {
-  duePrayerReminders,
+  duePrayerRemindersRange,
+  lookbackDates,
+  groupByDate,
+  relativeDayLabel,
   pickPrayerReminderGroup,
   type PrayerReminderCandidate,
 } from "@/lib/prayerReminder";
@@ -62,6 +66,10 @@ function dayQuietKey(date: string): string {
 const prayersCount = (n: number): string =>
   arabicCount(n, { one: "صلاةٌ واحدة", two: "صلاتان", few: "صلوات", many: "صلاة" });
 
+/** «يومٍ واحد · يومين · ٣ أيام» — مدى المطالبة في ترويستها. */
+const daysCount = (n: number): string =>
+  arabicCount(n, { one: "يومٍ واحد", two: "يومين", few: "أيام", many: "يومًا" });
+
 function clockOf(candidate: PrayerReminderCandidate): string {
   return arClock(candidate.adhanAt, formatClock);
 }
@@ -77,10 +85,18 @@ function clockOf(candidate: PrayerReminderCandidate): string {
  * واحدة بقيت النافذة سؤالاً مباشراً بزرّين كما كانت.
  *
  * لا تُنشئ سجلاً جديداً ولا تغيّر أي بيانات إلا بعد ضغط «جماعة» أو «مفرد».
+ *
+ * **وسؤالُ الخشوع هنا لا في صفحة الصلاة وحدها**: هذه النافذة هي المكان الذي
+ * يُسجَّل منه أكثرُ الصلوات فعلاً — تأتي إلى المالك حيثما كان في التطبيق، ولا
+ * يقصد صفحةَ الصلاة إلا ليرى إحصاءه. فسؤالٌ يعيش هناك وحده يُطرح على ما نُدر
+ * من التسجيل، ويبقى أكثرُه بلا جواب. يظهر السؤال بعد اختيار الحال مباشرةً في
+ * النافذة نفسِها، ويُتخطّى بضغطةٍ واحدة («أمرُّ») فلا يُثقل التسجيل الذي جاء
+ * من أجله.
  */
 export function PrayerReminderWatcher() {
   const prayerLogs = useAppStore((s) => s.prayerLogs);
   const setPrayerStatus = useAppStore((s) => s.setPrayerStatus);
+  const setKhushu = useAppStore((s) => s.setKhushu);
   const bankReviewing = usePending((s) => s.reviewing);
   const snoozesRef = useRef<SnoozeMap>({});
   // The store update is synchronous, but React may render the old selector
@@ -89,6 +105,17 @@ export function PrayerReminderWatcher() {
   const answeredTokensRef = useRef<Set<string>>(new Set());
   const [hydrated, setHydrated] = useState(() => useAppStore.persist.hasHydrated());
   const [candidates, setCandidates] = useState<PrayerReminderCandidate[]>([]);
+  // الصلواتُ التي سُجّلت حالُها في هذه النافذة وتنتظر سؤالَ القلب — القيمةُ هي
+  // الحالُ المختارة لتُعرض تحت الاسم. الصفُّ يبقى معروضاً ما دام هنا، ثمّ
+  // يختفي عند الإجابة أو التخطّي.
+  const [asking, setAsking] = useState<Record<string, PrayerStatus>>({});
+  // أثرُ التنظيف أدناه يعتمد على `prayerLogs` وحدها (بقصد)، فلو قرأ `asking`
+  // مباشرةً لالتقط لقطةً قديمة. المرآةُ في ref تُقرأ دائماً حاضرة.
+  const askingRef = useRef<Record<string, PrayerStatus>>({});
+  askingRef.current = asking;
+  // مرآةُ الصفوف المعروضة — يقرأها `refresh` ليستبقي ما ينتظر سؤالَ القلب
+  // دون أن يجعل نفسَه تابعاً لها (فتُعاد دورةُ الحساب بلا داعٍ).
+  const candidatesRef = useRef<PrayerReminderCandidate[]>([]);
 
   useEffect(() => {
     snoozesRef.current = readSnoozes();
@@ -112,9 +139,16 @@ export function PrayerReminderWatcher() {
     const current = new Date();
     const date = today();
     const coords = getCachedCoords();
-    const times = computePrayerTimes(parseDate(date), coords.lat, coords.lng);
-    const log = getPrayerLog(prayerLogs, date);
-    const due = duePrayerReminders(current, date, times, log);
+    // **تمتدّ المطالبة لما مضى**: من غاب عن التطبيق أياماً كانت صلواتُ تلك
+    // الأيام تسقط بلا تسجيلٍ إلى الأبد — لا تُسأل عنها ولا تظهر إلا لمن فتح
+    // تقويم الشهر وعدّلها يوماً يوماً. الآن تُجمع كلُّها في نافذةٍ واحدة
+    // مرتّبةً بيومها.
+    const due = duePrayerRemindersRange(
+      current,
+      lookbackDates(date),
+      (d) => computePrayerTimes(parseDate(d), coords.lat, coords.lng),
+      (d) => getPrayerLog(prayerLogs, d)
+    );
     const quietUntil = snoozesRef.current[dayQuietKey(date)] ?? 0;
     // نافذة مراجعة البنك أولويةٌ أعلى؛ لا نضع نافذتين فوق بعضهما. بعد إغلاقها
     // يعيد الأثر نفسه الحساب فتظهر مطالبة الصلاة إن بقيت مستحقة.
@@ -126,13 +160,19 @@ export function PrayerReminderWatcher() {
               !answeredTokensRef.current.has(candidate.token) &&
               (snoozesRef.current[candidate.token] ?? 0) <= current.getTime()
           );
+    // صفٌّ سُجّلت حالُه للتوّ وينتظر سؤالَ القلب لم يعد «مستحقّاً» في حساب
+    // `duePrayerReminders`، فلولا استبقاؤه هنا لاختفى تحت الإصبع قبل أن يُطرح
+    // السؤال أصلاً — والحساب يُعاد مع كلّ تغيّرٍ في السجلّ، أي فور التسجيل.
+    const held = candidatesRef.current.filter((c) => c.token in askingRef.current);
+    const merged = [...held, ...next.filter((c) => !(c.token in askingRef.current))]
+      .sort((a, b) => a.adhanAt.getTime() - b.adhanAt.getTime());
     // Keep the same array while the sheet is open and nothing changed; this
     // avoids resetting the modal's focus every minute.
     setCandidates((previous) =>
-      previous.length === next.length &&
-      previous.every((item, index) => item.token === next[index].token)
+      previous.length === merged.length &&
+      previous.every((item, index) => item.token === merged[index].token)
         ? previous
-        : next
+        : merged
     );
   }, [bankReviewing, prayerLogs]);
 
@@ -157,6 +197,9 @@ export function PrayerReminderWatcher() {
   useEffect(() => {
     setCandidates((previous) => {
       const next = previous.filter((candidate) => {
+        // صفٌّ سُجّل حالُه وينتظر سؤالَ القلب يبقى: هذا التنظيف يُسقط ما سُجّل
+        // من مكانٍ آخر، ولو أسقطه هنا لاختفى الصفُّ قبل أن يُطرح السؤال أصلاً.
+        if (candidate.token in askingRef.current) return true;
         const status = getPrayerLog(prayerLogs, candidate.date)?.prayers[candidate.prayer];
         return status === undefined || status === "لم";
       });
@@ -176,13 +219,34 @@ export function PrayerReminderWatcher() {
     }
   }, [prayerLogs]);
 
-  function answer(candidate: PrayerReminderCandidate, status: Extract<PrayerStatus, "جماعة" | "منفردة">) {
+  function answer(
+    candidate: PrayerReminderCandidate,
+    status: Extract<PrayerStatus, "جماعة" | "منفردة" | "فائتة">
+  ) {
     answeredTokensRef.current.add(candidate.token);
     setPrayerStatus(candidate.date, candidate.prayer, status);
     const next = { ...snoozesRef.current };
     delete next[candidate.token];
     snoozesRef.current = next;
     writeSnoozes(next);
+    // «فاتتني» لا قلبَ يُسأل عنه، فينتهي أمرُ الصفّ فوراً.
+    if (status === "فائتة") {
+      setCandidates((previous) => previous.filter((item) => item.token !== candidate.token));
+      return;
+    }
+    // الحالُ محفوظةٌ الآن مهما جرى بعدها: من أغلق النافذة عند سؤال القلب لم
+    // يخسر تسجيلَه، ويبقى السؤالُ في «بقي سؤالُ القلب» بصفحة الصلاة.
+    setAsking((previous) => ({ ...previous, [candidate.token]: status }));
+  }
+
+  /** جوابُ القلب — أو تخطّيه بـ`undefined`. في الحالين ينتهي أمرُ هذا الصفّ. */
+  function answerKhushu(candidate: PrayerReminderCandidate, level: KhushuLevel | undefined) {
+    if (level !== undefined) setKhushu(candidate.date, candidate.prayer, level);
+    setAsking((previous) => {
+      const next = { ...previous };
+      delete next[candidate.token];
+      return next;
+    });
     setCandidates((previous) => previous.filter((item) => item.token !== candidate.token));
   }
 
@@ -194,21 +258,35 @@ export function PrayerReminderWatcher() {
     snoozesRef.current = next;
     writeSnoozes(next);
     setCandidates([]);
+    setAsking({});
   }
 
   function quietForToday() {
     if (!candidates.length) return;
     const next = { ...snoozesRef.current };
+    // مفتاحُ الصمت مفتاحُ **اليوم الجاري** دائماً: صفوفُ الأيام الماضية تنتهي
+    // مهلتُها في ماضيها، فلو اكتفينا بمفاتيحها لعادت النافذةُ بعد ثوانٍ.
+    const todayStr = today();
+    next[dayQuietKey(todayStr)] = endOfLocalDay(todayStr);
     for (const candidate of candidates) {
-      next[candidate.token] = endOfLocalDay(candidate.date);
-      next[dayQuietKey(candidate.date)] = endOfLocalDay(candidate.date);
+      next[candidate.token] = endOfLocalDay(todayStr);
+      next[dayQuietKey(candidate.date)] = endOfLocalDay(todayStr);
     }
     snoozesRef.current = next;
     writeSnoozes(next);
     setCandidates([]);
+    setAsking({});
   }
 
+  candidatesRef.current = candidates;
+
   const single = candidates.length === 1 ? candidates[0] : null;
+  const remaining = candidates.filter((c) => !asking[c.token]).length;
+  const todayStr = today();
+  // المجموعاتُ تُرسم بترويسةِ يومها **فقط حين تمتدّ المطالبة لما مضى**؛ ولو
+  // كانت كلُّها اليومَ لكانت الترويسةُ سطراً يقول ما تعرفه أصلاً.
+  const groups = useMemo(() => groupByDate(candidates), [candidates]);
+  const spansPast = groups.some((g) => g.date !== todayStr);
   const title = useMemo(() => {
     if (single) return `تذكير ${single.prayer}`;
     if (candidates.length > 1) return "تذكير الصلوات";
@@ -225,54 +303,173 @@ export function PrayerReminderWatcher() {
               <strong>{single ? "تذكير الصلاة" : "صلواتٌ ما سجّلتها"}</strong>
               <small>
                 <Clock3 size={12} aria-hidden="true" />
-                {single ? "مرّت ٣٠ دقيقة على الأذان" : `${prayersCount(candidates.length)} تنتظر التسجيل`}
+                {/* العدُّ يُنقص ما سُجِّل للتوّ: ترويسةٌ تقول «٣ تنتظر التسجيل»
+                    وقد سجّلتَ اثنتين منها أمام عينك تكذب على قارئها. */}
+                {single
+                  ? spansPast
+                    ? `${relativeDayLabel(single.date, todayStr)} · ${clockOf(single)}`
+                    : "مرّت ٣٠ دقيقة على الأذان"
+                  : spansPast
+                    ? `${prayersCount(remaining)} على مدى ${daysCount(groups.length)}`
+                    : `${prayersCount(remaining)} تنتظر التسجيل`}
               </small>
             </span>
           </div>
 
           {single ? (
-            <>
-              <div className="mdr-prayer-reminder-question">
-                <strong>هل صلّيت {single.prayer}؟</strong>
-                <span>{single.prayer} ({clockOf(single)}) — سجّلها عشان ما تتكرر المطالبة.</span>
-              </div>
+            asking[single.token] ? (
+              <>
+                <div className="mdr-prayer-reminder-question">
+                  <strong>وكيف كان قلبُك فيها؟</strong>
+                  <span>
+                    سُجِّلت {single.prayer}{" "}
+                    {asking[single.token] === "جماعة" ? "جماعة" : "مفرد"} — ولك أن تمرّ.
+                  </span>
+                </div>
 
-              <div className="mdr-prayer-reminder-actions">
-                <MdrButton kind="ink" onClick={() => answer(single, "جماعة")} style={{ width: "100%" }}>
-                  صليتها جماعة
-                </MdrButton>
-                <MdrButton kind="ghost" onClick={() => answer(single, "منفردة")} style={{ width: "100%" }}>
-                  صليتها مفرد
-                </MdrButton>
-              </div>
-            </>
+                <div className="mdr-prayer-reminder-khushu">
+                  {KHUSHU_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      className="mdr-prayer-reminder-khushu-chip press"
+                      style={{ "--k": KHUSHU_META[level].color } as React.CSSProperties}
+                      onClick={() => answerKhushu(single, level)}
+                    >
+                      <strong>{KHUSHU_META[level].label}</strong>
+                      <small>{KHUSHU_META[level].hint}</small>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  className="mdr-prayer-reminder-skip press"
+                  onClick={() => answerKhushu(single, undefined)}
+                >
+                  أمرُّ
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mdr-prayer-reminder-question">
+                  <strong>
+                    هل صلّيت {single.prayer}
+                    {single.date !== todayStr ? ` ${relativeDayLabel(single.date, todayStr)}` : ""}؟
+                  </strong>
+                  <span>{single.prayer} ({clockOf(single)}) — سجّلها عشان ما تتكرر المطالبة.</span>
+                </div>
+
+                <div className="mdr-prayer-reminder-actions">
+                  <MdrButton kind="ink" onClick={() => answer(single, "جماعة")} style={{ width: "100%" }}>
+                    صليتها جماعة
+                  </MdrButton>
+                  <MdrButton kind="ghost" onClick={() => answer(single, "منفردة")} style={{ width: "100%" }}>
+                    صليتها مفرد
+                  </MdrButton>
+                </div>
+                {/* ليومٍ مضى: الاعترافُ بالفوات خيارٌ ثالثٌ صادق — راجع تعليقه
+                    في وضع القائمة. */}
+                {single.date !== todayStr && (
+                  <button
+                    type="button"
+                    className="mdr-prayer-reminder-skip press"
+                    onClick={() => answer(single, "فائتة")}
+                  >
+                    فاتتني — سجّلها عليّ
+                  </button>
+                )}
+              </>
+            )
           ) : (
-            <ul className="mdr-prayer-reminder-list">
-              {candidates.map((candidate) => (
-                <li key={candidate.token} className="mdr-prayer-reminder-row">
-                  <span className="mdr-prayer-reminder-row-name">
-                    <strong>{candidate.prayer}</strong>
-                    <small>{clockOf(candidate)}</small>
-                  </span>
-                  <span className="mdr-prayer-reminder-row-actions">
-                    <button
-                      type="button"
-                      className="mdr-prayer-reminder-chip is-jamaah press"
-                      onClick={() => answer(candidate, "جماعة")}
-                    >
-                      جماعة
-                    </button>
-                    <button
-                      type="button"
-                      className="mdr-prayer-reminder-chip press"
-                      onClick={() => answer(candidate, "منفردة")}
-                    >
-                      مفرد
-                    </button>
-                  </span>
-                </li>
+            <div className="mdr-prayer-reminder-groups">
+              {groups.map((group) => (
+                <section key={group.date}>
+                  {/* الترويسةُ تظهر عند امتداد المطالبة وحدَه — راجع `spansPast`. */}
+                  {spansPast && (
+                    <p className="mdr-prayer-reminder-daybar">
+                      <span>{relativeDayLabel(group.date, todayStr)}</span>
+                      <span className="mdr-prayer-reminder-daybar-rule" aria-hidden="true" />
+                      <small>{prayersCount(group.items.length)}</small>
+                    </p>
+                  )}
+                  <ul className="mdr-prayer-reminder-list">
+                    {group.items.map((candidate) => (
+                      <li key={candidate.token} className="mdr-prayer-reminder-row">
+                        <span className="mdr-prayer-reminder-row-name">
+                          <strong>{candidate.prayer}</strong>
+                          <small>
+                            {asking[candidate.token]
+                              ? `${asking[candidate.token] === "جماعة" ? "جماعة" : "مفرد"} · قلبُك؟`
+                              : clockOf(candidate)}
+                          </small>
+                        </span>
+                        {/* الصفُّ يتحوّل في مكانه: الحالُ تُسجَّل ثمّ يسأل عن
+                            القلب، فيبقى تقدُّمُك مرئياً ولا تقفز الصفوفُ تحت
+                            إصبعك. */}
+                        <span className="mdr-prayer-reminder-row-actions">
+                          {asking[candidate.token] ? (
+                            <>
+                              {KHUSHU_LEVELS.map((level) => (
+                                <button
+                                  key={level}
+                                  type="button"
+                                  className="mdr-prayer-reminder-chip is-khushu press"
+                                  style={{ "--k": KHUSHU_META[level].color } as React.CSSProperties}
+                                  onClick={() => answerKhushu(candidate, level)}
+                                >
+                                  {KHUSHU_META[level].label}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                className="mdr-prayer-reminder-chip is-pass press"
+                                aria-label={`تخطَّ سؤال القلب عن ${candidate.prayer}`}
+                                onClick={() => answerKhushu(candidate, undefined)}
+                              >
+                                ✕
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="mdr-prayer-reminder-chip is-jamaah press"
+                                onClick={() => answer(candidate, "جماعة")}
+                              >
+                                جماعة
+                              </button>
+                              <button
+                                type="button"
+                                className="mdr-prayer-reminder-chip press"
+                                onClick={() => answer(candidate, "منفردة")}
+                              >
+                                مفرد
+                              </button>
+                              {/* «فاتتني» ليومٍ مضى فقط: صلاةُ أمس إمّا صُلّيت
+                                  أو فاتت، ولا ثالثَ. وحصرُ الخيارين في الجماعة
+                                  والفرادى يدفع المالكَ إلى ادّعاءِ صلاةٍ لم
+                                  تقع أو إلى إغلاق النافذة — وكلاهما يُفسد
+                                  السجلّ. ولا تظهر لليوم الجاري: وقتُ صلاته
+                                  قد لا يكون انقضى بعد. */}
+                              {candidate.date !== todayStr && (
+                                <button
+                                  type="button"
+                                  className="mdr-prayer-reminder-chip is-missed press"
+                                  onClick={() => answer(candidate, "فائتة")}
+                                >
+                                  فاتتني
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
 
           <button

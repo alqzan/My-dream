@@ -13,12 +13,11 @@ export interface PrayerReminderCandidate {
 }
 
 /**
- * يعيد كل الصلوات المستحقّة اليوم مرتّبةً بترتيب اليوم.
+ * يعيد كل الصلوات المستحقّة مرتّبةً بالزمن — الأقدمُ أوّلاً.
  *
  * قبلَها كنّا نختار آخر صلاةٍ فقط ضمن نافذة ثماني ساعات، فمن فتح التطبيق مساءً
- * لم يُسأل إلا عن آخر صلاة وضاع ما قبلها بلا تسجيل. المطالبةُ الآن واحدةٌ
- * تجمعها كلَّها — والحدُّ الطبيعيّ هو اليومُ نفسه، إذ `duePrayerReminders`
- * محصورةٌ أصلاً في تاريخٍ واحد، ولمن لا يريدها زرُّ «لا تذكرني اليوم».
+ * لم يُسأل إلا عن آخر صلاة وضاع ما قبلها بلا تسجيل. ثمّ صارت تجمع اليومَ كلَّه،
+ * وهي الآن تمتدّ لأيامٍ مضت (`duePrayerRemindersRange`).
  */
 export function pickPrayerReminderGroup(
   candidates: PrayerReminderCandidate[],
@@ -63,4 +62,82 @@ export function duePrayerReminders(
       token: `${date}:${prayer}`,
     }];
   });
+}
+
+
+/* ═══════════════════ المطالبة تمتدّ لما مضى من الأيام ═══════════════════ */
+
+/**
+ * كم يوماً إلى الوراء تُجمع المطالبة.
+ *
+ * **لماذا حدٌّ أصلاً؟** بلا حدٍّ تفتح المطالبةُ على المالك صلواتِ شهورٍ لم
+ * يسجّلها قطّ، فتصير حائطَ تأنيبٍ يُغلَق ولا يُقرأ — وهو عكسُ الغرض. وسبعةُ
+ * أيام تغطّي «سافرتُ أسبوعاً» و«انشغلتُ أياماً» وهما الحالتان الواقعيّتان،
+ * وما قدُم عن ذلك مكانُه تقويمُ صفحة الصلاة يُعدَّل بهدوء.
+ */
+export const REMINDER_LOOKBACK_DAYS = 7;
+
+/**
+ * مفاتيحُ آخر `days` يومًا منتهيةً بـ`endDate` — الأقدمُ أوّلاً.
+ * (لا `Date` في التوقيع: مفاتيحُ التاريخ محليّةٌ نصّية كما في كلّ المستودع.)
+ */
+export function lookbackDates(endDate: string, days = REMINDER_LOOKBACK_DAYS): string[] {
+  const [y, m, d] = endDate.split("-").map(Number);
+  const end = new Date(y, m - 1, d);
+  const out: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const cur = new Date(end);
+    cur.setDate(cur.getDate() - i);
+    const mm = String(cur.getMonth() + 1).padStart(2, "0");
+    const dd = String(cur.getDate()).padStart(2, "0");
+    out.push(`${cur.getFullYear()}-${mm}-${dd}`);
+  }
+  return out;
+}
+
+/**
+ * كلُّ ما استُحقّ ولم يُسجَّل عبر عدّة أيام، الأقدمُ أوّلاً.
+ *
+ * المواقيتُ والسجلُّ يُطلبان بدالّتين لا يُمرَّران جدولاً جاهزاً: حسابُ مواقيت
+ * سبعةِ أيامٍ يقع عند النداء، والدالّة تبقى نقيّةً قابلةً للاختبار بمواقيت
+ * مصنوعة.
+ */
+export function duePrayerRemindersRange(
+  now: Date,
+  dates: string[],
+  timesFor: (date: string) => Record<PrayerName, Date> | null,
+  logFor: (date: string) => PrayerLog | undefined,
+  delayMs = PRAYER_REMINDER_DELAY_MS
+): PrayerReminderCandidate[] {
+  return dates
+    .flatMap((date) => duePrayerReminders(now, date, timesFor(date), logFor(date), delayMs))
+    .sort((a, b) => a.adhanAt.getTime() - b.adhanAt.getTime());
+}
+
+/** تجميعُ الصفوف بيومها — الأقدمُ أوّلاً، وترتيبُ الفروض داخل اليوم محفوظ. */
+export function groupByDate(
+  candidates: PrayerReminderCandidate[]
+): { date: string; items: PrayerReminderCandidate[] }[] {
+  const byDate = new Map<string, PrayerReminderCandidate[]>();
+  for (const c of candidates) {
+    const list = byDate.get(c.date);
+    if (list) list.push(c);
+    else byDate.set(c.date, [c]);
+  }
+  return [...byDate.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([date, items]) => ({ date, items }));
+}
+
+/**
+ * مسمّى اليوم في ترويسة مجموعته: «اليوم · أمس · قبل يومين · قبل ٣ أيام».
+ * نصٌّ نقيٌّ يُختبر، والأرقامُ تُهنَّد عند العرض لا هنا.
+ */
+export function relativeDayLabel(date: string, todayStr: string): string {
+  const day = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
+  const diff = Math.round((day(todayStr) - day(date)) / 864e5);
+  if (diff <= 0) return "اليوم";
+  if (diff === 1) return "أمس";
+  if (diff === 2) return "قبل يومين";
+  return `قبل ${diff} أيام`;
 }
