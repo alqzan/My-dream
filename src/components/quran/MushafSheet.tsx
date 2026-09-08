@@ -13,6 +13,7 @@ import {
   MUSHAF_SKINS, type MushafSkin, type ReadPrefs,
 } from "@/lib/quran/readPrefs";
 import { enterFullscreen, exitFullscreen } from "@/lib/platform/fullscreen";
+import { ROSETTE_PATH, ROSETTE_BOX, ROSETTE_INNER } from "@/lib/quran/rosette";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 import {
   Maximize2, Minimize2, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
@@ -660,32 +661,36 @@ function RunSpan({
 // **العرضُ مقيسٌ والصورةُ مختارة، وهذان لا يجتمعان بلا حيلة.** عرضُ السطر في
 // البيانات مقيسٌ ورقمُ الآية داخله على صورة المصدر: قوسان مزخرفان (U+FD3F/U+FD3E)
 // بينهما الرقم. فلو رسمناه بصورةٍ أخرى تغيّر عرضُ السطر عمّا قِيس فتفيض الأسطر
-// أو تقصر — والقوسان في خطّ «حفص» ثقيلان: قوسان كبيران حول رقمٍ صغير، يقطعان
-// السطر أكثر ممّا يعلّمانه.
+// أو تقصر — والقوسان في خطّ «حفص» ثقيلان في العين: قوسان كبيران حول رقمٍ صغير.
 //
-// فالحلّ: **نصٌّ شبحٌ يحجز العرض، ورقمٌ مرسومٌ فوقه**. الشبح هو نصُّ المصدر نفسه
-// (`﴿٩﴾`) مخفيّاً بـ`visibility` — لا يُرى ويأخذ عرضه كاملاً — والرقمُ وحده
-// يُرسم في وسطه. فالسطر يبقى على عرضه المقيس بالبكسل، والوجهُ يهدأ.
-// (وردةُ `۝` ليست بديلاً: خطّ «حفص» يرسمها بيضاويةً فارغة والرقمُ خارجها.)
+// فالحلّ: **نصٌّ شبحٌ يحجز العرض، ووردةٌ مرسومةٌ فوقه**. الشبح هو نصُّ المصدر
+// نفسه (`﴿٩﴾`) مخفيّاً بـ`visibility` — لا يُرى ويأخذ عرضه كاملاً — وفي موضعه
+// تُرسم وردةُ المصحف: دائرةٌ مسنَّنةٌ بأصدافها وحلقتُها الداخلية والرقمُ في
+// وسطها (`@/lib/quran/rosette`). فالسطر على عرضه المقيس بالبكسل، والوجهُ بوردة
+// المصحف المعروفة. (وردةُ الخطّ `۝` ليست بديلاً: يرسمها «حفص» بيضاويةً فارغة
+// والرقمُ خارجها.)
 //
 // والأرقامُ هندية من `arNum` — البوّابة الوحيدة للتحويل (راجع CLAUDE.md).
 export function AyahNumber({
   num, dimmed = false, spacer = false,
 }: { num: number; dimmed?: boolean; spacer?: boolean }) {
+  const digits = arNum(num);
   // الشبحُ لوجه المصحف وحده (`spacer`): هناك عرضُ السطر مقيسٌ فيجب أن يُحجز.
   // وخارجه — آيةُ الختام مثلاً — لا سطرَ مقيساً، فالشبحُ يوسّع الرقم بلا سبب
-  // حتى يدفع النصّ إلى سطرٍ ثانٍ ويتباعد ما قبله.
-  if (!spacer) {
-    return (
-      <span className={`mushaf-num is-bare ${dimmed ? "is-dim" : ""}`} aria-label={`آية ${num}`}>
-        {arNum(num)}
-      </span>
-    );
-  }
+  // حتى يدفع النصّ إلى سطرٍ ثانٍ ويتباعد ما قبله؛ فتقف الوردةُ على مقاسها.
   return (
-    <span className={`mushaf-num ${dimmed ? "is-dim" : ""}`} aria-label={`آية ${num}`}>
-      <span className="mushaf-num-ghost" aria-hidden>{`\uFD3F${arNum(num)}\uFD3E`}</span>
-      <span className="mushaf-num-face" aria-hidden>{arNum(num)}</span>
+    <span
+      className={`mushaf-num ${spacer ? "" : "is-bare"} ${dimmed ? "is-dim" : ""}`}
+      aria-label={`آية ${num}`}
+    >
+      {spacer && <span className="mushaf-num-ghost" aria-hidden>{`\uFD3F${digits}\uFD3E`}</span>}
+      <span className="mushaf-num-face" aria-hidden>
+        <svg className="mushaf-num-rosette" viewBox={`0 0 ${ROSETTE_BOX} ${ROSETTE_BOX}`} preserveAspectRatio="none">
+          <path d={ROSETTE_PATH} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round" />
+          <circle cx={ROSETTE_BOX / 2} cy={ROSETTE_BOX / 2} r={ROSETTE_INNER} fill="none" stroke="currentColor" strokeWidth="2.2" />
+        </svg>
+        <span className="mushaf-num-digits">{digits}</span>
+      </span>
     </span>
   );
 }

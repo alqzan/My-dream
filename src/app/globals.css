@@ -5854,25 +5854,49 @@ button.mdr-daily-rhythm-status:focus-visible {
   text-shadow: var(--pick-glow, none);
   color: var(--reader-ink);
 }
-/* رقمُ الآية: الشبحُ يحجز عرضَ المصدر المقيس (`﴿٩﴾`) ولا يُرى، والرقمُ وحده
-   يُرسم في وسطه — فالسطر على عرضه، والوجه بلا قوسين ثقيلين. (راجع `AyahNumber`.)
-   `visibility: hidden` لا `display: none`: الأوّل يُبقي الحيّز، والثاني يمحوه. */
+/* رقمُ الآية: الشبحُ يحجز عرضَ المصدر المقيس (`﴿٩﴾`) ولا يُرى، وفي موضعه تُرسم
+   وردةُ المصحف والرقمُ في وسطها — فالسطر على عرضه، والوجهُ بوردته. (راجع
+   `AyahNumber` و`@/lib/quran/rosette`.)
+   `visibility: hidden` لا `display: none`: الأوّل يُبقي الحيّز، والثاني يمحوه.
+   والوردةُ تُمطّ مع الشبح (`preserveAspectRatio: none`) فتتّسع لرقمٍ من ثلاث
+   خانات كما تتّسع في المطبوع، ولا تخرج عن العرض المقيس. */
 .mushaf-num {
   position: relative;
   display: inline-block;
   color: var(--reader-accent);
 }
-.mushaf-num.is-bare { position: static; font-size: 0.86em; }
 .mushaf-num-ghost { visibility: hidden; }
 .mushaf-num-face {
   position: absolute;
-  inset: 0;
+  inset-inline: 0;
+  top: 50%;
+  height: 1.45em;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.78em;
-  letter-spacing: 0.02em;
 }
+.mushaf-num-rosette {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.mushaf-num-digits {
+  position: relative;
+  font-size: 0.6em;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+/* خارج وجه المصحف لا شبحَ يحجز العرض، فتقف الوردةُ على مقاسها. */
+.mushaf-num.is-bare {
+  width: 2.1em;
+  height: 1.45em;
+  vertical-align: -0.32em;
+  font-size: 0.9em;
+}
+.mushaf-num.is-bare .mushaf-num-face { top: 0; height: 100%; transform: none; }
 .mushaf-num.is-dim { color: color-mix(in srgb, var(--reader-accent) 45%, transparent); }
 .mushaf-basmala { color: var(--reader-accent); }
 .mushaf-skin-warm .mushaf-sura,
