@@ -4412,6 +4412,120 @@ button.mdr-summary-habit-row { cursor: pointer; }
   outline: 2px solid var(--gline);
   outline-offset: 2px;
 }
+/* ===== سؤالُ القلب داخل المطالبة =====
+   الصفُّ يتحوّل في مكانه بعد تسجيل الحال، فتقع ثلاثُ درجاتٍ وزرُّ تخطٍّ محلَّ
+   زرَّي «جماعة/مفرد». أضيق من إخوتها بقصد: أربعةُ أزرارٍ في صفٍّ واحدٍ بجانب
+   اسم الصلاة على شاشة جوّالٍ ضيّقة. و`--k` لونُ الدرجة يمرّره المكوّن. */
+.mdr-prayer-reminder-row-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.mdr-prayer-reminder-chip.is-khushu {
+  padding-inline: 0.5rem;
+  font-size: 0.64rem;
+  border-color: color-mix(in srgb, var(--k) 42%, var(--line));
+  color: var(--k);
+}
+.mdr-prayer-reminder-chip.is-khushu:hover,
+.mdr-prayer-reminder-chip.is-khushu:focus-visible {
+  background: color-mix(in srgb, var(--k) 12%, var(--paper));
+}
+.mdr-prayer-reminder-chip.is-pass {
+  padding-inline: 0.5rem;
+  color: var(--ink34);
+  font-size: 0.7rem;
+}
+/* الوضعُ المفرد: ثلاثُ بطاقاتٍ عريضةٍ باسم الدرجة ووصفها — المساحةُ متاحةٌ
+   هنا (لا اسمَ صلاةٍ يزاحمها)، فلا داعي لاختصارٍ يُفقد المعنى. */
+.mdr-prayer-reminder-khushu {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+.mdr-prayer-reminder-khushu-chip {
+  display: grid;
+  gap: 0.12rem;
+  min-height: 3.4rem;
+  padding: 0.5rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--k) 40%, var(--line));
+  border-radius: 0.85rem;
+  background: var(--paper2);
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.mdr-prayer-reminder-khushu-chip strong {
+  color: var(--k);
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+.mdr-prayer-reminder-khushu-chip small {
+  color: var(--ink52);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.mdr-prayer-reminder-khushu-chip:hover,
+.mdr-prayer-reminder-khushu-chip:focus-visible {
+  background: color-mix(in srgb, var(--k) 12%, var(--paper2));
+}
+/* ===== مجموعاتُ الأيام =====
+   حين تمتدّ المطالبة لما مضى، يُفصل كلُّ يومٍ بترويسةٍ خفيفة: «أمس ——— ٥ صلوات».
+   بلا فصلٍ تصير خمسَ عشرةَ صلاةً قائمةً واحدةً لا يُعرف أين ينتهي يومٌ ويبدأ
+   آخر — وهو ما يجعل الطويلَ مرهقاً لا الطولُ نفسُه. */
+.mdr-prayer-reminder-groups {
+  display: grid;
+  gap: 0.85rem;
+}
+.mdr-prayer-reminder-daybar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.42rem;
+}
+.mdr-prayer-reminder-daybar span:first-child {
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+}
+.mdr-prayer-reminder-daybar-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.mdr-prayer-reminder-daybar small {
+  color: var(--ink34);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+.mdr-prayer-reminder-chip.is-missed {
+  padding-inline: 0.55rem;
+  border-color: color-mix(in srgb, var(--clay) 34%, var(--line));
+  color: var(--clay);
+  font-size: 0.64rem;
+}
+.mdr-prayer-reminder-chip.is-missed:hover,
+.mdr-prayer-reminder-chip.is-missed:focus-visible {
+  background: color-mix(in srgb, var(--clay) 12%, var(--paper));
+}
+.mdr-prayer-reminder-skip {
+  min-height: 2.4rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.8rem;
+  background: transparent;
+  color: var(--ink52);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mdr-prayer-reminder-skip:hover,
+.mdr-prayer-reminder-skip:focus-visible {
+  color: var(--ink);
+  border-color: var(--gline);
+}
 .mdr-prayer-reminder-later {
   min-height: 2.65rem;
   border: 0;
