@@ -13,7 +13,7 @@ import {
   MUSHAF_SKINS, type MushafSkin, type ReadPrefs,
 } from "@/lib/quran/readPrefs";
 import { enterFullscreen, exitFullscreen } from "@/lib/platform/fullscreen";
-import { ROSETTE_PATH, ROSETTE_BOX, ROSETTE_INNER } from "@/lib/quran/rosette";
+import { AyahMedallion } from "@/components/quran/AyahMedallion";
 import { SpreadGlyph } from "@/components/quran/SpreadGlyph";
 import {
   Maximize2, Minimize2, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
@@ -666,7 +666,7 @@ function RunSpan({
 // فالحلّ: **نصٌّ شبحٌ يحجز العرض، ووردةٌ مرسومةٌ فوقه**. الشبح هو نصُّ المصدر
 // نفسه (`﴿٩﴾`) مخفيّاً بـ`visibility` — لا يُرى ويأخذ عرضه كاملاً — وفي موضعه
 // تُرسم وردةُ المصحف: دائرةٌ مسنَّنةٌ بأصدافها وحلقتُها الداخلية والرقمُ في
-// وسطها (`@/lib/quran/rosette`). فالسطر على عرضه المقيس بالبكسل، والوجهُ بوردة
+// وسطها (`@/components/quran/AyahMedallion`). فالسطر على عرضه المقيس، والوجهُ بوردة
 // المصحف المعروفة. (وردةُ الخطّ `۝` ليست بديلاً: يرسمها «حفص» بيضاويةً فارغة
 // والرقمُ خارجها.)
 //
@@ -685,10 +685,7 @@ export function AyahNumber({
     >
       {spacer && <span className="mushaf-num-ghost" aria-hidden>{`\uFD3F${digits}\uFD3E`}</span>}
       <span className="mushaf-num-face" aria-hidden>
-        <svg className="mushaf-num-rosette" viewBox={`0 0 ${ROSETTE_BOX} ${ROSETTE_BOX}`} preserveAspectRatio="none">
-          <path d={ROSETTE_PATH} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round" />
-          <circle cx={ROSETTE_BOX / 2} cy={ROSETTE_BOX / 2} r={ROSETTE_INNER} fill="none" stroke="currentColor" strokeWidth="2.2" />
-        </svg>
+        <AyahMedallion />
         <span className="mushaf-num-digits">{digits}</span>
       </span>
     </span>

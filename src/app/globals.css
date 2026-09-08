@@ -5766,6 +5766,10 @@ button.mdr-daily-rhythm-status:focus-visible {
      عاش الرمزُ على المجموعة وحدها لَما وجده حفيدُها ولا العكس. */
   --mark-band: 1.3em;
   --mark-cap: calc(var(--mark-band) / 2);
+  /* قرصُ وردة الآية وجناحاها: القرصُ ورقٌ مصبوغٌ بلون النموذج، والجناحان بلون
+     الورق نفسه — كما في المطبوع (زخرفةٌ بيضاء على قرصٍ كريميّ). */
+  --medal-fill: color-mix(in srgb, var(--reader-accent) 16%, var(--reader-base));
+  --medal-core: var(--reader-base);
   --mark-tint: color-mix(in srgb, var(--reader-accent) 15%, var(--reader-base));
   /* لونُ رأسَي الشريط — يُطفأ في النموذج الذي تحديدُه وشاحٌ تحت الكلمة لا شريطٌ
      عليها، وإلا ظهر رأسان مصمتان عند طرفَي وشاحٍ رفيع. */
@@ -5876,7 +5880,7 @@ button.mdr-daily-rhythm-status:focus-visible {
   align-items: center;
   justify-content: center;
 }
-.mushaf-num-rosette {
+.mushaf-num-medal {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -5885,10 +5889,12 @@ button.mdr-daily-rhythm-status:focus-visible {
 }
 .mushaf-num-digits {
   position: relative;
-  font-size: 0.6em;
+  color: var(--reader-ink);
+  font-size: 0.58em;
   line-height: 1;
   letter-spacing: 0.01em;
 }
+.mushaf-num.is-dim .mushaf-num-digits { color: var(--reader-dim); }
 /* خارج وجه المصحف لا شبحَ يحجز العرض، فتقف الوردةُ على مقاسها. */
 .mushaf-num.is-bare {
   width: 2.1em;
