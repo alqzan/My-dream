@@ -17,6 +17,7 @@ import {
 } from "@/lib/utils";
 import { PRAYERS, type PrayerName, type PrayerStatus } from "@/lib/types";
 import { khushuOf } from "@/lib/khushu";
+import { relativeDayLabel } from "@/lib/prayerReminder";
 import { PrayerScreen } from "@/components/madar/prayer/PrayerScreen";
 import { PrayerRow } from "@/components/prayer/PrayerRow";
 import { PrayerCalendar } from "@/components/prayer/PrayerCalendar";
@@ -140,6 +141,9 @@ export default function PrayersPage() {
                   prayer={prayer}
                   status={statusFor(editDate, prayer)}
                   khushu={khushuOf(editLog, prayer)}
+                  // للماضي وحده: «أمس»/«قبل يومين». واليومُ الجاري لا يحتاج
+                  // ظرفاً، ويومٌ قادم لا يُقال فيه «اليوم» (وهو ما كان يقع).
+                  when={editDate < todayStr ? relativeDayLabel(editDate, todayStr) : undefined}
                   onChange={(status) => setPrayerStatus(editDate, prayer, status)}
                   onKhushu={(level) => setKhushu(editDate, prayer, level)}
                 />
