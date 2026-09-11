@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", memStorage());
   vi.stubGlobal("sessionStorage", memStorage());
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("قفلُ الخصوصية — الأساس", () => {
   it("بلا رمزٍ مضبوط لا قفل، وأيُّ إدخالٍ يمرّ", async () => {
@@ -92,6 +92,43 @@ describe("الترقيةُ من الصيغة القديمة (v1)", () => {
     expect(JSON.parse(after).v).toBe(2);
     // وبعد الترقية يفتح بالصيغة الجديدة.
     expect(await verifyPin("1234")).toBe(true);
+  }, SLOW);
+});
+
+describe("الترقيةُ لا تحجب الدخول", () => {
+  // لا مسارَ استرجاعٍ في هذا التطبيق: رمزٌ صحيحٌ لا يفتح = قفلٌ دائمٌ على
+  // مذكّراتِ سنوات. فأيُّ فشلٍ في **الترقية** (اشتقاقٌ أو تخزين) يجب أن يمرّ.
+  it("رمزٌ قديمٌ صحيحٌ يفتح ولو فشل اشتقاقُ الترقية", async () => {
+    const legacy = [...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode("1234"))
+    )].map((b) => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(PIN_KEY, legacy);
+
+    // **هذا هو الخطرُ الفعليّ**: التحقّقُ القديم يحتاج `digest` وحدها، أمّا
+    // الترقيةُ فتحتاج `deriveBits` — استدعاءٌ جديدٌ أُضيف على مسار **النجاح**.
+    // فمتصفّحٌ يمنعه (سياقٌ غيرُ آمن، سياسةٌ مقيِّدة) كان سيحوّل رمزاً صحيحاً
+    // إلى قفلٍ دائم. `digest` تبقى عاملةً كي يقع الفشلُ في الترقية وحدها.
+    const realDerive = crypto.subtle.deriveBits.bind(crypto.subtle);
+    const spy = vi.spyOn(crypto.subtle, "deriveBits")
+      .mockRejectedValue(new Error("deriveBits unavailable"));
+
+    await expect(verifyPin("1234")).resolves.toBe(true);
+    expect(spy).toHaveBeenCalled();               // جُرِّبت الترقيةُ فعلاً
+    expect(localStorage.getItem(PIN_KEY)).toBe(legacy); // وبقيت v1
+
+    // وحين يعود الاشتقاق تقع الترقيةُ في المرّة التالية.
+    spy.mockRestore();
+    void realDerive;
+    await expect(verifyPin("1234")).resolves.toBe(true);
+    expect(JSON.parse(localStorage.getItem(PIN_KEY) ?? "{}").v).toBe(2);
+  }, SLOW);
+
+  it("ورمزٌ قديمٌ خاطئٌ يبقى خاطئاً", async () => {
+    const legacy = [...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode("1234"))
+    )].map((b) => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(PIN_KEY, legacy);
+    await expect(verifyPin("0000")).resolves.toBe(false);
   }, SLOW);
 });
 

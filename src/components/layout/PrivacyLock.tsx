@@ -43,7 +43,12 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         if (!active) return;
-        if (!(err instanceof LockThrottledError)) throw err;
+        // خطأٌ غير متوقَّع (تعذّر `crypto.subtle` مثلاً) لا يُرمى من هنا: الرميُ
+        // داخل دالّةٍ غير متزامنة في `useEffect` يصير رفضاً بلا مُمسِك، فتبقى
+        // الشاشةُ ساكنةً بلا أيّ ردٍّ على الضغط — وهو أسوأُ ما يقع في شاشةِ
+        // قفلٍ بلا مسارِ استرجاع. يُعامَل معاملةَ محاولةٍ فاشلة فيرى المالكُ
+        // ردّاً على الأقلّ، والرسالةُ في الوحدة (console) لمن يبحث.
+        if (!(err instanceof LockThrottledError)) console.error("PIN verify failed", err);
       }
       setError(true);
       setWaitSec(Math.ceil(lockedForMs() / 1000));

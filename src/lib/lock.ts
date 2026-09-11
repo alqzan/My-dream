@@ -104,6 +104,13 @@ async function writePin(pin: string): Promise<void> {
   }
 }
 
+/** مِفتاحُ الطوارئ: يمحو القفلَ والتأخيرَ معاً من وحدة تحكّم المتصفّح، لمن
+ *  نسي رمزَه ولا يريد مسحَ بيانات الموقع كلِّها (وهي تحمل مذكّراته). لا مسارَ
+ *  استرجاعٍ داخل الواجهة عمداً — لكنّ وجودَ مخرجٍ موثَّقٍ خيرٌ من لا شيء:
+ *      localStorage.removeItem("madar-lock-pin");
+ *      localStorage.removeItem("madar-lock-attempts");
+ *  (موثَّقٌ في بطاقة القفل بصفحة الإعدادات.) */
+
 export async function setPin(pin: string): Promise<void> {
   await writePin(pin);
   clearThrottle();
@@ -181,7 +188,17 @@ export async function verifyPin(pin: string): Promise<boolean> {
   let ok: boolean;
   if (stored.v === 1) {
     ok = constantTimeEqual(await legacyHash(pin), stored.hash);
-    if (ok) await writePin(pin); // ترقيةٌ صامتة إلى v2
+    // الترقيةُ **لا تحجب الدخول أبداً**: لو فشل الاشتقاق أو التخزين (متصفّحٌ
+    // مقيَّد، ذاكرةٌ ممتلئة) فالرمزُ صحيحٌ على كلّ حال والمالكُ يدخل — وتُعاد
+    // المحاولةُ في المرّة القادمة. رميُها هنا كان يعني قفلاً دائماً على رمزٍ
+    // صحيح، ولا مسارَ استرجاع في هذا التطبيق أصلاً.
+    if (ok) {
+      try {
+        await writePin(pin);
+      } catch {
+        /* تبقى v1 — تُرقّى لاحقاً */
+      }
+    }
   } else {
     ok = constantTimeEqual(await derive(pin, fromHex(stored.salt)), stored.hash);
   }

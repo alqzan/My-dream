@@ -72,6 +72,34 @@ try {
   writeFileSync(swPath, readFileSync(swPath, "utf8").replaceAll("__BUILD__", buildId));
 } catch { /* sw.js not exported (shouldn't happen) — precache.json still written */ }
 
+// ===== بوّابةُ سلامةٍ للعامل: هل ما تحت `_next/static` معنوَنٌ بمحتواه؟ =====
+// `public/sw.js` ينقل ما تحت هذا المسار من خزن النشرة السابقة **بلا تنزيل**،
+// وحجّتُه الوحيدة أنّ اسمَ الملفّ يحمل بصمةَ بايتاته: فاتّفاقُ الاسم اتّفاقُ
+// محتوىً يقيناً. ولو أخرج Next يوماً ملفاً باسمٍ ثابتٍ ومحتوىً متغيّر تحت هذا
+// المسار (ترقيةُ إصدارٍ رئيسي مثلاً) لصار النقلُ تقديمَ بايتاتٍ قديمة — عطلٌ
+// صامتٌ لا يكشفه اختبارٌ ولا نوع. فيُكسَر البناءُ هنا بدل أن يُنشَر.
+//
+// الشكلان المقبولان: بصمةٌ سداسيةٌ في اسم الملفّ (`main-a1b2….js` ·
+// `0bb9a02f587d380f-s.p.woff2`)، أو ملفٌّ تحت مجلّد `buildId` الفريد لكلّ بناء
+// (`_next/static/<buildId>/_buildManifest.js`).
+const HASHED_NAME = /[-/.][a-f0-9]{8,}([-.][\w.]*)?\.\w+$/;
+const UNDER_BUILD_ID = /^_next\/static\/[^/]+\/(_buildManifest|_ssgManifest)\.js$/;
+const unaddressed = [...urls]
+  .map((u) => u.slice(basePath.length).replace(/^\//, ""))
+  .filter((rel) => rel.startsWith("_next/static/"))
+  .filter((rel) => !HASHED_NAME.test(rel) && !UNDER_BUILD_ID.test(rel));
+if (unaddressed.length) {
+  console.error("\n✗ ملفّاتٌ تحت _next/static بلا بصمةِ محتوىً في اسمها:");
+  for (const rel of unaddressed) console.error("   " + rel);
+  console.error(
+    "\n  العاملُ (public/sw.js) ينقل هذا المسار من خزن النشرة السابقة بلا تنزيل،\n" +
+    "  فاسمٌ ثابتٌ بمحتوىً متغيّر = تقديمُ بايتاتٍ قديمة. عالِج قبل النشر:\n" +
+    "  إمّا أن يُستثنى المسارُ في `isContentAddressed` داخل sw.js، وإمّا أن\n" +
+    "  يُخرَج من الخزن المسبق."
+  );
+  process.exit(1);
+}
+
 const totalBytes = list.reduce((sum, u) => {
   const p = join(OUT, u.slice(basePath.length).replace(/^\//, "") || "index.html");
   try { return sum + statSync(p.endsWith("/") ? join(p, "index.html") : p).size; } catch { return sum; }
