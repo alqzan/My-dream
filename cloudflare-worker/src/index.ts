@@ -213,12 +213,24 @@ async function putBlob(request: Request, env: Env): Promise<Response> {
   const actualDigest = await sha256HexBytes(body);
   if (!constantTimeEqual(actualDigest, declaredDigest)) throw new HttpError(400, "Content digest does not match");
 
+  // مختصرُ التكرار كان يقارن **الحجمَ وحده**: بايتاتٌ مختلفةٌ بالطول نفسه تحت
+  // الهاش نفسِه تُعَدّ «موجودةً أصلاً» فلا تُكتب، ويبقى القديم. والهاشُ في
+  // المفتاح لا يُشتقّ من هذه البايتات أصلاً (العميلُ يجزّئ نصَّ `data:` URL لا
+  // البايتات المفكوكة)، فلا سبيل للوسيط أن يتحقّق منه. لكنّ بصمةَ **المحتوى**
+  // التي تُرسَل مع الرفع (وقد قُوبلت بالجسم أعلاه) تكفي: تُخزَّن مع الكائن،
+  // فيصير التطابقُ سؤالاً عن المحتوى لا عن طوله.
   const key = objectKey(kind, hash);
   const existing = await env.MEDIA_BUCKET.head(key);
-  if (existing && existing.size === size) {
+  const storedDigest = existing?.customMetadata?.sha256;
+  if (existing && (storedDigest ? constantTimeEqual(storedDigest, declaredDigest) : existing.size === size)) {
     return json(request, env, { ok: true, exists: true, hash, size });
   }
-  await env.MEDIA_BUCKET.put(key, body, { httpMetadata: { contentType } });
+  await env.MEDIA_BUCKET.put(key, body, {
+    httpMetadata: { contentType },
+    // كائناتٌ قديمةٌ بلا هذه البصمة ترجع للمقارنة بالحجم أعلاه (سلوكٌ لا يتراجع)،
+    // وأوّلُ رفعٍ بعد اليوم يُثبّتها عليها.
+    customMetadata: { sha256: declaredDigest },
+  });
   return json(request, env, { ok: true, hash, size });
 }
 

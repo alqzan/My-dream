@@ -1,11 +1,28 @@
 // Optional password protection for backup files. The whole backup JSON is
 // encrypted with AES-GCM under a key derived from the password via PBKDF2
-// (150k iterations, SHA-256). The output is a small JSON wrapper carrying the
-// salt + IV so import can recognise it (isEncryptedBackup) and decrypt it. A
-// wrong password just fails to decrypt — there is no recovery, by design.
+// (SHA-256). The output is a small JSON wrapper carrying the salt + IV so
+// import can recognise it (isEncryptedBackup) and decrypt it. A wrong password
+// just fails to decrypt — there is no recovery, by design.
+//
+// ===================== عددُ الدورات ونسخةُ الغلاف =====================
+// عددُ دورات PBKDF2 هو كلُّ ما يقف بين كلمةِ مرورٍ بشرية وبين من يملك الملفّ:
+// رفعُه يرفع كلفةَ كلّ تخمينٍ بالقدر نفسه. كانت ١٥٠ ألفاً، وتوصيةُ OWASP
+// الحالية لـPBKDF2-SHA256 هي ٦٠٠ ألف — فرُفِعت.
+//
+// **ولا يجوز أن يكسر الرفعُ ملفّاً صُدِّر قبله.** فالعددُ ليس ثابتاً واحداً بل
+// صفةٌ من صفات الغلاف: `madar-enc-v1` تعني ١٥٠ ألفاً أبداً، و`madar-enc-v2`
+// تعني ٦٠٠ ألفاً. التصديرُ يكتب v2، والاستيرادُ يقرأ الاثنين — فنسخةٌ
+// احتياطية من العام الماضي تُفتح كما هي، وواحدةٌ اليوم تُكتب بالعدد الأقوى.
+// الحارس في `backupCrypto.test.ts`.
 
-const MAGIC = "madar-enc-v1";
-const ITERATIONS = 150_000;
+const MAGIC_V1 = "madar-enc-v1";
+const MAGIC_V2 = "madar-enc-v2";
+const MAGIC = MAGIC_V2; // ما يُكتب اليوم
+const ITERATIONS_BY_MAGIC: Record<string, number> = {
+  [MAGIC_V1]: 150_000,
+  [MAGIC_V2]: 600_000,
+};
+const ITERATIONS = ITERATIONS_BY_MAGIC[MAGIC];
 
 // Chunked base64 so large ciphertexts (a backup with inlined photos can be
 // several MB) don't blow the call-stack the way String.fromCharCode(...bytes)
@@ -27,7 +44,7 @@ function base64ToBuf(s: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-async function deriveKey(password: string, salt: BufferSource): Promise<CryptoKey> {
+async function deriveKey(password: string, salt: BufferSource, iterations = ITERATIONS): Promise<CryptoKey> {
   const baseKey = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(password) as BufferSource,
@@ -36,7 +53,7 @@ async function deriveKey(password: string, salt: BufferSource): Promise<CryptoKe
     ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
@@ -71,18 +88,28 @@ export async function encryptJson(obj: unknown, password: string): Promise<strin
 }
 
 export function isEncryptedBackup(parsed: unknown): parsed is EncryptedBackup {
+  const w = parsed as EncryptedBackup | null;
   return (
-    !!parsed &&
-    typeof parsed === "object" &&
-    (parsed as EncryptedBackup).__madar_enc === MAGIC &&
-    typeof (parsed as EncryptedBackup).data === "string"
+    !!w &&
+    typeof w === "object" &&
+    typeof w.__madar_enc === "string" &&
+    // أيُّ نسخةٍ نعرفها — وإلّا فملفٌّ من مستقبلٍ لا نفهمه، فالأصدقُ أن يُعامَل
+    // معاملةَ «ليس نسخةً مشفَّرةً نعرفها» على أن يُطلب له كلمةُ مرورٍ لن تُجدي.
+    w.__madar_enc in ITERATIONS_BY_MAGIC &&
+    typeof w.data === "string" &&
+    typeof w.salt === "string" &&
+    typeof w.iv === "string"
   );
 }
 
 export async function decryptJson(wrapper: EncryptedBackup, password: string): Promise<unknown> {
+  // عددُ الدورات من الغلاف نفسه لا من الثابت الحاليّ — وإلّا لصار كلُّ رفعٍ
+  // للعدد إتلافاً صامتاً لكلّ نسخةٍ احتياطية سبقته.
+  const iterations = ITERATIONS_BY_MAGIC[wrapper.__madar_enc];
+  if (!iterations) throw new Error("unknown backup encryption version");
   const salt = new Uint8Array(base64ToBuf(wrapper.salt));
   const iv = new Uint8Array(base64ToBuf(wrapper.iv));
-  const key = await deriveKey(password, salt as BufferSource);
+  const key = await deriveKey(password, salt as BufferSource, iterations);
   const plain = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: iv as BufferSource },
     key,

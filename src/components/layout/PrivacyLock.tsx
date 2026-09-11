@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { hasPin, isUnlocked, verifyPin, markUnlocked, PIN_LENGTH } from "@/lib/lock";
+import { hasPin, isUnlocked, verifyPin, markUnlocked, lockedForMs, LockThrottledError, PIN_LENGTH } from "@/lib/lock";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { Delete, Lock } from "lucide-react";
-import { buzz } from "@/lib/utils";
+import { buzz, secondsCount } from "@/lib/utils";
 
 // Gate that hides the whole app behind a PIN screen when a lock is set and this
 // session hasn't unlocked yet. Once unlocked, it renders children untouched.
@@ -18,25 +18,41 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
   const [digits, setDigits] = useState("");
   const [error, setError] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // ثوانٍ باقيةٌ من التأخير المتصاعد بعد محاولاتٍ خاطئة. تُعرض ولا تُخفى:
+  // لوحةٌ لا تستجيب بلا سبب أسوأُ من انتظارٍ معلوم.
+  const [waitSec, setWaitSec] = useState(() => Math.ceil(lockedForMs() / 1000));
+
+  useEffect(() => {
+    if (waitSec <= 0) return;
+    const id = setInterval(() => setWaitSec(Math.ceil(lockedForMs() / 1000)), 250);
+    return () => clearInterval(id);
+  }, [waitSec]);
 
   useEffect(() => {
     if (digits.length !== PIN_LENGTH) return;
     let active = true;
     (async () => {
-      const ok = await verifyPin(digits);
-      if (!active) return;
-      if (ok) {
-        markUnlocked();
-        buzz(15);
-        setLocked(false);
-      } else {
-        setError(true);
-        buzz(40);
-        setTimeout(() => {
-          setDigits("");
-          setError(false);
-        }, 500);
+      try {
+        const ok = await verifyPin(digits);
+        if (!active) return;
+        if (ok) {
+          markUnlocked();
+          buzz(15);
+          setLocked(false);
+          return;
+        }
+      } catch (err) {
+        if (!active) return;
+        if (!(err instanceof LockThrottledError)) throw err;
       }
+      setError(true);
+      setWaitSec(Math.ceil(lockedForMs() / 1000));
+      buzz(40);
+      setTimeout(() => {
+        if (!active) return;
+        setDigits("");
+        setError(false);
+      }, 500);
     })();
     return () => { active = false; };
   }, [digits]);
@@ -44,6 +60,7 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
   if (!locked) return <>{children}</>;
 
   const press = (n: string) => {
+    if (waitSec > 0) { buzz(40); return; }
     setDigits((d) => (d.length < PIN_LENGTH ? d + n : d));
     buzz(8);
   };
@@ -54,7 +71,9 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
       <BrandMark size={44} />
       <div className="mt-4 flex items-center gap-2 text-gray-500">
         <Lock size={15} />
-        <p className="text-sm font-medium">أدخل رمز الدخول</p>
+        <p className="text-sm font-medium">
+          {waitSec > 0 ? `محاولاتٌ كثيرة — انتظر ${secondsCount(waitSec)}` : "أدخل رمز الدخول"}
+        </p>
       </div>
 
       {/* نقاط الرمز */}

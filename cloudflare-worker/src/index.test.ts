@@ -10,6 +10,7 @@ type StoredObject = {
   bytes: Uint8Array;
   contentType: string;
   etag: string;
+  customMetadata?: Record<string, string>;
 };
 
 class MemoryBucket {
@@ -19,16 +20,27 @@ class MemoryBucket {
   async head(key: string) {
     const object = this.objects.get(key);
     return object
-      ? { key, size: object.bytes.byteLength, httpMetadata: { contentType: object.contentType }, httpEtag: object.etag }
+      ? {
+          key,
+          size: object.bytes.byteLength,
+          httpMetadata: { contentType: object.contentType },
+          customMetadata: object.customMetadata,
+          httpEtag: object.etag,
+        }
       : null;
   }
 
-  async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }) {
+  async put(
+    key: string,
+    value: ArrayBuffer,
+    options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
+  ) {
     this.putCount++;
     const bytes = new Uint8Array(value.slice(0));
     this.objects.set(key, {
       bytes,
       contentType: options?.httpMetadata?.contentType ?? "application/octet-stream",
+      customMetadata: options?.customMetadata,
       etag: `etag-${this.putCount}`,
     });
   }
@@ -112,6 +124,64 @@ describe("madar-r2-gateway runtime", () => {
       headers: { Origin: BAD_ORIGIN },
     }), env);
     expect(forbidden.status).toBe(403);
+  });
+
+  // مختصرُ التكرار: بايتاتٌ مختلفةٌ بالطول نفسه تحت الهاش نفسِه كانت تُعَدّ
+  // «موجودةً أصلاً» فلا تُكتب — والقديمُ يبقى. البصمةُ المخزَّنة تحسم المسألة.
+  it("same-length different bytes under one hash are NOT treated as already present", async () => {
+    const env = await envFor(bucket);
+    const first = new TextEncoder().encode("aaaaaaaa");
+    const second = new TextEncoder().encode("bbbbbbbb");
+    expect(first.byteLength).toBe(second.byteLength);
+    const path = `/v1/media/put?kind=photos&hash=${PHOTO_HASH}&ct=image/png`;
+
+    await worker.fetch(request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Madar-Content-SHA256": await sha256Hex(first) },
+      body: first,
+    }, true), env);
+    expect(bucket.putCount).toBe(1);
+
+    const other = await worker.fetch(request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Madar-Content-SHA256": await sha256Hex(second) },
+      body: second,
+    }, true), env);
+    expect(other.status).toBe(200);
+    expect((await jsonResponse(other)).exists).toBeUndefined();
+    expect(bucket.putCount).toBe(2);
+    expect(bucket.objects.get(`media/photos/${PHOTO_HASH}`)?.bytes).toEqual(second);
+  });
+
+  it("stores the content digest so a repeat upload is answered from it", async () => {
+    const env = await envFor(bucket);
+    const bytes = new TextEncoder().encode("png-data");
+    const digest = await sha256Hex(bytes);
+    const path = `/v1/media/put?kind=photos&hash=${PHOTO_HASH}&ct=image/png`;
+    await worker.fetch(request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Madar-Content-SHA256": digest },
+      body: bytes,
+    }, true), env);
+    expect(bucket.objects.get(`media/photos/${PHOTO_HASH}`)?.customMetadata).toEqual({ sha256: digest });
+  });
+
+  // كائناتٌ رُفعت قبل اليوم بلا بصمةٍ مخزَّنة: السلوكُ القديم (مقارنةُ الحجم)
+  // يبقى لها فلا تُعاد كتابةُ أرشيفٍ كامل عند أوّل حفظٍ بعد النشر.
+  it("falls back to the size check for pre-existing objects with no stored digest", async () => {
+    const env = await envFor(bucket);
+    const bytes = new TextEncoder().encode("png-data");
+    bucket.objects.set(`media/photos/${PHOTO_HASH}`, {
+      bytes, contentType: "image/png", etag: "legacy",
+    });
+    const before = bucket.putCount;
+    const again = await worker.fetch(request(`/v1/media/put?kind=photos&hash=${PHOTO_HASH}&ct=image/png`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Madar-Content-SHA256": await sha256Hex(bytes) },
+      body: bytes,
+    }, true), env);
+    expect((await jsonResponse(again)).exists).toBe(true);
+    expect(bucket.putCount).toBe(before);
   });
 
   it("verifies the upload digest, serves a signed download, and inventories the object", async () => {

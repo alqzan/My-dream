@@ -307,7 +307,26 @@ export function BackupCard() {
     };
     const withMeta = { __meta: meta, ...data };
     const useEnc = encrypt && exportPassword.trim().length > 0;
-    const payload = useEnc ? await encryptJson(withMeta, exportPassword.trim()) : JSON.stringify(withMeta);
+    // التشفيرُ يحتفظ بالنسخة أربعَ مرّاتٍ في الذاكرة معاً (نصٌّ · بايتات ·
+    // مشفَّر · base64 يتضخّم ٣٣٪)، ونسخةٌ فيها صورُ سنواتٍ قد تبلغ مئاتِ
+    // الميغابايت — فينفد ذاكرةُ Safari على الجوّال ويسقط الزرُّ صامتاً بلا
+    // ملفٍّ ولا سبب. الصيغةُ اليوم كتلةٌ واحدة (تغييرُها إلى تشفيرٍ مُقطَّع
+    // يمسّ كلَّ ملفٍّ صُدِّر من قبل، فليس بنداً جانبياً) — فالأصدقُ أن يُقال
+    // للمالك ما حدث ويُعرض عليه المخرج، لا أن يصمت.
+    let payload: string;
+    try {
+      payload = useEnc ? await encryptJson(withMeta, exportPassword.trim()) : JSON.stringify(withMeta);
+    } catch (err) {
+      setExporting(null);
+      showToast(
+        useEnc
+          ? "تعذّر تشفير النسخة — غالباً حجمُها أكبر من ذاكرة المتصفّح. جرّب التصدير بلا تشفير، أو من متصفّح الحاسوب"
+          : "تعذّر تجهيز ملف النسخة — غالباً حجمُها أكبر من ذاكرة المتصفّح. جرّب من متصفّح الحاسوب",
+        "warning"
+      );
+      setError(err instanceof Error ? err.message : "تعذّر تجهيز النسخة");
+      return;
+    }
     setExporting(null);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);

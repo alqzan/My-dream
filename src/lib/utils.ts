@@ -905,6 +905,10 @@ export function arabicCount(
 export const entriesCount = (n: number): string =>
   arabicCount(n, { one: "مذكرة واحدة", two: "مذكرتان", few: "مذكرات", many: "مذكرة" });
 
+/** «ثانية · ثانيتان · ٣ ثوانٍ · ١١ ثانية» — تأخيرُ قفل الخصوصية. */
+export const secondsCount = (n: number): string =>
+  arabicCount(n, { one: "ثانية واحدة", two: "ثانيتين", few: "ثوانٍ", many: "ثانية" });
+
 /** «يوم · يومان · ٣ أيام · ١١ يوماً». */
 export const daysCount = (n: number): string =>
   arabicCount(n, { one: "يوم واحد", two: "يومان", few: "أيام", many: "يوماً" });
