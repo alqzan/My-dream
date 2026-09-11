@@ -73,7 +73,10 @@ function LetterMoon({ frac }: { frac: number }) {
 }
 
 export function FutureLetters() {
-  const { futureLetters, addFutureLetter, openFutureLetter, deleteFutureLetter } = useAppStore();
+  const futureLetters = useAppStore((s) => s.futureLetters);
+  const addFutureLetter = useAppStore((s) => s.addFutureLetter);
+  const openFutureLetter = useAppStore((s) => s.openFutureLetter);
+  const deleteFutureLetter = useAppStore((s) => s.deleteFutureLetter);
   const [composing, setComposing] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");

@@ -11,7 +11,9 @@ import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 // هدف قراءة سنوي: عدد الكتب المُنهاة هذا العام مقابل هدف اخترته، مع مؤشر
 // «هل أنت على الوتيرة؟» يقارن نسبة الإنجاز بنسبة العام المنقضية.
 export function ReadingGoalCard() {
-  const { books, readingGoal, setReadingGoal } = useAppStore();
+  const books = useAppStore((s) => s.books);
+  const readingGoal = useAppStore((s) => s.readingGoal);
+  const setReadingGoal = useAppStore((s) => s.setReadingGoal);
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState(readingGoal ? String(readingGoal) : "");
 

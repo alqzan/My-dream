@@ -41,8 +41,12 @@ const STATE: Record<JuzState, { fill: string; text: string; label: string; dot: 
 // لوحة «خريطة الحفظ» — وحدات القرآن (أجزاء/أحزاب/أوجه) كشبكة ملوّنة بحالة كلٍّ،
 // مع إحصاءات وتفاصيل ومراجعة وقراءة مباشرة.
 export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onReview: (p: Portion) => void; onRead?: (p: Portion) => void }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const clearHifz = useAppStore((s) => s.clearHifz);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const setFrontier = useAppStore((s) => s.setFrontier);
+  const snapshot = useAppStore((s) => s.snapshot);
+  const updateHifzPlan = useAppStore((s) => s.updateHifzPlan);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const [unit, setUnit] = useState<MapUnit>("juz");
   const [sel, setSel] = useState<number | null>(null);
   const [editPlan, setEditPlan] = useState(false);
@@ -160,7 +164,7 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
           <div className="text-[11px] font-semibold text-gray-600">عدّل الورد اليومي</div>
           <div className="flex gap-1.5 flex-wrap">
             {UNITS.map((u) => (
-              <button key={u} onClick={() => store.updateHifzPlan({ unit: u })}
+              <button key={u} onClick={() => updateHifzPlan({ unit: u })}
                 className={`text-xs font-semibold rounded-full px-3 py-1.5 press ${plan.unit === u ? "bg-quran text-white" : "bg-white dark:bg-[#241c12] text-gray-500 border border-gray-200"}`}>
                 {UNIT_LABEL[u]}
               </button>
@@ -168,7 +172,7 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-gray-600">كل يوم</span>
-            <NumberInput value={String(plan.amount)} onChange={(v) => store.updateHifzPlan({ amount: parseInt(v) || 1 })} inputMode="numeric"
+            <NumberInput value={String(plan.amount)} onChange={(v) => updateHifzPlan({ amount: parseInt(v) || 1 })} inputMode="numeric"
               className="w-16 text-sm text-center border border-gray-200 rounded-lg px-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-quran/40" />
             <span className="text-[11px] text-gray-600">{UNIT_LABEL[plan.unit]}</span>
           </div>
@@ -190,18 +194,18 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
               </p>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
-                  onClick={() => downloadPlainBackup(store.snapshot(), "قبل-خطة-جديدة")}
+                  onClick={() => downloadPlainBackup(snapshot(), "قبل-خطة-جديدة")}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg px-2.5 py-1.5 press"
                 >
                   <Download size={13} /> صدّر نسخة احتياطية
                 </button>
                 <span className="flex-1" />
-                <button onClick={() => { store.clearHifz(); setConfirmNew(false); setEditPlan(false); }} className="text-[11px] font-bold text-white bg-red-500 rounded-lg px-3 py-1.5 press">تأكيد المسح</button>
+                <button onClick={() => { clearHifz(); setConfirmNew(false); setEditPlan(false); }} className="text-[11px] font-bold text-white bg-red-500 rounded-lg px-3 py-1.5 press">تأكيد المسح</button>
                 <button onClick={() => setConfirmNew(false)} className="text-[11px] text-gray-500 rounded-lg px-2.5 py-1.5 press">إلغاء</button>
               </div>
             </div>
           )}
-          {editPos && <PositionEditor current={h.frontierId} onSave={(id) => { store.setFrontier(id); setEditPos(false); }} onCancel={() => setEditPos(false)} />}
+          {editPos && <PositionEditor current={h.frontierId} onSave={(id) => { setFrontier(id); setEditPos(false); }} onCancel={() => setEditPos(false)} />}
         </div>
       )}
     </div>

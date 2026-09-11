@@ -23,10 +23,16 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onClose, initial, prefill, onSaved }: TransactionFormProps) {
-  const {
-    categories, reserves, transactions, budgets, monthlyIncome, merchantRules,
-    addTransaction, updateTransaction, addCategory, rememberMerchant,
-  } = useAppStore();
+  const categories = useAppStore((s) => s.categories);
+  const reserves = useAppStore((s) => s.reserves);
+  const transactions = useAppStore((s) => s.transactions);
+  const budgets = useAppStore((s) => s.budgets);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const merchantRules = useAppStore((s) => s.merchantRules);
+  const addTransaction = useAppStore((s) => s.addTransaction);
+  const updateTransaction = useAppStore((s) => s.updateTransaction);
+  const addCategory = useAppStore((s) => s.addCategory);
+  const rememberMerchant = useAppStore((s) => s.rememberMerchant);
   const mains = categories.filter((c) => !c.parentId);
 
   // If editing a transaction whose category is a sub, pre-select its parent

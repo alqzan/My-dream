@@ -36,12 +36,13 @@ const UNITS: HifzUnit[] = ["ayah", "quarter", "half", "page"];
 export type HifzView = "today" | "map" | "drill";
 
 export function HifzSection({ view = "today" }: { view?: HifzView } = {}) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const startHifzPlan = useAppStore((s) => s.startHifzPlan);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const [text, setText] = useState<string[] | null>(null);
   useEffect(() => { loadAyahText().then(setText); }, []);
 
-  if (!h.plan) return <PlanSetup onStart={store.startHifzPlan} />;
+  if (!h.plan) return <PlanSetup onStart={startHifzPlan} />;
   return <HifzDashboard text={text} view={view} />;
 }
 
@@ -126,8 +127,11 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
 
 // ---------------- لوحة الحفظ ----------------
 function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const recordHifzSession = useAppStore((s) => s.recordHifzSession);
+  const recordRandomTest = useAppStore((s) => s.recordRandomTest);
+  const recordReview = useAppStore((s) => s.recordReview);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
   // المُدرّب الموجّه خارج جلسة اليوم — للزيادة، أو للتسميع من الخريطة، أو للاختبار.
   const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; kind: CoachKind } | null>(null);
@@ -230,8 +234,8 @@ function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }
           )}
           <div>
             <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو سجّل مباشرةً — قيّم حفظك:</div>
-            <RatingRow onRate={(r) => { store.recordHifzSession(portion.toId, r); setShowMore(false); }} />
-            <button onClick={() => { store.recordHifzSession(portion.toId); setShowMore(false); }} className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg py-2 press">
+            <RatingRow onRate={(r) => { recordHifzSession(portion.toId, r); setShowMore(false); }} />
+            <button onClick={() => { recordHifzSession(portion.toId); setShowMore(false); }} className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg py-2 press">
               <Check size={14} /> أتممت بلا تقييم
             </button>
           </div>
@@ -287,9 +291,9 @@ function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }
           onClose={() => setCoach(null)}
           onDone={(rating?: HifzRating) => {
             const { portion: p, kind } = coach;
-            if (kind === "memorize") { store.recordHifzSession(p.toId, rating); setShowMore(false); }
-            else if (kind === "test") store.recordRandomTest(p.fromId, p.toId, rating);
-            else store.recordReview(p.fromId, p.toId, rating);
+            if (kind === "memorize") { recordHifzSession(p.toId, rating); setShowMore(false); }
+            else if (kind === "test") recordRandomTest(p.fromId, p.toId, rating);
+            else recordReview(p.fromId, p.toId, rating);
             setCoach(null);
           }}
         />
@@ -305,8 +309,10 @@ function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }
 const INTENSITIES: HifzIntensity[] = ["light", "balanced", "intense"];
 
 function IntensityCard({ plan }: { plan: TodayPlan }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const setHifzIntensity = useAppStore((s) => s.setHifzIntensity);
+  const updateHifzPlan = useAppStore((s) => s.updateHifzPlan);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const [open, setOpen] = useState(false);
   const cur = intensityOf(h.plan);
   if (!h.plan) return null;
@@ -329,7 +335,7 @@ function IntensityCard({ plan }: { plan: TodayPlan }) {
             <div className="flex items-center justify-center gap-2 text-[11px] text-gray-500">
               <Target size={13} className="text-quran" />
               <button
-                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount - 1 })}
+                onClick={() => updateHifzPlan({ amount: h.plan!.amount - 1 })}
                 disabled={h.plan.amount <= 1}
                 className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center disabled:opacity-40"
                 aria-label="أنقص"
@@ -338,7 +344,7 @@ function IntensityCard({ plan }: { plan: TodayPlan }) {
                 {arNum(h.plan.amount)} {UNIT_LABEL[h.plan.unit]}
               </span>
               <button
-                onClick={() => store.updateHifzPlan({ amount: h.plan!.amount + 1 })}
+                onClick={() => updateHifzPlan({ amount: h.plan!.amount + 1 })}
                 className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-[#382c1d] press flex items-center justify-center"
                 aria-label="زِد"
               ><Plus size={13} /></button>
@@ -351,7 +357,7 @@ function IntensityCard({ plan }: { plan: TodayPlan }) {
               {INTENSITIES.map((v) => (
                 <button
                   key={v}
-                  onClick={() => store.setHifzIntensity(v)}
+                  onClick={() => setHifzIntensity(v)}
                   className={`flex-1 text-xs font-bold rounded-xl py-2 press ${
                     cur === v ? "bg-quran text-white shadow-sm" : "bg-gray-100 dark:bg-[#382c1d] text-gray-500"
                   }`}

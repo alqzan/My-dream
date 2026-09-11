@@ -45,8 +45,10 @@ export function HifzCoach({
   onClose: () => void;
   recallTitle?: string; // عنوان شاشة التسميع (مراجعة/اختبار مفاجئ)
 }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const resolveMistake = useAppStore((s) => s.resolveMistake);
+  const toggleMistakeWord = useAppStore((s) => s.toggleMistakeWord);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const ayat = textsInRange(text, portion.fromId, portion.toId).map((r) => ({
     id: r.id, no: idToSurahAyah(r.id).ayah, text: r.text,
   }));
@@ -114,8 +116,8 @@ export function HifzCoach({
             <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
               <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها — واضغطها ثانيةً للتراجع
             </div>
-            <MarkableSheet text={text} portion={portion} today={todayStr} onToggle={store.toggleMistakeWord} />
-            <SpotStrip items={openHere} today={todayStr} onClear={store.resolveMistake} />
+            <MarkableSheet text={text} portion={portion} today={todayStr} onToggle={toggleMistakeWord} />
+            <SpotStrip items={openHere} today={todayStr} onClear={resolveMistake} />
             <div className="mt-3">
               <MutashabihatAlert portion={portion} compact />
             </div>

@@ -16,10 +16,16 @@ const PCT_PRESETS = [10, 20, 30, 50];
 // red once it overflows past the rim. A cap is either a fixed amount or a
 // percentage of the monthly income (and then it follows the income).
 export function BudgetTracker() {
-  const {
-    categories, budgets, transactions, monthlyIncome, salaryDay, lastSalaryConfirm, budgetWindow,
-    setBudget, removeBudget, setMonthlyIncome,
-  } = useAppStore();
+  const categories = useAppStore((s) => s.categories);
+  const budgets = useAppStore((s) => s.budgets);
+  const transactions = useAppStore((s) => s.transactions);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
+  const budgetWindow = useAppStore((s) => s.budgetWindow);
+  const setBudget = useAppStore((s) => s.setBudget);
+  const removeBudget = useAppStore((s) => s.removeBudget);
+  const setMonthlyIncome = useAppStore((s) => s.setMonthlyIncome);
   const [adding, setAdding] = useState(false);
   // تعديل سقفٍ قائم في مكانه — بلا حذفٍ وإعادة إضافة.
   const [editCat, setEditCat] = useState<string | null>(null);

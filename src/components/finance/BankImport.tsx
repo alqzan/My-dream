@@ -8,8 +8,9 @@ import type { Transaction } from "@/lib/types";
 import { CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
 
 export function BankImport({ onClose, initialSms }: { onClose: () => void; initialSms?: string }) {
-  const { categories, merchantRules, addTransaction } = useAppStore();
-
+  const categories = useAppStore((s) => s.categories);
+  const merchantRules = useAppStore((s) => s.merchantRules);
+  const addTransaction = useAppStore((s) => s.addTransaction);
   // Re-classify a parsed row through the user's learned merchant rules
   // (falls back to the built-in keyword guess the parser already applied).
   function classify(tx: Transaction): Transaction {

@@ -90,8 +90,11 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
 // شاشةٌ واحدة تمشي بالخطوات بالترتيب. تُلتقط الخطوات مرّةً عند الفتح فلا تتزحزح
 // أثناء الجلسة، وتُحفَظ لقطتُها على الجهاز فيُستأنف ما انقطع بدل البدء من الصفر.
 export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; resume: boolean; onClose: () => void }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const recordHifzSession = useAppStore((s) => s.recordHifzSession);
+  const recordRandomTest = useAppStore((s) => s.recordRandomTest);
+  const recordReview = useAppStore((s) => s.recordReview);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const todayStr = today();
 
   const [steps] = useState<SessionStep[]>(() => {
@@ -150,9 +153,9 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
             text={text}
             onSkip={() => advance()}
             onGuided={(portion, mode, title, onDoneRating) => setCoach({ portion, mode, title, onDone: onDoneRating })}
-            onMemorize={(portion, r) => { store.recordHifzSession(portion.toId, r); advance({ ...tally, memorized: tally.memorized + 1 }); }}
-            onReview={(portion, r) => { store.recordReview(portion.fromId, portion.toId, r); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
-            onTest={(portion, r) => { store.recordRandomTest(portion.fromId, portion.toId, r); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
+            onMemorize={(portion, r) => { recordHifzSession(portion.toId, r); advance({ ...tally, memorized: tally.memorized + 1 }); }}
+            onReview={(portion, r) => { recordReview(portion.fromId, portion.toId, r); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
+            onTest={(portion, r) => { recordRandomTest(portion.fromId, portion.toId, r); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
             onDrill={(closed) => advance({ ...tally, mistakesClosed: tally.mistakesClosed + (closed ? 1 : 0) })}
           />
         )}

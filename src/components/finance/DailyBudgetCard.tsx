@@ -83,11 +83,18 @@ function BudgetVessel({ frac, over }: { frac: number; over: boolean }) {
 // into your running balance. The daily amount is either a fixed figure or
 // a percentage of monthly income (income × pct / 100 ÷ 30).
 export function DailyBudgetCard() {
-  const {
-    dailyBudget, transactions, monthlyIncome, reserves, salaryDay,
-    setDailyBudget, removeDailyBudget, setMonthlyIncome, setSalaryDay,
-    sweepToReserve, addReserve, pullFromReserve,
-  } = useAppStore();
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const transactions = useAppStore((s) => s.transactions);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const reserves = useAppStore((s) => s.reserves);
+  const salaryDay = useAppStore((s) => s.salaryDay);
+  const setDailyBudget = useAppStore((s) => s.setDailyBudget);
+  const removeDailyBudget = useAppStore((s) => s.removeDailyBudget);
+  const setMonthlyIncome = useAppStore((s) => s.setMonthlyIncome);
+  const setSalaryDay = useAppStore((s) => s.setSalaryDay);
+  const sweepToReserve = useAppStore((s) => s.sweepToReserve);
+  const addReserve = useAppStore((s) => s.addReserve);
+  const pullFromReserve = useAppStore((s) => s.pullFromReserve);
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<Mode>(dailyBudget?.incomePct ? "income" : "fixed");
   const [amount, setAmount] = useState(dailyBudget?.amount?.toString() ?? "");

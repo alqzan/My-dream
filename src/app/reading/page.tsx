@@ -24,10 +24,11 @@ import { ShelfSeats } from "@/components/madar/mihbara/MihbaraParts";
 type FilterStatus = "الكل" | "أقرأ" | "أنهيت" | "أريد_قراءة";
 
 export default function ReadingPage() {
-  const {
-    books, readingLogs, deleteBook, deleteReadingLog,
-    readingGoal,
-  } = useAppStore();
+  const books = useAppStore((s) => s.books);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const deleteBook = useAppStore((s) => s.deleteBook);
+  const deleteReadingLog = useAppStore((s) => s.deleteReadingLog);
+  const readingGoal = useAppStore((s) => s.readingGoal);
   const [showBookForm, setShowBookForm] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
   const [editBook, setEditBook] = useState<Book | undefined>();

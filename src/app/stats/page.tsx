@@ -38,11 +38,17 @@ import {
 } from "@/components/madar/hasila/HasilaParts";
 
 export default function StatsPage() {
-  const {
-    journalEntries, readingLogs, transactions, books, prayerLogs, readingGoal, frozenHabits,
-    quranWird, quranHifz, quranReflections, quranKhatma,
-  } = useAppStore();
-
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const transactions = useAppStore((s) => s.transactions);
+  const books = useAppStore((s) => s.books);
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const readingGoal = useAppStore((s) => s.readingGoal);
+  const frozenHabits = useAppStore((s) => s.frozenHabits);
+  const quranWird = useAppStore((s) => s.quranWird);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const quranReflections = useAppStore((s) => s.quranReflections);
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
   const year = today().slice(0, 4);
 
   // ---------- Hero numbers ----------

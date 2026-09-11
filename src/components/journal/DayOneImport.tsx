@@ -40,7 +40,10 @@ interface ImportStats {
 const CONNECTION_CLIPBOARD_CLEAR_MS = 30_000;
 
 export function DayOneImport({ onClose }: { onClose: () => void }) {
-  const { importDayOneEntries, deleteDayOneImports, journalEntries, snapshot } = useAppStore();
+  const importDayOneEntries = useAppStore((s) => s.importDayOneEntries);
+  const deleteDayOneImports = useAppStore((s) => s.deleteDayOneImports);
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const snapshot = useAppStore((s) => s.snapshot);
   const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [stats, setStats] = useState<ImportStats | null>(null);

@@ -36,8 +36,11 @@ function AyahContext({ text, ayahId, word }: { text: string[] | null; ayahId: nu
 // اليوم»، وهنا ترى الصورة كاملةً وتختبر ما شئت متى شئت. «اختبرني» يطمس الموضع
 // ويسألك عنه (لا يعرضه مكشوفاً)، والإغلاق يجيء من نتيجة الاختبار.
 export function MistakesPanel() {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const deleteMistake = useAppStore((s) => s.deleteMistake);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const reopenMistake = useAppStore((s) => s.reopenMistake);
+  const resolveMistake = useAppStore((s) => s.resolveMistake);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const items = openMistakes(h);
   const closed = resolvedMistakes(h);
   const [map, setMap] = useState<SimMap | null>(null);
@@ -124,7 +127,7 @@ export function MistakesPanel() {
                     <Target size={15} />
                   </button>
                   <button
-                    onClick={() => store.resolveMistake(m.id)}
+                    onClick={() => resolveMistake(m.id)}
                     className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-500/10 press"
                     title="أغلقه بلا اختبار"
                     aria-label="أغلقه"
@@ -132,7 +135,7 @@ export function MistakesPanel() {
                     <Check size={16} />
                   </button>
                   <button
-                    onClick={() => store.deleteMistake(m.id)}
+                    onClick={() => deleteMistake(m.id)}
                     className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-500/10 press"
                     title="حذف"
                     aria-label="حذف"
@@ -186,14 +189,14 @@ export function MistakesPanel() {
                       <span className="mx-1">· {name} · آية {arNum(ayah)}</span>
                     </span>
                     <button
-                      onClick={() => store.reopenMistake(m.id)}
+                      onClick={() => reopenMistake(m.id)}
                       className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 rounded-lg px-1.5 py-1 press"
                       title="أعِدْه مفتوحاً"
                     >
                       <RotateCcw size={12} /> افتحه
                     </button>
                     <button
-                      onClick={() => store.deleteMistake(m.id)}
+                      onClick={() => deleteMistake(m.id)}
                       className="shrink-0 p-1 rounded-lg text-gray-300 hover:text-red-500 press"
                       title="حذف"
                       aria-label="حذف"

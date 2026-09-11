@@ -37,7 +37,13 @@ function juzArc(i: number): string {
 const GOAL_PRESETS = [10, 20, 30, 43];
 
 export function KhatmaOrbit() {
-  const { quranKhatma, addKhatmaJuz, setKhatmaJuz, setKhatmaPage, setKhatmaPageGoal, completeKhatma, resetKhatma } = useAppStore();
+  const quranKhatma = useAppStore((s) => s.quranKhatma);
+  const addKhatmaJuz = useAppStore((s) => s.addKhatmaJuz);
+  const setKhatmaJuz = useAppStore((s) => s.setKhatmaJuz);
+  const setKhatmaPage = useAppStore((s) => s.setKhatmaPage);
+  const setKhatmaPageGoal = useAppStore((s) => s.setKhatmaPageGoal);
+  const completeKhatma = useAppStore((s) => s.completeKhatma);
+  const resetKhatma = useAppStore((s) => s.resetKhatma);
   const k = quranKhatma ?? { juz: 0, completed: 0 };
   const [celebrate, setCelebrate] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);

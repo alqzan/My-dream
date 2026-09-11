@@ -21,8 +21,14 @@ const RATINGS: { r: HifzRating; label: string; cls: string }[] = [
 // قابلٍ للتراجع (Undo). حذف/تعديل جلسةٍ يعيد المتجرُ حساب الجبهة من الجلسات
 // فيبقى الرسمُ والسجلّ متّسقَين. مطويّ افتراضياً ومحدود العرض (أداء).
 export function HifzLog() {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const deleteHifzReview = useAppStore((s) => s.deleteHifzReview);
+  const deleteHifzSession = useAppStore((s) => s.deleteHifzSession);
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const restoreHifzReview = useAppStore((s) => s.restoreHifzReview);
+  const restoreHifzSession = useAppStore((s) => s.restoreHifzSession);
+  const updateHifzReview = useAppStore((s) => s.updateHifzReview);
+  const updateHifzSession = useAppStore((s) => s.updateHifzSession);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const [open, setOpen] = useState(false);
   const [limit, setLimit] = useState(20);
   const [undo, setUndo] = useState<{ kind: "session"; item: HifzSession } | { kind: "review"; item: HifzReviewLog } | null>(null);
@@ -38,22 +44,22 @@ export function HifzLog() {
 
   const setRating = (row: Row, rating: HifzRating) => {
     const next = row.rating === rating ? undefined : rating;
-    if (row.kind === "session") store.updateHifzSession(row.id, { rating: next });
-    else store.updateHifzReview(row.id, { rating: next });
+    if (row.kind === "session") updateHifzSession(row.id, { rating: next });
+    else updateHifzReview(row.id, { rating: next });
   };
   const del = (row: Row) => {
     if (row.kind === "session") {
       const item = (h.sessions ?? []).find((x) => x.id === row.id);
-      if (item) { setUndo({ kind: "session", item }); store.deleteHifzSession(row.id); }
+      if (item) { setUndo({ kind: "session", item }); deleteHifzSession(row.id); }
     } else {
       const item = (h.reviews ?? []).find((x) => x.id === row.id);
-      if (item) { setUndo({ kind: "review", item }); store.deleteHifzReview(row.id); }
+      if (item) { setUndo({ kind: "review", item }); deleteHifzReview(row.id); }
     }
   };
   const doUndo = () => {
     if (!undo) return;
-    if (undo.kind === "session") store.restoreHifzSession(undo.item);
-    else store.restoreHifzReview(undo.item);
+    if (undo.kind === "session") restoreHifzSession(undo.item);
+    else restoreHifzReview(undo.item);
     setUndo(null);
   };
 

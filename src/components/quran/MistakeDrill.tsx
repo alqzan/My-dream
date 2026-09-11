@@ -27,8 +27,9 @@ export function MistakeDrill({
   text: string[];
   onDone: (ok: boolean, closed: boolean) => void;
 }) {
-  const store = useAppStore();
-  const h = store.quranHifz ?? EMPTY_HIFZ;
+  const quranHifz = useAppStore((s) => s.quranHifz);
+  const recordMistakeDrill = useAppStore((s) => s.recordMistakeDrill);
+  const h = quranHifz ?? EMPTY_HIFZ;
   const mistake = (h.mistakes ?? []).find((m) => m.id === mistakeId);
   const streak = Math.max(0, mistake?.okStreak ?? 0);
   const [revealed, setRevealed] = useState(false);
@@ -47,7 +48,7 @@ export function MistakeDrill({
     : Math.max(0, words.indexOf(word));
 
   function answer(ok: boolean) {
-    store.recordMistakeDrill(mistakeId, ok);
+    recordMistakeDrill(mistakeId, ok);
     onDone(ok, ok && streak + 1 >= MISTAKE_MASTERY);
   }
 

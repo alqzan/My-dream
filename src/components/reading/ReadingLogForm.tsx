@@ -16,7 +16,9 @@ interface ReadingLogFormProps {
 }
 
 export function ReadingLogForm({ books, defaultBookId, defaultMinutes, initial, onClose }: ReadingLogFormProps) {
-  const { addReadingLog, updateReadingLog, updateBook } = useAppStore();
+  const addReadingLog = useAppStore((s) => s.addReadingLog);
+  const updateReadingLog = useAppStore((s) => s.updateReadingLog);
+  const updateBook = useAppStore((s) => s.updateBook);
   const activeBooks = books.filter((b) => b.status === "أقرأ");
   // When editing, allow the log's own book in the picker even if it's no
   // longer "أقرأ" (e.g. already finished), so its book can still be shown/kept.

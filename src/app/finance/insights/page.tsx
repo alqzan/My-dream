@@ -83,7 +83,15 @@ function periodRanges(period: Period, todayStr: string) {
 const inRange = (t: Transaction, start: string, end: string) => t.date >= start && t.date <= end;
 
 export default function SpendInsightsPage() {
-  const { transactions, categories, reserves, dailyBudget, budgets, monthlyIncome, salaryDay, lastSalaryConfirm, budgetWindow } = useAppStore();
+  const transactions = useAppStore((s) => s.transactions);
+  const categories = useAppStore((s) => s.categories);
+  const reserves = useAppStore((s) => s.reserves);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const budgets = useAppStore((s) => s.budgets);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
+  const budgetWindow = useAppStore((s) => s.budgetWindow);
   const [period, setPeriod] = useState<Period>("أسبوع");
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
 

@@ -66,11 +66,17 @@ function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
 }
 
 export default function FinancePage() {
-  const {
-    transactions, categories, dailyBudget, reserves, budgets, salaryDay, lastSalaryConfirm, budgetWindow, monthlyIncome,
-    deleteTransaction, addTransaction,
-  } = useAppStore();
-
+  const transactions = useAppStore((s) => s.transactions);
+  const categories = useAppStore((s) => s.categories);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const reserves = useAppStore((s) => s.reserves);
+  const budgets = useAppStore((s) => s.budgets);
+  const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
+  const budgetWindow = useAppStore((s) => s.budgetWindow);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const deleteTransaction = useAppStore((s) => s.deleteTransaction);
+  const addTransaction = useAppStore((s) => s.addTransaction);
   // Instant delete + 5s undo window.
   function handleDelete(id: string) {
     const tx = transactions.find((t) => t.id === id);

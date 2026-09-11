@@ -34,7 +34,11 @@ function Reorder({ onUp, onDown, first, last }: { onUp: () => void; onDown: () =
 // Deleting a category never deletes its transactions — they show as
 // "غير مصنف" (or roll up to the main if only the sub was deleted).
 export function CategoryManager({ onClose }: { onClose: () => void }) {
-  const { categories, addCategory, updateCategory, deleteCategory, moveCategory } = useAppStore();
+  const categories = useAppStore((s) => s.categories);
+  const addCategory = useAppStore((s) => s.addCategory);
+  const updateCategory = useAppStore((s) => s.updateCategory);
+  const deleteCategory = useAppStore((s) => s.deleteCategory);
+  const moveCategory = useAppStore((s) => s.moveCategory);
   const [addingMain, setAddingMain] = useState(false);
   const [addingSubFor, setAddingSubFor] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);

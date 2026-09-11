@@ -25,7 +25,11 @@ function salaryDue(salaryDay: number, lastConfirm: string | null, todayStr: stri
 // بانر «نزل الراتب؟ 🎉»: عند التأكيد يتحول باقي الميزانية اليومية
 // المتراكمة إلى صندوق «الفوائض» في الاحتياطي وتتصفّر كل العدادات.
 export function SalaryBanner() {
-  const { dailyBudget, transactions, salaryDay, lastSalaryConfirm, confirmSalary } = useAppStore();
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const transactions = useAppStore((s) => s.transactions);
+  const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
+  const confirmSalary = useAppStore((s) => s.confirmSalary);
   const [celebration, setCelebration] = useState<number | null>(null);
 
   const todayStr = today();

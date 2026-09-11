@@ -24,7 +24,11 @@ function prefersReducedMotion(): boolean {
 // بلون الثيم ما دام ممتلئاً، وأحمر حين ينفد/يسلب. اضغط الهدف لتفتح تعبئته/سحبه في
 // مكانه (نفس منطق الإيداع/السحب القديم — بلا حساب جديد).
 export function ReserveFunds() {
-  const { reserves, transactions, addReserve, deleteReserve, addReserveDeposit } = useAppStore();
+  const reserves = useAppStore((s) => s.reserves);
+  const transactions = useAppStore((s) => s.transactions);
+  const addReserve = useAppStore((s) => s.addReserve);
+  const deleteReserve = useAppStore((s) => s.deleteReserve);
+  const addReserveDeposit = useAppStore((s) => s.addReserveDeposit);
   const [adding, setAdding] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const openFund = reserves.find((f) => f.id === expanded) ?? null;
@@ -235,10 +239,13 @@ function FundDial({
 // ————————————————————————————————————————————————————————————————
 // تفاصيل الهدف المفتوح — نفس نموذج التعبئة/السحب والحذف القديم بالحرف.
 function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void }) {
-  const {
-    transactions, deleteReserve, updateReserve, addReserveDeposit, deleteReserveDeposit,
-    dailyBudget, pullFromReserve,
-  } = useAppStore();
+  const transactions = useAppStore((s) => s.transactions);
+  const deleteReserve = useAppStore((s) => s.deleteReserve);
+  const updateReserve = useAppStore((s) => s.updateReserve);
+  const addReserveDeposit = useAppStore((s) => s.addReserveDeposit);
+  const deleteReserveDeposit = useAppStore((s) => s.deleteReserveDeposit);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const pullFromReserve = useAppStore((s) => s.pullFromReserve);
   const [amount, setAmount] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);

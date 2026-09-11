@@ -32,7 +32,14 @@ function rawNote(text: string): string {
 // Automation → cloud inbox). Each row is pre-classified with the smart
 // suggestion; the user just confirms or changes the section, then adds.
 export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose: () => void }) {
-  const { categories, merchantRules, transactions, budgets, monthlyIncome, addTransaction, addCategory, rememberMerchant } = useAppStore();
+  const categories = useAppStore((s) => s.categories);
+  const merchantRules = useAppStore((s) => s.merchantRules);
+  const transactions = useAppStore((s) => s.transactions);
+  const budgets = useAppStore((s) => s.budgets);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const addTransaction = useAppStore((s) => s.addTransaction);
+  const addCategory = useAppStore((s) => s.addCategory);
+  const rememberMerchant = useAppStore((s) => s.rememberMerchant);
   // Which row is currently showing the inline "new category" form (by key).
   const [addingFor, setAddingFor] = useState<string | null>(null);
 

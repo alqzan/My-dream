@@ -16,7 +16,16 @@ interface DayViewProps {
 }
 
 export function DayView({ date, onClose }: DayViewProps) {
-  const { transactions, journalEntries, readingLogs, books, habits, prayerLogs, categories, quranReflections, quranWird, frozenHabits } = useAppStore();
+  const transactions = useAppStore((s) => s.transactions);
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const readingLogs = useAppStore((s) => s.readingLogs);
+  const books = useAppStore((s) => s.books);
+  const habits = useAppStore((s) => s.habits);
+  const prayerLogs = useAppStore((s) => s.prayerLogs);
+  const categories = useAppStore((s) => s.categories);
+  const quranReflections = useAppStore((s) => s.quranReflections);
+  const quranWird = useAppStore((s) => s.quranWird);
+  const frozenHabits = useAppStore((s) => s.frozenHabits);
   const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
 
   if (!date) return null;

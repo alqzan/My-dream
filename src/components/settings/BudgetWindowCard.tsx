@@ -16,7 +16,10 @@ const OPTIONS: { mode: BudgetWindowMode; label: string; hint: string }[] = [
 ];
 
 export function BudgetWindowCard() {
-  const { budgetWindow, setBudgetWindow, salaryDay, lastSalaryConfirm } = useAppStore();
+  const budgetWindow = useAppStore((s) => s.budgetWindow);
+  const setBudgetWindow = useAppStore((s) => s.setBudgetWindow);
+  const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
   const mode: BudgetWindowMode = budgetWindow === "month" ? "month" : "salary";
   const todayStr = today();
   const start = budgetCycleStart(lastSalaryConfirm, salaryDay ?? 27, todayStr);

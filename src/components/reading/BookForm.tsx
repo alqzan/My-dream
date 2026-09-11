@@ -18,7 +18,8 @@ interface BookFormProps {
 }
 
 export function BookForm({ onClose, initial }: BookFormProps) {
-  const { addBook, updateBook } = useAppStore();
+  const addBook = useAppStore((s) => s.addBook);
+  const updateBook = useAppStore((s) => s.updateBook);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [author, setAuthor] = useState(initial?.author ?? "");
   const [totalPages, setTotalPages] = useState(initial?.totalPages?.toString() ?? "");

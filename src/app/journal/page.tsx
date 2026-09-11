@@ -45,8 +45,10 @@ const JOURNAL_TABS = ["السماء", "الشهر", "الصور", "الرسائ�
 type JournalTab = (typeof JOURNAL_TABS)[number];
 
 export default function JournalPage() {
-  const { journalEntries, deleteJournalEntry, addJournalEntry, updateJournalEntry } = useAppStore();
-
+  const journalEntries = useAppStore((s) => s.journalEntries);
+  const deleteJournalEntry = useAppStore((s) => s.deleteJournalEntry);
+  const addJournalEntry = useAppStore((s) => s.addJournalEntry);
+  const updateJournalEntry = useAppStore((s) => s.updateJournalEntry);
   // Instant delete + 5s undo window instead of a confirm dialog.
   function handleDelete(id: string) {
     const entry = journalEntries.find((e) => e.id === id);

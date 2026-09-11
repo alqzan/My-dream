@@ -41,8 +41,8 @@ function downloadText(text: string, filename: string, type: string) {
 }
 
 export function AiExportCard() {
-  const store = useAppStore();
-  const data = store.snapshot() as AppData;
+  const snapshot = useAppStore((s) => s.snapshot);
+  const data = snapshot() as AppData;
   const currentDate = today();
   const [mode, setMode] = useState<AiExportPeriod["mode"]>("month");
   const [month, setMonth] = useState(currentDate.slice(0, 7));
