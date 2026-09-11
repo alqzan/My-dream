@@ -221,6 +221,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const savedId = useRef<string | undefined>(initial?.id);
   const firstRun = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  // هل ثمّ حفظٌ مؤجَّل لم يقع بعد؟ يُقرأ عند إخفاء الصفحة (أدناه) فلا نكتب
+  // بلا تعديل — `saveTimer` وحده لا يجيب: مرجعُه يبقى محمّلاً بعد أن يقع.
+  const pendingSave = useRef(false);
 
   // Auto-save a draft of a NEW entry so writing is never lost if you leave
   // mid-way. Restored on reopen; cleared once the entry is actually saved.
@@ -298,6 +301,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   // Persist the current state — create the entry on first save, update it
   // afterwards. This is what makes writing auto-save with no "save" tap.
   function persist() {
+    pendingSave.current = false;
     if (!hasSomething()) return;
     if (savedId.current) {
       updateJournalEntry(savedId.current, {
@@ -345,11 +349,41 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     if (firstRun.current) { firstRun.current = false; return; }
     if (!hasSomething()) return;
     setSaveState("saving");
+    pendingSave.current = true;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(persist, 700);
     return () => clearTimeout(saveTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, title, content, question, answering, photos, audios, attachments, photoEdits, tags, mood]);
+
+  // **الشرط الذي يجعل التأجيل آمناً هنا أيضاً**: أفرِغ الحفظَ المعلّق قبل أن
+  // تختفي الصفحة. `persist` تُعاد بناؤها كلَّ رسم فتلتقط أحدثَ نصّ، فتُوضع في
+  // مرجعٍ يقرؤه المستمعُ المسجَّل مرّةً واحدة (نفسُ نمط `handleDoneRef`).
+  //
+  // `visibilitychange` إلى hidden هي الإشارة المعوَّل عليها: على iOS لا يُطلق
+  // `beforeunload` عند تبديل التطبيق أو إغلاق التبويب؛ و`pagehide` معها لأنّ
+  // الأولى قد لا تقع في استعادةٍ من bfcache. و`pendingSave` يمنع كتابةً بلا
+  // تعديل، فلا يُختم `lastUpdated` ولا تُثار مزامنةٌ لمجرّد تبديل تبويب.
+  //
+  // وهذا **ليس** تكراراً لإفراغ `idbStorage.ts`: ذاك يُنزل المتجرَ إلى
+  // IndexedDB، وهذا يُنزل نصَّ النموذج إلى المتجر أصلاً — وبلا هذه الطبقة كانت
+  // آخرُ ٧٠٠ms من تعديلِ مذكرةٍ **قائمة** تضيع (المسودّةُ تحرس الجديدةَ وحدها).
+  const flushRef = useRef<() => void>(() => {});
+  flushRef.current = () => {
+    if (!pendingSave.current) return;
+    clearTimeout(saveTimer.current);
+    persist();
+  };
+  useEffect(() => {
+    const flush = () => flushRef.current();
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
 
   // "تم" — flush any pending save immediately and close. If the entry was
   // emptied out, treat it as a cancel: delete the auto-created row (or revert
@@ -368,6 +402,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   // "إلغاء" — undo this session: revert an edited entry to its original, or
   // remove a new one we auto-created, so cancel still means cancel.
   function handleCancel() {
+    pendingSave.current = false;
     clearTimeout(saveTimer.current);
     if (initial) {
       updateJournalEntry(initial.id, {

@@ -821,26 +821,45 @@ async function writeJournalShards(
   // الشهور المتغيّرة تُكتب على التوازي بحدٍّ صغير بدل انتظار كلٍّ منها على حدة:
   // استيرادٌ يمسّ عشرين شهراً كان عشرين رحلةَ شبكةٍ **متسلسلة**.
   const mergedSigs = new Map<string, string>();
+  // كلُّ شهرٍ يُمسك خطأه بنفسه ثمّ نرمي بعد أن تنتهي الشهور كلُّها — لا عند أوّل
+  // فشل. `Promise.all` داخل `mapWithConcurrency` ترفض عند أوّل رافض، فيمضي
+  // المنادي وقد بقي في الطابور شهورٌ يكتبها العمّالُ بعده: إنجازٌ غيرُ حتميّ
+  // حين تزيد الشهورُ على حدّ التوازي (استيرادُ Day One يمسّ عشرين). وأسوأ
+  // منه أنّ سطرَ حفظ البصمات بعد الانتظار لا يُنفَّذ أصلاً، فشهرٌ أُودِع فعلاً
+  // يُعاد إيداعُه في الحفظ التالي. كاتبُ شرائح المعاملات أدناه يحرس هذا منذ
+  // البداية؛ هذا الكاتبُ كان نسخةً منه بلا الحارس.
+  const errors: unknown[] = [];
   await mapWithConcurrency(changed, SHARD_WRITE_CONCURRENCY, async ([sid, es]) => {
-    const sig = await runTransaction(database, async (txn) => {
-      const ref = doc(database, COLLECTION, uid, JOURNAL_SUB, sid);
-      const snap = await txn.get(ref);
-      const remoteRaw = snap.exists()
-        ? ((snap.data() as { entries?: unknown }).entries ?? [])
-        : [];
-      if (!Array.isArray(remoteRaw) || !remoteRaw.every(isSyncReadableJournalEntry)) {
-        throw new Error("invalid remote journal shard");
-      }
-      const remote = remoteRaw as CloudEntry[];
-      const merged = mergeJournalShardEntries(es, remote, deleted, deletedMedia);
-      const mergedSig = shardSig(merged);
-      if (mergedSig !== shardSig(remote)) {
-        txn.set(ref, { entries: merged, writerVersion: JOURNAL_WRITER_VERSION }, { merge: false });
-      }
-      return mergedSig;
-    });
-    mergedSigs.set(sid, sig);
+    try {
+      const sig = await runTransaction(database, async (txn) => {
+        const ref = doc(database, COLLECTION, uid, JOURNAL_SUB, sid);
+        const snap = await txn.get(ref);
+        const remoteRaw = snap.exists()
+          ? ((snap.data() as { entries?: unknown }).entries ?? [])
+          : [];
+        if (!Array.isArray(remoteRaw) || !remoteRaw.every(isSyncReadableJournalEntry)) {
+          throw new Error("invalid remote journal shard");
+        }
+        const remote = remoteRaw as CloudEntry[];
+        const merged = mergeJournalShardEntries(es, remote, deleted, deletedMedia);
+        const mergedSig = shardSig(merged);
+        if (mergedSig !== shardSig(remote)) {
+          txn.set(ref, { entries: merged, writerVersion: JOURNAL_WRITER_VERSION }, { merge: false });
+        }
+        return mergedSig;
+      });
+      mergedSigs.set(sid, sig);
+    } catch (error) {
+      errors.push(error);
+    }
   });
+  if (errors.length) {
+    // البصماتُ المؤكَّدة تُحفَظ قبل الرمي: شهرٌ كُتب فعلاً لا يُعاد كتابتُه في
+    // المحاولة القادمة لمجرّد أنّ شهراً آخر فشل. وبصماتُ الشهور الفاشلة غائبةٌ
+    // عن `mergedSigs` أصلاً، فتُعاد محاولتُها.
+    shardSignatures = new Map([...shardSignatures, ...mergedSigs]);
+    throw errors[0];
+  }
   // Preserve signatures for cloud-only months. Forgetting them made a partial
   // device believe those months had vanished and delete them on its next save.
   shardSignatures = new Map([...shardSignatures, ...nextSigs, ...mergedSigs]);

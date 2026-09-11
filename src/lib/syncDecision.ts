@@ -23,7 +23,12 @@ export function hasData(d: Partial<AppData>): boolean {
   if (hifz && (hifz.plan || (hifz.sessions?.length ?? 0) > 0 ||
     (hifz.reviews?.length ?? 0) > 0 || (hifz.frontierId ?? 0) > 0 ||
     (hifz.mistakes?.length ?? 0) > 0)) return true;
-  if ((d.quranKhatma?.completed ?? 0) > 0 || (d.quranKhatma?.juz ?? 0) > 0) return true;
+  // الختمة: `juz` مشتقّةٌ من الصفحة (`khatmaJuzForPage`) فتبقى صفراً حتى
+  // العشرين صفحة — فقارئُ خمسَ عشرةَ صفحةً كان يُقرأ «فارغاً» أمام حارس الجهاز
+  // الجديد. الصفحةُ وسجلُّها وتاريخُ البداية تقدُّمٌ حقيقيّ مثلُها.
+  const kh = d.quranKhatma;
+  if (kh && ((kh.completed ?? 0) > 0 || (kh.juz ?? 0) > 0 || (kh.page ?? 0) > 0
+    || (kh.pageLog?.length ?? 0) > 0 || !!kh.startDate || !!kh.lastReadDate)) return true;
   if (d.dailyBudget || (d.monthlyIncome ?? 0) > 0 || (d.readingGoal ?? 0) > 0) return true;
   if ((d.qadaBacklog ?? 0) > 0) return true;
   if (Object.keys(d.merchantRules ?? {}).length > 0) return true;

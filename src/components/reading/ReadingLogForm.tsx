@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { Book, ReadingLog } from "@/lib/types";
 import { uid, today } from "@/lib/utils";
+import { advanceBookPage } from "@/lib/readingProgress";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 
@@ -52,14 +53,10 @@ export function ReadingLogForm({ books, defaultBookId, defaultMinutes, initial, 
 
     addReadingLog({ id: uid(), bookId, date, pagesRead: pages, minutesRead: parseInt(minutes) || undefined });
 
+    // قاعدةُ التقدّم في `readingProgress.ts` (نقيّةٌ ومختبَرة) — لا هنا:
+    // الكتابُ بلا عددِ صفحاتٍ كان يرجع تقدُّمُه للصفر مع كلّ تسجيل.
     if (selectedBook) {
-      const newPage = Math.min(selectedBook.currentPage + pages, selectedBook.totalPages);
-      const updates: Partial<Book> = { currentPage: newPage };
-      if (newPage >= selectedBook.totalPages && selectedBook.totalPages > 0) {
-        updates.status = "أنهيت";
-        updates.finishDate = date;
-      }
-      updateBook(bookId, updates);
+      updateBook(bookId, advanceBookPage(selectedBook, pages, date));
     }
     onClose();
   }

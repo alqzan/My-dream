@@ -10,9 +10,6 @@ function base(over: Partial<AppData> = {}): AppData {
     readingLogs: [],
     journalEntries: [],
     habits: [],
-    recurring: [],
-    installmentPlans: [],
-    assets: [],
     budgets: [],
     categories: [],
     reserves: [],
@@ -111,6 +108,30 @@ describe("the edited-transaction scenario end to end", () => {
       cloudRevision: 12, lastRevision: 11,
       hasUnseen: cloudHasUnseen(cloud, local),
     })).toBe(true);
+  });
+});
+
+describe("hasData — تقدُّمُ الختمة بالصفحة بياناتٌ حقيقية", () => {
+  // `juz` مشتقّةٌ من الصفحة، فتبقى صفراً دون العشرين صفحة. جهازٌ كلُّ ما فيه
+  // خمسَ عشرةَ صفحةً مقروءة كان يُقرأ «فارغاً»، فيسقط حارسُ الجهاز الجديد عنه.
+  it("خمسَ عشرةَ صفحةً (والجزءُ صفر) ليست فراغاً", () => {
+    const d = base({ quranKhatma: { juz: 0, completed: 0, page: 15 } });
+    expect(d.quranKhatma.juz).toBe(0);
+    expect(hasData(d)).toBe(true);
+  });
+
+  it("سجلُّ الصفحات وحدَه يكفي", () => {
+    expect(hasData(base({
+      quranKhatma: { juz: 0, completed: 0, pageLog: [{ date: "2026-09-01", page: 7 }] },
+    }))).toBe(true);
+  });
+
+  it("وتاريخُ بدءِ الختمة كذلك", () => {
+    expect(hasData(base({ quranKhatma: { juz: 0, completed: 0, startDate: "2026-09-01" } }))).toBe(true);
+  });
+
+  it("وختمةٌ خاليةٌ تماماً تبقى فراغاً", () => {
+    expect(hasData(base())).toBe(false);
   });
 });
 
