@@ -43,6 +43,44 @@ function precachedUrls() {
   return precachedPromise;
 }
 
+// ===== ما يُنقَل من خزن النشرة السابقة بدل أن يُنزَّل من جديد =====
+// اسمُ الخزن يحمل رقمَ البناء، فكلُّ نشرةٍ خزنٌ جديدٌ فارغ — وكان ذلك يعني
+// تنزيلَ **٧٫٨ م.ب كاملةً في كلّ نشرة**، وأكثرُها لم يتغيّر بحرف.
+//
+// وما تحت `/_next/static/` معنوَنٌ بمحتواه: اسمُ الملفّ يحمل بصمةَ بايتاته،
+// فاتّفاقُ الاسم = اتّفاقُ المحتوى يقيناً. فيُنسَخ من خزن النشرة السابقة
+// مباشرةً بلا شبكة، ولا يُنزَّل إلّا ما تغيّر اسمُه فعلاً.
+//
+// وما سواه **لا يُنقَل أبداً**: صفحاتُ المسارات (`/quran/`) والبيان والأيقونات
+// أسماؤها ثابتةٌ ومحتواها يتغيّر. نسخُ صفحةٍ قديمة يعني إقلاعاً بنسخةٍ تشير
+// إلى حزمٍ حُذفت — أي `ChunkLoadError` وشاشةَ الخطأ، وهو بالضبط ما يمنعه
+// ترقيمُ الخزن. فالتمييزُ هنا ليس تحسيناً بل شرطَ سلامة.
+const isContentAddressed = (url) => new URL(url, location.origin).pathname.includes("/_next/static/");
+
+async function fillFromPreviousCaches(cache, urls) {
+  const keys = await caches.keys();
+  const old = await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.open(k)));
+  let copied = 0;
+  await Promise.allSettled(
+    urls.map(async (u) => {
+      if (isContentAddressed(u)) {
+        for (const prev of old) {
+          const hit = await prev.match(u);
+          if (hit) {
+            await cache.put(u, hit.clone());
+            copied++;
+            return;
+          }
+        }
+      }
+      // Cache each entry independently so one failed asset (a 404 on an old
+      // deploy, a flaky fetch) can't abort the whole install like addAll would.
+      await cache.add(u);
+    })
+  );
+  return copied;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -51,9 +89,7 @@ self.addEventListener("install", (event) => {
         if (res.ok) {
           const { urls } = await res.json();
           const cache = await caches.open(CACHE);
-          // Cache each entry independently so one failed asset (a 404 on an old
-          // deploy, a flaky fetch) can't abort the whole install like addAll would.
-          await Promise.allSettled((urls ?? []).map((u) => cache.add(u)));
+          await fillFromPreviousCaches(cache, urls ?? []);
           // القائمة نفسها في الخزن: يقرأها التشذيب بعد أيّ إيقاظٍ للعامل.
           await cache.put(manifestKey(), new Response(JSON.stringify({ urls: urls ?? [] })));
           precachedPromise = null;

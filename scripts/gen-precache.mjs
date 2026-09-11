@@ -19,11 +19,37 @@ function walk(dir, acc = []) {
   return acc;
 }
 
+// ===== حزمٌ لا يحتاجها مسارٌ ليعمل دون شبكة =====
+// الخزنُ المسبق يُنزّل ما يجعل **كلَّ صفحةٍ تعمل** حتى لو لم تُفتح قطّ. لكنّه
+// كان يمشي على `out/` ويأخذ كلّ ملف — فأخذ معه حزماً قُسِّمت عمداً لتُحمَّل
+// عند الحاجة وحدها، وأثقلُها `heic2any` (١٫٣ م.ب من libheif): لا يحتاجها
+// عرضُ صفحةٍ ولا تصفُّحٌ ولا كتابةُ مذكرة — تُطلب في لحظةٍ واحدة: أن يختار
+// المالك صورةَ HEIC ليُحوَّلها، وهي لحظةٌ يكون فيها حاضراً لا مستعرِضاً
+// أرشيفَه في طائرة. فتُترك للتخزين وقتَ التشغيل: تُنزَّل مرّةً عند أوّل
+// تحويلٍ وتبقى.
+//
+// التعرُّفُ بالمحتوى لا بالاسم: أسماءُ الحزم مجزَّأةٌ وتتغيّر كلَّ بناء، فبصمةٌ
+// مكتوبةٌ بيدٍ تتقادم صامتةً. والبحثُ عن `libheif` داخل الحزمة يصمد.
+//
+// وما بقي (نصُّ المصحف · رسومُ الإحصاءات) يبقى مخزوناً: تلك **يحتاجها المسار
+// نفسُه** ليعمل دون شبكة، وكلفتُها لم تعد كلفةَ كلّ نشرة بعد أن صار العامل
+// ينقل ما لم يتغيّر من خزن النشرة السابقة (راجع `public/sw.js`).
+const RUNTIME_ONLY_MARKERS = ["libheif"];
+
+function isRuntimeOnlyChunk(file, rel) {
+  if (!/^_next\/static\/chunks\/.*\.js$/.test(rel)) return false;
+  if (statSync(file).size < 256 * 1024) return false; // لا نقرأ الحزمَ الصغيرة
+  const head = readFileSync(file, "utf8");
+  return RUNTIME_ONLY_MARKERS.some((m) => head.includes(m));
+}
+
 const urls = new Set();
+const skipped = [];
 for (const file of walk(OUT)) {
   const rel = relative(OUT, file).split(/[\\/]/).join("/");
   if (rel.endsWith(".map")) continue;             // source maps: not needed offline
   if (rel === "sw.js" || rel === "precache.json") continue;
+  if (isRuntimeOnlyChunk(file, rel)) { skipped.push([rel, statSync(file).size]); continue; }
   if (rel === "index.html" || rel.endsWith("/index.html")) {
     // trailingSlash:true → the page is served at its directory URL.
     const dir = rel.slice(0, rel.length - "index.html".length); // keeps trailing "/"
@@ -46,4 +72,12 @@ try {
   writeFileSync(swPath, readFileSync(swPath, "utf8").replaceAll("__BUILD__", buildId));
 } catch { /* sw.js not exported (shouldn't happen) — precache.json still written */ }
 
-console.log(`precache.json: ${list.length} urls · build ${buildId}`);
+const totalBytes = list.reduce((sum, u) => {
+  const p = join(OUT, u.slice(basePath.length).replace(/^\//, "") || "index.html");
+  try { return sum + statSync(p.endsWith("/") ? join(p, "index.html") : p).size; } catch { return sum; }
+}, 0);
+const mb = (n) => (n / 1048576).toFixed(1);
+console.log(`precache.json: ${list.length} urls · ${mb(totalBytes)} MB · build ${buildId}`);
+for (const [rel, size] of skipped) {
+  console.log(`  ↷ خارج الخزن المسبق (تُنزَّل عند الحاجة): ${rel} — ${mb(size)} MB`);
+}
