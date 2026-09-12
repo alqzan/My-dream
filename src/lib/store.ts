@@ -18,6 +18,7 @@ import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
+import { offsetPlan, OFFSET_NOTE } from "./budgetFlow";
 import { persistedIdbStorage } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
@@ -36,7 +37,7 @@ const ID_COLLECTIONS = [
 // the other device's stale non-null copy.
 const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
-  "lastSalaryConfirm", "frozenHabits", "budgetWindow", "qadaBacklog", "quranKhatma",
+  "lastSalaryConfirm", "frozenHabits", "budgetWindow", "autoOffset", "qadaBacklog", "quranKhatma",
 ] as const;
 
 // These preferences are persisted on the device but deliberately excluded
@@ -207,6 +208,16 @@ interface AppStore extends AppData {
   // الاتجاه المعاكس: سحب مبلغ من احتياطي (صندوق الفوائض عادةً) وإضافته لرصيد
   // الميزانية اليومية. يرجع المبلغ المُضاف فعلاً (مقصوصاً على رصيد الصندوق).
   pullFromReserve: (fundId: string, amount: number, note?: string) => number;
+  // **المقاصة التلقائية**: تغطية عجز اليومية من «الفوائض» بلا ضغطة. القرار كلّه
+  // في `offsetPlan` (`budgetFlow.ts`) — بما فيه الوقوف عند عجزٍ أكبر من ثلاث
+  // يوميّات. ترجع المبلغ المُقاصّ (0 = لم تتحرّك). آمنةٌ للنداء مراراً: بعد
+  // التغطية يصير الرصيد صفراً فلا تتحرّك ثانيةً.
+  setAutoOffset: (on: boolean) => void;
+  autoOffsetDeficit: () => number;
+  // نقلٌ بين مظروفين (تمويل مظروف حدثٍ من الفوائض مثلاً): سحبٌ من الأول وإيداعٌ
+  // في الثاني بالمبلغ نفسه — لا معاملة ولا صرف، تحريكُ رصيدٍ بين وعاءين.
+  // يرجع المنقول فعلاً (مقصوصاً على رصيد المصدر).
+  transferBetweenReserves: (fromId: string, toId: string, amount: number, note?: string) => number;
 
   // رسائل لنفسك المستقبلية
   // الأحداث المهمّة (العدّ التنازلي) — إضافة/تعديل/حذف كبقيّة العناصر
@@ -599,6 +610,7 @@ export const useAppStore = create<AppStore>()(
       countdownEvents: [],
       salaryDay: 27,
       budgetWindow: "salary",
+      autoOffset: true,
       lastSalaryConfirm: null,
       readingGoal: null,
       frozenHabits: [],
@@ -1116,6 +1128,58 @@ export const useAppStore = create<AppStore>()(
           };
         });
         return added;
+      },
+
+      setAutoOffset: (on) => set(() => ({ autoOffset: !!on })),
+
+      // المقاصة التلقائية: العجز يُغطّى من «الفوائض» لحظةَ ظهوره، بلا ضغطة.
+      // لا معادلة هنا — القرار كلّه في `offsetPlan` (مختبَرٌ وحدةً)، والتنفيذ
+      // يُعاد استعماله من `pullFromReserve` بالضبط (سحبٌ سالبٌ من الصندوق +
+      // خفضُ carryAdjust) فلا تنشأ طريقةٌ ثانية لإدخال مالٍ إلى اليومية.
+      // يناديها مراقبٌ واحد (`DeficitOffsetWatcher`) بعد أيّ تغيّرٍ في المعاملات،
+      // فتغطّي الصرفَ اليدويّ ورسائلَ البنك ودمجَ السحابة بالمنطق نفسه.
+      autoOffsetDeficit: () => {
+        const s = get();
+        if (!s.dailyBudget) return 0;
+        const fund = s.reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+        if (!fund) return 0;
+        const status = computeDailyBudgetStatus(s.dailyBudget, s.transactions);
+        const plan = offsetPlan(
+          status.balance,
+          reserveBalance(fund, s.transactions),
+          s.dailyBudget.amount,
+          s.autoOffset !== false
+        );
+        if (plan.amount <= 0) return 0;
+        return get().pullFromReserve(fund.id, plan.amount, OFFSET_NOTE);
+      },
+
+      // تمويل مظروفٍ من مظروف (رحلةُ المدينة تُموَّل من الفوائض): سحبٌ من المصدر
+      // وإيداعٌ في الوجهة بالمبلغ نفسه في تعديلٍ واحد — مجموعُ الاحتياطيات لا
+      // يتغيّر، والميزانية اليومية لا تُمسّ (هذا ليس صرفاً).
+      transferBetweenReserves: (fromId, toId, amount, note) => {
+        let moved = 0;
+        set((s) => {
+          const from = s.reserves.find((f) => f.id === fromId);
+          const to = s.reserves.find((f) => f.id === toId);
+          if (!from || !to || from.id === to.id || !Number.isFinite(amount) || amount <= 0) return {};
+          const available = reserveBalance(from, s.transactions);
+          if (available <= 0) return {};
+          moved = round2(Math.min(amount, available));
+          if (moved <= 0) return {};
+          const todayStr = today();
+          const label = note ?? `تمويل «${to.name}»`;
+          return {
+            reserves: s.reserves.map((f) =>
+              f.id === from.id
+                ? { ...f, deposits: [{ id: uid(), date: todayStr, amount: -moved, note: label }, ...f.deposits] }
+                : f.id === to.id
+                ? { ...f, deposits: [{ id: uid(), date: todayStr, amount: moved, note: `من «${from.name}»` }, ...f.deposits] }
+                : f
+            ),
+          };
+        });
+        return moved;
       },
 
       addCountdownEvent: (event) =>
@@ -1655,6 +1719,7 @@ export const useAppStore = create<AppStore>()(
           countdownEvents: data.countdownEvents ?? [],
           salaryDay: data.salaryDay ?? 27,
           budgetWindow: data.budgetWindow ?? "salary",
+          autoOffset: data.autoOffset ?? true,
           lastSalaryConfirm: data.lastSalaryConfirm ?? null,
           readingGoal: data.readingGoal ?? null,
           frozenHabits: data.frozenHabits ?? [],
@@ -1690,6 +1755,7 @@ export const useAppStore = create<AppStore>()(
           countdownEvents: s.countdownEvents ?? [],
           salaryDay: s.salaryDay,
           budgetWindow: s.budgetWindow ?? "salary",
+          autoOffset: s.autoOffset ?? true,
           lastSalaryConfirm: s.lastSalaryConfirm,
           readingGoal: s.readingGoal,
           frozenHabits: s.frozenHabits ?? [],

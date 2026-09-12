@@ -733,8 +733,13 @@ export function countsInBudget(t: Pick<Transaction, "offBudget">): boolean {
 
 // ===================== Reserve funds & split spending =====================
 
-// Share of a transaction charged to the daily budget (the remainder after
-// any reserve splits). A transaction with no splits is 100% daily.
+// **حصّة التدفّق العادي**: ما تستهلكه المعاملة من ميزانيتك الجارية — الميزانية
+// اليومية **وسقوف الأقسام معاً** — أي المبلغ بعد طرح ما حُمّل منه على مظروف
+// (`reserveSplits`)، وصفرٌ لما وُسم `offBudget`. معاملةٌ بلا مظاريف حصّتُها
+// كاملة. ولماذا تُطرح حصّةُ المظروف من السقف أيضاً؟ لأنّ المظروف مموَّلٌ من
+// دوراتٍ سابقة: احتسابُ رحلةٍ بألفين على سقف «كماليات» يحاسبك مرّتين على مالٍ
+// جُمع مرّةً — فيبدو شهرُك منفلتاً وأنت مُنضبط، وهو عين ما أفقد السقوفَ معناها.
+// الحدثُ يُحاسَب في مظروفه (`reserveShare`) وفي مجاميع الشهر (`cashOut`).
 export function dailyShare(t: Transaction): number {
   // المؤجّل لا يستهلك ميزانيةً (لم يُدفع)، والموسوم `offBudget` لا يستهلكها
   // (دُفع لكنّه استثناءٌ لا يُحاسَب عليه) — كلاهما عبر البوابة الواحدة.

@@ -62,3 +62,38 @@ describe("describeSpendWindow", () => {
     expect(describeSpendWindow("2026-07", TODAY)).toContain("اليوم 28 من الشهر");
   });
 });
+
+// ما دُفع من مظروفٍ (`reserveSplits`) لا يستهلك سقف القسم: المظروف مموَّلٌ من
+// دوراتٍ سابقة، فاحتسابُه هنا يحاسب المالك مرّتين على مالٍ جُمع مرّة — وهو ما
+// كان يجعل رحلةً واحدة تُظهر «كماليات» متجاوزةً ثلاثة أضعافها بينما صرفُ الدورة
+// منضبط. الشرح في `dailyShare` (utils.ts)، والصرفُ يبقى في مظروفه ومجاميع الشهر.
+describe("المظاريف لا تستهلك السقوف", () => {
+  const trip = (splits: number): Transaction => ({
+    id: "trip", date: CYCLE, amount: 2000, category: "basics", note: "رحلة المدينة",
+    reserveSplits: splits ? [{ fundId: "f-trip", pct: splits }] : undefined,
+  });
+
+  it("مصروفٌ كامله على مظروف لا يمسّ السقف", () => {
+    const [st] = budgetStatuses(budgets, [trip(100)], cats, null, CYCLE);
+    expect(st.spent).toBe(0);
+    expect(st.state).toBe("ok");
+  });
+
+  it("المقسوم يستهلك حصّته من التدفّق العادي وحدها", () => {
+    const [st] = budgetStatuses(budgets, [trip(75)], cats, null, CYCLE);
+    expect(st.spent).toBe(500);
+  });
+
+  it("وبلا مظروفٍ يبقى المبلغ كاملاً على السقف (فلا يضيع صرفٌ عاديّ)", () => {
+    const [st] = budgetStatuses(budgets, [trip(0)], cats, null, CYCLE);
+    expect(st.spent).toBe(2000);
+  });
+
+  it("والشارةُ والتنبيهُ الحيّ يتبعان القاعدة نفسها (شاشةٌ واحدة)", () => {
+    const big: Transaction = { ...trip(100), amount: 20000 };
+    expect(budgetAlerts(budgets, [big], cats, null, CYCLE)).toEqual({ over: 0, near: 0 });
+    expect(budgetWarningFor("basics", budgets, [big], cats, null, CYCLE)).toBeNull();
+    expect(budgetAlerts(budgets, [{ ...big, reserveSplits: undefined }], cats, null, CYCLE))
+      .toEqual({ over: 1, near: 0 });
+  });
+});

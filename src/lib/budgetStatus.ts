@@ -7,7 +7,7 @@
 // مرّةً واحدة وكلّ واجهةٍ تقرأ منه، فلا يمكن أن تتناقض شاشتان بعد اليوم.
 // منطقٌ نقيّ بلا DOM ولا حالة، مختبَرٌ في `budgetStatus.test.ts`.
 import type { Budget, Transaction, FinanceCategoryDef } from "./types";
-import { budgetLimit, budgetSpend, getMainCategory, formatDate, today } from "./utils";
+import { budgetLimit, dailyShare, getMainCategory, formatDate, today } from "./utils";
 import { inSpendWindow, cycleDays } from "./budgetCycle";
 
 // عتبة «اقتربت من السقف» — رقمٌ واحد لكل الواجهة (البوصلة، الشارة، التنبيه
@@ -38,11 +38,12 @@ export function budgetStatuses(
   for (const b of budgets) {
     const cap = budgetLimit(b, monthlyIncome);
     if (!cap) continue;
-    // السقف على قسمٍ رئيسي، وصرف أقسامه الفرعية يستهلكه. والمؤجّل والموسوم
-    // «خارج الميزانيات» صفرٌ هنا (`budgetSpend`) — لم يخرج من ميزانية الدورة.
+    // السقف على قسمٍ رئيسي، وصرف أقسامه الفرعية يستهلكه. وما لا يستهلك التدفّق
+    // العادي صفرٌ هنا (`dailyShare`): الموسوم «خارج الميزانيات»، وما دُفع من
+    // مظروفٍ مموَّلٍ من دوراتٍ سابقة — يُحاسَب في مظروفه لا على سقف هذه الدورة.
     const spent = transactions
       .filter((t) => getMainCategory(categories, t.category).id === b.category && inSpendWindow(t.date, windowStart))
-      .reduce((s, t) => s + budgetSpend(t), 0);
+      .reduce((s, t) => s + dailyShare(t), 0);
     const pct = (spent / cap) * 100;
     out.push({
       category: b.category,

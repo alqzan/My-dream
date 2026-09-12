@@ -1,6 +1,6 @@
 "use client";
 import type { Budget, Transaction, FinanceCategoryDef } from "@/lib/types";
-import { formatAmount, budgetLimit, getMainCategory, budgetSpend } from "@/lib/utils";
+import { formatAmount, budgetLimit, getMainCategory, dailyShare } from "@/lib/utils";
 
 interface FinancePaceProps {
   budgets: Budget[];
@@ -23,7 +23,9 @@ export function FinancePace({ budgets, transactions, categories, monthlyIncome, 
   // Sub-category spending rolls up onto the main category's budget.
   const spent = transactions
     .filter((t) => t.date >= cycleStart && budgetedCats.has(getMainCategory(categories, t.category).id))
-    .reduce((s, t) => s + budgetSpend(t), 0);
+    // حصّة التدفّق العادي وحدها (كالسقوف تماماً): ما دُفع من مظروفٍ أو وُسم
+    // «خارج الميزانيات» لا يقصّر الوتيرة — راجع `dailyShare` في utils.ts.
+    .reduce((s, t) => s + dailyShare(t), 0);
   const remaining = totalBudget - spent;
 
   // الوتيرة تُقاس على دورة الراتب لا على الشهر الميلادي — نفس نافذة السقوف.

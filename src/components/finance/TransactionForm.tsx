@@ -7,6 +7,7 @@ import { uid, today, formatAmount, getSubCategories, reserveBalance, cn } from "
 import { budgetWarningFor } from "@/lib/budgetStatus";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
+import { BigExpenseRouter } from "@/components/finance/BigExpenseRouter";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { PiggyBank, CalendarClock, Link2Off, ShieldOff } from "lucide-react";
@@ -322,6 +323,19 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
         )}
       </div>
       )}
+
+      {/* مصروفٌ كبير؟ يُسأل عن وجهته قبل أن يمسّ البدل اليومي — مظروفُ حدثٍ
+          مموَّلٌ من الفوائض هو الطريق الثالث بين «يبتلع الميزانية» و«يختفي».
+          لا يظهر إلّا لما عادل ثلاث يوميّاتٍ فأكثر (`budgetFlow.ts`). */}
+      <BigExpenseRouter
+        amount={parsedAmount}
+        note={note}
+        splits={splits}
+        offBudget={offBudget}
+        onDaily={() => { setSplits([]); setOffBudget(false); }}
+        onFund={(fundId) => { setSplits([{ fundId, pct: 100 }]); setOffBudget(false); }}
+        onOffBudget={() => { setSplits([]); setOffBudget(true); }}
+      />
 
       {/* «تجاهله من الميزانيات» — للمصروف الاستثنائيّ الذي لا يتكرّر (رسوم اختبار،
           عمرة، حادث): يبقى مصروفاً حقيقياً في السجل والإحصائيات ومجموع الشهر،

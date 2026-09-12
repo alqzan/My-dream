@@ -1,6 +1,7 @@
 "use client";
 import { BackupCard } from "@/components/settings/BackupCard";
 import { BudgetWindowCard } from "@/components/settings/BudgetWindowCard";
+import { AutoOffsetCard } from "@/components/settings/AutoOffsetCard";
 import { EventsCard } from "@/components/settings/EventsCard";
 import { DataHealthCard } from "@/components/settings/DataHealthCard";
 import { NavCustomizeCard } from "@/components/settings/NavCustomizeCard";
@@ -37,6 +38,9 @@ export default function SettingsPage() {
       </div>
       <div className="animate-fade-up stagger-1">
         <BudgetWindowCard />
+      </div>
+      <div className="animate-fade-up stagger-1">
+        <AutoOffsetCard />
       </div>
       <div className="animate-fade-up stagger-1">
         <BackupCard />

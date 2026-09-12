@@ -539,6 +539,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     countdownEvents: byIdNewer(primary.countdownEvents ?? [], secondary.countdownEvents ?? []),
     salaryDay: pickSingleton("salaryDay", primary.salaryDay),
     budgetWindow: pickSingleton("budgetWindow", primary.budgetWindow ?? secondary.budgetWindow ?? "salary"),
+    // المقاصة التلقائية: تبديلٌ مقصود كبقيّة الإعدادات المفردة — إيقافُها على
+    // جهازٍ يسري، ولا يعيدها `??` من نسخةٍ أقدم على الجهاز الآخر.
+    autoOffset: pickSingleton("autoOffset", primary.autoOffset ?? secondary.autoOffset ?? true),
     lastSalaryConfirm: pickSingleton("lastSalaryConfirm", primary.lastSalaryConfirm),
     readingGoal: pickSingleton("readingGoal", primary.readingGoal ?? secondary.readingGoal ?? null),
     // العادات المجمّدة إعدادٌ مفرد (تبديل مقصود): آخر ضبطٍ يفوز كي يسري

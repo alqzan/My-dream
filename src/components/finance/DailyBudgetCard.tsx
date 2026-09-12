@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { daysUntilSalary, projectedCycleSurplus, surplusPullSource } from "@/lib/financeOverview";
+import { cyclePace, offsetPlan } from "@/lib/budgetFlow";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Settings2, PiggyBank, Sparkles } from "lucide-react";
 import { SECTION, GOLD_LIGHT } from "@/lib/palette";
@@ -95,6 +96,7 @@ export function DailyBudgetCard() {
   const sweepToReserve = useAppStore((s) => s.sweepToReserve);
   const addReserve = useAppStore((s) => s.addReserve);
   const pullFromReserve = useAppStore((s) => s.pullFromReserve);
+  const autoOffset = useAppStore((s) => s.autoOffset);
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<Mode>(dailyBudget?.incomePct ? "income" : "fixed");
   const [amount, setAmount] = useState(dailyBudget?.amount?.toString() ?? "");
@@ -290,6 +292,11 @@ export function DailyBudgetCard() {
   // ما رُحّل إليه عند نزول الراتب يعود لليومية بضغطة حين تحتاجه. شرط الظهور
   // نفسه منطقٌ نقيّ في `financeOverview.ts` (مختبَر) لا في المكوّن.
   const surplus = surplusPullSource(reserves, transactions, true);
+  // **البدل المعدَّل لبقيّة الدورة**: العجز موزَّعاً على الأيام الباقية — خطّةٌ
+  // بدل رقمٍ أحمر. والمقاصة: ما الذي فعلَته (أو امتنعت عنه) تلقائياً ولماذا.
+  // كلاهما من `budgetFlow.ts` — لا معادلة في هذا المكوّن.
+  const pace = cyclePace(status.balance, dailyBudget.amount, projection.daysLeft);
+  const offset = offsetPlan(status.balance, surplus?.balance ?? 0, dailyBudget.amount, autoOffset !== false);
 
   return (
     <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-finance/5"}`}>
@@ -345,6 +352,50 @@ export function DailyBudgetCard() {
           </p>
           <p className="text-[10px] text-gray-400">
             لو ما صرفت شيئاً حتى الراتب: {formatAmount(Math.round(projection.optimistic))} ر.س (السقف الأعلى)
+          </p>
+          {/* الرقم العمليّ: كم تصرف يومياً حتى تصل ليوم الراتب على الصفر */}
+          <p className="text-[11px] leading-relaxed border-t border-gray-200/60 dark:border-white/10 pt-1.5 mt-1">
+            🎯 لبقيّة الدورة:{" "}
+            <b className={pace.kind === "beyond" ? "text-red-500" : pace.delta < 0 ? "text-amber-600" : "text-finance"}>
+              {formatAmount(Math.round(pace.rate))} ر.س/يوم
+            </b>{" "}
+            <span className="text-gray-400">
+              {pace.delta < 0
+                ? `(أقلّ من بدلك بـ${formatAmount(Math.round(-pace.delta))})`
+                : pace.delta > 0
+                ? `(أعلى من بدلك بـ${formatAmount(Math.round(pace.delta))})`
+                : "(على بدلك تماماً)"}
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* عجزٌ لم تغطّه المقاصة التلقائية: قرارٌ لا إشعار. السقف والسبب من
+          `offsetPlan` — والزرّان أدناه (الفوائض ← اليومية) هما التنفيذ. */}
+      {over && offset.amount === 0 && offset.deficit > 0 && (
+        <div className="rounded-xl bg-red-500/5 border border-red-300/40 px-3 py-2 space-y-1">
+          <p className="text-[11px] font-bold text-red-500">
+            {offset.reason === "tooBig"
+              ? `عجزٌ بـ${formatAmount(Math.round(offset.deficit))} ر.س — أكبر من مقاصةٍ تلقائية`
+              : offset.reason === "off"
+              ? `عجزٌ بـ${formatAmount(Math.round(offset.deficit))} ر.س — المقاصة التلقائية موقوفة`
+              : `عجزٌ بـ${formatAmount(Math.round(offset.deficit))} ر.س — لا رصيد في ${SURPLUS_FUND_NAME}`}
+          </p>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            {offset.reason === "tooBig" ? (
+              <>
+                المقاصة تغطّي حتى {formatAmount(Math.round(offset.cap))} ر.س (ثلاث يوميّات)؛ وما فوقها
+                حدثٌ لا عجزُ يومٍ — غطِّه من {SURPLUS_FUND_NAME} بالزرّ أدناه، أو اجعل مصروفه مظروفاً
+                مستقلاً من نموذج المصروف.{" "}
+              </>
+            ) : offset.reason === "off" ? (
+              <>فعّلها من الإعدادات، أو غطِّ العجز يدوياً بالزرّ أدناه.{" "}</>
+            ) : (
+              <>لا مصدر يغطّيه الآن.{" "}</>
+            )}
+            {pace.kind === "beyond"
+              ? "والأيام الباقية لا تمتصّه (البدل المعدَّل غير واقعيّ)."
+              : `أو شدّ لبقيّة الدورة إلى ${formatAmount(Math.round(pace.rate))} ر.س/يوم فيُمتصّ وحده.`}
           </p>
         </div>
       )}

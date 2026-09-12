@@ -68,6 +68,7 @@ import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { IndicDigits } from "@/components/layout/IndicDigits";
 import { SyncProvider } from "@/components/sync/SyncProvider";
 import { PendingInboxWatcher } from "@/components/finance/PendingInboxWatcher";
+import { DeficitOffsetWatcher } from "@/components/finance/DeficitOffsetWatcher";
 import { PrayerReminderWatcher } from "@/components/prayer/PrayerReminderWatcher";
 
 export const metadata: Metadata = {
@@ -131,6 +132,7 @@ export default function RootLayout({
               <UndoToast />
               <UpdatePrompt />
               <PendingInboxWatcher />
+              <DeficitOffsetWatcher />
               <PrayerReminderWatcher />
               <AppBadge />
               <MilestoneWatcher />

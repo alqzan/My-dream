@@ -234,6 +234,7 @@ export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
     countdownEvents: g("countdownEvents", []),
     salaryDay: g("salaryDay", 27),
     budgetWindow: g("budgetWindow", "salary"),
+    autoOffset: g("autoOffset", true),
     lastSalaryConfirm: g("lastSalaryConfirm", null),
     readingGoal: g("readingGoal", null),
     // العادات المجمّدة تُصدَّر ضمن اللقطة، وكان التطبيع يُسقطها: فاستبدالُ نسخةٍ
