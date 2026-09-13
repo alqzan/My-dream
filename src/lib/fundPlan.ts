@@ -203,3 +203,108 @@ export function planBigExpense(input: {
     needsEnvelope: envelopeShare > 0,
   };
 }
+
+/* ===================== خياراتُ المصروف الكبير ===================== */
+// «أبي الخيار عندي، لكن العرض أكثر منطقيةً وذكاء». والفرق بين العرضين كبير:
+// خطةٌ واحدة وزرُّ «عدّلها» تجعل المالك يحرّر **أرقاماً**، وهو لا يريد أرقاماً —
+// يريد أن يرى **ماذا يكلّفه كلُّ طريق**. فهذه الدالّة تبني الطرق كاملةً، ولكلٍّ
+// عاقبتُه مكتوبةً برقمٍ واحد: بدلُك بعدها، وما يبقى في فوائضك.
+//
+//   • **mix** — الموصى به: الأرخص فالأغلى (`planBigExpense`).
+//   • **noTouchBudget** — رصيدك والفوائض وحدهما: بدلك لا ينقص، لكن الوسادة تُمسّ.
+//     لا يُعرض إلّا إن كان يغطّي المبلغ كاملاً.
+//   • **financeAll** — احفظ سيولتك: كلُّه سدادٌ من الراتب، وفوائضك كما هي.
+//   • **fromBudget** — كلُّه الآن من بدلك: بلا مظروفٍ ولا التزام، والثمنُ وتيرةُ
+//     بقيّة الدورة (وقد تصير غير واقعية — وهذا ما يجب أن يُرى قبل الاختيار).
+//
+// ترتيبُها ثابت، و«الموصى به» علامةٌ لا قيد: الاختيار للمالك.
+export type PlanKind = "mix" | "noTouchBudget" | "financeAll" | "fromBudget";
+
+export interface PlanOption {
+  kind: PlanKind;
+  plan: ExpensePlan;
+  recommended: boolean;
+  /** البدل اليومي بعد اعتماد هذا الطريق (للدورات القادمة). */
+  rateAfter: number;
+  /** ما يبقى في الفوائض بعده. */
+  surplusAfter: number;
+  /** وتيرةُ ما تبقّى من الدورة الحالية بعده (تهمّ «من بدلي» خاصّةً). */
+  paceAfter: number;
+  /** هل يمسّ وسادةَ المقاصة في الفوائض؟ */
+  eatsCushion: boolean;
+}
+
+export function buildPlanOptions(input: {
+  amount: number;
+  cycleBalance: number;
+  rate: number;
+  surplusBalance: number;
+  cycleLen: number;
+  daysLeft: number;
+}): PlanOption[] {
+  const { amount, cycleBalance, rate, surplusBalance, cycleLen } = input;
+  const left = Math.max(1, Math.round(Number.isFinite(input.daysLeft) ? input.daysLeft : 1));
+  const amt = Number.isFinite(amount) && amount > 0 ? round2(amount) : 0;
+  const surplus = Number.isFinite(surplusBalance) && surplusBalance > 0 ? surplusBalance : 0;
+  const len = Math.max(1, Math.round(Number.isFinite(cycleLen) ? cycleLen : 30));
+  const r = Number.isFinite(rate) && rate > 0 ? rate : 0;
+  const bal = Number.isFinite(cycleBalance) ? cycleBalance : 0;
+
+  // قالبٌ واحد يبني خيارًا من أنصبته الثلاثة، فتُحسب العواقب في مكانٍ واحد.
+  const make = (kind: PlanKind, fromCycle: number, fromSurplus: number, cycles?: number): PlanOption => {
+    const fc = round2(Math.max(0, Math.min(amt, fromCycle)));
+    const fs = round2(Math.max(0, Math.min(amt - fc, fromSurplus)));
+    const financed = round2(amt - fc - fs);
+    const perCycleMax = round2(r * MAX_DRIP_RATIO * len);
+    const n =
+      financed <= 0
+        ? 0
+        : cycles ??
+          (perCycleMax > 0
+            ? Math.min(MAX_PAYOFF_CYCLES, Math.max(1, Math.ceil(financed / perCycleMax)))
+            : MAX_PAYOFF_CYCLES);
+    const perCycle = n > 0 ? round2(financed / n) : 0;
+    const perDay = n > 0 ? fundingPerDay(perCycle, len) : 0;
+    const envelopeShare = round2(fs + financed);
+    return {
+      kind,
+      plan: {
+        amount: amt,
+        fromCycle: fc,
+        fromSurplus: fs,
+        financed,
+        cycles: n,
+        perCycle,
+        perDay,
+        envelopePct: amt > 0 ? Math.min(100, Math.round((envelopeShare / amt) * 100)) : 0,
+        keptCushion: round2(surplus - fs),
+        needsEnvelope: envelopeShare > 0,
+      },
+      recommended: false,
+      rateAfter: effectiveDailyRate(r, perDay),
+      surplusAfter: round2(surplus - fs),
+      paceAfter: round2((bal - fc + r * left) / left),
+      eatsCushion: round2(surplus - fs) < round2(Math.min(surplus, r * SURPLUS_CUSHION_DAYS)),
+    };
+  };
+
+  const mixPlan = planBigExpense({ amount: amt, cycleBalance: bal, rate: r, surplusBalance: surplus, cycleLen: len });
+  const options: PlanOption[] = [
+    { ...make("mix", mixPlan.fromCycle, mixPlan.fromSurplus, mixPlan.cycles || undefined), recommended: true },
+  ];
+
+  // رصيدك والفوائض وحدهما — يُعرض فقط إن غطّى المبلغ كاملاً (وإلّا فهو «mix» نفسه).
+  const cycleUsable = Math.max(0, bal - r);
+  const both = make("noTouchBudget", cycleUsable, surplus);
+  if (both.plan.financed <= 0 && (both.plan.fromSurplus > mixPlan.fromSurplus || both.plan.fromCycle > mixPlan.fromCycle)) {
+    options.push(both);
+  }
+
+  // احفظ سيولتك: كلُّه سداد.
+  if (amt > 0) options.push(make("financeAll", 0, 0));
+
+  // كلُّه الآن من بدلك — بلا مظروف.
+  options.push(make("fromBudget", amt, 0));
+
+  return options;
+}

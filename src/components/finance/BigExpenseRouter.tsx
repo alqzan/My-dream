@@ -4,26 +4,31 @@ import { useAppStore } from "@/lib/store";
 import type { ReserveSplit } from "@/lib/types";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
-import { cyclePace, expenseWeight } from "@/lib/budgetFlow";
-import { planBigExpense, suggestPayoffPerCycle, fundingPerDay, PAYOFF_CYCLE_CHOICES } from "@/lib/fundPlan";
+import { expenseWeight } from "@/lib/budgetFlow";
+import {
+  buildPlanOptions, suggestPayoffPerCycle, fundingPerDay,
+  PAYOFF_CYCLE_CHOICES, type PlanKind, type PlanOption,
+} from "@/lib/fundPlan";
 import { cycleLength } from "@/lib/budgetCycle";
 import { daysUntilSalary, surplusPullSource } from "@/lib/financeOverview";
-import { Tent, Wand2 } from "lucide-react";
+import { Tent } from "lucide-react";
 
-// ===================== «رحلة المدينة»: أين تسكن الصدمة الكبيرة؟ =====================
-// كان أمام المصروف الكبير طريقان كلاهما يكذب: أن يُسجَّل عادياً فيبتلع الميزانية
-// اليومية أسبوعين ويُفقدها معنى قياس الانضباط، أو يُوسم «خارج الميزانيات» فيختفي
-// من كلّ وعاءٍ رغم أنّ المال خرج فعلاً.
-//
-// ثمّ تبيّن أنّ الطريق الثالث (مظروفٌ للحدث) ليس كافياً وحدَه ما دام يسأل المالك
-// سؤالين عند الكاشير: **من أين؟ وعلى كم دورة؟**. فصار التطبيق يقرأ حالته ويقترح
-// **توزيعاً واحداً جاهزاً** (`planBigExpense`): رصيدُ الدورة أوّلاً، فالفوائض بما
-// لا يُفرغ وسادةَ المقاصة، فالباقي سدادٌ بأقلّ عددِ دوراتٍ يُبقي نقصَ البدل في
-// حدّه. ضغطةٌ واحدة تنفّذها، و«عدّلها» يفتح كلّ رقمٍ فيها لمن أراد.
-//
-// لا تظهر البطاقة إلّا حين يستحقّ المصروفُ قراراً — `expenseWeight(...).big`.
+// ===================== المصروف الكبير: طرقٌ بعواقبها، لا أرقامٌ تُحرَّر =====================
+// تدرّجت هذه الشاشة على ثلاث مراحل، وكلُّ مرحلةٍ كشفت نقصَ ما قبلها:
+//   ١) مظروفٌ للحدث — حلَّ الحساب، وترك على المالك سؤالين عند الكاشير.
+//   ٢) خطةٌ مقترحة واحدة + «عدّلها» — أجابت السؤالين، لكنّها جعلته يحرّر **أرقاماً**.
+//   ٣) وهذه: **طرقٌ كاملة، ولكلٍّ عاقبتُه برقمٍ واحد** — «بدلك بعدها ٨٤ ر.س/يوم،
+//      ويبقى في فوائضك ٣٠٠». فالاختيار يصير بين نتائجَ مفهومة لا بين آليات.
+// «موصى به» علامةٌ لا قيد، والبناءُ كلُّه نقيٌّ في `buildPlanOptions` (مختبَر).
 const EVENT_ICON = "🎒";
 const EVENT_COLOR = "#8a6fb0";
+
+const TITLES: Record<PlanKind, { title: string; gist: string }> = {
+  mix: { title: "موزَّعة بذكاء", gist: "الأرخص أولاً: رصيدُ دورتك، فالفوائض، فالباقي سداداً" },
+  noTouchBudget: { title: "بلا مساسٍ ببدلك", gist: "من رصيدك والفوائض وحدهما — ولا سداد" },
+  financeAll: { title: "احفظ فوائضك", gist: "كلُّه سدادٌ من الراتب — سيولتك كما هي" },
+  fromBudget: { title: "كلُّه الآن من بدلي", gist: "بلا مظروفٍ ولا التزام — والثمنُ بقيّةُ دورتك" },
+};
 
 interface Props {
   amount: number;
@@ -44,57 +49,63 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
   const transferBetweenReserves = useAppStore((s) => s.transferBetweenReserves);
   const setReserveFunding = useAppStore((s) => s.setReserveFunding);
 
-  const [tweaking, setTweaking] = useState(false);
+  const [picked, setPicked] = useState<PlanKind>("mix");
   const [newName, setNewName] = useState("");
-  const [cycles, setCycles] = useState<number | null>(null); // null = العدد المحسوب
+  const [cycles, setCycles] = useState<number | null>(null);
 
   const weight = expenseWeight(amount, dailyBudget?.amount ?? 0);
-  // بلا ميزانيةٍ يومية لا مقياس لـ«كبير» أصلاً، فلا قرار يُعرض.
   if (!dailyBudget || !weight.big) return null;
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
-  const daysLeft = daysUntilSalary(salaryDay ?? 27, today());
   const len = cycleLength(salaryDay ?? 27, today());
+  const daysLeft = daysUntilSalary(salaryDay ?? 27, today());
   const surplus = surplusPullSource(reserves, transactions, true);
-  const plan = planBigExpense({
+  const options = buildPlanOptions({
     amount,
     cycleBalance: status.balance,
     rate: status.rate,
     surplusBalance: surplus?.balance ?? 0,
     cycleLen: len,
+    daysLeft,
   });
-  // عددُ الدورات: المحسوب ما لم يختر المالك غيره.
-  const planCycles = cycles ?? plan.cycles;
-  const perCycle = plan.financed > 0 && planCycles > 0 ? suggestPayoffPerCycle(plan.financed, planCycles) : 0;
+  const chosen = options.find((o) => o.kind === picked) ?? options[0];
+  // عددُ الدورات: المحسوب ما لم يختر المالك غيره (ويُعرض للطريق المختار وحده).
+  const planCycles = cycles ?? chosen.plan.cycles;
+  const perCycle =
+    chosen.plan.financed > 0 && planCycles > 0 ? suggestPayoffPerCycle(chosen.plan.financed, planCycles) : 0;
   const perDay = perCycle > 0 ? fundingPerDay(perCycle, len) : 0;
-  const after = cyclePace(status.balance - amount, status.rate, daysLeft);
-
-  const route: "daily" | "fund" | "off" = offBudget ? "off" : splits.length ? "fund" : "daily";
-  const chosenFund = splits.length ? reserves.find((f) => f.id === splits[0].fundId) : undefined;
+  const rateAfter = Math.max(0, Math.round((status.rate - perDay) * 100) / 100);
   const name = (newName.trim() || note.trim() || "حدث").slice(0, 40);
+  const chosenFund = splits.length ? reserves.find((f) => f.id === splits[0].fundId) : undefined;
 
-  // تنفيذُ الخطة بضغطة: مظروفٌ باسم الحدث · تمويلٌ فوريّ من الفوائض · خطةُ سدادٍ
-  // للباقي · وحصّةُ المعاملة موزّعةٌ بين الجيب والمظروف بالنسبة المحسوبة.
-  function applyPlan() {
+  function apply() {
+    if (!chosen.plan.needsEnvelope) {
+      onDaily();
+      return;
+    }
     const id = uid();
     addReserve({ id, name, icon: EVENT_ICON, color: EVENT_COLOR, deposits: [], createdAt: today() });
-    if (plan.fromSurplus > 0 && surplus) {
-      transferBetweenReserves(surplus.fundId, id, plan.fromSurplus, `تمويل «${name}»`);
+    if (chosen.plan.fromSurplus > 0 && surplus) {
+      transferBetweenReserves(surplus.fundId, id, chosen.plan.fromSurplus, `تمويل «${name}»`);
     }
-    if (plan.financed > 0 && perCycle > 0) {
+    if (chosen.plan.financed > 0 && perCycle > 0) {
       setReserveFunding(id, { perCycle, source: "salary", stop: "zero" });
     }
-    onFund(id, plan.envelopePct);
-    setTweaking(false);
+    onFund(id, chosen.plan.envelopePct);
   }
 
-  // مظروفٌ قائم اختاره المالك بنفسه — بلا خطة، كامل المبلغ عليه.
-  function pickExisting(fundId: string) {
-    onFund(fundId, 100);
-    setTweaking(false);
+  // سطرُ التركيب: من أين يأتي المال في هذا الطريق.
+  function composition(o: PlanOption): string {
+    const parts: string[] = [];
+    if (o.plan.fromCycle > 0) parts.push(`${formatAmount(Math.round(o.plan.fromCycle))} من دورتك`);
+    if (o.plan.fromSurplus > 0) parts.push(`${formatAmount(Math.round(o.plan.fromSurplus))} من الفوائض`);
+    if (o.plan.financed > 0) {
+      const n = o.kind === chosen.kind ? planCycles : o.plan.cycles;
+      parts.push(`${formatAmount(Math.round(o.plan.financed))} على ${formatAmount(n)} ${n === 1 ? "دورة" : "دورات"}`);
+    }
+    return parts.join(" · ");
   }
 
-  const line = "flex items-baseline gap-1.5 text-[11px] leading-relaxed";
   return (
     <div
       className="rounded-xl p-3 space-y-2.5 animate-fade-up"
@@ -103,83 +114,76 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
       <div className="flex items-center gap-2">
         <Tent size={15} className="text-finance shrink-0" />
         <span className="text-xs font-bold text-finance">
-          مصروفٌ كبير — يعادل {formatAmount(weight.days)} يوماً من بدلك
+          مصروفٌ كبير — يعادل {formatAmount(weight.days)} يوماً من بدلك. من وين تدفعه؟
         </span>
       </div>
 
-      {/* ————— الخطة المقترحة: الجواب جاهزاً، ومعه سببُه ————— */}
-      {plan.needsEnvelope ? (
-        <div className="rounded-lg px-2.5 py-2 space-y-1" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "var(--ink)" }}>
-            <Wand2 size={13} className="text-finance" /> الخطة المقترحة
-          </div>
-          {plan.fromCycle > 0 && (
-            <div className={line} style={{ color: "var(--ink52)" }}>
-              <b className="text-finance">{formatAmount(Math.round(plan.fromCycle))}</b>
-              <span>من رصيد دورتك الحالي — متاحٌ الآن ولا يرتّب التزاماً</span>
-            </div>
-          )}
-          {plan.fromSurplus > 0 && (
-            <div className={line} style={{ color: "var(--ink52)" }}>
-              <b className="text-finance">{formatAmount(Math.round(plan.fromSurplus))}</b>
-              <span>
-                من {SURPLUS_FUND_NAME} — ويبقى فيها {formatAmount(Math.round(plan.keptCushion))} وسادةً للمقاصة
+      <div className="space-y-1.5">
+        {options.map((o) => {
+          const on = o.kind === picked;
+          const isDirect = o.kind === "fromBudget";
+          const rate = on ? rateAfter : o.rateAfter;
+          return (
+            <button
+              key={o.kind}
+              type="button"
+              onClick={() => { setPicked(o.kind); setCycles(null); }}
+              aria-pressed={on}
+              className="w-full text-right rounded-lg px-2.5 py-2 press transition-colors"
+              style={{
+                background: "var(--paper)",
+                border: `1px solid ${on ? "var(--theme-accent)" : "var(--line)"}`,
+                boxShadow: on ? "inset 0 0 0 1px var(--theme-accent-line)" : undefined,
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{
+                    border: `1px solid ${on ? "var(--theme-accent)" : "var(--line)"}`,
+                    background: on ? "var(--theme-accent)" : "transparent",
+                  }}
+                />
+                <span className="text-[11px] font-bold" style={{ color: "var(--ink)" }}>{TITLES[o.kind].title}</span>
+                {o.recommended && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-finance/15 text-finance">موصى به</span>
+                )}
               </span>
-            </div>
-          )}
-          {plan.financed > 0 && (
-            <div className={line} style={{ color: "var(--ink52)" }}>
-              <b className="text-amber-600">{formatAmount(Math.round(plan.financed))}</b>
-              <span>
-                سداداً على {formatAmount(planCycles)} {planCycles === 1 ? "دورة" : "دورات"} —{" "}
-                {formatAmount(Math.round(perCycle))} ر.س لكل دورة، أي{" "}
-                <b className="text-amber-600">{formatAmount(Math.round(perDay))} ر.س/يوم</b> من بدلك
-                {cycles === null && <> (أقلُّ عددٍ يُبقي النقص دون ثلث بدلك)</>}
-              </span>
-            </div>
-          )}
-          <div className="text-[10px] pt-0.5" style={{ color: "var(--ink52)" }}>
-            ↳ يُفتح مظروفٌ باسم «{name}» يحمل {formatAmount(plan.envelopePct)}٪ من المبلغ، وبدلك اليومي لا ينكسر.
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-lg px-2.5 py-2 text-[11px] leading-relaxed" style={{ background: "var(--paper)", border: "1px solid var(--line)", color: "var(--ink52)" }}>
-          ✓ رصيدُ دورتك يتحمّله — يُخصم من بدلك مباشرةً ولا داعي لمظروف. (يبقى بعده{" "}
-          {formatAmount(Math.round(status.balance - amount))} ر.س، وبدلك لبقيّة الدورة{" "}
-          {formatAmount(Math.round(after.rate))} ر.س/يوم.)
-        </div>
-      )}
 
-      <div className="flex gap-1.5">
-        <button
-          type="button"
-          onClick={() => (plan.needsEnvelope ? applyPlan() : onDaily())}
-          className="flex-1 bg-finance text-white text-[11px] font-bold py-2 rounded-lg press"
-        >
-          {plan.needsEnvelope ? "اعتمد الخطة" : "سجّله من البدل"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setTweaking((v) => !v)}
-          className="text-[11px] font-semibold px-3 rounded-lg press"
-          style={{ border: "1px solid var(--line)", color: "var(--ink52)" }}
-        >
-          {tweaking ? "إخفاء" : "عدّلها"}
-        </button>
+              <span className="block text-[10px] mt-0.5 leading-relaxed" style={{ color: "var(--ink52)" }}>
+                {composition(o) || TITLES[o.kind].gist}
+              </span>
+
+              {/* العاقبة برقمٍ واحد — وهي ما يُختار عليه */}
+              <span className="flex flex-wrap gap-1.5 mt-1">
+                {isDirect ? (
+                  <span
+                    className="mdr-chip"
+                    style={o.paceAfter < status.rate * 0.35 ? { color: "#c15a34", borderColor: "#c15a3455" } : undefined}
+                  >
+                    بقيّةُ دورتك <b>{formatAmount(Math.round(o.paceAfter))} ر.س/يوم</b>
+                  </span>
+                ) : (
+                  <span className="mdr-chip">
+                    بدلك بعدها <b>{formatAmount(Math.round(rate))} ر.س/يوم</b>
+                  </span>
+                )}
+                <span className="mdr-chip">
+                  الفوائض <b>{formatAmount(Math.round(o.surplusAfter))} ر.س</b>
+                </span>
+                {o.eatsCushion && <span className="mdr-chip">⚠︎ تُمسّ وسادةُ المقاصة</span>}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {route === "fund" && chosenFund && (
-        <p className="text-[10px] text-finance font-semibold">
-          ✓ {splits[0]?.pct ?? 100}٪ منه على «{chosenFund.name}» — الباقي من بدلك
-        </p>
-      )}
-
-      {/* ————— التعديل اليدويّ: كلّ رقمٍ في الخطة مفتوح ————— */}
-      {tweaking && (
-        <div className="space-y-2 animate-fade-up">
+      {/* تفاصيل الطريق المختار: الاسم وعددُ الدورات — تظهر حين تعني شيئاً فقط */}
+      {chosen.plan.needsEnvelope && (
+        <div className="space-y-2">
           <div>
             <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
-              اسم المظروف
+              اسم المظروف الذي يحمل {formatAmount(chosen.plan.envelopePct)}٪ من المبلغ
             </label>
             <input
               value={newName}
@@ -190,10 +194,11 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
             />
           </div>
 
-          {plan.financed > 0 && (
+          {chosen.plan.financed > 0 && (
             <div>
               <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
-                على كم دورة تسدّد {formatAmount(Math.round(plan.financed))} ر.س؟
+                السداد على كم دورة؟ ({formatAmount(Math.round(perCycle))} ر.س لكل دورة ·{" "}
+                {formatAmount(Math.round(perDay))} ر.س/يوم من بدلك)
               </label>
               <div className="flex gap-1 flex-wrap">
                 {PAYOFF_CYCLE_CHOICES.map((n) => (
@@ -211,85 +216,57 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
                     {formatAmount(n)}
                   </button>
                 ))}
-                {cycles !== null && (
-                  <button
-                    type="button"
-                    onClick={() => setCycles(null)}
-                    className="text-[10px] font-semibold text-finance px-2 press"
-                  >
-                    المحسوب ({formatAmount(plan.cycles)})
+                {cycles !== null && cycles !== chosen.plan.cycles && (
+                  <button type="button" onClick={() => setCycles(null)} className="text-[10px] font-semibold text-finance px-2 press">
+                    المحسوب ({formatAmount(chosen.plan.cycles)})
                   </button>
                 )}
               </div>
             </div>
           )}
-
-          {reserves.length > 0 && (
-            <div>
-              <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
-                أو ضعه كاملاً على مظروفٍ قائم
-              </label>
-              <div className="flex gap-1.5 flex-wrap">
-                {reserves.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => pickExisting(f.id)}
-                    className={cn(
-                      "text-[11px] px-2.5 py-1 rounded-full border transition-colors press",
-                      chosenFund?.id === f.id ? "border-finance bg-finance text-white font-semibold" : "text-gray-500"
-                    )}
-                    style={chosenFund?.id === f.id ? undefined : { borderColor: "var(--line)", background: "var(--paper)" }}
-                  >
-                    {f.icon} {f.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-1.5 pt-0.5">
-            <button
-              type="button"
-              onClick={onDaily}
-              aria-pressed={route === "daily"}
-              className={cn(
-                "flex-1 text-[11px] font-bold py-1.5 rounded-lg press",
-                route === "daily" ? "bg-white dark:bg-white/15 text-finance shadow-sm" : "text-gray-400"
-              )}
-              style={route === "daily" ? undefined : { border: "1px solid var(--line)" }}
-            >
-              كلّه من البدل اليومي
-            </button>
-            <button
-              type="button"
-              onClick={onOffBudget}
-              aria-pressed={route === "off"}
-              className={cn(
-                "flex-1 text-[11px] font-bold py-1.5 rounded-lg press",
-                route === "off" ? "bg-white dark:bg-white/15 text-finance shadow-sm" : "text-gray-400"
-              )}
-              style={route === "off" ? undefined : { border: "1px solid var(--line)" }}
-            >
-              خارج الميزانيات
-            </button>
-          </div>
-          {route === "daily" && (
-            <p className="text-[10px] leading-relaxed" style={{ color: "var(--ink52)" }}>
-              ينزل بدلك لبقيّة الدورة إلى{" "}
-              <b className={after.kind === "beyond" ? "text-red-500" : "text-amber-600"}>
-                {formatAmount(Math.round(after.rate))} ر.س/يوم
-              </b>{" "}
-              ({formatAmount(daysLeft)} يوم على الراتب).
-            </p>
-          )}
-          {route === "off" && (
-            <p className="text-[10px] leading-relaxed" style={{ color: "var(--ink52)" }}>
-              سيظهر في السجل والإحصائيات ومجموع الشهر، ولا يُحاسَب في أيّ وعاء — لما لا تريد تتبّعه أصلاً.
-            </p>
-          )}
         </div>
       )}
+
+      <button type="button" onClick={apply} className="w-full bg-finance text-white text-[11px] font-bold py-2 rounded-lg press">
+        {chosen.plan.needsEnvelope ? `اعتمد — ${TITLES[chosen.kind].title}` : "سجّله من بدلي"}
+      </button>
+
+      {chosenFund && (
+        <p className="text-[10px] text-finance font-semibold">
+          ✓ {splits[0]?.pct ?? 100}٪ منه على «{chosenFund.name}» — الباقي من بدلك
+        </p>
+      )}
+
+      {/* مظروفٌ قائم، أو خارج الميزانيات — طريقان جانبيّان لا يزاحمان الخيارات */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+        {reserves.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onFund(f.id, 100)}
+            className={cn(
+              "text-[10px] px-2 py-0.5 rounded-full border transition-colors press",
+              chosenFund?.id === f.id ? "border-finance bg-finance text-white font-semibold" : "text-gray-500"
+            )}
+            style={chosenFund?.id === f.id ? undefined : { borderColor: "var(--line)", background: "var(--paper)" }}
+          >
+            {f.icon} {f.name}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={onOffBudget}
+          aria-pressed={offBudget}
+          className="text-[10px] px-2 py-0.5 rounded-full press"
+          style={{
+            border: `1px solid ${offBudget ? "var(--theme-accent)" : "var(--line)"}`,
+            color: offBudget ? "var(--theme-accent)" : "var(--ink52)",
+            background: "var(--paper)",
+          }}
+        >
+          لا أتتبّعه — خارج الميزانيات
+        </button>
+      </div>
     </div>
   );
 }

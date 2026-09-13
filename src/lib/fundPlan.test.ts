@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   suggestPayoffPerCycle, cycleFundingAmount, fundingDone, fundingPerDay,
   effectiveDailyRate, fundingPreview, cyclesRemaining, cyclesForGap,
-  planBigExpense, PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
+  planBigExpense, buildPlanOptions, PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
 } from "./fundPlan";
 import type { ReserveFund } from "./types";
 
@@ -187,5 +187,62 @@ describe("planBigExpense — الخطةُ المقترحة", () => {
         expect(Math.round((p.fromCycle + p.fromSurplus + p.financed) * 100) / 100).toBe(Math.round(amount * 100) / 100);
       }
     }
+  });
+});
+
+describe("buildPlanOptions — طرقٌ كاملةٌ بعواقبها", () => {
+  const base = { rate: 100, cycleLen: 30, daysLeft: 10 };
+
+  it("الموصى به أوّلاً وهو المزيج، ولكلّ خيارٍ مجموعٌ يساوي المصروف", () => {
+    const opts = buildPlanOptions({ ...base, amount: 3000, cycleBalance: 450, surplusBalance: 1500 });
+    expect(opts[0].kind).toBe("mix");
+    expect(opts[0].recommended).toBe(true);
+    expect(opts.filter((o) => o.recommended)).toHaveLength(1);
+    for (const o of opts) {
+      const sum = o.plan.fromCycle + o.plan.fromSurplus + o.plan.financed;
+      expect(Math.round(sum * 100) / 100).toBe(3000);
+    }
+  });
+
+  it("«كلُّه من بدلي» لا يفتح مظروفاً، ويُظهر وتيرةً منهارة حين لا تحتمل", () => {
+    const opts = buildPlanOptions({ ...base, amount: 3000, cycleBalance: 450, surplusBalance: 1500 });
+    const direct = opts.find((o) => o.kind === "fromBudget")!;
+    expect(direct.plan.needsEnvelope).toBe(false);
+    expect(direct.rateAfter).toBe(100); // لا يمسّ الدورات القادمة
+    expect(direct.paceAfter).toBeLessThan(0); // لكنّ بقيّة الدورة تنهار
+  });
+
+  it("«احفظ سيولتك» يُبقي الفوائض كاملة ويأخذ من البدل وحده", () => {
+    const opts = buildPlanOptions({ ...base, amount: 3000, cycleBalance: 450, surplusBalance: 1500 });
+    const fin = opts.find((o) => o.kind === "financeAll")!;
+    expect(fin.plan.fromSurplus).toBe(0);
+    expect(fin.surplusAfter).toBe(1500);
+    expect(fin.rateAfter).toBeLessThan(100);
+  });
+
+  it("«بلا مساس ببدلك» يظهر حين تغطّيه الفوائض بمسِّ الوسادة وحدها", () => {
+    // 1100 في الفوائض: الموصى به يترك 300 وسادةً فيبقى 200 سداداً؛ وهذا الطريق
+    // يغطّي المبلغ كاملاً بأكل الوسادة — طريقٌ مختلفٌ فعلاً فيستحقّ العرض.
+    const opts = buildPlanOptions({ ...base, amount: 1000, cycleBalance: 0, surplusBalance: 1100 });
+    const opt = opts.find((o) => o.kind === "noTouchBudget");
+    expect(opt).toBeTruthy();
+    expect(opt!.plan.financed).toBe(0);
+    expect(opt!.rateAfter).toBe(100);
+  });
+
+  it("ولا يُعرض حين لا يضيف شيئاً على الموصى به (فلا خيارٌ مكرّر)", () => {
+    // فوائضُ واسعة: الموصى به يغطّي كلَّ شيءٍ أصلاً بلا مسِّ الوسادة.
+    const rich = buildPlanOptions({ ...base, amount: 1000, cycleBalance: 200, surplusBalance: 5000 });
+    expect(rich[0].plan.financed).toBe(0);
+    expect(rich.find((o) => o.kind === "noTouchBudget")).toBeUndefined();
+    // وفقيرُ الفوائض لا يُعرض له هذا الطريق أصلاً
+    const poor = buildPlanOptions({ ...base, amount: 3000, cycleBalance: 100, surplusBalance: 200 });
+    expect(poor.find((o) => o.kind === "noTouchBudget")).toBeUndefined();
+  });
+
+  it("ويُعلَن مسُّ الوسادة صراحةً حين يقع", () => {
+    const opts = buildPlanOptions({ ...base, amount: 1000, cycleBalance: 0, surplusBalance: 1100 });
+    expect(opts.find((o) => o.kind === "noTouchBudget")!.eatsCushion).toBe(true); // بقي 100 < وسادة 300
+    expect(opts[0].eatsCushion).toBe(false); // والموصى به لا يمسّها
   });
 });
