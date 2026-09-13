@@ -120,3 +120,86 @@ export function cyclesRemaining(fund: ReserveFund, balance: number): number | nu
   if (gap <= 0) return 0;
   return Math.ceil(round2(gap) / f.perCycle);
 }
+
+/* ===================== الخطةُ المقترحة لمصروفٍ كبير ===================== */
+// «أنا غالباً أدفع من الدورة أو من الاحتياطيات أو أيّاً يكن — أبيه يتصرّف بذكاء».
+// فبدل أن يُسأل المالك سؤالين (من أين؟ وعلى كم دورة؟) يقرأ التطبيق حالته ويقترح
+// **توزيعاً واحداً** بثلاثة مصادر مرتّبة من الأرخص إلى الأغلى:
+//
+//   ١) **رصيد دورتك الحالي** — أرخصُها: مالٌ متاحٌ الآن لا يُرتّب التزاماً.
+//      ويُبقى منه **يوميّةٌ واحدة** وسادةً، فلا يُترك اليومُ على حافّة الصفر.
+//   ٢) **الفوائض** — مالٌ قديم لا يمسّ البدل. ويُبقى منها **ثلاثُ يوميّات**
+//      (سقفُ المقاصة التلقائية في `budgetFlow.ts`)، وإلّا أُفرغت الوسادةُ التي
+//      تغطّي عجز الغد وعاد المالك إلى الأحمر من بابٍ آخر.
+//   ٣) **خطةُ سدادٍ من الراتب** — آخرُها لأنّها الوحيدة التي تنقص البدل.
+//
+// **وعددُ الدورات يُحسب لا يُفترض**: أقلُّ عددٍ يُبقي نقصَ البدل في حدوده
+// (`MAX_DRIP_RATIO` = ثلثُ البدل)، مقصوصاً على `MAX_PAYOFF_CYCLES`. فالجواب
+// «أربع دورات» يصير له سببٌ يُقال: «حتى لا ينزل بدلك أكثر من الثلث».
+// نقيٌّ ومختبَر؛ والمالك يبقى قادراً على تعديل كلّ رقمٍ فيه.
+
+// أقصى ما تأخذه خطةُ السداد من البدل اليومي.
+export const MAX_DRIP_RATIO = 1 / 3;
+// ما يُترك في الفوائض وسادةً للمقاصة التلقائية (بيوميّات البدل).
+export const SURPLUS_CUSHION_DAYS = 3;
+
+export interface ExpensePlan {
+  amount: number;
+  fromCycle: number;    // من رصيد الدورة (يبقى على البدل اليومي كصرفٍ عاديّ)
+  fromSurplus: number;  // تمويلٌ فوريّ للمظروف من الفوائض
+  financed: number;     // الباقي بخطة سدادٍ من الراتب
+  cycles: number;       // عدد دوراتها (0 إن لا سداد)
+  perCycle: number;
+  perDay: number;       // كم تنقص من بدلك يومياً
+  envelopePct: number;  // حصّة المظروف من المعاملة (0..100)
+  keptCushion: number;  // ما تُرك في الفوائض
+  needsEnvelope: boolean; // false = رصيدك يتحمّله، فلا داعي لمظروفٍ أصلاً
+}
+
+export function planBigExpense(input: {
+  amount: number;
+  cycleBalance: number;
+  rate: number;
+  surplusBalance: number;
+  cycleLen: number;
+}): ExpensePlan {
+  const amount = Number.isFinite(input.amount) && input.amount > 0 ? round2(input.amount) : 0;
+  const rate = Number.isFinite(input.rate) && input.rate > 0 ? input.rate : 0;
+  const len = Math.max(1, Math.round(Number.isFinite(input.cycleLen) ? input.cycleLen : 30));
+  const cycleBalance = Number.isFinite(input.cycleBalance) ? input.cycleBalance : 0;
+  const surplus = Number.isFinite(input.surplusBalance) && input.surplusBalance > 0 ? input.surplusBalance : 0;
+
+  // ١) رصيد الدورة — مع إبقاء يوميّةٍ واحدة وسادة.
+  const fromCycle = round2(Math.max(0, Math.min(amount, cycleBalance - rate)));
+  let rest = round2(amount - fromCycle);
+
+  // ٢) الفوائض — مع إبقاء وسادة المقاصة.
+  const cushion = round2(Math.min(surplus, rate * SURPLUS_CUSHION_DAYS));
+  const fromSurplus = round2(Math.max(0, Math.min(rest, surplus - cushion)));
+  rest = round2(rest - fromSurplus);
+
+  // ٣) الباقي سداداً — بأقلّ عددٍ يُبقي نقص البدل في حدّه.
+  const financed = round2(Math.max(0, rest));
+  const perCycleMax = round2(rate * MAX_DRIP_RATIO * len);
+  const cycles =
+    financed <= 0
+      ? 0
+      : perCycleMax > 0
+      ? Math.min(MAX_PAYOFF_CYCLES, Math.max(1, Math.ceil(financed / perCycleMax)))
+      : MAX_PAYOFF_CYCLES;
+  const perCycle = cycles > 0 ? round2(financed / cycles) : 0;
+
+  const envelopeShare = round2(fromSurplus + financed);
+  return {
+    amount,
+    fromCycle,
+    fromSurplus,
+    financed,
+    cycles,
+    perCycle,
+    perDay: cycles > 0 ? fundingPerDay(perCycle, len) : 0,
+    envelopePct: amount > 0 ? Math.min(100, Math.round((envelopeShare / amount) * 100)) : 0,
+    keptCushion: cushion,
+    needsEnvelope: envelopeShare > 0,
+  };
+}

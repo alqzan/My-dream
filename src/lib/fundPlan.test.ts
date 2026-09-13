@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   suggestPayoffPerCycle, cycleFundingAmount, fundingDone, fundingPerDay,
   effectiveDailyRate, fundingPreview, cyclesRemaining, cyclesForGap,
-  PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
+  planBigExpense, PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
 } from "./fundPlan";
 import type { ReserveFund } from "./types";
 
@@ -126,6 +126,66 @@ describe("cyclesForGap — العدد المقابل لمبلغٍ اختاره �
   it("والمنتقي يعطي مبلغاً يطابق العدد المختار ذهاباً وإياباً", () => {
     for (const n of PAYOFF_CYCLE_CHOICES) {
       expect(cyclesForGap(1200, suggestPayoffPerCycle(1200, n))).toBe(n);
+    }
+  });
+});
+
+describe("planBigExpense — الخطةُ المقترحة", () => {
+  const base = { rate: 100, cycleLen: 30 };
+
+  it("يبدأ بالأرخص: رصيدُ الدورة، ويُبقي يوميّةً واحدة وسادة", () => {
+    const p = planBigExpense({ ...base, amount: 300, cycleBalance: 450, surplusBalance: 0 });
+    expect(p.fromCycle).toBe(300); // 450 − 100 وسادة = 350 متاح، والمصروف 300
+    expect(p.needsEnvelope).toBe(false);
+    expect(p.financed).toBe(0);
+  });
+
+  it("ثمّ الفوائض — ويُبقي ثلاث يوميّات وسادةً للمقاصة التلقائية", () => {
+    const p = planBigExpense({ ...base, amount: 1000, cycleBalance: 0, surplusBalance: 800 });
+    expect(p.fromCycle).toBe(0);
+    expect(p.keptCushion).toBe(300);
+    expect(p.fromSurplus).toBe(500);
+    expect(p.financed).toBe(500);
+  });
+
+  it("ثمّ السداد — بأقلّ عددٍ يُبقي نقص البدل في حدّ الثلث", () => {
+    // الحدّ: 100 × ⅓ × 30 = 1000 لكل دورة
+    const p = planBigExpense({ ...base, amount: 3000, cycleBalance: 0, surplusBalance: 0 });
+    expect(p.financed).toBe(3000);
+    expect(p.cycles).toBe(3);
+    expect(p.perCycle).toBe(1000);
+    expect(p.perDay).toBe(33.33); // ثلثُ البدل تماماً
+  });
+
+  it("ويوزّع المصادر الثلاثة معاً حين تتوفّر", () => {
+    const p = planBigExpense({ ...base, amount: 3000, cycleBalance: 450, surplusBalance: 1500 });
+    expect(p.fromCycle).toBe(350);
+    expect(p.fromSurplus).toBe(1200); // 1500 − 300 وسادة
+    expect(p.financed).toBe(1450);
+    expect(p.fromCycle + p.fromSurplus + p.financed).toBe(3000);
+    // حصّةُ المظروف = ما لم يُدفع من رصيد الدورة
+    expect(p.envelopePct).toBe(88);
+  });
+
+  it("رصيدٌ سالب لا يساهم بشيء (ولا يُخترع مالٌ من العدم)", () => {
+    const p = planBigExpense({ ...base, amount: 500, cycleBalance: -200, surplusBalance: 0 });
+    expect(p.fromCycle).toBe(0);
+    expect(p.financed).toBe(500);
+  });
+
+  it("لا ينهار بلا بدلٍ يومي ولا بقيمٍ مشوّهة", () => {
+    const p = planBigExpense({ amount: 900, cycleBalance: 0, surplusBalance: 0, rate: 0, cycleLen: 0 });
+    expect(p.cycles).toBe(MAX_PAYOFF_CYCLES);
+    expect(Number.isFinite(p.perCycle)).toBe(true);
+    expect(() => planBigExpense({ amount: NaN, cycleBalance: NaN, surplusBalance: NaN, rate: NaN, cycleLen: NaN })).not.toThrow();
+  });
+
+  it("والمجموع لا يزيد ولا ينقص عن المصروف أبداً", () => {
+    for (const amount of [120, 777.5, 2400, 10000]) {
+      for (const surplusBalance of [0, 450, 9000]) {
+        const p = planBigExpense({ ...base, amount, cycleBalance: 260, surplusBalance });
+        expect(Math.round((p.fromCycle + p.fromSurplus + p.financed) * 100) / 100).toBe(Math.round(amount * 100) / 100);
+      }
     }
   });
 });

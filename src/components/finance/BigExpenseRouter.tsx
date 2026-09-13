@@ -2,24 +2,26 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { ReserveSplit } from "@/lib/types";
+import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { cyclePace, expenseWeight } from "@/lib/budgetFlow";
-import { suggestPayoffPerCycle, fundingPerDay, PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES } from "@/lib/fundPlan";
+import { planBigExpense, suggestPayoffPerCycle, fundingPerDay, PAYOFF_CYCLE_CHOICES } from "@/lib/fundPlan";
 import { cycleLength } from "@/lib/budgetCycle";
 import { daysUntilSalary, surplusPullSource } from "@/lib/financeOverview";
-import { SURPLUS_FUND_NAME } from "@/lib/types";
-import { Tent } from "lucide-react";
+import { Tent, Wand2 } from "lucide-react";
 
 // ===================== «رحلة المدينة»: أين تسكن الصدمة الكبيرة؟ =====================
 // كان أمام المصروف الكبير طريقان كلاهما يكذب: أن يُسجَّل عادياً فيبتلع الميزانية
 // اليومية أسبوعين ويُفقدها معنى قياس الانضباط، أو يُوسم «خارج الميزانيات» فيختفي
-// من كلّ وعاءٍ رغم أنّ المال خرج فعلاً. هذه البطاقة تفتح الطريق الثالث لحظةَ
-// التسجيل: **مظروفٌ للحدث يُموَّل من الفوائض**، فالرحلةُ تُحاسَب على نفسها.
+// من كلّ وعاءٍ رغم أنّ المال خرج فعلاً.
 //
-// لا تظهر إلّا حين يستحقّ المصروفُ قراراً — `expenseWeight(...).big`، أي ما عادل
-// ثلاث يوميّاتٍ فأكثر (`budgetFlow.ts`). وما دون ذلك لا يُقاطَع فيه المالك.
-// وإن نقص رصيدُ الفوائض عن المبلغ، مُوِّل المظروف بما تيسّر وبقي الباقي عجزاً
-// **في المظروف** يُغطّى من الراتب القادم — لا عجزاً في بدلك اليومي.
+// ثمّ تبيّن أنّ الطريق الثالث (مظروفٌ للحدث) ليس كافياً وحدَه ما دام يسأل المالك
+// سؤالين عند الكاشير: **من أين؟ وعلى كم دورة؟**. فصار التطبيق يقرأ حالته ويقترح
+// **توزيعاً واحداً جاهزاً** (`planBigExpense`): رصيدُ الدورة أوّلاً، فالفوائض بما
+// لا يُفرغ وسادةَ المقاصة، فالباقي سدادٌ بأقلّ عددِ دوراتٍ يُبقي نقصَ البدل في
+// حدّه. ضغطةٌ واحدة تنفّذها، و«عدّلها» يفتح كلّ رقمٍ فيها لمن أراد.
+//
+// لا تظهر البطاقة إلّا حين يستحقّ المصروفُ قراراً — `expenseWeight(...).big`.
 const EVENT_ICON = "🎒";
 const EVENT_COLOR = "#8a6fb0";
 
@@ -29,7 +31,7 @@ interface Props {
   splits: ReserveSplit[];
   offBudget: boolean;
   onDaily: () => void;
-  onFund: (fundId: string) => void;
+  onFund: (fundId: string, pct?: number) => void;
   onOffBudget: () => void;
 }
 
@@ -41,10 +43,10 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
   const addReserve = useAppStore((s) => s.addReserve);
   const transferBetweenReserves = useAppStore((s) => s.transferBetweenReserves);
   const setReserveFunding = useAppStore((s) => s.setReserveFunding);
-  const [naming, setNaming] = useState(false);
+
+  const [tweaking, setTweaking] = useState(false);
   const [newName, setNewName] = useState("");
-  // **عدد دورات السداد بيد المالك** — يُقترح ثلاثاً ويُبدَّل بضغطة قبل الإنشاء.
-  const [cycles, setCycles] = useState<number>(PAYOFF_CYCLES);
+  const [cycles, setCycles] = useState<number | null>(null); // null = العدد المحسوب
 
   const weight = expenseWeight(amount, dailyBudget?.amount ?? 0);
   // بلا ميزانيةٍ يومية لا مقياس لـ«كبير» أصلاً، فلا قرار يُعرض.
@@ -52,173 +54,242 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
   const daysLeft = daysUntilSalary(salaryDay ?? 27, today());
-  const after = cyclePace(status.balance - amount, dailyBudget.amount, daysLeft);
+  const len = cycleLength(salaryDay ?? 27, today());
   const surplus = surplusPullSource(reserves, transactions, true);
-  const fundedBy = surplus ? Math.min(amount, surplus.balance) : 0;
-  const shortfall = Math.max(0, Math.round((amount - fundedBy) * 100) / 100);
+  const plan = planBigExpense({
+    amount,
+    cycleBalance: status.balance,
+    rate: status.rate,
+    surplusBalance: surplus?.balance ?? 0,
+    cycleLen: len,
+  });
+  // عددُ الدورات: المحسوب ما لم يختر المالك غيره.
+  const planCycles = cycles ?? plan.cycles;
+  const perCycle = plan.financed > 0 && planCycles > 0 ? suggestPayoffPerCycle(plan.financed, planCycles) : 0;
+  const perDay = perCycle > 0 ? fundingPerDay(perCycle, len) : 0;
+  const after = cyclePace(status.balance - amount, status.rate, daysLeft);
 
   const route: "daily" | "fund" | "off" = offBudget ? "off" : splits.length ? "fund" : "daily";
   const chosenFund = splits.length ? reserves.find((f) => f.id === splits[0].fundId) : undefined;
+  const name = (newName.trim() || note.trim() || "حدث").slice(0, 40);
 
-  function createEnvelope() {
-    const name = (newName.trim() || note.trim() || "حدث").slice(0, 40);
+  // تنفيذُ الخطة بضغطة: مظروفٌ باسم الحدث · تمويلٌ فوريّ من الفوائض · خطةُ سدادٍ
+  // للباقي · وحصّةُ المعاملة موزّعةٌ بين الجيب والمظروف بالنسبة المحسوبة.
+  function applyPlan() {
     const id = uid();
     addReserve({ id, name, icon: EVENT_ICON, color: EVENT_COLOR, deposits: [], createdAt: today() });
-    // تمويلٌ فوريّ من الفوائض بما تسمح به (الدالّة تقصّه على الرصيد المتاح)…
-    const funded = surplus ? transferBetweenReserves(surplus.fundId, id, amount, `تمويل «${name}»`) : 0;
-    // …وما قصُرت عنه **لا يُترك مظروفاً أحمرَ معلّقاً**: يصير خطة سدادٍ تنتهي
-    // من نفسها عند التصفير، فتنزل من بدلك قطرةً يومية معلومة بدل صدمةٍ واحدة.
-    const short = Math.round((amount - funded) * 100) / 100;
-    if (short > 0) {
-      setReserveFunding(id, { perCycle: suggestPayoffPerCycle(short, cycles), source: "salary", stop: "zero" });
+    if (plan.fromSurplus > 0 && surplus) {
+      transferBetweenReserves(surplus.fundId, id, plan.fromSurplus, `تمويل «${name}»`);
     }
-    onFund(id);
-    setNaming(false);
-    setNewName("");
+    if (plan.financed > 0 && perCycle > 0) {
+      setReserveFunding(id, { perCycle, source: "salary", stop: "zero" });
+    }
+    onFund(id, plan.envelopePct);
+    setTweaking(false);
   }
 
-  const tab = (active: boolean) =>
-    cn(
-      "flex-1 text-[11px] font-bold py-2 rounded-lg transition-all press",
-      active ? "bg-white dark:bg-white/15 text-finance shadow-sm" : "text-gray-400"
-    );
+  // مظروفٌ قائم اختاره المالك بنفسه — بلا خطة، كامل المبلغ عليه.
+  function pickExisting(fundId: string) {
+    onFund(fundId, 100);
+    setTweaking(false);
+  }
 
+  const line = "flex items-baseline gap-1.5 text-[11px] leading-relaxed";
   return (
-    <div className="rounded-xl border border-finance/25 bg-finance/5 p-3 space-y-2 animate-fade-up">
+    <div
+      className="rounded-xl p-3 space-y-2.5 animate-fade-up"
+      style={{ background: "var(--paper2)", border: "1px solid var(--theme-accent-line)" }}
+    >
       <div className="flex items-center gap-2">
         <Tent size={15} className="text-finance shrink-0" />
         <span className="text-xs font-bold text-finance">
-          مصروفٌ كبير — يعادل {weight.days} يوماً من بدلك
+          مصروفٌ كبير — يعادل {formatAmount(weight.days)} يوماً من بدلك
         </span>
       </div>
-      <p className="text-[10px] text-gray-500 leading-relaxed">
-        لو خصمته من البدل اليومي نزلت وتيرتك لبقيّة الدورة إلى{" "}
-        <b className={after.kind === "beyond" ? "text-red-500" : "text-amber-600"}>
-          {formatAmount(Math.round(after.rate))} ر.س/يوم
-        </b>{" "}
-        ({daysLeft} يوم على الراتب). أو اجعله حدثاً بمظروفٍ يُحاسَب على نفسه.
-      </p>
 
-      <div className="flex bg-gray-100 dark:bg-white/5 rounded-xl p-1 gap-1">
-        <button type="button" onClick={onDaily} aria-pressed={route === "daily"} className={tab(route === "daily")}>
-          من البدل اليومي
+      {/* ————— الخطة المقترحة: الجواب جاهزاً، ومعه سببُه ————— */}
+      {plan.needsEnvelope ? (
+        <div className="rounded-lg px-2.5 py-2 space-y-1" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "var(--ink)" }}>
+            <Wand2 size={13} className="text-finance" /> الخطة المقترحة
+          </div>
+          {plan.fromCycle > 0 && (
+            <div className={line} style={{ color: "var(--ink52)" }}>
+              <b className="text-finance">{formatAmount(Math.round(plan.fromCycle))}</b>
+              <span>من رصيد دورتك الحالي — متاحٌ الآن ولا يرتّب التزاماً</span>
+            </div>
+          )}
+          {plan.fromSurplus > 0 && (
+            <div className={line} style={{ color: "var(--ink52)" }}>
+              <b className="text-finance">{formatAmount(Math.round(plan.fromSurplus))}</b>
+              <span>
+                من {SURPLUS_FUND_NAME} — ويبقى فيها {formatAmount(Math.round(plan.keptCushion))} وسادةً للمقاصة
+              </span>
+            </div>
+          )}
+          {plan.financed > 0 && (
+            <div className={line} style={{ color: "var(--ink52)" }}>
+              <b className="text-amber-600">{formatAmount(Math.round(plan.financed))}</b>
+              <span>
+                سداداً على {formatAmount(planCycles)} {planCycles === 1 ? "دورة" : "دورات"} —{" "}
+                {formatAmount(Math.round(perCycle))} ر.س لكل دورة، أي{" "}
+                <b className="text-amber-600">{formatAmount(Math.round(perDay))} ر.س/يوم</b> من بدلك
+                {cycles === null && <> (أقلُّ عددٍ يُبقي النقص دون ثلث بدلك)</>}
+              </span>
+            </div>
+          )}
+          <div className="text-[10px] pt-0.5" style={{ color: "var(--ink52)" }}>
+            ↳ يُفتح مظروفٌ باسم «{name}» يحمل {formatAmount(plan.envelopePct)}٪ من المبلغ، وبدلك اليومي لا ينكسر.
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg px-2.5 py-2 text-[11px] leading-relaxed" style={{ background: "var(--paper)", border: "1px solid var(--line)", color: "var(--ink52)" }}>
+          ✓ رصيدُ دورتك يتحمّله — يُخصم من بدلك مباشرةً ولا داعي لمظروف. (يبقى بعده{" "}
+          {formatAmount(Math.round(status.balance - amount))} ر.س، وبدلك لبقيّة الدورة{" "}
+          {formatAmount(Math.round(after.rate))} ر.س/يوم.)
+        </div>
+      )}
+
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => (plan.needsEnvelope ? applyPlan() : onDaily())}
+          className="flex-1 bg-finance text-white text-[11px] font-bold py-2 rounded-lg press"
+        >
+          {plan.needsEnvelope ? "اعتمد الخطة" : "سجّله من البدل"}
         </button>
-        <button type="button" onClick={onOffBudget} aria-pressed={route === "off"} className={tab(route === "off")}>
-          خارج الميزانيات
+        <button
+          type="button"
+          onClick={() => setTweaking((v) => !v)}
+          className="text-[11px] font-semibold px-3 rounded-lg press"
+          style={{ border: "1px solid var(--line)", color: "var(--ink52)" }}
+        >
+          {tweaking ? "إخفاء" : "عدّلها"}
         </button>
       </div>
 
-      {/* الطريق الثالث: مظروفٌ يحمل الحدث — قائمٌ أو جديدٌ يُموَّل من الفوائض */}
-      <div className="space-y-1.5">
-        <div className="text-[10px] font-semibold text-gray-500">أو من مظروف (الأنظف لحدثٍ كهذا):</div>
-        <div className="flex gap-1.5 flex-wrap">
-          {reserves.map((f) => (
+      {route === "fund" && chosenFund && (
+        <p className="text-[10px] text-finance font-semibold">
+          ✓ {splits[0]?.pct ?? 100}٪ منه على «{chosenFund.name}» — الباقي من بدلك
+        </p>
+      )}
+
+      {/* ————— التعديل اليدويّ: كلّ رقمٍ في الخطة مفتوح ————— */}
+      {tweaking && (
+        <div className="space-y-2 animate-fade-up">
+          <div>
+            <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
+              اسم المظروف
+            </label>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={note.trim() || "مثل: رحلة المدينة"}
+              className="w-full text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
+              style={{ background: "var(--paper)", border: "1px solid var(--line)" }}
+            />
+          </div>
+
+          {plan.financed > 0 && (
+            <div>
+              <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
+                على كم دورة تسدّد {formatAmount(Math.round(plan.financed))} ر.س؟
+              </label>
+              <div className="flex gap-1 flex-wrap">
+                {PAYOFF_CYCLE_CHOICES.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setCycles(n)}
+                    aria-pressed={planCycles === n}
+                    className={cn(
+                      "text-[11px] font-bold rounded-lg px-2.5 py-1 border transition-colors press",
+                      planCycles === n ? "bg-finance text-white border-finance" : "text-gray-500"
+                    )}
+                    style={planCycles === n ? undefined : { borderColor: "var(--line)", background: "var(--paper)" }}
+                  >
+                    {formatAmount(n)}
+                  </button>
+                ))}
+                {cycles !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setCycles(null)}
+                    className="text-[10px] font-semibold text-finance px-2 press"
+                  >
+                    المحسوب ({formatAmount(plan.cycles)})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {reserves.length > 0 && (
+            <div>
+              <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
+                أو ضعه كاملاً على مظروفٍ قائم
+              </label>
+              <div className="flex gap-1.5 flex-wrap">
+                {reserves.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => pickExisting(f.id)}
+                    className={cn(
+                      "text-[11px] px-2.5 py-1 rounded-full border transition-colors press",
+                      chosenFund?.id === f.id ? "border-finance bg-finance text-white font-semibold" : "text-gray-500"
+                    )}
+                    style={chosenFund?.id === f.id ? undefined : { borderColor: "var(--line)", background: "var(--paper)" }}
+                  >
+                    {f.icon} {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-1.5 pt-0.5">
             <button
-              key={f.id}
               type="button"
-              onClick={() => onFund(f.id)}
+              onClick={onDaily}
+              aria-pressed={route === "daily"}
               className={cn(
-                "text-[11px] px-2.5 py-1 rounded-full border transition-colors press",
-                chosenFund?.id === f.id
-                  ? "border-finance bg-finance text-white font-semibold"
-                  : "border-gray-200 dark:border-white/15 text-gray-500 bg-white dark:bg-white/5"
+                "flex-1 text-[11px] font-bold py-1.5 rounded-lg press",
+                route === "daily" ? "bg-white dark:bg-white/15 text-finance shadow-sm" : "text-gray-400"
               )}
+              style={route === "daily" ? undefined : { border: "1px solid var(--line)" }}
             >
-              {f.icon} {f.name}
+              كلّه من البدل اليومي
             </button>
-          ))}
-          {!naming && (
             <button
               type="button"
-              onClick={() => { setNaming(true); setNewName(note.trim()); }}
-              className="text-[11px] px-2.5 py-1 rounded-full border border-dashed border-finance/50 text-finance bg-white dark:bg-white/5 font-semibold press"
+              onClick={onOffBudget}
+              aria-pressed={route === "off"}
+              className={cn(
+                "flex-1 text-[11px] font-bold py-1.5 rounded-lg press",
+                route === "off" ? "bg-white dark:bg-white/15 text-finance shadow-sm" : "text-gray-400"
+              )}
+              style={route === "off" ? undefined : { border: "1px solid var(--line)" }}
             >
-              + مظروف حدث جديد
+              خارج الميزانيات
             </button>
+          </div>
+          {route === "daily" && (
+            <p className="text-[10px] leading-relaxed" style={{ color: "var(--ink52)" }}>
+              ينزل بدلك لبقيّة الدورة إلى{" "}
+              <b className={after.kind === "beyond" ? "text-red-500" : "text-amber-600"}>
+                {formatAmount(Math.round(after.rate))} ر.س/يوم
+              </b>{" "}
+              ({formatAmount(daysLeft)} يوم على الراتب).
+            </p>
+          )}
+          {route === "off" && (
+            <p className="text-[10px] leading-relaxed" style={{ color: "var(--ink52)" }}>
+              سيظهر في السجل والإحصائيات ومجموع الشهر، ولا يُحاسَب في أيّ وعاء — لما لا تريد تتبّعه أصلاً.
+            </p>
           )}
         </div>
-
-        {naming && (
-          <div className="space-y-1.5 animate-fade-up">
-            <div className="flex gap-1.5">
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="اسم الحدث — مثل: رحلة المدينة"
-                className="flex-1 min-w-0 text-xs border border-gray-200 dark:border-white/15 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
-                onKeyDown={(e) => e.key === "Enter" && createEnvelope()}
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={createEnvelope}
-                className="text-[11px] font-bold text-white bg-finance rounded-lg px-3 press shrink-0"
-              >
-                أنشئ ومَوِّل
-              </button>
-              <button
-                type="button"
-                onClick={() => { setNaming(false); setNewName(""); }}
-                className="text-[11px] text-gray-400 bg-gray-100 dark:bg-white/10 rounded-lg px-2 press shrink-0"
-              >
-                إلغاء
-              </button>
-            </div>
-            {shortfall > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] font-semibold text-gray-500">
-                  الباقي {formatAmount(Math.round(shortfall))} ر.س — على كم دورة تسدّده؟
-                </div>
-                <div className="flex gap-1 flex-wrap">
-                  {PAYOFF_CYCLE_CHOICES.map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setCycles(n)}
-                      aria-pressed={cycles === n}
-                      className={cn(
-                        "text-[11px] font-bold rounded-lg px-2.5 py-1 border transition-colors press",
-                        cycles === n
-                          ? "bg-finance text-white border-finance"
-                          : "border-gray-200 dark:border-white/15 text-gray-500 bg-white dark:bg-white/5"
-                      )}
-                    >
-                      {formatAmount(n)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-[10px] text-gray-400 leading-relaxed">
-              {fundedBy > 0 && <>سيُموَّل بـ{formatAmount(Math.round(fundedBy))} ر.س من {SURPLUS_FUND_NAME}. </>}
-              {shortfall > 0 ? (
-                <>
-                  والباقي يصير <b className="text-finance">خطة سداد على {formatAmount(cycles)} دورات</b> —{" "}
-                  {formatAmount(Math.round(suggestPayoffPerCycle(shortfall, cycles)))} ر.س لكل دورة، أي{" "}
-                  <b className="text-amber-600">
-                    {formatAmount(Math.round(fundingPerDay(suggestPayoffPerCycle(shortfall, cycles), cycleLength(salaryDay ?? 27, today()))))} ر.س/يوم
-                  </b>{" "}
-                  من بدلك حتى يصفّر — بدل صدمةٍ واحدة. (تعدّلها أو توقفها من بطاقة المظروف متى شئت.)
-                </>
-              ) : (
-                <>يغطّيه المظروف كاملاً — ولا يمسّ بدلك اليومي.</>
-              )}
-            </p>
-          </div>
-        )}
-
-        {route === "fund" && chosenFund && (
-          <p className="text-[10px] text-finance font-semibold">
-            ✓ كامل المبلغ على «{chosenFund.name}» — لا يمسّ بدلك اليومي ولا سقوف الأقسام
-          </p>
-        )}
-        {route === "off" && (
-          <p className="text-[10px] text-gray-400 leading-relaxed">
-            سيظهر في السجل والإحصائيات ومجموع الشهر، ولا يُحاسَب في أيّ وعاء — استعمله لما لا تريد
-            تتبّعه أصلاً، لا لما تريد ضبطه.
-          </p>
-        )}
-      </div>
+      )}
     </div>
   );
 }

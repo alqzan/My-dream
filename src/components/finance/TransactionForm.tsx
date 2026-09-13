@@ -333,7 +333,13 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
         splits={splits}
         offBudget={offBudget}
         onDaily={() => { setSplits([]); setOffBudget(false); }}
-        onFund={(fundId) => { setSplits([{ fundId, pct: 100 }]); setOffBudget(false); }}
+        onFund={(fundId, pct) => {
+          // النسبةُ تأتي من الخطة المقترحة (ما لم يُدفع من رصيد الدورة) — أو
+          // كاملةً حين يختار المالك مظروفاً قائماً بنفسه.
+          const share = Math.max(1, Math.min(100, Math.round(pct ?? 100)));
+          setSplits([{ fundId, pct: share }]);
+          setOffBudget(false);
+        }}
         onOffBudget={() => { setSplits([]); setOffBudget(true); }}
       />
 
