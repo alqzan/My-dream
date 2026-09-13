@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   suggestPayoffPerCycle, cycleFundingAmount, fundingDone, fundingPerDay,
   effectiveDailyRate, fundingPreview, cyclesRemaining, cyclesForGap,
-  planBigExpense, buildPlanOptions, PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
+  planBigExpense, buildPlanOptions, cyclesUntil, savingPlan, PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
 } from "./fundPlan";
 import type { ReserveFund } from "./types";
 
@@ -244,5 +244,43 @@ describe("buildPlanOptions — طرقٌ كاملةٌ بعواقبها", () => {
     const opts = buildPlanOptions({ ...base, amount: 1000, cycleBalance: 0, surplusBalance: 1100 });
     expect(opts.find((o) => o.kind === "noTouchBudget")!.eatsCushion).toBe(true); // بقي 100 < وسادة 300
     expect(opts[0].eatsCushion).toBe(false); // والموصى به لا يمسّها
+  });
+});
+
+describe("التجهيزُ لشيءٍ قادم", () => {
+  it("cyclesUntil يعدّ الرواتب التي تنزل قبل الموعد", () => {
+    // اليوم ١٣ سبتمبر ويوم الراتب ٢٧: رواتب ٢٧/٩ · ٢٧/١٠ · ٢٧/١١ قبل ٣٠/١١
+    expect(cyclesUntil("2026-11-30", 27, "2026-09-13")).toBe(3);
+    expect(cyclesUntil("2026-09-27", 27, "2026-09-13")).toBe(1);
+    // موعدٌ قبل أوّل راتبٍ قادم = لا فرصة للتجهيز
+    expect(cyclesUntil("2026-09-20", 27, "2026-09-13")).toBe(0);
+    expect(cyclesUntil("2026-09-01", 27, "2026-09-13")).toBe(0);
+    expect(cyclesUntil("لا-تاريخ", 27, "2026-09-13")).toBe(0);
+  });
+
+  it("يقسم الهدف على الدورات المتاحة ويعطي أثره اليومي", () => {
+    const p = savingPlan({ target: 3000, dateStr: "2026-11-30", salaryDay: 27, todayStr: "2026-09-13", cycleLen: 30 });
+    expect(p.cycles).toBe(3);
+    expect(p.perCycle).toBe(1000);
+    expect(p.perDay).toBe(33.33);
+    expect(p.ready).toBe(true);
+  });
+
+  it("ويطرح ما جُمع فعلاً قبل القسمة", () => {
+    const p = savingPlan({ target: 3000, have: 1200, dateStr: "2026-11-30", salaryDay: 27, todayStr: "2026-09-13", cycleLen: 30 });
+    expect(p.perCycle).toBe(600);
+  });
+
+  it("هدفٌ بلغ مبلغه لا يحتاج خطة", () => {
+    const p = savingPlan({ target: 3000, have: 3000, dateStr: "2026-11-30", salaryDay: 27, todayStr: "2026-09-13", cycleLen: 30 });
+    expect(p.perCycle).toBe(0);
+    expect(p.ready).toBe(true);
+  });
+
+  it("وموعدٌ لا يسبقه راتبٌ يُعلَن غيرَ قابلٍ للتجهيز (بلا قسمةٍ على صفر)", () => {
+    const p = savingPlan({ target: 3000, dateStr: "2026-09-20", salaryDay: 27, todayStr: "2026-09-13", cycleLen: 30 });
+    expect(p.ready).toBe(false);
+    expect(p.cycles).toBe(0);
+    expect(p.perCycle).toBe(3000);
   });
 });

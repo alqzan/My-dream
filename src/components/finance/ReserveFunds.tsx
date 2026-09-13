@@ -5,8 +5,9 @@ import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent
 import type { ReserveFund, Transaction } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
-import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X, Pencil, ChevronDown } from "lucide-react";
+import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X, Pencil, ChevronDown, Target } from "lucide-react";
 import { FundPlanEditor } from "@/components/finance/FundPlanEditor";
+import { GoalWizard } from "@/components/finance/GoalWizard";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -31,6 +32,9 @@ export function ReserveFunds() {
   const deleteReserve = useAppStore((s) => s.deleteReserve);
   const addReserveDeposit = useAppStore((s) => s.addReserveDeposit);
   const [adding, setAdding] = useState(false);
+  // مسارٌ ثانٍ للإنشاء: **التجهيز لشيءٍ قادم** (هدفٌ بموعدٍ وقسطٍ محسوب) — مقابل
+  // المظروف العادي الذي يُفتح ويُموَّل يدوياً.
+  const [goal, setGoal] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const openFund = reserves.find((f) => f.id === expanded) ?? null;
 
@@ -46,18 +50,27 @@ export function ReserveFunds() {
             </span>
           )}
         </div>
-        <button
-          onClick={() => setAdding(!adding)}
-          className="text-finance hover:text-finance/80 p-1.5 press"
-          aria-label="إضافة مظروف"
-        >
-          <Plus size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { setGoal((v) => !v); setAdding(false); }}
+            className="flex items-center gap-1 text-[11px] font-bold text-finance bg-finance/10 hover:bg-finance/15 rounded-full px-2.5 py-1 press"
+          >
+            <Target size={12} /> جهّز لشيء قادم
+          </button>
+          <button
+            onClick={() => { setAdding(!adding); setGoal(false); }}
+            className="text-finance hover:text-finance/80 p-1.5 press"
+            aria-label="إضافة مظروف"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
 
+      {goal && <GoalWizard onDone={() => setGoal(false)} />}
       {adding && <FundForm onDone={() => setAdding(false)} onAdd={addReserve} onDeposit={addReserveDeposit} />}
 
-      {reserves.length === 0 && !adding && (
+      {reserves.length === 0 && !adding && !goal && (
         <button
           onClick={() => setAdding(true)}
           className="w-full py-5 rounded-xl border-2 border-dashed border-finance/30 text-finance text-sm font-medium hover:bg-finance/5 press"

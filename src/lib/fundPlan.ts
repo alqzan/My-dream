@@ -308,3 +308,68 @@ export function buildPlanOptions(input: {
 
   return options;
 }
+
+/* ===================== التجهيزُ لشيءٍ قادم ===================== */
+// «أبي أجهّز من الحين ميزانيةً لأيّ شيءٍ معيّن مستقبلاً». وهذا هو الاتجاه
+// **الأمامي** للخطة نفسها: بدل أن تسدّد حدثاً وقع، تدّخر لحدثٍ لم يقع بعد —
+// فيأتي يومُه والمال جاهزٌ ولا تحسّ بضربةٍ أصلاً. والحسابُ سؤالٌ واحد: **متى
+// تحتاجه؟** فعددُ الدورات يُشتقّ من التاريخ لا يُخمَّن، والقسطُ منه.
+//
+// ولماذا بالدورات لا بالأشهر الميلادية؟ لأنّ المال ينتقل يوم نزول الراتب —
+// فدورتان بينك وبين الهدف تعنيان دفعتين لا شهرين.
+
+// عددُ رواتبَ تنزل بعد اليوم وحتى التاريخ المستهدف (صفرٌ إن كان الهدف قبل أوّل
+// راتبٍ قادم — أي لا فرصةَ للتجهيز أصلاً).
+export function cyclesUntil(dateStr: string, salaryDay: number, todayStr: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr ?? "") || dateStr <= todayStr) return 0;
+  let count = 0;
+  let cursor = todayStr;
+  // حارسٌ على الحلقة: مئةُ دورةٍ (ثماني سنوات) أبعدُ من أيّ تجهيزٍ معقول.
+  for (let i = 0; i < 100; i++) {
+    const next = nextSalaryDateLocal(salaryDay, cursor);
+    if (next > dateStr) break;
+    count++;
+    cursor = next;
+  }
+  return count;
+}
+
+// نسخةٌ محليّة من «يوم الراتب القادم» حتى يبقى هذا الملفّ نقيّاً بلا دورةِ
+// استيرادٍ مع `budgetCycle.ts` (الذي يستورد `utils` كما نستورده).
+function nextSalaryDateLocal(salaryDay: number, fromStr: string): string {
+  const [y, m] = fromStr.split("-").map(Number);
+  const d = Number(fromStr.slice(8));
+  const day = Math.min(Math.max(Math.round(salaryDay) || 27, 1), 31);
+  const thisMonthDay = Math.min(day, new Date(y, m, 0).getDate());
+  if (d < thisMonthDay) return `${y}-${String(m).padStart(2, "0")}-${String(thisMonthDay).padStart(2, "0")}`;
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const lastDay = new Date(ny, nm, 0).getDate();
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
+export interface SavingPlan {
+  cycles: number;   // كم راتباً بينك وبين الهدف
+  perCycle: number; // ما يُقتطع كل دورة
+  perDay: number;   // أثرُه على بدلك اليومي (حين يكون من الراتب)
+  ready: boolean;   // هل يمكن بلوغُ الهدف قبل موعده أصلاً؟
+}
+
+// خطةُ الادّخار لهدفٍ بمبلغٍ وتاريخ. `have` رصيدُ المظروف الحالي (إن كان قائماً).
+export function savingPlan(input: {
+  target: number;
+  have?: number;
+  dateStr: string;
+  salaryDay: number;
+  todayStr: string;
+  cycleLen: number;
+}): SavingPlan {
+  const target = Number.isFinite(input.target) && input.target > 0 ? round2(input.target) : 0;
+  const have = Number.isFinite(input.have) && (input.have ?? 0) > 0 ? input.have! : 0;
+  const gap = round2(Math.max(0, target - have));
+  const cycles = cyclesUntil(input.dateStr, input.salaryDay, input.todayStr);
+  if (gap <= 0) return { cycles, perCycle: 0, perDay: 0, ready: true };
+  if (cycles <= 0) return { cycles: 0, perCycle: gap, perDay: 0, ready: false };
+  const perCycle = round2(gap / cycles);
+  return { cycles, perCycle, perDay: fundingPerDay(perCycle, input.cycleLen), ready: true };
+}
