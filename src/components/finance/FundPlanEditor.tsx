@@ -13,10 +13,10 @@ import { NumberInput } from "@/components/ui/NumberInput";
 import { Repeat, Target, Bandage } from "lucide-react";
 
 // ===================== خطة تمويل المظروف — الواجهة =====================
-// السطرُ الذي تقوم عليه البطاقة كلّها: **المظروف يمتدّ على عدة دورات، والبدل
+// السطرُ الذي تقوم عليه البطاقة كلّها: **المظروف يمتدّ على عدة دورات، والمصروف اليومي
 // اليومي دورةٌ واحدة.** فالإيجار خطةٌ مستمرّة، والرحلةُ القادمة ادخارٌ حتى
 // الهدف، والأثاثُ الذي اشتريته أمس سدادٌ حتى التصفير — ثلاث صورٍ بآليةٍ واحدة.
-// وأهمّ ما في الشاشة: **سطر الأثر** — «ينزل بدلك من ١٠٠ إلى ٨٣» يُعرض قبل
+// وأهمّ ما في الشاشة: **سطر الأثر** — «ينزل مصروفك اليومي من ١٠٠ إلى ٨٣» يُعرض قبل
 // الموافقة لا بعدها، فلا يفاجئك نقصٌ لم تأذن به.
 
 type Mode = "cycle" | "target" | "zero";
@@ -112,9 +112,9 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
         </div>
         <div className="text-[10px] leading-relaxed" style={{ color: "var(--ink52)" }}>
           {f.source === "surplus" ? (
-            <>من {SURPLUS_FUND_NAME} — لا يمسّ بدلك اليومي</>
+            <>من {SURPLUS_FUND_NAME} — لا يمسّ مصروفك اليومي</>
           ) : (
-            <>من الراتب — ينقص بدلك <b className="text-amber-600">{formatAmount(Math.round(perDay))} ر.س/يوم</b></>
+            <>من الراتب — ينقص مصروفك اليومي <b className="text-amber-600">{formatAmount(Math.round(perDay))} ر.س/يوم</b></>
           )}
           {remaining !== null && remaining > 0 && (
             <>
@@ -210,7 +210,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
           </div>
           {pickedCycles > LONG_PLAN_CYCLES && (
             <p className="text-[10px]" style={{ color: "var(--ink52)" }}>
-              ⓘ خطةٌ طويلة — ستسحب من بدلك طوال {formatAmount(pickedCycles)} دورات. مقبولٌ إن كان مقصوداً.
+              ⓘ خطةٌ طويلة — ستسحب من مصروفك اليومي طوال {formatAmount(pickedCycles)} دورات. مقبولٌ إن كان مقصوداً.
             </p>
           )}
         </div>
@@ -263,7 +263,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
           {source === "salary" ? (
             preview ? (
               <>
-                ↳ بدلك اليومي ينزل من <b>{formatAmount(Math.round(preview.before))}</b> إلى{" "}
+                ↳ مصروفك اليومي ينزل من <b>{formatAmount(Math.round(preview.before))}</b> إلى{" "}
                 <b className="text-amber-600">{formatAmount(Math.round(preview.after))} ر.س/يوم</b> —{" "}
                 {formatAmount(Math.round(preview.perDay))} ر.س يومياً لهذا المظروف
               </>
@@ -272,7 +272,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
             )
           ) : (
             <>
-              ↳ لا يمسّ بدلك اليومي — يُخصم من {SURPLUS_FUND_NAME} (المتوفّر الآن{" "}
+              ↳ لا يمسّ مصروفك اليومي — يُخصم من {SURPLUS_FUND_NAME} (المتوفّر الآن{" "}
               {formatAmount(Math.round(surplusBalance))} ر.س)
             </>
           )}

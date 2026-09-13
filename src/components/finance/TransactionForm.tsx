@@ -358,7 +358,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       </div>
       )}
 
-      {/* مصروفٌ كبير؟ يُسأل عن وجهته قبل أن يمسّ البدل اليومي — مظروفُ حدثٍ
+      {/* مصروفٌ كبير؟ يُسأل عن وجهته قبل أن يمسّ المصروف اليومي — مظروفُ حدثٍ
           مموَّلٌ من الفوائض هو الطريق الثالث بين «يبتلع الميزانية» و«يختفي».
           لا يظهر إلّا لما عادل ثلاث يوميّاتٍ فأكثر (`budgetFlow.ts`). */}
       {!onTrip && <BigExpenseRouter
@@ -505,7 +505,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
             })}
           </div>
           <p className="text-[10px] text-gray-400 leading-relaxed">
-            مثال: هدية ٥٠٪ من بدلك اليومي و٥٠٪ من مظروف الهدايا — كل جزء يُخصم من مصدره.
+            مثال: هدية ٥٠٪ من مصروفك اليومي و٥٠٪ من مظروف الهدايا — كل جزء يُخصم من مصدره.
           </p>
         </div>
       )}

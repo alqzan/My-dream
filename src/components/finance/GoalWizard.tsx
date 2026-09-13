@@ -171,7 +171,7 @@ export function GoalWizard({ onDone }: { onDone: () => void }) {
               {source === "salary" ? (
                 dailyBudget ? (
                   <>
-                    ينزل بدلك اليومي{" "}
+                    ينزل مصروفك اليومي{" "}
                     <b className="text-amber-600">{formatAmount(Math.round(plan.perDay))} ر.س/يوم</b> حتى يكتمل الهدف،
                     ثمّ يرجع كما كان وحده.
                   </>
@@ -179,7 +179,7 @@ export function GoalWizard({ onDone }: { onDone: () => void }) {
                   <>يُقتطع من الراتب مع كل دورة.</>
                 )
               ) : (
-                <>يُؤخذ من {SURPLUS_FUND_NAME} — لا يمسّ بدلك اليومي.</>
+                <>يُؤخذ من {SURPLUS_FUND_NAME} — لا يمسّ مصروفك اليومي.</>
               )}
             </>
           ) : (

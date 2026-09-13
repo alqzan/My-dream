@@ -168,7 +168,7 @@ export function FinanceCycleDashboard({
         {curve && score && (
           <div className="mdr-finance-discipline">
             <div className="mdr-finance-discipline-head"><i /><h3>انضباط الأيام</h3><span /><strong>{arPct(score.ratio)}</strong></div>
-            <div className="mdr-finance-discipline-bars" aria-label={`${arNum(score.within)} من ${arNum(score.of)} يومًا داخل البدل`}>
+            <div className="mdr-finance-discipline-bars" aria-label={`${arNum(score.within)} من ${arNum(score.of)} يومًا داخل المصروف اليومي`}>
               {bars.map((bar) => (
                 <i
                   key={bar.day}
@@ -178,7 +178,7 @@ export function FinanceCycleDashboard({
                 />
               ))}
             </div>
-            <p>{arNum(score.within)} من {arNum(score.of)} يومًا داخل البدل</p>
+            <p>{arNum(score.within)} من {arNum(score.of)} يومًا داخل المصروف اليومي</p>
           </div>
         )}
       </section>}

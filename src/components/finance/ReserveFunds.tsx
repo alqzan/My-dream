@@ -389,11 +389,11 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
       ) : null}
 
       {/* مظروفٌ سالب: يُشرح بالعبارة لا برقمٍ أحمر وحده — صُرف منه قبل أن
-          يُموَّل، وطريقُه خطةُ سدادٍ على دورات لا عجزٌ في البدل اليومي. */}
+          يُموَّل، وطريقُه خطةُ سدادٍ على دورات لا عجزٌ في المصروف اليومي. */}
       {balance < 0 && (
         <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed bg-white/70 dark:bg-white/5 rounded-lg px-2.5 py-1.5">
           صُرف من هذا المظروف <b className="text-red-500">{formatAmount(Math.round(-balance))} ر.س</b> قبل أن يُموَّل —
-          يُغطّى من الراتب القادم بخطة سدادٍ على دورات، لا من بدلك اليومي دفعةً واحدة.
+          يُغطّى من الراتب القادم بخطة سدادٍ على دورات، لا من مصروفك اليومي دفعةً واحدة.
         </p>
       )}
 

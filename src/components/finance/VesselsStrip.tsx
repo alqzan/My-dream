@@ -7,7 +7,7 @@ import { computeDailyBudgetStatus, formatAmount, reserveBalance, cashOut, today 
 // صحيحة تبدو متناقضةً لأنّ أحداً لم يقل **أيُّها يقرّر وأيُّها يخبر**. فهذه
 // الشريحة تسمّي الأدوار قبل أن تعرض الأرقام:
 //
-//   • **البدل اليومي — يقرّر**: الرقم الوحيد الذي يجيب «أقدر أصرف الآن؟».
+//   • **المصروف اليومي — يقرّر**: الرقم الوحيد الذي يجيب «أقدر أصرف الآن؟».
 //   • **المظاريف — محجوز**: مالٌ موجودٌ مخصَّص (إيجار، سفر). ليس صرفاً.
 //   • **صرف الشهر — مرآة**: ما خرج فعلاً، شاملاً ما صُرف من المظاريف. لا يقرّر.
 //
@@ -17,7 +17,7 @@ import { computeDailyBudgetStatus, formatAmount, reserveBalance, cashOut, today 
 
 const GLYPH = { width: 26, height: 26, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
-// إناءٌ يُصبّ منه اليوم — أخو «إناء الميزانية» في بطاقة البدل.
+// إناءٌ يُصبّ منه اليوم — أخو «إناء الميزانية» في بطاقة المصروف اليومي.
 function GlyphVessel() {
   return (
     <svg {...GLYPH} aria-hidden="true">
@@ -72,7 +72,7 @@ export function VesselsStrip({ onGo }: { onGo: (id: "daily" | "reserves" | "hist
       value: status ? formatAmount(Math.round(status.balance)) : "—",
       low: !!status && status.balance < 0,
       sub: status
-        ? `بدلك ${formatAmount(Math.round(status.rate))} ر.س لكل يوم`
+        ? `مصروفك اليومي ${formatAmount(Math.round(status.rate))} ر.س`
         : "لم تُضبط ميزانيةٌ يومية بعد",
     },
     {

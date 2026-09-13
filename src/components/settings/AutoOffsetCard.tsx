@@ -55,7 +55,7 @@ export function AutoOffsetCard() {
 
         <p className="text-[11px] text-gray-500 bg-finance/5 rounded-xl px-3 py-2 leading-relaxed">
           ⚖️ السقف: {cap > 0 ? <>حتى {formatAmount(Math.round(cap))} ر.س</> : <>حتى {EVENT_DAYS} يوميّات</>} في المرّة
-          الواحدة ({EVENT_DAYS} أيام من بدلك). وما زاد عن ذلك لا يُغطّى صامتاً — فهو غالباً حدثٌ كبير
+          الواحدة ({EVENT_DAYS} أيام من مصروفك اليومي). وما زاد عن ذلك لا يُغطّى صامتاً — فهو غالباً حدثٌ كبير
           (سفرة، رسوم) مكانُه مظروفٌ مستقلّ يُعرض عليك لحظة تسجيل المصروف، لا بدلُك اليومي.
         </p>
       </div>

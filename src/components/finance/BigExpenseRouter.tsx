@@ -22,7 +22,7 @@ import { Tent } from "lucide-react";
 //
 // فصارت الشاشةُ خطوتين بترتيبهما الطبيعيّ:
 //   **١) على أيّ مظروفٍ يُحمَّل؟** — مظروفٌ قائم (فتنضمّ الفاتورةُ لأخواتها)،
-//      أو جديدٌ باسمٍ **تكتبه أنت**، أو من بدلك مباشرةً بلا مظروف.
+//      أو جديدٌ باسمٍ **تكتبه أنت**، أو من مصروفك اليومي مباشرةً بلا مظروف.
 //   **٢) ومن أين نموّل ما ينقص؟** — ولا تُعرض إلّا إن كان ثمّة نقصٌ فعلاً:
 //      مظروفٌ رصيدُه يكفي لا يحتاج تمويلاً ولا سؤالاً.
 // وما لا معنى له يُحذف لا يُعرض صفراً: بلا فوائضَ لا تُعرض خياراتُها ولا شاراتها.
@@ -33,7 +33,7 @@ const TITLES: Record<PlanKind, string> = {
   mix: "موزَّعة بذكاء",
   noTouchBudget: "من رصيدك والفوائض",
   financeAll: "كلُّه سداداً على دورات",
-  fromBudget: "كلُّه الآن من بدلي",
+  fromBudget: "كلُّه الآن من مصروفي اليومي",
 };
 
 interface Props {
@@ -154,7 +154,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
       <div className="flex items-center gap-2">
         <Tent size={15} className="text-finance shrink-0" />
         <span className="text-xs font-bold text-finance">
-          مصروفٌ كبير — يعادل {formatAmount(weight.days)} يوماً من بدلك
+          مصروفٌ كبير — يعادل {formatAmount(weight.days)} يوماً من مصروفك اليومي
         </span>
       </div>
 
@@ -202,7 +202,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
             )}
             style={toDaily ? undefined : { borderColor: "var(--line)", background: "var(--paper)" }}
           >
-            بلا مظروف — من بدلي
+            بلا مظروف — من مصروفي اليومي
           </button>
         </div>
 
@@ -238,7 +238,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
             {covered >= amount ? (
               <>
                 ✓ رصيدُ «{chosen.fund.name}» يغطّيها — يبقى فيه{" "}
-                <b className="text-finance">{formatAmount(Math.round(chosen.balance - amount))} ر.س</b> ولا يمسّ بدلك.
+                <b className="text-finance">{formatAmount(Math.round(chosen.balance - amount))} ر.س</b> ولا يمسّ مصروفك اليومي.
               </>
             ) : (
               <>
@@ -307,7 +307,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
                     </span>
                   ) : (
                     <span className="mdr-chip">
-                      بدلك بعدها <b>{formatAmount(Math.round(on ? rateAfter : o.rateAfter))} ر.س/يوم</b>
+                      مصروفك بعدها <b>{formatAmount(Math.round(on ? rateAfter : o.rateAfter))} ر.س/يوم</b>
                     </span>
                   )}
                   {hasSurplus && (
@@ -325,7 +325,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
             <div className="pt-0.5">
               <label className="block text-[10px] font-semibold mb-1" style={{ color: "var(--ink52)" }}>
                 السداد على كم دورة؟ ({formatAmount(Math.round(perCycle))} ر.س لكل دورة ·{" "}
-                {formatAmount(Math.round(perDay))} ر.س/يوم من بدلك)
+                {formatAmount(Math.round(perDay))} ر.س/يوم من مصروفك اليومي)
               </label>
               <div className="flex gap-1 flex-wrap">
                 {PAYOFF_CYCLE_CHOICES.map((n) => (
@@ -356,7 +356,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
         className="w-full bg-finance text-white text-[11px] font-bold py-2 rounded-lg press disabled:opacity-40"
       >
         {toDaily
-          ? "سجّله من بدلي"
+          ? "سجّله من مصروفي اليومي"
           : isNew
           ? name
             ? `أنشئ «${name}» وحمّلها عليه`

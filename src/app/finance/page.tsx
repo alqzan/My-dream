@@ -346,7 +346,7 @@ export default function FinancePage() {
       )}
 
       {/* أدوات المال بعد حذف الأصول والأقساط والمتكرّرة والرفّ: ما بقي كلُّه
-          يخصّ إنفاقَ يومك — البدل اليومي والسقوف والاحتياطيات. */}
+          يخصّ إنفاقَ يومك — المصروف اليومي والسقوف والاحتياطيات. */}
       <div className="mdr-finance-tools">
       <div className="mdr-finance-plan-details">
 

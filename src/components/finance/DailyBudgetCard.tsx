@@ -274,7 +274,7 @@ export function DailyBudgetCard() {
   }
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
-  // **البدل الفعليّ** (`status.rate`) هو ما يُعرض ويُحسب عليه كلّ ما بعده: البدل
+  // **المصروف اليوميّ الفعليّ** (`status.rate`) هو ما يُعرض ويُحسب عليه كلّ ما بعده: البدل
   // المضبوط ناقص قطرةِ تمويل المظاريف من راتب هذه الدورة. عرضُ المضبوط يعلن
   // بدلاً لا تملكه، وقياسُ الوتيرة والمقاصة عليه يعِد بما لا يقع.
   const over = status.balance < 0;
@@ -296,7 +296,7 @@ export function DailyBudgetCard() {
   // ما رُحّل إليه عند نزول الراتب يعود لليومية بضغطة حين تحتاجه. شرط الظهور
   // نفسه منطقٌ نقيّ في `financeOverview.ts` (مختبَر) لا في المكوّن.
   const surplus = surplusPullSource(reserves, transactions, true);
-  // **البدل المعدَّل لبقيّة الدورة**: العجز موزَّعاً على الأيام الباقية — خطّةٌ
+  // **المصروف المعدَّل لبقيّة الدورة**: العجز موزَّعاً على الأيام الباقية — خطّةٌ
   // بدل رقمٍ أحمر. والمقاصة: ما الذي فعلَته (أو امتنعت عنه) تلقائياً ولماذا.
   // كلاهما من `budgetFlow.ts` — لا معادلة في هذا المكوّن.
   const pace = cyclePace(status.balance, status.rate, projection.daysLeft);
@@ -343,7 +343,7 @@ export function DailyBudgetCard() {
           {formatAmount(status.rate)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
         </p>
       )}
-      {/* قسمةُ اليوم: لماذا صار بدلك ٨٣ لا ١٠٠ — صورةٌ لا فقرة. */}
+      {/* قسمةُ اليوم: لماذا صار مصروفك اليومي ٨٣ لا ١٠٠ — صورةٌ لا فقرة. */}
       <DailyRateSplit amount={dailyBudget.amount} rate={status.rate} />
 
       {projection.daysLeft > 0 && (
@@ -368,10 +368,10 @@ export function DailyBudgetCard() {
             </b>{" "}
             <span className="text-gray-400">
               {pace.delta < 0
-                ? `(أقلّ من بدلك بـ${formatAmount(Math.round(-pace.delta))})`
+                ? `(أقلّ من مصروفك اليومي بـ${formatAmount(Math.round(-pace.delta))})`
                 : pace.delta > 0
-                ? `(أعلى من بدلك بـ${formatAmount(Math.round(pace.delta))})`
-                : "(على بدلك تماماً)"}
+                ? `(أعلى من مصروفك اليومي بـ${formatAmount(Math.round(pace.delta))})`
+                : "(على مصروفك اليومي تماماً)"}
             </span>
           </p>
         </div>
@@ -401,7 +401,7 @@ export function DailyBudgetCard() {
               <>لا مصدر يغطّيه الآن.{" "}</>
             )}
             {pace.kind === "beyond"
-              ? "والأيام الباقية لا تمتصّه (البدل المعدَّل غير واقعيّ)."
+              ? "والأيام الباقية لا تمتصّه (المصروف المعدَّل غير واقعيّ)."
               : `أو شدّ لبقيّة الدورة إلى ${formatAmount(Math.round(pace.rate))} ر.س/يوم فيُمتصّ وحده.`}
           </p>
         </div>
