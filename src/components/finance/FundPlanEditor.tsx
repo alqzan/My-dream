@@ -83,7 +83,15 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
     const f = fund.funding;
     const perDay = dailyBudget ? fundingPreview(dailyBudget.amount, 0, f.perCycle, len).perDay : 0;
     return (
-      <div className="rounded-xl border-r-2 border-r-[var(--theme-accent)] border border-finance/15 bg-white/70 dark:bg-white/5 px-3 py-2 space-y-1">
+      <div
+        className="rounded-xl px-3 py-2 space-y-1"
+        style={{
+          background: "var(--paper2)",
+          border: "1px solid var(--line)",
+          borderInlineStartWidth: 2,
+          borderInlineStartColor: "var(--theme-accent)",
+        }}
+      >
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
             {f.stop === "zero" ? "🩹 خطة سداد" : f.stop === "target" ? "🎯 خطة ادخار" : "🔁 تمويل مستمرّ"}
@@ -95,7 +103,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
             <button onClick={() => setReserveFunding(fund.id, null)} className="text-[10px] text-gray-400 hover:text-red-500 press">أوقف</button>
           </div>
         </div>
-        <div className="text-[10px] text-gray-500 leading-relaxed">
+        <div className="text-[10px] leading-relaxed" style={{ color: "var(--ink52)" }}>
           {f.source === "surplus" ? (
             <>من {SURPLUS_FUND_NAME} — لا يمسّ بدلك اليومي</>
           ) : (
@@ -141,7 +149,10 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
   const modes = MODES.filter((m) => (m.id === "target" ? !!fund.target : m.id === "zero" ? deficit > 0 : true));
   const active = MODES.find((m) => m.id === mode);
   return (
-    <div className="rounded-xl border border-finance/25 bg-finance/5 p-2.5 space-y-2 animate-fade-up">
+    <div
+      className="rounded-xl p-2.5 space-y-2 animate-fade-up"
+      style={{ background: "var(--paper2)", border: "1px solid var(--theme-accent-line)" }}
+    >
       <div className="flex gap-1">
         {modes.map((m) => (
           <button
@@ -198,7 +209,10 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
 
       {/* سطرُ الأثر — يُعرض قبل الموافقة لا بعدها */}
       {perCycle > 0 && (
-        <p className="text-[10px] leading-relaxed bg-white/70 dark:bg-white/5 rounded-lg px-2.5 py-1.5">
+        <p
+          className="text-[10px] leading-relaxed rounded-lg px-2.5 py-1.5"
+          style={{ background: "var(--paper)", border: "1px solid var(--line)", color: "var(--ink52)" }}
+        >
           {source === "salary" ? (
             preview ? (
               <>

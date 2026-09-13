@@ -25,39 +25,42 @@ export function DailyRateSplit({ amount, rate }: { amount: number; rate: number 
   const yoursPct = Math.max(0, Math.min(100, (rate / amount) * 100));
 
   return (
-    <div className="rounded-xl bg-white/70 dark:bg-white/5 px-3 py-2 space-y-1.5">
+    <div className="mdr-daysplit space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">قسمةُ يومك</span>
-        <span className="text-[10px] text-gray-400">
+        <span className="text-[11px] font-bold" style={{ color: "var(--ink)" }}>
+          قسمةُ يومك
+        </span>
+        <span className="text-[10px]" style={{ color: "var(--ink52)" }}>
           {formatAmount(Math.round(amount))} مضبوط − {formatAmount(Math.round(drip))} لمظاريفك
         </span>
       </div>
 
-      <div className="h-2.5 rounded-full overflow-hidden flex bg-gray-100 dark:bg-white/10">
+      <div className="mdr-daysplit-track">
         <div
-          className="h-full transition-all duration-500"
+          className="mdr-daysplit-seg"
           style={{ width: `${yoursPct}%`, backgroundColor: "var(--theme-accent)" }}
           title="لك"
         />
         {funded.map((f) => (
           <div
             key={f.id}
-            className="h-full transition-all duration-500"
+            className="mdr-daysplit-seg"
             style={{ width: `${Math.max(1, (f.perDay / amount) * 100)}%`, backgroundColor: f.color }}
             title={f.name}
           />
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-gray-500">
-        <span className="inline-flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "var(--theme-accent)" }} />
-          لك <b className="text-finance">{formatAmount(Math.round(rate))} ر.س</b>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mdr-chip">
+          <span className="mdr-dot" style={{ backgroundColor: "var(--theme-accent)" }} />
+          لك <b>{formatAmount(Math.round(rate))} ر.س</b>
         </span>
         {funded.map((f) => (
-          <span key={f.id} className="inline-flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: f.color }} />
-            {f.icon} {f.name} {formatAmount(Math.round(f.perDay))}
+          <span key={f.id} className="mdr-chip truncate">
+            <span className="mdr-dot" style={{ backgroundColor: f.color }} />
+            <span className="truncate">{f.icon} {f.name}</span>
+            <b>{formatAmount(Math.round(f.perDay))}</b>
           </span>
         ))}
       </div>

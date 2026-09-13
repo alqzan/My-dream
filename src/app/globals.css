@@ -6269,3 +6269,92 @@ button.mdr-daily-rhythm-status:focus-visible {
    المكوّن نفسه بـ`stack`). ورقةٌ تملأ الشاشة ليست ورقةً في مجلَّد — والخيطُ
    الذهبيّ على حافّة الزجاج شريطٌ غريب لا كعبُ كتاب. */
 .mushaf-stage-fit[data-fill="1"] .mushaf-leaf-page > span[aria-hidden] { display: none; }
+
+/* ============================================================
+   الأوعية الثلاثة · قسمةُ اليوم · خطةُ المظروف  (٠٫١٫٤١٠)
+   صفحةُ المال لها نظامٌ تحريريّ خاصّ (ورقٌ وحبرٌ وخطٌّ شعرة، بلا ظلالٍ ولا
+   تدرّجات)، فأيّ سطحٍ جديد يُكتب بأصناف Tailwind العامّة يخرج عنه ويُسطَّح
+   قسراً بقواعد `.mdr-finance-page`. هذه الأصناف تكتبه **بلغته**: أوراقُه
+   وحبرُه وذهبُه من متغيّرات `:root` نفسها، فيقرأ في الوضعين بلا تكرار.
+   ============================================================ */
+
+.mdr-vessels { display: grid; gap: 0.55rem; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .mdr-vessels { grid-template-columns: repeat(3, 1fr); } }
+
+.mdr-vessel {
+  position: relative;
+  text-align: right;
+  min-width: 0;
+  padding: 0.75rem 0.9rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  background: var(--paper2);
+  color: var(--ink);
+  overflow: hidden;
+  transition: border-color 0.25s ease, transform 0.25s ease;
+}
+/* خيطٌ ذهبيّ يعلو البطاقة — نفس خيط قافلة المظاريف، فتُقرأ الشاشتان أسرةً واحدة */
+.mdr-vessel::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0.9rem;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(to left, transparent, var(--theme-accent-line), transparent);
+}
+.mdr-vessel:hover { border-color: var(--theme-accent-line); }
+.mdr-vessel:active { transform: translateY(1px); }
+
+.mdr-vessel-head { display: flex; align-items: center; gap: 0.4rem; }
+.mdr-vessel-glyph { color: var(--theme-accent); flex-shrink: 0; }
+.mdr-vessel-label { font-size: 0.73rem; font-weight: 600; color: var(--ink52); }
+.mdr-vessel-role {
+  margin-inline-start: auto;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--theme-accent-soft);
+  color: var(--ink52);
+  white-space: nowrap;
+}
+.mdr-vessel-value {
+  margin-top: 0.15rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.mdr-vessel-value.is-low { color: #c15a34; }
+.mdr-vessel-sub { font-size: 0.64rem; color: var(--ink52); line-height: 1.65; }
+
+/* قسمةُ اليوم: مسارٌ واحد مقسومٌ بألوان المظاريف نفسها */
+.mdr-daysplit {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper2);
+  padding: 0.55rem 0.7rem 0.6rem;
+}
+.mdr-daysplit-track {
+  height: 0.62rem;
+  display: flex;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--theme-accent-soft);
+}
+.mdr-daysplit-seg { height: 100%; transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.mdr-daysplit-seg + .mdr-daysplit-seg { box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.4); }
+.mdr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.63rem;
+  color: var(--ink52);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  max-width: 100%;
+}
+.mdr-chip b { color: var(--ink); }
+.mdr-dot { width: 0.45rem; height: 0.45rem; border-radius: 999px; flex-shrink: 0; }
