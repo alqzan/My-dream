@@ -6,7 +6,7 @@ import type {
   KnowledgeSource, Benefit,
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
-  BudgetWindowMode,
+  BudgetWindowMode, FundFunding,
 } from "./types";
 import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -19,6 +19,8 @@ import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { offsetPlan, OFFSET_NOTE } from "./budgetFlow";
+import { cycleFundingAmount, fundingDone, fundingPerDay, effectiveDailyRate } from "./fundPlan";
+import { cycleLength } from "./budgetCycle";
 import { persistedIdbStorage } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
@@ -212,6 +214,8 @@ interface AppStore extends AppData {
   // في `offsetPlan` (`budgetFlow.ts`) — بما فيه الوقوف عند عجزٍ أكبر من ثلاث
   // يوميّات. ترجع المبلغ المُقاصّ (0 = لم تتحرّك). آمنةٌ للنداء مراراً: بعد
   // التغطية يصير الرصيد صفراً فلا تتحرّك ثانيةً.
+  // خطة تمويل المظروف (الإيجار · سدادُ حدثٍ مضى · ادخارٌ لقادم). `null` يرفعها.
+  setReserveFunding: (fundId: string, funding: FundFunding | null) => void;
   setAutoOffset: (on: boolean) => void;
   autoOffsetDeficit: () => number;
   // نقلٌ بين مظروفين (تمويل مظروف حدثٍ من الفوائض مثلاً): سحبٌ من الأول وإيداعٌ
@@ -1042,15 +1046,68 @@ export const useAppStore = create<AppStore>()(
             );
           }
 
+          // ===== تمويل المظاريف للدورة الجديدة =====
+          // يجري **بعد** ترحيل الفائض مباشرةً، فالمموَّل من «الفوائض» يجد ما
+          // رُحّل للتوّ متاحاً. ولكلّ مظروفٍ خطةٌ تُنفَّذ مرّةً واحدة في الدورة،
+          // وتُرفع من نفسها حين تبلغ غايتها (`fundingDone`) فلا يبقى تحويلٌ
+          // منسيّ. المموَّل من الراتب يُجمع ليصير قطرةً يومية تنقص البدل.
+          const surplusId = reserves.find((f) => f.name === SURPLUS_FUND_NAME)?.id;
+          let surplusLeft = surplusId
+            ? reserveBalance(reserves.find((f) => f.id === surplusId)!, s.transactions)
+            : 0;
+          let fromSalary = 0;
+          const deposits = new Map<string, ReserveDeposit[]>();
+          const clearPlan = new Set<string>();
+          const addDeposit = (fundId: string, amount: number, note: string) => {
+            const list = deposits.get(fundId) ?? [];
+            list.unshift({ id: uid(), date: todayStr, amount, note });
+            deposits.set(fundId, list);
+          };
+
+          for (const fund of reserves) {
+            if (!fund.funding || fund.id === surplusId) continue;
+            const balance = reserveBalance(fund, s.transactions);
+            let amount = cycleFundingAmount(fund, balance);
+            if (fund.funding.source === "surplus") {
+              amount = round2(Math.min(amount, Math.max(0, surplusLeft)));
+              if (amount > 0) {
+                surplusLeft = round2(surplusLeft - amount);
+                addDeposit(surplusId!, -amount, `تمويل «${fund.name}»`);
+              }
+            } else if (amount > 0) {
+              fromSalary = round2(fromSalary + amount);
+            }
+            if (amount > 0) {
+              addDeposit(fund.id, amount, fund.funding.stop === "zero" ? "سداد الدورة" : "تمويل الدورة");
+            }
+            if (fundingDone(fund.funding, fund, round2(balance + amount))) clearPlan.add(fund.id);
+          }
+
+          if (deposits.size || clearPlan.size) {
+            reserves = reserves.map((f) => {
+              const extra = deposits.get(f.id);
+              const next = extra ? { ...f, deposits: [...extra, ...f.deposits] } : f;
+              return clearPlan.has(f.id) ? { ...next, funding: undefined } : next;
+            });
+          }
+
           // الدورة الجديدة تبدأ من اليوم (لا الغد) فيُحتسب أي صرف يسجَّل بعد
           // تأكيد الراتب في نفس اليوم. carryAdjust يمنع منح مخصّص اليوم مرتين
-          // (كان ضمن الرصيد المرحّل): بعد التأكيد يصبح الرصيد صفراً بالضبط.
+          // (كان ضمن الرصيد المرحّل): بعد التأكيد يصبح الرصيد صفراً بالضبط —
+          // ويُقاس على **البدل الفعليّ** بعد قطرة التمويل، لا على المضبوط.
           let dailyBudget = s.dailyBudget;
           if (dailyBudget) {
             const spentToday = round2(
               s.transactions.filter((t) => t.date === todayStr).reduce((a, t) => a + dailyShare(t), 0)
             );
-            dailyBudget = { ...dailyBudget, startDate: todayStr, carryAdjust: round2(dailyBudget.amount - spentToday) };
+            const perDay = fundingPerDay(fromSalary, cycleLength(s.salaryDay ?? 27, todayStr));
+            const rate = effectiveDailyRate(dailyBudget.amount, perDay);
+            dailyBudget = {
+              ...dailyBudget,
+              startDate: todayStr,
+              carryAdjust: round2(rate - spentToday),
+              fundingPerDay: perDay > 0 ? perDay : undefined,
+            };
           }
 
           return {
@@ -1084,7 +1141,10 @@ export const useAppStore = create<AppStore>()(
             dailyBudget = {
               ...dailyBudget,
               startDate: todayStr,
-              carryAdjust: round2(dailyBudget.amount - spentToday - (oldBalance - amount)),
+              // على **البدل الفعليّ** (بعد قطرة تمويل المظاريف) لا على المضبوط.
+              carryAdjust: round2(
+                effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) - spentToday - (oldBalance - amount)
+              ),
             };
           }
           return {
@@ -1129,6 +1189,15 @@ export const useAppStore = create<AppStore>()(
         });
         return added;
       },
+
+      setReserveFunding: (fundId, funding) =>
+        set((s) => ({
+          reserves: s.reserves.map((f) =>
+            f.id === fundId
+              ? { ...f, funding: funding && funding.perCycle > 0 ? { ...funding, perCycle: round2(funding.perCycle) } : undefined }
+              : f
+          ),
+        })),
 
       setAutoOffset: (on) => set(() => ({ autoOffset: !!on })),
 

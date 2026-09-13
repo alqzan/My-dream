@@ -11,6 +11,7 @@ import { ReserveFunds } from "@/components/finance/ReserveFunds";
 import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceCycleDashboard } from "@/components/finance/FinanceCycleDashboard";
+import { VesselsStrip } from "@/components/finance/VesselsStrip";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DayView } from "@/components/day/DayView";
@@ -289,6 +290,11 @@ export default function FinancePage() {
         </div>
       </div>
 
+      {/* الأوعية الثلاثة: أيُّها يقرّر وأيُّها يخبر — قبل أيّ رقمٍ آخر. */}
+      <div className="animate-fade-up stagger-1">
+        <VesselsStrip onGo={goToSection} />
+      </div>
+
       <div className="mdr-finance-tabs" role="tablist" aria-label="واجهة المال">
         <button type="button" role="tab" aria-selected={financeView === "cycle"} className={financeView === "cycle" ? "is-active" : ""} onClick={() => setFinanceView("cycle")}>الدورة</button>
         <button type="button" role="tab" aria-selected={financeView === "now"} className={financeView === "now" ? "is-active" : ""} onClick={() => setFinanceView("now")}>الآن</button>
@@ -474,12 +480,12 @@ export default function FinancePage() {
 
       {isFinanceSectionVisible("reserves") && <CollapsibleSection
         id="reserves"
-        title="الاحتياطيات"
+        title="مظاريفي"
         icon={<Landmark size={16} />}
         className="mdr-finance-tool"
         open={openSections.reserves}
         onToggle={() => toggleSection("reserves")}
-        summary={overview.hasReserves ? `${formatAmount(overview.reservesTotal)} ر.س` : "لا احتياطي بعد"}
+        summary={overview.hasReserves ? `${formatAmount(overview.reservesTotal)} ر.س` : "لا مظاريف بعد"}
       >
         <Card>
           <ReserveFunds />

@@ -400,7 +400,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
               <PiggyBank size={14} /> مصدر الصرف
             </span>
             <span className={cn("text-[11px] font-bold", dailyPct === 100 ? "text-gray-400" : "text-finance")}>
-              {dailyPct}% يومية · {reservedPct}% احتياطي
+              {dailyPct}٪ من الجيب · {reservedPct}٪ من مظروف
             </span>
           </div>
 
@@ -465,7 +465,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
             })}
           </div>
           <p className="text-[10px] text-gray-400 leading-relaxed">
-            مثال: هدية ٥٠٪ من اليومية و٥٠٪ من احتياطي الهدايا — كل جزء يتخصم من مصدره.
+            مثال: هدية ٥٠٪ من بدلك اليومي و٥٠٪ من مظروف الهدايا — كل جزء يُخصم من مصدره.
           </p>
         </div>
       )}

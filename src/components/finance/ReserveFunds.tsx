@@ -6,6 +6,7 @@ import type { ReserveFund, Transaction } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X, Pencil, ChevronDown } from "lucide-react";
+import { FundPlanEditor } from "@/components/finance/FundPlanEditor";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -38,7 +39,7 @@ export function ReserveFunds() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <PiggyBank size={16} className="text-finance" />
-          <span className="text-sm font-semibold text-gray-700">الاحتياطي</span>
+          <span className="text-sm font-semibold text-gray-700">مظاريفي</span>
           {reserves.length > 0 && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-finance/10 text-finance">
               {formatAmount(reserves.reduce((s, f) => s + reserveBalance(f, transactions), 0))} ر.س
@@ -48,7 +49,7 @@ export function ReserveFunds() {
         <button
           onClick={() => setAdding(!adding)}
           className="text-finance hover:text-finance/80 p-1.5 press"
-          aria-label="إضافة احتياطي"
+          aria-label="إضافة مظروف"
         >
           <Plus size={16} />
         </button>
@@ -61,7 +62,7 @@ export function ReserveFunds() {
           onClick={() => setAdding(true)}
           className="w-full py-5 rounded-xl border-2 border-dashed border-finance/30 text-finance text-sm font-medium hover:bg-finance/5 press"
         >
-          🪺 خصّص مبلغاً لهدف — إيجار، سفرة، هدايا...
+          🪺 افتح مظروفاً لهدف — إيجار، سفرة، هدايا...
         </button>
       )}
 
@@ -342,6 +343,17 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
         </div>
       ) : null}
 
+      {/* مظروفٌ سالب: يُشرح بالعبارة لا برقمٍ أحمر وحده — صُرف منه قبل أن
+          يُموَّل، وطريقُه خطةُ سدادٍ على دورات لا عجزٌ في البدل اليومي. */}
+      {balance < 0 && (
+        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed bg-white/70 dark:bg-white/5 rounded-lg px-2.5 py-1.5">
+          صُرف من هذا المظروف <b className="text-red-500">{formatAmount(Math.round(-balance))} ر.س</b> قبل أن يُموَّل —
+          يُغطّى من الراتب القادم بخطة سدادٍ على دورات، لا من بدلك اليومي دفعةً واحدة.
+        </p>
+      )}
+
+      <FundPlanEditor fund={fund} balance={balance} />
+
       <div className="flex gap-1.5">
         <NumberInput
           value={amount}
@@ -424,7 +436,7 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
 
       {charges.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[10px] font-semibold text-gray-500">آخر المصاريف من هذا الاحتياطي</div>
+          <div className="text-[10px] font-semibold text-gray-500">آخر المصاريف من هذا المظروف</div>
           {charges.map((t) => {
             const share = t.reserveSplits!.find((sp) => sp.fundId === fund.id)!;
             return (
@@ -463,13 +475,13 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
             className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-finance press"
             aria-expanded={editing}
           >
-            <Pencil size={12} /> تعديل الاحتياطي
+            <Pencil size={12} /> تعديل المظروف
           </button>
           <button
             onClick={() => setConfirmDelete(true)}
             className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 press"
           >
-            <Trash2 size={12} /> حذف الاحتياطي
+            <Trash2 size={12} /> حذف المظروف
           </button>
         </div>
       )}
@@ -478,7 +490,7 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
 }
 
 /**
- * نموذجُ الاحتياطي — **إضافةً وتعديلاً بالحقول نفسها**، فلا يتباعد الشكلان.
+ * نموذجُ المظروف — **إضافةً وتعديلاً بالحقول نفسها**، فلا يتباعد الشكلان.
  *
  * `initial` غيابُه إضافةٌ جديدة (فيظهر «الرصيد الافتتاحي» ويُنشأ الصندوق)،
  * ووجودُه تعديلٌ للاسم والأيقونة واللون والهدف وحدها: **الرصيد لا يُحرَّر هنا**

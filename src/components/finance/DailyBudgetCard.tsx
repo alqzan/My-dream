@@ -5,6 +5,7 @@ import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/ut
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { daysUntilSalary, projectedCycleSurplus, surplusPullSource } from "@/lib/financeOverview";
 import { cyclePace, offsetPlan } from "@/lib/budgetFlow";
+import { DailyRateSplit } from "@/components/finance/DailyRateSplit";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Settings2, PiggyBank, Sparkles } from "lucide-react";
 import { SECTION, GOLD_LIGHT } from "@/lib/palette";
@@ -273,18 +274,21 @@ export function DailyBudgetCard() {
   }
 
   const status = computeDailyBudgetStatus(dailyBudget, transactions);
+  // **البدل الفعليّ** (`status.rate`) هو ما يُعرض ويُحسب عليه كلّ ما بعده: البدل
+  // المضبوط ناقص قطرةِ تمويل المظاريف من راتب هذه الدورة. عرضُ المضبوط يعلن
+  // بدلاً لا تملكه، وقياسُ الوتيرة والمقاصة عليه يعِد بما لا يقع.
   const over = status.balance < 0;
   // «كم راح يتبقّى لي عند نزول الراتب؟» — على وتيرة صرفك الفعلية في هذه الدورة،
   // ومعها السقف الأعلى (لو ما صرفت شيئاً) حتى لا يُقرأ الرقم على أنه وعد.
-  const projection = projectedCycleSurplus(status, dailyBudget.amount, daysUntilSalary(salaryDay ?? 27, today()));
+  const projection = projectedCycleSurplus(status, status.rate, daysUntilSalary(salaryDay ?? 27, today()));
   // نسبة امتلاء الإناء = الرصيد المتراكم ÷ يوميّة يوم واحد — لا ÷ المتاح
   // التراكمي (status.allowance) الذي يكبر كل يوم، فيقسم رصيداً صحياً على رقم
   // ضخم ويُظهر إناءً شبه فارغ رغم الفائض. فرصيدٌ يعادل يوميّة كاملة (أو أكثر)
   // يملأ الإناء، ويفرغ باقترابه من الصفر. تمثيل بصري فقط — بلا أي مساس بأرقام
   // computeDailyBudgetStatus أو الرصيد المعروض. الحارس يمنع القسمة على صفر.
   const frac =
-    dailyBudget.amount > 0
-      ? Math.min(1, Math.max(0, status.balance / dailyBudget.amount))
+    status.rate > 0
+      ? Math.min(1, Math.max(0, status.balance / status.rate))
       : over
       ? 0
       : 1;
@@ -295,8 +299,8 @@ export function DailyBudgetCard() {
   // **البدل المعدَّل لبقيّة الدورة**: العجز موزَّعاً على الأيام الباقية — خطّةٌ
   // بدل رقمٍ أحمر. والمقاصة: ما الذي فعلَته (أو امتنعت عنه) تلقائياً ولماذا.
   // كلاهما من `budgetFlow.ts` — لا معادلة في هذا المكوّن.
-  const pace = cyclePace(status.balance, dailyBudget.amount, projection.daysLeft);
-  const offset = offsetPlan(status.balance, surplus?.balance ?? 0, dailyBudget.amount, autoOffset !== false);
+  const pace = cyclePace(status.balance, status.rate, projection.daysLeft);
+  const offset = offsetPlan(status.balance, surplus?.balance ?? 0, status.rate, autoOffset !== false);
 
   return (
     <div className={`rounded-2xl p-4 space-y-2 ${over ? "bg-red-50" : "bg-finance/5"}`}>
@@ -320,13 +324,13 @@ export function DailyBudgetCard() {
       </p>
       {status.days === 0 ? (
         <p className="text-xs text-gray-500 text-center leading-relaxed">
-          🌱 رُحّل الفائض — الدورة الجديدة تبدأ من الغد بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً
+          🌱 رُحّل الفائض — الدورة الجديدة تبدأ من الغد بمعدل {formatAmount(status.rate)} ر.س يومياً
         </p>
       ) : status.carryAdjust > 0 ? (
         // بعد ترحيل الفائض: المخصّص الفعّال ينقص بمقدار ما رُحّل، فلا تصحّ
         // صيغة «المبلغ × الأيام». نعرض المتاح والمصروف مباشرةً.
         <p className="text-xs text-gray-500 text-center leading-relaxed">
-          🌱 دورة جديدة بعد الترحيل بمعدل {formatAmount(dailyBudget.amount)} ر.س يومياً — متاح {formatAmount(status.allowance)} ر.س، صرفت {formatAmount(status.spent)} ر.س
+          🌱 دورة جديدة بعد الترحيل بمعدل {formatAmount(status.rate)} ر.س يومياً — متاح {formatAmount(status.allowance)} ر.س، صرفت {formatAmount(status.spent)} ر.س
         </p>
       ) : status.carryAdjust < 0 ? (
         // فوائض أُضيفت لليومية: المخصّص الفعّال أكبر من «المبلغ × الأيام»
@@ -336,9 +340,12 @@ export function DailyBudgetCard() {
         </p>
       ) : (
         <p className="text-xs text-gray-500 text-center leading-relaxed">
-          {formatAmount(dailyBudget.amount)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
+          {formatAmount(status.rate)} ر.س × {status.days} يوم = {formatAmount(status.allowance)} ر.س متاح — صرفت {formatAmount(status.spent)} ر.س
         </p>
       )}
+      {/* قسمةُ اليوم: لماذا صار بدلك ٨٣ لا ١٠٠ — صورةٌ لا فقرة. */}
+      <DailyRateSplit amount={dailyBudget.amount} rate={status.rate} />
+
       {projection.daysLeft > 0 && (
         <div className="rounded-xl bg-white/60 dark:bg-white/5 px-3 py-2 text-center space-y-0.5">
           <p className="text-[11px] text-gray-600 leading-relaxed">

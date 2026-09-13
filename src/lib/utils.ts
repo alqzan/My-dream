@@ -769,7 +769,11 @@ export function reserveSpent(fund: ReserveFund, transactions: Transaction[]): nu
 
 export interface DailyBudgetStatus {
   days: number; // days since (and including) startDate, through today
-  allowance: number; // effective allowance: amount * days − carryAdjust
+  // **البدل الفعليّ لليوم**: ما ضبطتَه ناقص قطرةِ تمويل المظاريف المموَّلة من
+  // راتب هذه الدورة (`fundingPerDay`). هو الرقم الذي **يقرّر** — فكلّ عرضٍ
+  // لمعدّل اليوم يقرأ `rate` لا `amount`، وإلّا أعلنت الشاشةُ بدلاً لا تملكه.
+  rate: number;
+  allowance: number; // effective allowance: rate * days − carryAdjust
   spent: number; // sum of daily-budget shares since startDate
   carryAdjust: number; // amount already settled by a sweep on the start day
   balance: number; // allowance - spent (negative = over)
@@ -781,7 +785,7 @@ export interface DailyBudgetStatus {
 // counts: a portion split onto a reserve fund is that fund's business, not
 // the daily allowance's.
 export function computeDailyBudgetStatus(
-  dailyBudget: { amount: number; startDate: string; carryAdjust?: number },
+  dailyBudget: { amount: number; startDate: string; carryAdjust?: number; fundingPerDay?: number },
   transactions: Transaction[]
 ): DailyBudgetStatus {
   const todayStr = today();
@@ -805,15 +809,20 @@ export function computeDailyBudgetStatus(
   // `NaN` فيُعرض «NaN ر.س» — وهو أسوأ من الانهيار لأنّه يمرّ صامتاً في كلّ
   // البطاقات والإحصائيات.
   const amount = Number.isFinite(dailyBudget.amount) ? dailyBudget.amount : 0;
+  // قطرةُ تمويل المظاريف (الإيجار · سدادُ حدثٍ مضى · ادخارٌ لقادم) تُخصم من
+  // البدل يوماً بيوم، فيصير `rate` هو البدل الحقيقيّ لهذه الدورة. الخصمُ دفعةً
+  // واحدة يوم الراتب كان يقلب الرصيد سالباً من اليوم الأوّل بلا سبب.
+  const perDay = Number.isFinite(dailyBudget.fundingPerDay) ? dailyBudget.fundingPerDay! : 0;
+  const rate = Math.max(0, round2(amount - (perDay > 0 ? perDay : 0)));
   // Fold carryAdjust into the effective allowance so the whole app (balance,
   // display, discipline ratio) stays internally consistent.
-  const allowance = round2(amount * days - carryAdjust);
+  const allowance = round2(rate * days - carryAdjust);
   const spent = round2(
     transactions
       .filter((t) => t.date >= startDate && t.date <= todayStr)
       .reduce((s, t) => s + dailyShare(t), 0)
   );
-  return { days, allowance, spent, carryAdjust, balance: round2(allowance - spent) };
+  return { days, rate, allowance, spent, carryAdjust, balance: round2(allowance - spent) };
 }
 
 // تعريف «اليوم المكتمل» يعيش في مكانٍ واحد: dayAggregator.ts

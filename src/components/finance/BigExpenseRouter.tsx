@@ -4,7 +4,10 @@ import { useAppStore } from "@/lib/store";
 import type { ReserveSplit } from "@/lib/types";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { cyclePace, expenseWeight } from "@/lib/budgetFlow";
+import { suggestPayoffPerCycle, fundingPerDay, PAYOFF_CYCLES } from "@/lib/fundPlan";
+import { cycleLength } from "@/lib/budgetCycle";
 import { daysUntilSalary, surplusPullSource } from "@/lib/financeOverview";
+import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { Tent } from "lucide-react";
 
 // ===================== «رحلة المدينة»: أين تسكن الصدمة الكبيرة؟ =====================
@@ -37,6 +40,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
   const salaryDay = useAppStore((s) => s.salaryDay);
   const addReserve = useAppStore((s) => s.addReserve);
   const transferBetweenReserves = useAppStore((s) => s.transferBetweenReserves);
+  const setReserveFunding = useAppStore((s) => s.setReserveFunding);
   const [naming, setNaming] = useState(false);
   const [newName, setNewName] = useState("");
 
@@ -58,8 +62,14 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
     const name = (newName.trim() || note.trim() || "حدث").slice(0, 40);
     const id = uid();
     addReserve({ id, name, icon: EVENT_ICON, color: EVENT_COLOR, deposits: [], createdAt: today() });
-    // تمويلٌ فوريّ من الفوائض بما تسمح به (الدالّة تقصّه على الرصيد المتاح).
-    if (surplus) transferBetweenReserves(surplus.fundId, id, amount, `تمويل «${name}»`);
+    // تمويلٌ فوريّ من الفوائض بما تسمح به (الدالّة تقصّه على الرصيد المتاح)…
+    const funded = surplus ? transferBetweenReserves(surplus.fundId, id, amount, `تمويل «${name}»`) : 0;
+    // …وما قصُرت عنه **لا يُترك مظروفاً أحمرَ معلّقاً**: يصير خطة سدادٍ تنتهي
+    // من نفسها عند التصفير، فتنزل من بدلك قطرةً يومية معلومة بدل صدمةٍ واحدة.
+    const short = Math.round((amount - funded) * 100) / 100;
+    if (short > 0) {
+      setReserveFunding(id, { perCycle: suggestPayoffPerCycle(short), source: "salary", stop: "zero" });
+    }
     onFund(id);
     setNaming(false);
     setNewName("");
@@ -153,15 +163,19 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
               </button>
             </div>
             <p className="text-[10px] text-gray-400 leading-relaxed">
-              {fundedBy > 0 ? (
+              {fundedBy > 0 && <>سيُموَّل بـ{formatAmount(Math.round(fundedBy))} ر.س من {SURPLUS_FUND_NAME}. </>}
+              {shortfall > 0 ? (
                 <>
-                  سيُموَّل بـ{formatAmount(Math.round(fundedBy))} ر.س من الفوائض
-                  {shortfall > 0 && (
-                    <> — والباقي {formatAmount(Math.round(shortfall))} ر.س يبقى عجزاً في المظروف نفسه تغطّيه لاحقاً، لا عجزاً في بدلك اليومي</>
-                  )}
+                  والباقي {formatAmount(Math.round(shortfall))} ر.س يصير{" "}
+                  <b className="text-finance">خطة سداد على {PAYOFF_CYCLES} دورات</b> —{" "}
+                  {formatAmount(Math.round(suggestPayoffPerCycle(shortfall)))} ر.س لكل دورة، أي{" "}
+                  <b className="text-amber-600">
+                    {formatAmount(Math.round(fundingPerDay(suggestPayoffPerCycle(shortfall), cycleLength(salaryDay ?? 27, today()))))} ر.س/يوم
+                  </b>{" "}
+                  من بدلك حتى يصفّر — بدل صدمةٍ واحدة. (تعدّلها أو توقفها من بطاقة المظروف متى شئت.)
                 </>
               ) : (
-                <>لا رصيد في الفوائض الآن — يُنشأ المظروف بعجزٍ بقيمة المصروف يُغطّى من الراتب القادم، وتبقى يوميّتك سليمة</>
+                <>يغطّيه المظروف كاملاً — ولا يمسّ بدلك اليومي.</>
               )}
             </p>
           </div>

@@ -1,4 +1,5 @@
 "use client";
+import { useAppStore } from "@/lib/store";
 import type { Transaction, FinanceCategoryDef } from "@/lib/types";
 import { formatDate, formatAmount, getCategoryInfo, getMainCategory } from "@/lib/utils";
 import { Trash2, PiggyBank } from "lucide-react";
@@ -13,6 +14,9 @@ interface TransactionListProps {
 
 export function TransactionList({ transactions, categories, onDelete, onEdit, limit }: TransactionListProps) {
   const shown = limit ? transactions.slice(0, limit) : transactions;
+  // أسماءُ المظاريف لتسمية وعاء الصرف بالعربي في كلّ سطر: «من مظروف: رحلة
+  // المدينة» بدل «١٠٠٪ احتياطي» — السطر يقول من أين خرج المال بلا أن يُفتح.
+  const reserves = useAppStore((s) => s.reserves);
 
   if (!shown.length) {
     return (
@@ -53,11 +57,19 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
                     info.label
                   )}
                 </div>
-                {reservedPct > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full shrink-0">
-                    <PiggyBank size={9} /> {reservedPct}% احتياطي
-                  </span>
-                )}
+                {reservedPct > 0 && (() => {
+                  const names = (tx.reserveSplits ?? [])
+                    .map((sp) => reserves.find((f) => f.id === sp.fundId)?.name)
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <span className="flex items-center gap-0.5 text-[10px] font-semibold text-finance bg-finance/10 px-1.5 py-0.5 rounded-full shrink-0 max-w-[11rem] truncate">
+                      <PiggyBank size={9} className="shrink-0" />
+                      {reservedPct >= 100 ? "من مظروف" : `${reservedPct}٪ من مظروف`}
+                      {names ? `: ${names}` : ""}
+                    </span>
+                  );
+                })()}
                 {/* مصروفٌ استثنائيّ خارج الميزانيات: صرفٌ حقيقيّ (يبقى بالأحمر
                     وفي المجاميع) لكنّه لا يخصم من اليومية ولا السقوف. */}
                 {tx.offBudget && (

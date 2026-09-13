@@ -70,3 +70,13 @@ export function spendWindow(
 ): string {
   return mode === "month" ? todayStr.slice(0, 7) : budgetCycleStart(lastSalaryConfirm, salaryDay, todayStr);
 }
+
+// طولُ دورة الراتب بالأيام (٢٨..٣١): من يوم الراتب الماضي إلى القادم. تُقسَم
+// عليه خطةُ تمويل المظاريف لتصير قطرةً يومية. ولماذا لا «من اليوم إلى الراتب
+// القادم»؟ لأنّ تأكيداً مبكّراً (اليوم ٢٥ والراتب ٢٧) يجعل الطول يومين فتصير
+// القطرةُ ضِعفَ البدل وتأكله كلَّه — والدورة في الحقيقة شهرٌ كامل.
+export function cycleLength(salaryDay: number, todayStr: string): number {
+  const from = parseDate(lastSalaryDate(salaryDay, todayStr)).getTime();
+  const to = parseDate(nextSalaryDate(salaryDay, todayStr)).getTime();
+  return Math.max(1, Math.round((to - from) / 86400000));
+}
