@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import type { ReserveSplit } from "@/lib/types";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
 import { cyclePace, expenseWeight } from "@/lib/budgetFlow";
-import { suggestPayoffPerCycle, fundingPerDay, PAYOFF_CYCLES } from "@/lib/fundPlan";
+import { suggestPayoffPerCycle, fundingPerDay, PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES } from "@/lib/fundPlan";
 import { cycleLength } from "@/lib/budgetCycle";
 import { daysUntilSalary, surplusPullSource } from "@/lib/financeOverview";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
@@ -43,6 +43,8 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
   const setReserveFunding = useAppStore((s) => s.setReserveFunding);
   const [naming, setNaming] = useState(false);
   const [newName, setNewName] = useState("");
+  // **عدد دورات السداد بيد المالك** — يُقترح ثلاثاً ويُبدَّل بضغطة قبل الإنشاء.
+  const [cycles, setCycles] = useState<number>(PAYOFF_CYCLES);
 
   const weight = expenseWeight(amount, dailyBudget?.amount ?? 0);
   // بلا ميزانيةٍ يومية لا مقياس لـ«كبير» أصلاً، فلا قرار يُعرض.
@@ -68,7 +70,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
     // من نفسها عند التصفير، فتنزل من بدلك قطرةً يومية معلومة بدل صدمةٍ واحدة.
     const short = Math.round((amount - funded) * 100) / 100;
     if (short > 0) {
-      setReserveFunding(id, { perCycle: suggestPayoffPerCycle(short), source: "salary", stop: "zero" });
+      setReserveFunding(id, { perCycle: suggestPayoffPerCycle(short, cycles), source: "salary", stop: "zero" });
     }
     onFund(id);
     setNaming(false);
@@ -162,15 +164,39 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
                 إلغاء
               </button>
             </div>
+            {shortfall > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-semibold text-gray-500">
+                  الباقي {formatAmount(Math.round(shortfall))} ر.س — على كم دورة تسدّده؟
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {PAYOFF_CYCLE_CHOICES.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setCycles(n)}
+                      aria-pressed={cycles === n}
+                      className={cn(
+                        "text-[11px] font-bold rounded-lg px-2.5 py-1 border transition-colors press",
+                        cycles === n
+                          ? "bg-finance text-white border-finance"
+                          : "border-gray-200 dark:border-white/15 text-gray-500 bg-white dark:bg-white/5"
+                      )}
+                    >
+                      {formatAmount(n)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-[10px] text-gray-400 leading-relaxed">
               {fundedBy > 0 && <>سيُموَّل بـ{formatAmount(Math.round(fundedBy))} ر.س من {SURPLUS_FUND_NAME}. </>}
               {shortfall > 0 ? (
                 <>
-                  والباقي {formatAmount(Math.round(shortfall))} ر.س يصير{" "}
-                  <b className="text-finance">خطة سداد على {PAYOFF_CYCLES} دورات</b> —{" "}
-                  {formatAmount(Math.round(suggestPayoffPerCycle(shortfall)))} ر.س لكل دورة، أي{" "}
+                  والباقي يصير <b className="text-finance">خطة سداد على {formatAmount(cycles)} دورات</b> —{" "}
+                  {formatAmount(Math.round(suggestPayoffPerCycle(shortfall, cycles)))} ر.س لكل دورة، أي{" "}
                   <b className="text-amber-600">
-                    {formatAmount(Math.round(fundingPerDay(suggestPayoffPerCycle(shortfall), cycleLength(salaryDay ?? 27, today()))))} ر.س/يوم
+                    {formatAmount(Math.round(fundingPerDay(suggestPayoffPerCycle(shortfall, cycles), cycleLength(salaryDay ?? 27, today()))))} ر.س/يوم
                   </b>{" "}
                   من بدلك حتى يصفّر — بدل صدمةٍ واحدة. (تعدّلها أو توقفها من بطاقة المظروف متى شئت.)
                 </>

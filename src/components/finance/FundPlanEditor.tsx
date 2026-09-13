@@ -5,7 +5,10 @@ import type { FundFunding, ReserveFund } from "@/lib/types";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { formatAmount, cn, today, reserveBalance } from "@/lib/utils";
 import { cycleLength } from "@/lib/budgetCycle";
-import { suggestPayoffPerCycle, cyclesRemaining, fundingPreview, PAYOFF_CYCLES } from "@/lib/fundPlan";
+import {
+  suggestPayoffPerCycle, cyclesRemaining, fundingPreview, cyclesForGap,
+  PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES, LONG_PLAN_CYCLES,
+} from "@/lib/fundPlan";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Repeat, Target, Bandage } from "lucide-react";
 
@@ -67,6 +70,10 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
     ? fundingPreview(dailyBudget.amount, dailyBudget.fundingPerDay, perCycle, len)
     : null;
   const remaining = cyclesRemaining(fund, balance);
+  // **الفجوة** التي يقسمها المالك على الدورات: عجزُ السداد، أو ما بقي للهدف.
+  // الخطةُ المستمرّة (الإيجار) بلا فجوة — مبلغُها هو المطلوب كل دورة بذاته.
+  const gap = mode === "zero" ? deficit : mode === "target" ? Math.max(0, (fund.target ?? 0) - balance) : 0;
+  const pickedCycles = gap > 0 ? cyclesForGap(gap, perCycle) : 0;
 
   function save() {
     if (perCycle <= 0) return;
@@ -170,6 +177,45 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
       </div>
       <p className="text-[10px] text-gray-400 leading-relaxed">{active?.hint}</p>
 
+      {/* **العدد بيدك**: اختر على كم دورة تُقسَم الفجوة، والمبلغ يُشتقّ منها —
+          أو اكتب المبلغ فيُقال لك كم دورة يعني. الاتجاهان مفتوحان. */}
+      {gap > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[10px] font-semibold" style={{ color: "var(--ink52)" }}>
+              على كم دورة تقسّم {formatAmount(Math.round(gap))} ر.س؟
+            </span>
+            {pickedCycles > 0 && (
+              <span className="text-[10px]" style={{ color: "var(--ink52)" }}>
+                = {pickedCycles === 1 ? "دورةٌ واحدة" : `${formatAmount(pickedCycles)} دورات`}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1 flex-wrap">
+            {PAYOFF_CYCLE_CHOICES.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setAmount(String(suggestPayoffPerCycle(gap, n)))}
+                aria-pressed={pickedCycles === n}
+                className={cn(
+                  "text-[11px] font-bold rounded-lg px-2.5 py-1 border transition-colors press",
+                  pickedCycles === n ? "bg-finance text-white border-finance" : "text-gray-500"
+                )}
+                style={pickedCycles === n ? undefined : { borderColor: "var(--line)", background: "var(--paper)" }}
+              >
+                {formatAmount(n)}
+              </button>
+            ))}
+          </div>
+          {pickedCycles > LONG_PLAN_CYCLES && (
+            <p className="text-[10px]" style={{ color: "var(--ink52)" }}>
+              ⓘ خطةٌ طويلة — ستسحب من بدلك طوال {formatAmount(pickedCycles)} دورات. مقبولٌ إن كان مقصوداً.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-1.5">
         <NumberInput
           value={amount}
@@ -179,12 +225,13 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
           className="flex-1 min-w-0 text-sm border border-gray-200 dark:border-white/15 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
           aria-label="المبلغ لكل دورة"
         />
-        {deficit > 0 && (
+        {gap > 0 && (
           <button
-            onClick={() => setAmount(String(suggestPayoffPerCycle(deficit)))}
+            onClick={() => setAmount(String(suggestPayoffPerCycle(gap)))}
             className="text-[10px] font-semibold text-finance bg-finance/10 rounded-lg px-2 press shrink-0"
+            title={`المقترح: ${PAYOFF_CYCLES} دورات`}
           >
-            ÷ {PAYOFF_CYCLES} دورات
+            المقترح
           </button>
         )}
       </div>

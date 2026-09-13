@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   suggestPayoffPerCycle, cycleFundingAmount, fundingDone, fundingPerDay,
-  effectiveDailyRate, fundingPreview, cyclesRemaining, PAYOFF_CYCLES, MAX_PAYOFF_CYCLES,
+  effectiveDailyRate, fundingPreview, cyclesRemaining, cyclesForGap,
+  PAYOFF_CYCLES, MAX_PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES,
 } from "./fundPlan";
 import type { ReserveFund } from "./types";
 
@@ -110,5 +111,21 @@ describe("cyclesRemaining — خطّ الدورات", () => {
   it("والمستمرّة بلا عدّ (لا غاية لها)", () => {
     expect(cyclesRemaining(fund({ funding: { perCycle: 2000, source: "salary" } }), -100)).toBeNull();
     expect(cyclesRemaining(fund(), -100)).toBeNull();
+  });
+});
+
+describe("cyclesForGap — العدد المقابل لمبلغٍ اختاره المالك بيده", () => {
+  it("يقرّب لأعلى: ١٥٠٠ على ٤٠٠ = أربع دورات", () => {
+    expect(cyclesForGap(1500, 400)).toBe(4);
+    expect(cyclesForGap(1500, 500)).toBe(3);
+  });
+  it("صفرٌ حين لا فجوة أو لا مبلغ", () => {
+    expect(cyclesForGap(0, 500)).toBe(0);
+    expect(cyclesForGap(1500, 0)).toBe(0);
+  });
+  it("والمنتقي يعطي مبلغاً يطابق العدد المختار ذهاباً وإياباً", () => {
+    for (const n of PAYOFF_CYCLE_CHOICES) {
+      expect(cyclesForGap(1200, suggestPayoffPerCycle(1200, n))).toBe(n);
+    }
   });
 });

@@ -23,7 +23,18 @@ import { round2 } from "./utils";
 // الصدمة إلى قطرةٍ محتمَلة وتبقى في الذاكرة؛ وما تجاوز الستّ يصير دَيناً منسيّاً
 // يسحب من الراتب بلا أن يذكره أحد — وهو الشعور نفسه الذي وُلدت الخطة لرفعه.
 export const PAYOFF_CYCLES = 3;
-export const MAX_PAYOFF_CYCLES = 6;
+// الحدّ الأعلى **اقتراحٌ لا وصاية**: المالك يختار عدد الدورات بنفسه من منتقي
+// الخطة، وهذه القيم خياراتُه السريعة. ما تجاوز ستّاً يبقى ممكناً لكنّه يُذكَّر
+// بأنّه يسحب من بدله طوال المدّة — القرارُ قراره لا قرار التطبيق.
+export const MAX_PAYOFF_CYCLES = 12;
+export const PAYOFF_CYCLE_CHOICES = [2, 3, 4, 6, 12] as const;
+export const LONG_PLAN_CYCLES = 6;
+
+// كم دورةً يلزم لتغطية فجوةٍ بمبلغٍ لكل دورة؟ (للعرض بجانب المبلغ المكتوب يدوياً)
+export function cyclesForGap(gap: number, perCycle: number): number {
+  if (!Number.isFinite(gap) || gap <= 0 || !Number.isFinite(perCycle) || perCycle <= 0) return 0;
+  return Math.ceil(round2(gap) / perCycle);
+}
 
 // مبلغ السداد المقترح لعجزٍ قائم (العجز موجبٌ هنا).
 export function suggestPayoffPerCycle(deficit: number, cycles: number = PAYOFF_CYCLES): number {
