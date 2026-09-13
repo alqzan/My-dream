@@ -12,6 +12,7 @@ import { SalaryBanner } from "@/components/finance/SalaryBanner";
 import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceCycleDashboard } from "@/components/finance/FinanceCycleDashboard";
 import { VesselsStrip } from "@/components/finance/VesselsStrip";
+import { TripBanner } from "@/components/finance/TripBanner";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DayView } from "@/components/day/DayView";
@@ -288,6 +289,11 @@ export default function FinancePage() {
             إضافة
           </Button>
         </div>
+      </div>
+
+      {/* وضعُ السفر حالةٌ استثنائية تحكم كلّ مصروفٍ يُسجَّل — تُرى قبل الأرقام. */}
+      <div className="animate-fade-up stagger-1">
+        <TripBanner onGo={() => goToSection("reserves")} />
       </div>
 
       {/* الأوعية الثلاثة: أيُّها يقرّر وأيُّها يخبر — قبل أيّ رقمٍ آخر. */}

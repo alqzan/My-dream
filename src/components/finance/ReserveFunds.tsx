@@ -8,6 +8,8 @@ import { NumberInput } from "@/components/ui/NumberInput";
 import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X, Pencil, ChevronDown, Target } from "lucide-react";
 import { FundPlanEditor } from "@/components/finance/FundPlanEditor";
 import { GoalWizard } from "@/components/finance/GoalWizard";
+import { TripPanel } from "@/components/finance/TripPanel";
+import { pastTrips, tripSummary } from "@/lib/trip";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -104,6 +106,36 @@ export function ReserveFunds() {
       )}
 
       {openFund && <FundDetail key={openFund.id} fund={openFund} onClose={() => setExpanded(null)} />}
+
+      {/* «كم كلّفتني كلُّ سفرة» — سجلٌّ مختصر للرحلات المنتهية، أحدثُها أوّلاً. */}
+      {pastTrips(reserves).length > 0 && (
+        <div className="space-y-1 pt-1">
+          <div className="text-[10px] font-semibold" style={{ color: "var(--ink52)" }}>رحلاتي السابقة</div>
+          {pastTrips(reserves).map((f) => {
+            const t = tripSummary(f, transactions, today());
+            return (
+              <button
+                key={f.id}
+                onClick={() => setExpanded(expanded === f.id ? null : f.id)}
+                className="w-full flex items-center gap-2 rounded-xl px-2.5 py-1.5 press text-right"
+                style={{ background: "var(--paper)", border: "1px solid var(--line)" }}
+              >
+                <span className="text-sm shrink-0">{f.icon}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[11px] font-bold truncate" style={{ color: "var(--ink)" }}>{f.name}</span>
+                  <span className="block text-[10px]" style={{ color: "var(--ink52)" }}>
+                    {formatDateShort(f.trip!.startedAt)} ← {formatDateShort(f.trip!.endedAt!)} ·{" "}
+                    {formatAmount(t.days)} {t.days === 1 ? "يوم" : "يوماً"}
+                  </span>
+                </span>
+                <span className="text-sm font-bold tabular-nums shrink-0" style={{ color: "var(--ink)" }}>
+                  {formatAmount(Math.round(t.total))}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -366,6 +398,9 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
       )}
 
       <FundPlanEditor fund={fund} balance={balance} />
+
+      {/* وضعُ السفر وتقريرُه — نافذةٌ زمنية على هذا المظروف. */}
+      <TripPanel fund={fund} />
 
       <div className="flex gap-1.5">
         <NumberInput

@@ -216,6 +216,10 @@ interface AppStore extends AppData {
   // التغطية يصير الرصيد صفراً فلا تتحرّك ثانيةً.
   // خطة تمويل المظروف (الإيجار · سدادُ حدثٍ مضى · ادخارٌ لقادم). `null` يرفعها.
   setReserveFunding: (fundId: string, funding: FundFunding | null) => void;
+  // **وضع السفر**: يبدأ رحلةً على مظروف (ويُنهي أيّ رحلةٍ جارية قبلها)، أو
+  // يُنهيها فيصير تقريرُها نهائياً. الرحلةُ الجارية واحدةٌ في كلّ وقت.
+  startTrip: (fundId: string) => void;
+  endTrip: (fundId: string) => void;
   setAutoOffset: (on: boolean) => void;
   autoOffsetDeficit: () => number;
   // نقلٌ بين مظروفين (تمويل مظروف حدثٍ من الفوائض مثلاً): سحبٌ من الأول وإيداعٌ
@@ -1195,6 +1199,31 @@ export const useAppStore = create<AppStore>()(
           reserves: s.reserves.map((f) =>
             f.id === fundId
               ? { ...f, funding: funding && funding.perCycle > 0 ? { ...funding, perCycle: round2(funding.perCycle) } : undefined }
+              : f
+          ),
+        })),
+
+      startTrip: (fundId) =>
+        set((s) => {
+          const todayStr = today();
+          return {
+            reserves: s.reserves.map((f) =>
+              f.id === fundId
+                ? { ...f, trip: { startedAt: todayStr } }
+                : // رحلةٌ أخرى جارية تُنهى الآن: وضعُ السفر واحدٌ لا يتداخل،
+                  // وإلّا حُمِّلت الفاتورةُ على رحلتين واختلط التقريران.
+                f.trip?.startedAt && !f.trip.endedAt
+                ? { ...f, trip: { ...f.trip, endedAt: todayStr } }
+                : f
+            ),
+          };
+        }),
+
+      endTrip: (fundId) =>
+        set((s) => ({
+          reserves: s.reserves.map((f) =>
+            f.id === fundId && f.trip?.startedAt && !f.trip.endedAt
+              ? { ...f, trip: { ...f.trip, endedAt: today() } }
               : f
           ),
         })),
