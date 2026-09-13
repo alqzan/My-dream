@@ -122,7 +122,13 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
               <CyclePips remaining={remaining} /> بقيت {remaining === 1 ? "دورةٌ واحدة" : `${formatAmount(remaining)} دورات`}
             </>
           )}
-          {remaining === 0 && <> · اكتملت — ترتفع عند الراتب القادم</>}
+          {remaining === 0 && (
+            // خطةٌ بلا ما تسدّه: تُقال كما هي بدل «اكتملت» التي تُقرأ كإنجازٍ لم يقع.
+            <>
+              {" · "}
+              {f.stop === "zero" ? "لا عجز الآن — تُرفع عند الراتب القادم" : "بلغ هدفه — تُرفع عند الراتب القادم"}
+            </>
+          )}
         </div>
       </div>
     );

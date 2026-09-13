@@ -7,7 +7,7 @@ import { uid, today, formatAmount, getSubCategories, reserveBalance, cn } from "
 import { budgetWarningFor } from "@/lib/budgetStatus";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
-import { BigExpenseRouter } from "@/components/finance/BigExpenseRouter";
+import { BigExpenseRouter, applyExpenseIntent, type ExpenseIntent } from "@/components/finance/BigExpenseRouter";
 import { activeTrip } from "@/lib/trip";
 import { Plane } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -65,6 +65,10 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   // «تجاهله من الميزانيات»: مصروفٌ حقيقيّ لكنّه استثناءٌ لا يتكرّر (رسوم اختبار…)
   // فلا يستهلك اليومية ولا السقوف — ويبقى في السجل والإحصائيات كما هو.
   const [offBudget, setOffBudget] = useState(!!initial?.offBudget);
+  // **نيّةُ المصروف الكبير**: ما يُنشأ ويُموَّل ويُسدَّد — تُنفَّذ عند حفظ المعاملة
+  // لا قبله، فإغلاقُ الورقة بلا حفظ لا يترك مظروفاً يتيماً ولا خطةً بلا عجز.
+  // (كانت تُنفَّذ فور «اعتمد»، فظهر مظروفٌ فارغ وخطةٌ «اكتملت» ومصروفٌ غير مربوط.)
+  const [intent, setIntent] = useState<ExpenseIntent | null>(null);
 
   // Auto-classify from the note while adding a new expense: learned merchant
   // rules first, then keyword guess. Silently pre-selects the section/sub so
@@ -156,6 +160,8 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
 
   function handleSave() {
     if (!parsedAmount || parsedAmount <= 0) return;
+    // تُنفَّذ النيّة أوّلاً فيوجد المظروفُ قبل أن تُحمَّل عليه المعاملة.
+    if (intent) applyExpenseIntent(intent);
     const tx: Transaction = {
       id: initial?.id ?? uid(),
       date,
@@ -366,15 +372,14 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
         note={note}
         splits={splits}
         offBudget={offBudget}
-        onDaily={() => { setSplits([]); setOffBudget(false); }}
-        onFund={(fundId, pct) => {
-          // النسبةُ تأتي من الخطة المقترحة (ما لم يُدفع من رصيد الدورة) — أو
-          // كاملةً حين يختار المالك مظروفاً قائماً بنفسه.
-          const share = Math.max(1, Math.min(100, Math.round(pct ?? 100)));
-          setSplits([{ fundId, pct: share }]);
+        intent={intent}
+        onDaily={() => { setIntent(null); setSplits([]); setOffBudget(false); }}
+        onPlan={(next) => {
+          setIntent(next);
+          setSplits([{ fundId: next.fundId, pct: next.pct }]);
           setOffBudget(false);
         }}
-        onOffBudget={() => { setSplits([]); setOffBudget(true); }}
+        onOffBudget={() => { setIntent(null); setSplits([]); setOffBudget(true); }}
       />}
 
       {/* «تجاهله من الميزانيات» — للمصروف الاستثنائيّ الذي لا يتكرّر (رسوم اختبار،

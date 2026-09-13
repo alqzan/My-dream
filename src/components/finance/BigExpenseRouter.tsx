@@ -14,6 +14,43 @@ import { daysUntilSalary, surplusPullSource } from "@/lib/financeOverview";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { Tent } from "lucide-react";
 
+// **لماذا نيّةٌ مؤجّلة لا تنفيذٌ فوريّ؟** أوّلُ استعمالٍ حقيقيّ كشف الفخّ: ضغط
+// المالك «اعتمد» فأُنشئ المظروفُ وخطةُ سداده في تلك اللحظة، ثمّ أغلق الورقة بلا
+// ضغط «حفظ» — فبقي مظروفٌ فارغ (٠ ر.س) وخطةُ سدادٍ «اكتملت» لأنّها لم تجد عجزاً
+// تسدّه، والمصروفُ لم يُربط بشيء. الكتابةُ في المتجر يجب أن تقع **مع حفظ
+// المعاملة أو لا تقع**: فالبطاقةُ تبني نيّةً، و`applyExpenseIntent` ينفّذها في
+// `handleSave` وحده. ومعرّفُ المظروف الجديد يُولَد الآن ليحمله انقسامُ المعاملة،
+// ويُنشأ به المظروفُ نفسُه عند الحفظ — فلا يتفرّق المعرّفان.
+export interface ExpenseIntent {
+  fundId: string;
+  pct: number;
+  newFund?: { name: string; target?: number };
+  fromSurplus?: { fromId: string; amount: number };
+  funding?: { perCycle: number };
+}
+
+export function applyExpenseIntent(intent: ExpenseIntent) {
+  const s = useAppStore.getState();
+  const name = intent.newFund?.name ?? s.reserves.find((f) => f.id === intent.fundId)?.name ?? "مظروف";
+  if (intent.newFund) {
+    s.addReserve({
+      id: intent.fundId,
+      name: intent.newFund.name,
+      icon: EVENT_ICON,
+      color: EVENT_COLOR,
+      target: intent.newFund.target,
+      deposits: [],
+      createdAt: today(),
+    });
+  }
+  if (intent.fromSurplus && intent.fromSurplus.amount > 0) {
+    s.transferBetweenReserves(intent.fromSurplus.fromId, intent.fundId, intent.fromSurplus.amount, `تمويل «${name}»`);
+  }
+  if (intent.funding && intent.funding.perCycle > 0) {
+    s.setReserveFunding(intent.fundId, { perCycle: intent.funding.perCycle, source: "salary", stop: "zero" });
+  }
+}
+
 // ===================== المصروف الكبير: الوجهةُ أوّلاً ثمّ التمويل =====================
 // أوّلُ تجربةٍ حقيقية كشفت ترتيباً مقلوباً: فاتورةُ فندقٍ بـ٢٦٠٠ في رحلة المدينة،
 // والشاشةُ تسأل «من وين تدفعه؟» قبل أن تسأل «هذا المصروف **لماذا**؟». والرحلةُ
@@ -42,18 +79,17 @@ interface Props {
   splits: ReserveSplit[];
   offBudget: boolean;
   onDaily: () => void;
-  onFund: (fundId: string, pct?: number) => void;
+  onPlan: (intent: ExpenseIntent) => void;
   onOffBudget: () => void;
+  /** النيّة المعتمَدة (إن وُجدت) — لتأكيدٍ مرئيّ أنّ التنفيذ ينتظر الحفظ. */
+  intent: ExpenseIntent | null;
 }
 
-export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onFund, onOffBudget }: Props) {
+export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onPlan, onOffBudget, intent }: Props) {
   const dailyBudget = useAppStore((s) => s.dailyBudget);
   const transactions = useAppStore((s) => s.transactions);
   const reserves = useAppStore((s) => s.reserves);
   const salaryDay = useAppStore((s) => s.salaryDay);
-  const addReserve = useAppStore((s) => s.addReserve);
-  const transferBetweenReserves = useAppStore((s) => s.transferBetweenReserves);
-  const setReserveFunding = useAppStore((s) => s.setReserveFunding);
 
   // مظاريفُ الأحداث (كلُّها عدا «الفوائض» — ذاك وعاءُ تمويلٍ لا وجهةُ صرف).
   const targets = useMemo(
@@ -69,6 +105,8 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
   }, [note, targets]);
 
   const [dest, setDest] = useState<string>("");
+  // معرّفُ المظروف الجديد يُولَد مرّةً ويثبت، فيحمله الانقسامُ ويُنشأ به المظروف.
+  const [newFundId] = useState(() => uid());
   const [newName, setNewName] = useState("");
   const [tripBudget, setTripBudget] = useState("");
   const [picked, setPicked] = useState<PlanKind>("mix");
@@ -113,32 +151,20 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
 
   function apply() {
     if (toDaily) return onDaily();
-
-    // مظروفٌ قائم: الفاتورة تُحمَّل عليه كاملةً، ويُموَّل ما ينقصه.
-    let fundId = chosen?.fund.id ?? "";
-    if (isNew) {
-      fundId = uid();
-      addReserve({
-        id: fundId,
-        name,
-        icon: EVENT_ICON,
-        color: EVENT_COLOR,
-        target: parseFloat(tripBudget) > 0 ? parseFloat(tripBudget) : undefined,
-        deposits: [],
-        createdAt: today(),
-      });
-    }
-    if (needed > 0) {
-      if (option.plan.fromSurplus > 0 && surplus) {
-        transferBetweenReserves(surplus.fundId, fundId, option.plan.fromSurplus, `تمويل «${chosen?.fund.name ?? name}»`);
-      }
-      if (option.plan.financed > 0 && perCycle > 0) {
-        setReserveFunding(fundId, { perCycle, source: "salary", stop: "zero" });
-      }
-    }
     // حصّةُ المظروف: ما لم يُدفع من رصيد الدورة مباشرةً.
     const pct = amount > 0 ? Math.max(1, Math.min(100, Math.round(((amount - option.plan.fromCycle) / amount) * 100))) : 100;
-    onFund(fundId, pct);
+    onPlan({
+      fundId: isNew ? newFundId : chosen!.fund.id,
+      pct,
+      newFund: isNew
+        ? { name, target: parseFloat(tripBudget) > 0 ? parseFloat(tripBudget) : undefined }
+        : undefined,
+      fromSurplus:
+        needed > 0 && option.plan.fromSurplus > 0 && surplus
+          ? { fromId: surplus.fundId, amount: option.plan.fromSurplus }
+          : undefined,
+      funding: needed > 0 && option.plan.financed > 0 && perCycle > 0 ? { perCycle } : undefined,
+    });
   }
 
   const cardStyle = (on: boolean) => ({
@@ -377,9 +403,10 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onF
       >
         لا أتتبّعه — خارج الميزانيات
       </button>
-      {splits.length > 0 && (
-        <p className="text-[10px] text-finance font-semibold">
-          ✓ {splits[0].pct}٪ منه على «{reserves.find((f) => f.id === splits[0].fundId)?.name}»
+      {intent && (
+        <p className="text-[10px] font-semibold leading-relaxed text-finance">
+          ✓ {formatAmount(intent.pct)}٪ منه على «{intent.newFund?.name ?? reserves.find((f) => f.id === intent.fundId)?.name}»
+          {intent.newFund && " (مظروفٌ جديد)"} — <b>اضغط «حفظ» بالأسفل ليُنفَّذ</b>.
         </p>
       )}
     </div>

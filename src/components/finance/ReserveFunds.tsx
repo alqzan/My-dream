@@ -276,7 +276,7 @@ function FundDial({
           !healthy ? "text-red-500 font-semibold" : done ? "text-finance font-bold" : "text-gray-400"
         )}
       >
-        {!healthy ? "مستنفد" : done ? "اكتمل ✓" : hasTarget ? `${pct}٪ من الهدف` : "متوفّر"}
+        {balance < 0 ? "عليه دين" : !healthy ? "فارغ" : done ? "اكتمل ✓" : hasTarget ? `${pct}٪ من الهدف` : "متوفّر"}
       </span>
     </button>
   );
@@ -358,7 +358,7 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
                 healthy ? "bg-finance/10 text-finance" : "bg-red-100 text-red-600 dark:bg-red-500/20"
               )}
             >
-              {healthy ? "متوفر" : "مستنفد"}
+              {balance < 0 ? "عليه دين" : healthy ? "متوفر" : "فارغ"}
             </span>
           </div>
           <div className={cn("text-lg font-bold tabular-nums mt-0.5", healthy ? "text-finance" : "text-red-500")}>
