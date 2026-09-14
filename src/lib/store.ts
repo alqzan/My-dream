@@ -1242,10 +1242,15 @@ export const useAppStore = create<AppStore>()(
         const fund = s.reserves.find((f) => f.name === SURPLUS_FUND_NAME);
         if (!fund) return 0;
         const status = computeDailyBudgetStatus(s.dailyBudget, s.transactions);
+        // **السقفُ على المعدَّل الفعليّ لا على المضبوط** (`status.rate` محسوبٌ في
+        // السطر أعلاه). كان يقرأ `amount`، فمن ضبط ١٠٠ وعليه إيجارٌ يسحب ٣٠
+        // يومياً صار سقفُ مقاصته ٣٠٠ بدل ٢١٠ — فيُغطّى عجزُ ٢٥٠ صامتاً من فوائضه
+        // وهو فوق السقف بقاعدة `offsetPlan` نفسها: `tooBig` قرارُ المالك لا
+        // قرارُ التطبيق. الوسادةُ تُفرغ بلا قرار، وهو عينُ ما جاء السقف ليمنعه.
         const plan = offsetPlan(
           status.balance,
           reserveBalance(fund, s.transactions),
-          s.dailyBudget.amount,
+          status.rate,
           s.autoOffset !== false
         );
         if (plan.amount <= 0) return 0;

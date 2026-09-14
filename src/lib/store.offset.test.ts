@@ -76,6 +76,32 @@ describe("autoOffsetDeficit — المقاصة التلقائية", () => {
     expect(useAppStore.getState().autoOffsetDeficit()).toBe(0);
   });
 
+  // **السقفُ يتبع المعدَّل الفعليّ لا المضبوط.** مضبوطٌ ١٠٠ وإيجارٌ يسحب ٣٠
+  // يومياً → الفعليّ ٧٠ والسقف ٢١٠. كان السقف يُحسب من المضبوط (٣٠٠) فيُغطّى
+  // عجزُ ٢٥٠ صامتاً — وهو بقاعدة `offsetPlan` نفسها قرارُ المالك لا التطبيق.
+  it("**تقف** عند عجزٍ فوق ثلاث يوميّاتٍ فعلية وإن كان دون ثلاثِ المضبوط", () => {
+    useAppStore.setState({
+      dailyBudget: { amount: 100, startDate: T, fundingPerDay: 30 },
+      reserves: [surplusFund(5000)],
+      transactions: [tx("hotel", 320)],
+    });
+    expect(balance()).toBe(-250);
+    expect(useAppStore.getState().autoOffsetDeficit()).toBe(0);
+    const s = useAppStore.getState();
+    expect(reserveBalance(s.reserves[0], s.transactions)).toBe(5000); // لم تُمسّ الفوائض
+  });
+
+  it("وما دون السقف الفعليّ يُقاصّ كالمعتاد رغم قطرة التمويل", () => {
+    useAppStore.setState({
+      dailyBudget: { amount: 100, startDate: T, fundingPerDay: 30 },
+      reserves: [surplusFund(5000)],
+      transactions: [tx("t1", 170)],
+    });
+    expect(balance()).toBe(-100);
+    expect(useAppStore.getState().autoOffsetDeficit()).toBe(100);
+    expect(balance()).toBe(0);
+  });
+
   it("المصروف الموسوم «خارج الميزانيات» لا يصنع عجزاً تُقاصّه", () => {
     useAppStore.setState({
       reserves: [surplusFund(900)],

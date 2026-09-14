@@ -112,14 +112,19 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onP
   const [picked, setPicked] = useState<PlanKind>("mix");
   const [cycles, setCycles] = useState<number | null>(null);
 
-  const weight = expenseWeight(amount, dailyBudget?.amount ?? 0);
-  if (!dailyBudget || !weight.big) return null;
+  // **العتبةُ تُقاس بالمعدَّل الفعليّ لا بالمضبوط.** كانت تقرأ `dailyBudget.amount`،
+  // فمن ضبط ١٠٠ وعليه إيجارٌ يسحب ٣٠ يومياً كانت فاتورةُ ٢٥٠ عنده «٢٫٥ يوميّة»
+  // فلا تظهر هذه البطاقة أصلاً — وهي في الحقيقة ٣٫٦ يوميّاتٍ ممّا يملكه. فتنزل
+  // الضربةُ كاملةً على ميزانيته اليومية، وهو الشيء الوحيد الذي وُجد هذا التوجيه
+  // ليمنعه — ويتعطّل كلّما كثرت خططُه، أي في الحالة التي بُني لها.
+  const status = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
+  const weight = expenseWeight(amount, status?.rate ?? 0);
+  if (!dailyBudget || !status || !weight.big) return null;
 
   // الوجهة الفعلية: اختيارُ المالك، وإلّا المظروف المخمَّن، وإلّا مظروفٌ جديد.
   const destination = dest || guessed || "new";
   const chosen = targets.find((t) => t.fund.id === destination);
 
-  const status = computeDailyBudgetStatus(dailyBudget, transactions);
   const len = cycleLength(salaryDay ?? 27, today());
   const daysLeft = daysUntilSalary(salaryDay ?? 27, today());
   const surplus = surplusPullSource(reserves, transactions, true);
