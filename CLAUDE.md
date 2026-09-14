@@ -22,17 +22,14 @@
 
 - تطبيق PWA شخصي عربي (RTL) اسمه **مدار** لتتبّع: المصاريف، المذكرات، الصلوات،
   القراءة، العادات، والإحصائيات.
-- **التقنيات:** Next.js 15 (App Router، `output: "export"` → موقع ثابت)، React 18،
-  Zustand (محفوظ في IndexedDB عبر idb-keyval)، Tailwind، Firebase/Firestore
-  لمزامنة سحابية اختيارية (نموذج «login-free»: `src/components/sync/`).
+- **البنية:** `output: "export"` → موقع ثابت بلا خادم. المزامنة السحابية
+  اختيارية بنموذج «login-free» (`src/components/sync/`).
 - كل الحالة على جهاز المستخدم؛ Firestore للمزامنة فقط.
 
 ## الأوامر
 
-- `npm run dev` — خادم تطوير محلي.
-- `npm run build` — إخراج ثابت للإنتاج في `out/` (يفحص الأنواع أيضاً، ويتحقّق من
-  الإصدار أولاً عبر `scripts/check-version.mjs`).
-- `npm test` — اختبارات Vitest. `npm run lint` — ESLint.
+- `npm run build` — يكسر قبل أن يبدأ إن انحرف رقم الإصدار
+  (`scripts/check-version.mjs`)، ويخرج الموقع الثابت في `out/`.
 - `npm run bump` — **يرفع رقم الإصدار تعديلاً واحداً**: شغّله مع كل تعديلٍ جوهريّ
   (ميزة/إصلاح/مهاجرة) قبل الدفع، وسجّل السطر المقابل في `ROADMAP.md`.
 - النشر: ادفع إلى `main` (تلقائي عبر GitHub Pages).
