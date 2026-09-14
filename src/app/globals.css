@@ -6358,3 +6358,49 @@ button.mdr-daily-rhythm-status:focus-visible {
 }
 .mdr-chip b { color: var(--ink); }
 .mdr-dot { width: 0.45rem; height: 0.45rem; border-radius: 999px; flex-shrink: 0; }
+
+/* ===== افتتاحيةُ الدورة: بيانٌ يُقرأ سطراً بعد سطر ===== */
+.mdr-opening {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper2);
+  padding: 0.7rem 0.85rem 0.8rem;
+  text-align: right;
+}
+/* الالتزاماتُ مُزاحةٌ تحت الراتب بخيطٍ يجمعها — بندٌ تحت بند، لا بطاقاتٌ متجاورة */
+.mdr-opening-items {
+  margin: 0.1rem 0.5rem 0.15rem;
+  padding-inline-start: 0.6rem;
+  border-inline-start: 1px solid var(--line);
+}
+.mdr-opening-tag {
+  margin-inline-start: 0.35rem;
+  font-size: 0.56rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--theme-accent-soft);
+  color: var(--ink52);
+  white-space: nowrap;
+}
+/* فاصلُ الجمع كما في الورق: خيطٌ قبل السطر الذي يحسم */
+.mdr-opening-rule {
+  height: 1px;
+  margin: 0.35rem 0 0.1rem;
+  background: linear-gradient(to left, transparent, var(--theme-accent-line), transparent);
+}
+.mdr-opening-note {
+  margin-top: 0.5rem;
+  font-size: 0.66rem;
+  line-height: 1.8;
+  color: var(--ink52);
+  background: var(--theme-accent-soft);
+  border-radius: 0.65rem;
+  padding: 0.4rem 0.55rem;
+}
+.mdr-opening-note b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.mdr-opening-note.is-warn {
+  background: color-mix(in srgb, #c15a34 10%, transparent);
+  color: var(--ink);
+}
+.mdr-opening-note.is-warn b { color: #c15a34; }

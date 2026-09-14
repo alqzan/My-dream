@@ -1,8 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
-import { computeDailyBudgetStatus, formatAmount, today } from "@/lib/utils";
+import { computeDailyBudgetStatus, formatAmount, reserveBalance, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
+import { cycleLength } from "@/lib/budgetCycle";
+import { cycleOpening, type CycleOpening as Opening } from "@/lib/cycleOpening";
+import { CycleOpening } from "@/components/finance/CycleOpening";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Confetti } from "@/components/ui/Confetti";
@@ -27,12 +30,32 @@ function salaryDue(salaryDay: number, lastConfirm: string | null, todayStr: stri
 export function SalaryBanner() {
   const dailyBudget = useAppStore((s) => s.dailyBudget);
   const transactions = useAppStore((s) => s.transactions);
+  const reserves = useAppStore((s) => s.reserves);
+  const monthlyIncome = useAppStore((s) => s.monthlyIncome);
   const salaryDay = useAppStore((s) => s.salaryDay);
   const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
   const confirmSalary = useAppStore((s) => s.confirmSalary);
   const [celebration, setCelebration] = useState<number | null>(null);
+  // البيانُ المعروضُ قبل الضغط يُحفظ لحظتَها ليُعرض في ورقة «دورة جديدة» بعده:
+  // بعد التأكيد تكون الخطط قد نُفّذت ورُفع ما بلغ غايته، فإعادةُ حسابه حينئذٍ
+  // تُري دورةً أخرى لا الدورةَ التي بدأت للتوّ. وهو نفسُه ما وقع (`planCycleFunding`).
+  const [openedWith, setOpenedWith] = useState<Opening | null>(null);
 
   const todayStr = today();
+  const surplus = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+  const opening = useMemo(
+    () =>
+      cycleOpening({
+        income: monthlyIncome,
+        dailyBudget,
+        reserves,
+        transactions,
+        cycleLen: cycleLength(salaryDay ?? 27, todayStr),
+        surplusId: surplus?.id,
+        surplusBalance: surplus ? reserveBalance(surplus, transactions) : 0,
+      }),
+    [monthlyIncome, dailyBudget, reserves, transactions, salaryDay, todayStr, surplus]
+  );
   if (!dailyBudget) return null;
   const due = salaryDue(salaryDay ?? 27, lastSalaryConfirm ?? null, todayStr);
 
@@ -40,6 +63,7 @@ export function SalaryBanner() {
   const leftover = Math.max(0, balance);
 
   function handleConfirm() {
+    setOpenedWith(opening);
     setCelebration(confirmSalary());
   }
 
@@ -58,6 +82,15 @@ export function SalaryBanner() {
               </p>
             </div>
           </div>
+
+          {/* **البيانُ قبل الضغط لا بعده.** هذه اللحظةُ هي الوحيدة التي ما زال
+              القرارُ فيها ممكناً: بعدها كلُّ ما يفعله النظام ردُّ فعل. فيرى
+              المالكُ ما يخرج من راتبه وما يبقى له ومصروفَه اليومي **قبل** أن
+              يبدأ الدورة، لا بعد أن ينزل الرقم بلا تفسير. */}
+          <div className="mt-3">
+            <CycleOpening opening={opening} title="هذا ما يبدأ عند التأكيد" />
+          </div>
+
           <button
             onClick={handleConfirm}
             className="mt-3 w-full bg-white/95 hover:bg-white text-[#8a5a18] font-bold text-sm py-2.5 rounded-xl transition-colors press"
@@ -67,22 +100,24 @@ export function SalaryBanner() {
         </div>
       )}
 
-      <Modal open={celebration !== null} onClose={() => setCelebration(null)} title="دورة جديدة 🎉">
+      <Modal open={celebration !== null} onClose={() => { setCelebration(null); setOpenedWith(null); }} title="دورة جديدة 🎉">
         {celebration !== null && celebration > 0 && <Confetti />}
-        <div className="text-center space-y-3 py-2">
-          <p className="text-5xl">🌙✨</p>
+        <div className="space-y-3 py-2">
+          <p className="text-5xl text-center">🌙✨</p>
           {celebration && celebration > 0 ? (
-            <p className="text-sm text-gray-700 leading-relaxed">
+            <p className="text-sm text-gray-700 leading-relaxed text-center">
               أضفنا <b className="text-finance">{formatAmount(celebration)} ر.س</b> إلى صندوق {SURPLUS_FUND_NAME}،
               <br />وصفّرنا العدادات — بداية موفقة للدورة الجديدة!
             </p>
           ) : (
-            <p className="text-sm text-gray-700 leading-relaxed">
+            <p className="text-sm text-gray-700 leading-relaxed text-center">
               بدأنا دورة جديدة وصفّرنا العدادات.
               <br />لم يكن هناك فائض هذه الدورة — الدورة القادمة أفضل بإذن الله 💪
             </p>
           )}
-          <Button onClick={() => setCelebration(null)} className="w-full bg-finance hover:bg-finance/90">تم ✓</Button>
+          {/* البيانُ نفسُه الذي قُرئ قبل الضغط — لأنّه ما وقع بالضبط. */}
+          {openedWith && <CycleOpening opening={openedWith} title="دورتك الجديدة" />}
+          <Button onClick={() => { setCelebration(null); setOpenedWith(null); }} className="w-full bg-finance hover:bg-finance/90">تم ✓</Button>
         </div>
       </Modal>
     </>

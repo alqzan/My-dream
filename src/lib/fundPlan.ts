@@ -16,8 +16,8 @@
 // رُفعت عن السقوف.
 //
 // منطقٌ نقيّ بلا حالة ولا DOM، مختبَرٌ في `fundPlan.test.ts`.
-import type { FundFunding, ReserveFund } from "./types";
-import { round2 } from "./utils";
+import type { FundFunding, ReserveFund, Transaction } from "./types";
+import { reserveBalance, round2 } from "./utils";
 
 // عدد دورات السداد المقترَح لعجزٍ وقع، وحدُّه الأعلى. لماذا ثلاث؟ لأنّها تقسم
 // الصدمة إلى قطرةٍ محتمَلة وتبقى في الذاكرة؛ وما تجاوز الستّ يصير دَيناً منسيّاً
@@ -307,6 +307,74 @@ export function buildPlanOptions(input: {
   options.push(make("fromBudget", amt, 0));
 
   return options;
+}
+
+/* ===================== تنفيذُ خطط الدورة — مصدرٌ واحد ===================== */
+// **لماذا هنا لا في المتجر؟** كانت حلقةُ التمويل مكتوبةً داخل `confirmSalary`
+// وحدَها، فما من طريقةٍ لعرض «ماذا سيحدث حين أؤكّد؟» إلّا بكتابة الحلقة مرّةً
+// ثانية — ونسختان لحسابٍ واحد تفترقان عند أوّل تعديل، فيَعِد العرضُ بشيءٍ
+// ويفعل التنفيذُ غيرَه. فصارت هنا **نيّةً محسوبة**: `confirmSalary` ينفّذها،
+// وافتتاحيةُ الدورة تعرضها، وكلاهما يقرأ الرقم نفسه.
+//
+// والترتيبُ مقصود: يُنادى **بعد** ترحيل فائض الدورة إلى الفوائض، فالمموَّل من
+// «الفوائض» يجد ما رُحّل للتوّ متاحاً. و`surplusBalance` رصيدُها بعد الترحيل.
+
+export interface FundingMove {
+  fundId: string;
+  /** ما ينتقل فعلاً هذه الدورة (قد يكون صفراً: خطةٌ بلغت غايتها، أو فوائضُ نفدت). */
+  amount: number;
+  source: "salary" | "surplus";
+  /** بلغت الخطةُ غايتها بعد هذه النقلة → تُرفع فلا يبقى سحبٌ منسيّ. */
+  done: boolean;
+}
+
+export interface CycleFundingPlan {
+  moves: FundingMove[];
+  /** المجموع المقتطع من راتب الدورة — وهو وحده ما ينقص المصروف اليومي. */
+  fromSalary: number;
+  /** المموَّل من الفوائض (مالٌ قديم) — لا يمسّ المصروف اليومي. */
+  fromSurplus: number;
+  /** ما تبقّى في الفوائض بعد التمويل. */
+  surplusLeft: number;
+}
+
+export function planCycleFunding(input: {
+  reserves: ReserveFund[];
+  transactions: Transaction[];
+  /** معرّفُ صندوق الفوائض — يُستثنى من التمويل (لا يموّل نفسه). */
+  surplusId?: string;
+  /** رصيدُ الفوائض بعد ترحيل فائض الدورة إليها. */
+  surplusBalance: number;
+}): CycleFundingPlan {
+  let surplusLeft = Number.isFinite(input.surplusBalance) ? input.surplusBalance : 0;
+  let fromSalary = 0;
+  let fromSurplus = 0;
+  const moves: FundingMove[] = [];
+
+  for (const fund of input.reserves) {
+    if (!fund.funding || fund.id === input.surplusId) continue;
+    const balance = reserveBalance(fund, input.transactions);
+    let amount = cycleFundingAmount(fund, balance);
+    const source = fund.funding.source === "surplus" ? "surplus" : "salary";
+    if (source === "surplus") {
+      // الفوائضُ لا تُصرف أكثر ممّا فيها: خطةُ ٥٠٠ ورصيدٌ ٢٠٠ تنقل ٢٠٠.
+      amount = round2(Math.min(amount, Math.max(0, surplusLeft)));
+      if (amount > 0) {
+        surplusLeft = round2(surplusLeft - amount);
+        fromSurplus = round2(fromSurplus + amount);
+      }
+    } else if (amount > 0) {
+      fromSalary = round2(fromSalary + amount);
+    }
+    moves.push({
+      fundId: fund.id,
+      amount: amount > 0 ? amount : 0,
+      source,
+      done: fundingDone(fund.funding, fund, round2(balance + (amount > 0 ? amount : 0))),
+    });
+  }
+
+  return { moves, fromSalary, fromSurplus, surplusLeft };
 }
 
 /* ===================== التجهيزُ لشيءٍ قادم ===================== */

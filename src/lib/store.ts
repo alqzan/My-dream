@@ -19,7 +19,7 @@ import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
 import { offsetPlan, OFFSET_NOTE } from "./budgetFlow";
-import { cycleFundingAmount, fundingDone, fundingPerDay, effectiveDailyRate } from "./fundPlan";
+import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan";
 import { cycleLength } from "./budgetCycle";
 import { persistedIdbStorage } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
@@ -1055,11 +1055,19 @@ export const useAppStore = create<AppStore>()(
           // رُحّل للتوّ متاحاً. ولكلّ مظروفٍ خطةٌ تُنفَّذ مرّةً واحدة في الدورة،
           // وتُرفع من نفسها حين تبلغ غايتها (`fundingDone`) فلا يبقى تحويلٌ
           // منسيّ. المموَّل من الراتب يُجمع ليصير قطرةً يومية تنقص البدل.
+          // الحلقةُ نفسُها صارت في `planCycleFunding` (`fundPlan.ts`) فتقرأها
+          // افتتاحيةُ الدورة قبل التأكيد وتنفّذها هذه الدالّة بعده — رقمٌ واحد
+          // لا نسختان تفترقان. وهنا التنفيذُ وحده: تحويلُ النيّة إلى إيداعات.
           const surplusId = reserves.find((f) => f.name === SURPLUS_FUND_NAME)?.id;
-          let surplusLeft = surplusId
-            ? reserveBalance(reserves.find((f) => f.id === surplusId)!, s.transactions)
-            : 0;
-          let fromSalary = 0;
+          const plan = planCycleFunding({
+            reserves,
+            transactions: s.transactions,
+            surplusId,
+            surplusBalance: surplusId
+              ? reserveBalance(reserves.find((f) => f.id === surplusId)!, s.transactions)
+              : 0,
+          });
+          const fromSalary = plan.fromSalary;
           const deposits = new Map<string, ReserveDeposit[]>();
           const clearPlan = new Set<string>();
           const addDeposit = (fundId: string, amount: number, note: string) => {
@@ -1068,23 +1076,16 @@ export const useAppStore = create<AppStore>()(
             deposits.set(fundId, list);
           };
 
-          for (const fund of reserves) {
-            if (!fund.funding || fund.id === surplusId) continue;
-            const balance = reserveBalance(fund, s.transactions);
-            let amount = cycleFundingAmount(fund, balance);
-            if (fund.funding.source === "surplus") {
-              amount = round2(Math.min(amount, Math.max(0, surplusLeft)));
-              if (amount > 0) {
-                surplusLeft = round2(surplusLeft - amount);
-                addDeposit(surplusId!, -amount, `تمويل «${fund.name}»`);
+          for (const move of plan.moves) {
+            const fund = reserves.find((f) => f.id === move.fundId);
+            if (!fund) continue;
+            if (move.amount > 0) {
+              if (move.source === "surplus" && surplusId) {
+                addDeposit(surplusId, -move.amount, `تمويل «${fund.name}»`);
               }
-            } else if (amount > 0) {
-              fromSalary = round2(fromSalary + amount);
+              addDeposit(fund.id, move.amount, fund.funding?.stop === "zero" ? "سداد الدورة" : "تمويل الدورة");
             }
-            if (amount > 0) {
-              addDeposit(fund.id, amount, fund.funding.stop === "zero" ? "سداد الدورة" : "تمويل الدورة");
-            }
-            if (fundingDone(fund.funding, fund, round2(balance + amount))) clearPlan.add(fund.id);
+            if (move.done) clearPlan.add(fund.id);
           }
 
           if (deposits.size || clearPlan.size) {
