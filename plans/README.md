@@ -1,4 +1,7 @@
-# Implementation Plans
+# Implementation Plans — **أرشيف، لا قائمة عمل**
+
+> لا خطّةَ قابلةً للتنفيذ هنا. الخطّةُ الوحيدة (`001`) **مرفوضة**: عولجت
+> نتائجُها في تغييرٍ آخر. يُقرأ هذا المجلّد مرجعاً ولا يُنفَّذ منه شيء.
 
 Generated for the approved `/improve execute` review on 2026-08-26. Execute the
 plan in the order below. The plan is intentionally limited to Quran state

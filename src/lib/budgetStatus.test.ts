@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import { budgetStatuses, budgetStatusFor, budgetWarningFor, describeSpendWindow } from "./budgetStatus";
 import { budgetAlerts } from "./financeOverview";
 import { spendWindow } from "./budgetCycle";
+import { budgetLimit } from "./utils";
 import type { Transaction, FinanceCategoryDef, Budget } from "./types";
 
 const cats: FinanceCategoryDef[] = [
@@ -95,5 +96,31 @@ describe("المظاريف لا تستهلك السقوف", () => {
     expect(budgetWarningFor("basics", budgets, [big], cats, null, CYCLE)).toBeNull();
     expect(budgetAlerts(budgets, [{ ...big, reserveSplits: undefined }], cats, null, CYCLE))
       .toEqual({ over: 1, near: 0 });
+  });
+});
+
+// ===== سقفٌ بالنسبة من الدخل — الفرعُ الذي لم يُختبر قطّ =====
+// لـ`budgetLimit` فرعان: سقفٌ مطلق (`limit`) وسقفٌ **نسبةً من الدخل الشهري**
+// (`pct`). كلُّ ما كان يمرّ عليه من اختبارات يُمرّر `monthlyIncome = null`،
+// فالفرعُ الثاني — وهو حسابٌ على مال المالك يقود تنبيهات التجاوز — لم يُنفَّذ
+// في أيّ اختبار. (و`pct` في ملفّات الاختبار الأخرى نسبةُ **الحالة** لا `Budget.pct`.)
+describe("budgetLimit — فرعُ النسبة من الدخل", () => {
+  it("النسبةُ تُحسب من الدخل حين يكون معلوماً", () => {
+    expect(budgetLimit({ category: "c", pct: 20 }, 10000)).toBe(2000);
+    expect(budgetLimit({ category: "c", pct: 7.5 }, 8000)).toBe(600);
+  });
+
+  it("وبلا دخلٍ معلوم يسقط إلى السقف المطلق — لا إلى صفرٍ صامت", () => {
+    expect(budgetLimit({ category: "c", pct: 20, limit: 1500 }, null)).toBe(1500);
+    expect(budgetLimit({ category: "c", pct: 20, limit: 1500 }, 0)).toBe(1500);
+  });
+
+  it("والنسبةُ تغلب السقف المطلق حين يجتمعان ويكون الدخل معلوماً", () => {
+    expect(budgetLimit({ category: "c", pct: 10, limit: 1500 }, 10000)).toBe(1000);
+  });
+
+  it("وبلا نسبةٍ ولا سقفٍ: صفر (ولا NaN)", () => {
+    expect(budgetLimit({ category: "c" }, 10000)).toBe(0);
+    expect(budgetLimit({ category: "c", pct: 0, limit: 0 }, 10000)).toBe(0);
   });
 });

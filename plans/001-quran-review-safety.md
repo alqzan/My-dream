@@ -1,3 +1,10 @@
+> # ⛔ مرفوضة — لا تُنفَّذ
+>
+> نتائجُ هذه الخطّة عولجت في تغييرٍ أمنيّ مستقلّ قبل أن تُنفَّذ، فحالتُها في
+> `plans/README.md` هي `REJECTED`. أُبقيت مرجعاً يُقرأ لا قالباً يُنسَخ.
+> ومرجعُ الانحراف فيها (`c3ca4b0`) بعيدٌ الآن بمئاتِ التعديلات، فتعليماتُ
+> التنفيذ أدناه لا تنطبق على الشيفرة الحالية.
+
 # Plan 001: Prevent malformed Quran state and duplicate review folding
 
 > **Executor instructions**: Follow this plan step by step. Run every

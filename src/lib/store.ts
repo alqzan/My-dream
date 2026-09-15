@@ -334,6 +334,242 @@ interface AppStore extends AppData {
   setSectionPalette: (section: MadarSectionKey, palette: AccentPalette | null) => void;
 }
 
+/** سلسلةُ هجرة الحالة المحفوظة — **المسارُ الوحيد في التطبيق الذي يعمل مرّةً
+ *  واحدة لكلّ مستخدمٍ لكلّ ترقية، بلا إعادةٍ وبلا تراجع.** خطؤه لا يُرى: إن
+ *  رمى ابتلعه `persist` وأقلع المالكُ على تطبيقٍ فارغ، وإن رشّح بياناتٍ خطأً
+ *  اختفت المعاملاتُ من التخزين المحلّي ثمّ نشرت المزامنةُ الخسارة.
+ *
+ *  مُخرَجةٌ من إعداد `persist` لتُختبر مباشرةً (كانت دالّةً مجهولةً داخله فلا
+ *  سبيل إلى ندائها). **نقلٌ حرفيّ**: لا سطرَ منطقٍ تغيّر. حارسُها في
+ *  `store.migrate.test.ts`.
+ *
+ *  ملاحظةٌ للقارئ: الكتل **ليست مرتّبةً رقمياً** (v16 قبل v5) وهذا مقصودٌ في
+ *  الأصل — كلُّ كتلةٍ مستقلّةٌ بشرطها، والترتيبُ بينها هو ترتيبُ الكتابة لا
+ *  ترتيبُ الرقم. الاختبارُ يثبّت الناتج كما هو اليوم قبل أيّ مسٍّ به. */
+export function migratePersisted(persisted: unknown, version: number): AppData {
+      let state = (persisted ?? {}) as Record<string, unknown>;
+      const todayStr = today();
+
+      // v2 dropped income entirely (finance is expense/budget-only) and
+      // replaced the fixed شهري/أسبوعي/سنوي frequency with a flexible
+      // (unit, every) interval.
+      if (version < 2) {
+        const oldExpenseCategories = new Set([
+          "إيجار", "مواصلات", "طعام", "صحة", "تعليم", "كمالي", "سفر", "ادخار", "استثمار", "أخرى",
+        ]);
+        const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
+          .filter((t) => t.type !== "دخل" && oldExpenseCategories.has(t.category as string))
+          .map((t) => ({
+            id: t.id, date: t.date, amount: t.amount,
+            category: t.category, note: t.note, linkedJournalId: t.linkedJournalId,
+          }));
+        const budgets = ((state.budgets as Record<string, unknown>[]) ?? [])
+          .filter((b) => oldExpenseCategories.has(b.category as string));
+        state = { ...state, transactions, budgets, prayerLogs: state.prayerLogs ?? [] };
+      }
+
+      // v3 turns the fixed category union into user-managed categories
+      // (add/rename/delete freely, like habits) seeded with 5 defaults.
+      if (version < 3) {
+        const CATEGORY_REMAP: Record<string, string> = {
+          "إيجار": "cat-essentials", "مواصلات": "cat-essentials", "طعام": "cat-essentials",
+          "صحة": "cat-essentials", "تعليم": "cat-essentials", "أخرى": "cat-essentials",
+          "كمالي": "cat-luxuries", "سفر": "cat-luxuries",
+          "ادخار": "cat-investment", "استثمار": "cat-investment",
+        };
+        const remapCategory = (cat: unknown) => CATEGORY_REMAP[cat as string] ?? (cat as string) ?? "cat-essentials";
+
+        const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
+          .map((t) => ({ ...t, category: remapCategory(t.category) })) as Transaction[];
+
+        // Several old categories can collapse onto the same new one —
+        // sum their caps instead of silently dropping any.
+        const oldBudgets = (state.budgets as Record<string, unknown>[]) ?? [];
+        const summed: Record<string, number> = {};
+        for (const b of oldBudgets) {
+          const id = remapCategory(b.category);
+          summed[id] = (summed[id] ?? 0) + (b.limit as number);
+        }
+        const budgets: Budget[] = Object.entries(summed).map(([category, limit]) => ({ category, limit }));
+
+        state = {
+          ...state,
+          transactions,
+          budgets,
+          categories: state.categories ?? DEFAULT_CATEGORIES,
+          dailyBudget: state.dailyBudget ?? null,
+        };
+      }
+
+      // v4 adds reserve funds (الاحتياطي) and the "auto" theme mode.
+      // Everyone lands on auto once — the mode didn't exist before, so a
+      // stored "light" was the old default, not a choice.
+      if (version < 4) {
+        state = {
+          ...state,
+          reserves: state.reserves ?? [],
+          theme: "auto",
+        };
+      }
+
+      // v16 adds device-local accent palettes. The current warm palette is
+      // the safe default, while valid choices survive a future migration.
+      if (version < 16) {
+        const rawSections = state.sectionPalettes;
+        const sectionPalettes = rawSections && typeof rawSections === "object"
+          ? Object.fromEntries(
+              Object.entries(rawSections as Record<string, unknown>).filter(([key, value]) =>
+                MADAR_SECTION_KEYS.includes(key as MadarSectionKey) && isAccentPalette(value)
+              )
+            )
+          : {};
+        state = {
+          ...state,
+          themePalette: isAccentPalette(state.themePalette) ? state.themePalette : "madar",
+          sectionPalettes,
+        };
+      }
+
+      // v5 marks which main categories take sub-categories: أساسيات
+      // وكماليات فقط (the flag is what shows the sub-category UI).
+      if (version < 5) {
+        const subEnabled = new Set(["cat-essentials", "cat-luxuries"]);
+        state = {
+          ...state,
+          categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) =>
+            subEnabled.has(c.id) ? { ...c, allowSubs: true } : c
+          ),
+        };
+      }
+
+      // v7 adds رسائل المستقبل ودورة الراتب (يوم 27 + الفوائض).
+      // lastSalaryConfirm يبدأ من اليوم حتى لا يظهر سؤال «نزل الراتب؟»
+      // فور الترقية عن راتبٍ سبق نزوله — أول ظهور له في يوم الراتب القادم.
+      if (version < 7) {
+        state = {
+          ...state,
+          futureLetters: state.futureLetters ?? [],
+          salaryDay: state.salaryDay ?? 27,
+          lastSalaryConfirm: state.lastSalaryConfirm ?? todayStr,
+        };
+      }
+
+      // v6 retires the "صرف كبير" feature: the flag is stripped and those
+      // transactions count like any other expense from here on.
+      if (version < 6) {
+        const stripBig = (items: unknown) =>
+          ((items as Record<string, unknown>[]) ?? []).map(({ big: _big, ...rest }) => rest);
+        state = {
+          ...state,
+          transactions: stripBig(state.transactions),
+        };
+      }
+
+      // v8 retints the default categories to the app's warm palette. Only
+      // categories still on their old default color are updated, so any color
+      // the owner picked by hand is preserved.
+      if (version < 8) {
+        const RETINT: Record<string, [string, string]> = {
+          // id: [old default color, new color]
+          "cat-essentials": ["#e07b39", "#c1663f"],
+          "cat-luxuries": ["#9b6fcd", "#c9852a"],
+          "cat-investment": ["#256128", "#3d9640"],
+          "cat-others": ["#4a9fbd", "#8a6fb0"],
+        };
+        state = {
+          ...state,
+          categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) => {
+            const pair = RETINT[c.id];
+            return pair && c.color === pair[0] ? { ...c, color: pair[1] } : c;
+          }),
+        };
+      }
+
+      // v9 adds an optional annual reading goal (عدد الكتب المُنهاة هذا العام).
+      if (version < 9) {
+        state = { ...state, readingGoal: state.readingGoal ?? null };
+      }
+
+      // v10 adds the قرآن section: تأمّلات، محفوظات، وِرد يومي، وحالة الختمة.
+      if (version < 10) {
+        state = {
+          ...state,
+          quranReflections: state.quranReflections ?? [],
+          quranWird: state.quranWird ?? [],
+          quranKhatma: state.quranKhatma ?? { juz: 0, completed: 0 },
+        };
+      }
+
+      // v11 replaces the old memorization list (quranMemorized) with the
+      // sequential حفظ plan (quranHifz). The old experimental list is dropped.
+      if (version < 11) {
+        const st = state as Record<string, unknown>;
+        delete st.quranMemorized;
+        state = {
+          ...st,
+          quranHifz: st.quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [] },
+        };
+      }
+
+      // v12 يُثبّت هوية مذكرات Day One: كانت تأخذ uid عشوائياً كل استيراد، فنفس
+      // المذكرة على الجوال والآيباد صارت بمعرّفين مختلفين — يتكرّر عرضها،
+      // وحذفها على جهاز لا ينتشر للآخر. الآن معرّفها مشتقّ من UUID الثابت
+      // (`do-<uuid>`)، فتتلاقى النسخ في عنصرٍ واحد ويصبح الحذف قابلاً للانتشار.
+      // dedupeJournalEntries يعيد كتابة المعرّفات ويدمج المكرّرات (مع وسائطها).
+      if (version < 12) {
+        const je = (state.journalEntries as JournalEntry[]) ?? [];
+        state = { ...state, journalEntries: dedupeJournalEntries(je) };
+      }
+
+      // v13 يُثبّت «جيل خطة الحفظ» (planId) لبيانات quranHifz القديمة التي لا
+      // تحمله: معرّفٌ مشتقٌّ ثابت (legacyHifzGen) يُنتج القيمةَ نفسها على كلّ
+      // جهاز — فتتلاقى الخطة القديمة في جيلٍ واحد وتتّحد سجلّاتها بلا فقد، بينما
+      // أيّ بدءٍ/مسحٍ لاحق (planId عشوائي بطابعٍ حديث) يفوز عليها. الطوابع صفر
+      // كي يفوز عليها أيّ إجراءٍ حقيقيّ لاحق. راجع mergeHifz في merge.ts.
+      if (version < 13) {
+        const h = state.quranHifz as HifzState | undefined;
+        if (h && h.planId == null) {
+          state = {
+            ...state,
+            quranHifz: {
+              ...h,
+              mistakes: h.mistakes ?? [],
+              planId: legacyHifzGen(h),
+              planUpdatedAt: 0,
+              frontierUpdatedAt: 0,
+            },
+          };
+        }
+      }
+
+      // v17 يحذف أربعة أبوابٍ بقرار المالك: الأصول · الأقساط · الالتزامات
+      // المتكرّرة · الرفّ. كانت تصف التزاماً أو تعرض حساباً، ولم تكن تصرف —
+      // فحذفُها لا يغيّر ريالاً في السجل ولا في الميزانية اليومية ولا السقوف.
+      //
+      // ما يُحذف هنا **بياناتُ تلك الأبواب وحدها**، وتبقى كل معاملةٍ سُجّلت
+      // كما هي: قسطٌ دُفع يبقى مصروفاً في يومه، وإيجارٌ ولّدته قاعدةٌ متكرّرة
+      // يبقى مصروفاً عادياً. الاستثناء الوحيد: معاملة «الأصل المؤجّل»
+      // (`deferred`) — شراءٌ بالتقسيط سُجّل التزاماً ولم يخرج من الجيب، وكان
+      // يُحتسب **صفراً** في كلّ حساب. بلا الأقساط ما عاد لها معنى، وبقاؤها
+      // يعني ظهورَ مبلغٍ كامل (١٢٠٠ مثلاً) صرفاً لم يحدث — فتُحذف. حذفُها لا
+      // يغيّر أيّ مجموع، لأنها كانت صفراً في كلّ مجموع.
+      if (version < 17) {
+        const txs = ((state.transactions as Record<string, unknown>[]) ?? [])
+          .filter((t) => !t.deferred)
+          .map(({
+            planId: _planId, planRole: _planRole, planInstallmentNo: _no,
+            planLinkedAt: _at, deferred: _deferred, ...rest
+          }) => rest);
+        const {
+          recurring: _recurring, installmentPlans: _plans, assets: _assets,
+          shelfItems: _shelf, ...restState
+        } = state;
+        state = { ...restState, transactions: txs };
+      }
+
+      return state as unknown as AppData;
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     (rawSet, get) => {
@@ -1895,229 +2131,7 @@ export const useAppStore = create<AppStore>()(
       // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
       // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.
       storage: createJSONStorage(() => persistedIdbStorage),
-      migrate: (persisted: unknown, version: number) => {
-        let state = (persisted ?? {}) as Record<string, unknown>;
-        const todayStr = today();
-
-        // v2 dropped income entirely (finance is expense/budget-only) and
-        // replaced the fixed شهري/أسبوعي/سنوي frequency with a flexible
-        // (unit, every) interval.
-        if (version < 2) {
-          const oldExpenseCategories = new Set([
-            "إيجار", "مواصلات", "طعام", "صحة", "تعليم", "كمالي", "سفر", "ادخار", "استثمار", "أخرى",
-          ]);
-          const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
-            .filter((t) => t.type !== "دخل" && oldExpenseCategories.has(t.category as string))
-            .map((t) => ({
-              id: t.id, date: t.date, amount: t.amount,
-              category: t.category, note: t.note, linkedJournalId: t.linkedJournalId,
-            }));
-          const budgets = ((state.budgets as Record<string, unknown>[]) ?? [])
-            .filter((b) => oldExpenseCategories.has(b.category as string));
-          state = { ...state, transactions, budgets, prayerLogs: state.prayerLogs ?? [] };
-        }
-
-        // v3 turns the fixed category union into user-managed categories
-        // (add/rename/delete freely, like habits) seeded with 5 defaults.
-        if (version < 3) {
-          const CATEGORY_REMAP: Record<string, string> = {
-            "إيجار": "cat-essentials", "مواصلات": "cat-essentials", "طعام": "cat-essentials",
-            "صحة": "cat-essentials", "تعليم": "cat-essentials", "أخرى": "cat-essentials",
-            "كمالي": "cat-luxuries", "سفر": "cat-luxuries",
-            "ادخار": "cat-investment", "استثمار": "cat-investment",
-          };
-          const remapCategory = (cat: unknown) => CATEGORY_REMAP[cat as string] ?? (cat as string) ?? "cat-essentials";
-
-          const transactions = ((state.transactions as Record<string, unknown>[]) ?? [])
-            .map((t) => ({ ...t, category: remapCategory(t.category) })) as Transaction[];
-
-          // Several old categories can collapse onto the same new one —
-          // sum their caps instead of silently dropping any.
-          const oldBudgets = (state.budgets as Record<string, unknown>[]) ?? [];
-          const summed: Record<string, number> = {};
-          for (const b of oldBudgets) {
-            const id = remapCategory(b.category);
-            summed[id] = (summed[id] ?? 0) + (b.limit as number);
-          }
-          const budgets: Budget[] = Object.entries(summed).map(([category, limit]) => ({ category, limit }));
-
-          state = {
-            ...state,
-            transactions,
-            budgets,
-            categories: state.categories ?? DEFAULT_CATEGORIES,
-            dailyBudget: state.dailyBudget ?? null,
-          };
-        }
-
-        // v4 adds reserve funds (الاحتياطي) and the "auto" theme mode.
-        // Everyone lands on auto once — the mode didn't exist before, so a
-        // stored "light" was the old default, not a choice.
-        if (version < 4) {
-          state = {
-            ...state,
-            reserves: state.reserves ?? [],
-            theme: "auto",
-          };
-        }
-
-        // v16 adds device-local accent palettes. The current warm palette is
-        // the safe default, while valid choices survive a future migration.
-        if (version < 16) {
-          const rawSections = state.sectionPalettes;
-          const sectionPalettes = rawSections && typeof rawSections === "object"
-            ? Object.fromEntries(
-                Object.entries(rawSections as Record<string, unknown>).filter(([key, value]) =>
-                  MADAR_SECTION_KEYS.includes(key as MadarSectionKey) && isAccentPalette(value)
-                )
-              )
-            : {};
-          state = {
-            ...state,
-            themePalette: isAccentPalette(state.themePalette) ? state.themePalette : "madar",
-            sectionPalettes,
-          };
-        }
-
-        // v5 marks which main categories take sub-categories: أساسيات
-        // وكماليات فقط (the flag is what shows the sub-category UI).
-        if (version < 5) {
-          const subEnabled = new Set(["cat-essentials", "cat-luxuries"]);
-          state = {
-            ...state,
-            categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) =>
-              subEnabled.has(c.id) ? { ...c, allowSubs: true } : c
-            ),
-          };
-        }
-
-        // v7 adds رسائل المستقبل ودورة الراتب (يوم 27 + الفوائض).
-        // lastSalaryConfirm يبدأ من اليوم حتى لا يظهر سؤال «نزل الراتب؟»
-        // فور الترقية عن راتبٍ سبق نزوله — أول ظهور له في يوم الراتب القادم.
-        if (version < 7) {
-          state = {
-            ...state,
-            futureLetters: state.futureLetters ?? [],
-            salaryDay: state.salaryDay ?? 27,
-            lastSalaryConfirm: state.lastSalaryConfirm ?? todayStr,
-          };
-        }
-
-        // v6 retires the "صرف كبير" feature: the flag is stripped and those
-        // transactions count like any other expense from here on.
-        if (version < 6) {
-          const stripBig = (items: unknown) =>
-            ((items as Record<string, unknown>[]) ?? []).map(({ big: _big, ...rest }) => rest);
-          state = {
-            ...state,
-            transactions: stripBig(state.transactions),
-          };
-        }
-
-        // v8 retints the default categories to the app's warm palette. Only
-        // categories still on their old default color are updated, so any color
-        // the owner picked by hand is preserved.
-        if (version < 8) {
-          const RETINT: Record<string, [string, string]> = {
-            // id: [old default color, new color]
-            "cat-essentials": ["#e07b39", "#c1663f"],
-            "cat-luxuries": ["#9b6fcd", "#c9852a"],
-            "cat-investment": ["#256128", "#3d9640"],
-            "cat-others": ["#4a9fbd", "#8a6fb0"],
-          };
-          state = {
-            ...state,
-            categories: ((state.categories as FinanceCategoryDef[]) ?? DEFAULT_CATEGORIES).map((c) => {
-              const pair = RETINT[c.id];
-              return pair && c.color === pair[0] ? { ...c, color: pair[1] } : c;
-            }),
-          };
-        }
-
-        // v9 adds an optional annual reading goal (عدد الكتب المُنهاة هذا العام).
-        if (version < 9) {
-          state = { ...state, readingGoal: state.readingGoal ?? null };
-        }
-
-        // v10 adds the قرآن section: تأمّلات، محفوظات، وِرد يومي، وحالة الختمة.
-        if (version < 10) {
-          state = {
-            ...state,
-            quranReflections: state.quranReflections ?? [],
-            quranWird: state.quranWird ?? [],
-            quranKhatma: state.quranKhatma ?? { juz: 0, completed: 0 },
-          };
-        }
-
-        // v11 replaces the old memorization list (quranMemorized) with the
-        // sequential حفظ plan (quranHifz). The old experimental list is dropped.
-        if (version < 11) {
-          const st = state as Record<string, unknown>;
-          delete st.quranMemorized;
-          state = {
-            ...st,
-            quranHifz: st.quranHifz ?? { plan: null, frontierId: 0, sessions: [], reviews: [] },
-          };
-        }
-
-        // v12 يُثبّت هوية مذكرات Day One: كانت تأخذ uid عشوائياً كل استيراد، فنفس
-        // المذكرة على الجوال والآيباد صارت بمعرّفين مختلفين — يتكرّر عرضها،
-        // وحذفها على جهاز لا ينتشر للآخر. الآن معرّفها مشتقّ من UUID الثابت
-        // (`do-<uuid>`)، فتتلاقى النسخ في عنصرٍ واحد ويصبح الحذف قابلاً للانتشار.
-        // dedupeJournalEntries يعيد كتابة المعرّفات ويدمج المكرّرات (مع وسائطها).
-        if (version < 12) {
-          const je = (state.journalEntries as JournalEntry[]) ?? [];
-          state = { ...state, journalEntries: dedupeJournalEntries(je) };
-        }
-
-        // v13 يُثبّت «جيل خطة الحفظ» (planId) لبيانات quranHifz القديمة التي لا
-        // تحمله: معرّفٌ مشتقٌّ ثابت (legacyHifzGen) يُنتج القيمةَ نفسها على كلّ
-        // جهاز — فتتلاقى الخطة القديمة في جيلٍ واحد وتتّحد سجلّاتها بلا فقد، بينما
-        // أيّ بدءٍ/مسحٍ لاحق (planId عشوائي بطابعٍ حديث) يفوز عليها. الطوابع صفر
-        // كي يفوز عليها أيّ إجراءٍ حقيقيّ لاحق. راجع mergeHifz في merge.ts.
-        if (version < 13) {
-          const h = state.quranHifz as HifzState | undefined;
-          if (h && h.planId == null) {
-            state = {
-              ...state,
-              quranHifz: {
-                ...h,
-                mistakes: h.mistakes ?? [],
-                planId: legacyHifzGen(h),
-                planUpdatedAt: 0,
-                frontierUpdatedAt: 0,
-              },
-            };
-          }
-        }
-
-        // v17 يحذف أربعة أبوابٍ بقرار المالك: الأصول · الأقساط · الالتزامات
-        // المتكرّرة · الرفّ. كانت تصف التزاماً أو تعرض حساباً، ولم تكن تصرف —
-        // فحذفُها لا يغيّر ريالاً في السجل ولا في الميزانية اليومية ولا السقوف.
-        //
-        // ما يُحذف هنا **بياناتُ تلك الأبواب وحدها**، وتبقى كل معاملةٍ سُجّلت
-        // كما هي: قسطٌ دُفع يبقى مصروفاً في يومه، وإيجارٌ ولّدته قاعدةٌ متكرّرة
-        // يبقى مصروفاً عادياً. الاستثناء الوحيد: معاملة «الأصل المؤجّل»
-        // (`deferred`) — شراءٌ بالتقسيط سُجّل التزاماً ولم يخرج من الجيب، وكان
-        // يُحتسب **صفراً** في كلّ حساب. بلا الأقساط ما عاد لها معنى، وبقاؤها
-        // يعني ظهورَ مبلغٍ كامل (١٢٠٠ مثلاً) صرفاً لم يحدث — فتُحذف. حذفُها لا
-        // يغيّر أيّ مجموع، لأنها كانت صفراً في كلّ مجموع.
-        if (version < 17) {
-          const txs = ((state.transactions as Record<string, unknown>[]) ?? [])
-            .filter((t) => !t.deferred)
-            .map(({
-              planId: _planId, planRole: _planRole, planInstallmentNo: _no,
-              planLinkedAt: _at, deferred: _deferred, ...rest
-            }) => rest);
-          const {
-            recurring: _recurring, installmentPlans: _plans, assets: _assets,
-            shelfItems: _shelf, ...restState
-          } = state;
-          state = { ...restState, transactions: txs };
-        }
-
-        return state as unknown as AppData;
-      },
+      migrate: migratePersisted,
     }
   )
 );

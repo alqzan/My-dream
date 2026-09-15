@@ -3,7 +3,13 @@
 > **وثيقة حيّة.** هذه ليست خطة تُكتب مرّة وتُنسى: كل تعديلٍ لاحق على المستودع قد
 > يضيف أو يشطب بنداً هنا. اقرأ **«قاعدة الصيانة»** في آخر الملف قبل أن تُغلقه.
 
-آخر مواءمة مع الكود: `APP_BUILD = 396` (المصدر الوحيد: `src/lib/version.ts`).
+آخر مواءمة مع الكود: `APP_BUILD = 424` (المصدر الوحيد: `src/lib/version.ts`).
+
+> **وتُذكر المواضع بأسمائها لا بأرقام أسطرها (٠٫١٫٤٢٤).** كانت الوثيقة تُحيل
+> بالسطر، فتعفّنت كلُّ إحالةٍ فيها خلال ٢٨ تعديلاً: `BackupCard.tsx:239-244`
+> صارت شيفرةً أخرى تماماً، و`utils.ts:317` صارت حسابَ مواقيت. الأسوأ أنّ ذلك
+> يقع **بصمت**: من يقرأ الوثيقة يفتح السطر المذكور فيجد شيئاً معقولاً ويصدّقه.
+> الاسمُ يُلاحَق بـ`grep`، والرقمُ يكذب.
 
 ---
 
@@ -50,36 +56,47 @@
 
 ### ⬜ 3.1 التصدير والاستيراد — **ينكسر صامتاً** (أولوية قصوى)
 
-- `src/components/settings/BackupCard.tsx:239-244` — `URL.createObjectURL` +
-  `a.download` + `a.click()`. **في WKWebView لا يفعل شيئاً: لا تنزيل ولا خطأ.**
+**أربعةُ مواضع** تكتب `URL.createObjectURL` + `a.download` + `a.click()`، وكلُّها
+**في WKWebView لا تفعل شيئاً: لا تنزيل ولا خطأ**. الوثيقة كانت تذكر أوّلها فقط:
+
+- `saveBackup()` في `src/components/settings/BackupCard.tsx` — النسخة الكاملة.
+- **`downloadPlainBackup()` في `src/lib/backupFile.ts`** — نسخةُ أمانٍ سريعة قبل
+  إجراءٍ مُتلِف (مسحِ خطة الحفظ مثلاً). **أخطرُها**: المالك يظنّ أنّه أخذ نسخةً
+  قبل الإتلاف، ولم يأخذ شيئاً. وهي أيضاً **خارج الحاجز**: تلمس `document` و
+  `localStorage` من داخل `src/lib/` (راجع ٣٫١٣).
+- `src/components/settings/AiExportCard.tsx` — تصديرُ ملخّصٍ نصّي.
+- `src/components/quran/HifzChart.tsx` — حفظُ الرسم صورةً.
 - الحلّ: واجهة `saveFile(name, blob)` / `pickFile()` — تنفيذها في الويب هو الكود
   الحالي، وفي الأصليّ `@capacitor/filesystem` + `@capacitor/share` (ورقة المشاركة
-  الأصلية، وهي تجربة أفضل من التنزيل أصلاً).
-- الاستيراد عبر `<input type="file">` (`BackupCard.tsx:343`) يعمل، لكن يُفضَّل
-  منتقي ملفاتٍ أصليّ.
+  الأصلية، وهي تجربة أفضل من التنزيل أصلاً). **الأربعةُ تُوجَّه إليها معاً**؛
+  إصلاحُ `BackupCard` وحدها يترك ثلاثةَ مساراتٍ صامتة.
+- الاستيراد عبر `<input type="file">` (`fileRef` في `BackupCard.tsx`) يعمل، لكن
+  يُفضَّل منتقي ملفاتٍ أصليّ.
 
 ### ⬜ 3.2 `localStorage` → `@capacitor/preferences`
 
-66 استخداماً في 24 ملفاً (+2 مفتاحان جديدان أدناه). يعمل في WKWebView لكن
+**73 استخداماً في 25 ملفاً** (أُعيد العدّ في ٠٫١٫٤٢٤). يعمل في WKWebView لكن
 **النظام يمسحه تحت ضغط التخزين**.
 
 الأولوية بالخطورة لا بالعدد:
 
 | الملف | ما يضيع لو مُسح |
 |---|---|
-| **`src/lib/firebase.ts:29`** (`madar-sync-space`) | **المزامنة تتوقّف بصمت. الأخطر.** |
+| **`getStoredSyncSpace()` في `src/lib/firebase.ts`** (`madar-sync-space`) | **المزامنة تتوقّف بصمت. الأخطر.** |
 | `src/lib/firebase.ts` (`madar-sync-media-key`، `madar-sync-key-version`) | فصل مفتاح البيانات/الوسائط (`docs/KEY-SEPARATION.md`) — غيابهما يرجع الجهاز لسلوك v1 تلقائياً (آمن)، لا انهيار |
 | `src/lib/lock.ts` (`madar-lock-pin`) | القفل يسقط ← الخصوصية |
 | `src/lib/quran/session.ts` · `readPrefs.ts` | موضع القراءة والتفضيلات |
 | `src/components/journal/JournalForm.tsx` (`madar-journal-draft`) | مسودةُ مذكرةٍ لم تُحفظ بعد — نصٌّ كتبه المالك ولا نسخة له في المتجر |
-| البقية (تفضيلات عرضٍ في المكوّنات) | مزعج لا كارثيّ |
+| `src/lib/backupFile.ts` (`madar-last-backup`) | تاريخُ آخر نسخة — يُظهر تذكيرَ نسخٍ لا داعي له |
+| `src/lib/theme.ts` (`madar-theme-preferences`) · `navPrefs.ts` (`madar-nav-prefs`) · `financePreferences.ts` (`madar-finance-display`/`madar-finance-sections`) | تفضيلاتُ عرضٍ لكلّ جهاز |
+| البقية (`madar-geo` · `madar-unlocked` · `madar-oldbuild` · `madar-auto-recover` · `madar-celebrated-*` · `madar-reading-start` · `madar-ai-export`) | مزعج لا كارثيّ |
 
 الحلّ: غلافٌ واحد `prefs.get/set/remove` (متزامن الواجهة، غير متزامن التنفيذ)
 يُستبدل تنفيذه مرّة واحدة.
 
 ### ⬜ 3.3 الاهتزاز — **ميت كلياً على iOS**
 
-- `src/lib/utils.ts:317` — `navigator.vibrate` **غير مدعوم في WKWebView إطلاقاً**.
+- `buzz()` في `src/lib/utils.ts` — `navigator.vibrate` **غير مدعوم في WKWebView إطلاقاً**.
 - الحلّ: `@capacitor/haptics`. مكسبٌ مزدوج: نقرة أصلية حقيقية عند تسجيل صلاة أو
   معاملة تُحسّن الإحساس كثيراً، وتُقوّي ملف «ليس موقعاً ملفوفاً» أمام المراجعة.
 
@@ -130,7 +147,7 @@ JPEG مباشرةً من النظام، فيسقط `heic2any` من مسار iOS 
 
 ### ⬜ 3.9 الموقع
 
-`src/components/layout/ThemeToggle.tsx:45` — `navigator.geolocation` لحساب المغرب.
+`src/components/layout/ThemeToggle.tsx` (داخل مُعالج طلب الموقع) — `navigator.geolocation` لحساب المغرب.
 `@capacitor/geolocation` + إذن (القسم 4).
 
 ### ⬜ 3.10 `PrivacyLock` → Face ID / Touch ID
@@ -162,6 +179,32 @@ JPEG مباشرةً من النظام، فيسقط `heic2any` من مسار iOS 
 
 ---
 
+### ⬜ 3.13 حاجزُ النقاء في `src/lib/` — **مُخترَقٌ في تسعة ملفّات**
+
+القاعدة في `CLAUDE.md`: الحسابُ النقيّ في `src/lib/*.ts` بلا `window` ولا DOM،
+وكلُّ ما هو منصّة خلف واجهةٍ قابلة للاستبدال. والقياسُ الفعليّ (٠٫١٫٤٢٤) يقول
+إنّ الحاجز مُخترَق — وهذا **يغيّر تقديرَ ٣٫٢ جوهرياً**: ليس «غلافُ `prefs` واحد»
+بل لمسُ تسعةِ وحدات، منها `utils.ts` (أعلى ملفٍّ فانْ-إنْ في المشروع)
+و`firebase.ts` (مسارُ المزامنة).
+
+| الملفّ | ما يلمسه | ملاحظة |
+|---|---|---|
+| `src/lib/lock.ts` | `localStorage` · `sessionStorage` | **بلا حارس `typeof window` أصلاً** — يعتمد على `try/catch` وحده. وهو يحمل بصمة رمز القفل |
+| `src/lib/backupFile.ts` | `document.createElement` · `localStorage` | تنزيلُ ملفّ من داخل `lib` (راجع ٣٫١) |
+| `src/lib/utils.ts` | `localStorage` (`madar-geo`) · `navigator.vibrate` | أعلى فانْ-إنْ |
+| `src/lib/firebase.ts` | `localStorage` ×٣ | مفتاحُ المساحة ونسخةُ المفتاح ومفتاحُ الوسائط |
+| `theme.ts` · `navPrefs.ts` · `financePreferences.ts` · `quran/session.ts` · `quran/readPrefs.ts` | `window.localStorage` | كلُّها محروسةٌ بـ`typeof window` |
+
+وفي المقابل، الموضوعُ خلف الحاجز صحيحاً: `idbStorage.ts` · `imageUtils.ts` ·
+`platform/fullscreen.ts`. و`src/lib/platform/` فيه **ملفٌّ واحد** — البنيةُ
+موجودةٌ ولم يُنقل إليها شيء.
+
+**الترتيب المقترح حين يبدأ النقل** (لا الآن — كلٌّ منها يمسّ مساراً حيّاً):
+`platform/prefs.ts` أوّلاً بمفاتيحَ مسمّاة، ثمّ الخمسةُ الهيّنة (تفضيلاتٌ
+وقرآن)، ثمّ `utils.ts`، وأخيراً `firebase.ts` و`lock.ts` باختباراتِ توصيفٍ لكلّ
+مفتاح قبل نقله — خطأٌ في دلالة «فارغ مقابل غير موجود» هناك يعطّل المزامنة أو
+يمنع فكّ القفل.
+
 ## 4. الأذونات — `Info.plist`
 
 **غيابها يعني انهيار التطبيق (crash) لا فشلاً لطيفاً.**
@@ -169,7 +212,7 @@ JPEG مباشرةً من النظام، فيسقط `heic2any` من مسار iOS 
 | المفتاح | السبب في الكود |
 |---|---|
 | `NSMicrophoneUsageDescription` | `AudioRecorder.tsx:95` |
-| `NSLocationWhenInUseUsageDescription` | `ThemeToggle.tsx:45` |
+| `NSLocationWhenInUseUsageDescription` | `ThemeToggle.tsx` |
 | `NSPhotoLibraryUsageDescription` | رفع صور المذكرة |
 | `NSCameraUsageDescription` | التقاط صورة مباشرة |
 | `NSFaceIDUsageDescription` | بند 3.10 |

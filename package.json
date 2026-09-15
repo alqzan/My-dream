@@ -1,6 +1,6 @@
 {
   "name": "my-dream-app",
-  "version": "0.1.423",
+  "version": "0.1.424",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,13 +12,14 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "doctor:ai": "node scripts/ai-doctor.mjs",
     "css:dead": "node scripts/dead-css.mjs",
-    "bump": "node scripts/bump-version.mjs"
+    "bump": "node scripts/bump-version.mjs",
+    "verify": "npm test && npm run lint && npm run typecheck && npm run build && npm --prefix cloudflare-worker run typecheck"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "fflate": "^0.8.3",
     "firebase": "^12.15.0",
-    "heic2any": "^0.0.4",
+    "heic2any": "0.0.4",
     "idb-keyval": "^6.2.6",
     "lucide-react": "^0.468.0",
     "next": "^15.5.20",

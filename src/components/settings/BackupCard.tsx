@@ -141,6 +141,13 @@ export interface BackupCounts {
 
 // Order-stable FNV-1a over a string — enough to catch a truncated/corrupted
 // file, not a security hash. Used for the backup integrity check.
+//
+// **وحدُّه مكتوبٌ في الواجهة أيضاً (٠٫١٫٤٢٤)**: بصمةٌ ٣٢-بت **غير مفتاحية**
+// محفوظةٌ **داخل الملفّ الذي تحرسه** تكشف التلفَ والنقصَ ولا تكشف العبث — من
+// حرّر نسخةً نصّية يُعيد حسابها في سطر. وكانت الواجهة تقول «قد يكون الملف
+// عُدّل»، فيقرأ المالكُ «سليم» على أنّها شهادةُ عدم تلاعب. صار النصّ يقول
+// «تالفٌ أو ناقص» فقط. ومن أراد دليلاً على عدم العبث فالتصديرُ المشفَّر
+// (`backupCrypto.ts`) مُوثَّقٌ بـAES-GCM وهو الذي يعطيه.
 function hashString(s: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
@@ -412,7 +419,7 @@ export function BackupCard() {
     if (
       mode === "replace" &&
       pendingMeta?.integrity === "mismatch" &&
-      !window.confirm("فحص السلامة لا يطابق — قد يكون الملف تالفاً أو معدّلاً. متأكد أنك تريد استبدال كل بياناتك الحالية به؟")
+      !window.confirm("فحص السلامة لا يطابق — الملف تالفٌ أو ناقص. متأكد أنك تريد استبدال كل بياناتك الحالية به؟")
     ) {
       return;
     }
@@ -564,11 +571,11 @@ export function BackupCard() {
               )}
               {pendingMeta.integrity === "mismatch" && (
                 <p className="text-[11px] text-amber-600 mt-2 leading-relaxed">
-                  ⚠️ فحص السلامة لا يطابق — قد يكون الملف عُدّل أو نقص جزء منه. راجِع المحتوى قبل الاستبدال.
+                  ⚠️ فحص السلامة لا يطابق — الملف تالفٌ أو نقص جزء منه. راجِع المحتوى قبل الاستبدال.
                 </p>
               )}
               {pendingMeta.integrity === "ok" && (
-                <p className="text-[11px] text-finance mt-2">✓ فحص السلامة سليم</p>
+                <p className="text-[11px] text-finance mt-2">✓ فحص السلامة سليم (يكشف التلف لا العبث)</p>
               )}
             </div>
           )}

@@ -13,6 +13,14 @@ import { useAppStore } from "./store";
 import { budgetTombKey, mergeAppData } from "./merge";
 import { isValidBackupPayload } from "./backupValidation";
 import type { AppData } from "./types";
+import { persistedIdbStorage } from "./idbStorage";
+
+/** التخزينُ مؤجَّلٌ عمداً (`persistScheduler.ts`)، فالكتابةُ لا تنزل فوراً.
+ *  نُفرغ ما هو معلّق بدل انتظار المؤقّت. */
+const flushPersist = async () => {
+  await persistedIdbStorage.flush();
+  await new Promise((r) => setTimeout(r, 0));
+};
 
 // لقطةٌ فيها **كلّ** حقلٍ من AppData بقيمةٍ غير افتراضية. أيّ حقلٍ يُضاف لاحقاً
 // ويُنسى في `hydrate` يسقط هنا فوراً: هذا ما فات في الأصول (كانت في snapshot
@@ -118,6 +126,26 @@ describe("snapshot ⇄ hydrate — كلّ حقلٍ في AppData يعبر الد�
     );
     expect(rejected, `حقولٌ يرفضها الفاحص: ${rejected.join("، ")}`).toEqual([]);
     expect(isValidBackupPayload(exported)).toBe(true);
+  });
+
+  // **الدورةُ الثالثة**: الحارسان فوق يغطّيان `hydrate ⇄ snapshot` وفاحصَ
+  // النسخ. ويبقى مسارٌ ثالث لا يمرّ بأيٍّ منهما — **ما يُكتب إلى القرص**.
+  // فـ`persist` يُسلسل **كائن المتجر كلَّه** (لا `snapshot()`)، وبلا
+  // `partialize` تكون الكتلةُ المحفوظة شكلاً **مختلفاً** عن اللقطة، والاثنان
+  // يُصانان مستقلَّين. فحقلٌ يُضاف إلى الحالة ويُنسى في `snapshot()` ينجو
+  // محلياً على هذا الجهاز ولا يصل السحابةَ ولا ملفَّ النسخة أبداً — وهو صنفُ
+  // العطل الذي كُتب هذا الملفُّ كلُّه لمنعه، وكان يتسرّب من هذه الجهة.
+  it("الكتلةُ المكتوبة إلى القرص تحمل كلَّ حقلٍ في AppData", async () => {
+    useAppStore.getState().hydrate(FULL);
+    await useAppStore.persist.rehydrate();   // يضمن تهيئة الوسيط
+    useAppStore.getState().setSalaryDay(FULL.salaryDay); // كتابةٌ تُطلق الحفظ
+    await flushPersist();
+
+    const raw = idb.get("my-dream-store");
+    expect(raw, "لم تُكتب كتلةٌ إلى التخزين").toBeTruthy();
+    const parsed = JSON.parse(raw as string) as { state: Record<string, unknown> };
+    const missing = (Object.keys(FULL) as (keyof AppData)[]).filter((k) => !(k in parsed.state));
+    expect(missing, `حقولٌ لا تصل القرص: ${missing.join("، ")}`).toEqual([]);
   });
 });
 
