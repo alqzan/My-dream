@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { today } from "@/lib/utils";
 import { fetchInlineMedia, getLocalInlineMedia, mergeAppData } from "@/lib/sync";
 import { replaceTombstones } from "@/lib/merge";
+import { saveFile } from "@/lib/platform/files";
 import { getMediaAuthKey, getSyncSpace } from "@/lib/firebase";
 import { DEFAULT_CATEGORIES } from "@/lib/types";
 import type { AppData, JournalEntry } from "@/lib/types";
@@ -337,13 +338,10 @@ export function BackupCard() {
       return;
     }
     setExporting(null);
-    const blob = new Blob([payload], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `madar-backup-${today()}${useEnc ? "-مشفّر" : ""}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveFile(
+      `madar-backup-${today()}${useEnc ? "-مشفّر" : ""}.json`,
+      new Blob([payload], { type: "application/json" })
+    );
     const missingAttachments = counts.attachments - counts.attachmentFiles;
     if (missingAttachments > 0) {
       showToast(

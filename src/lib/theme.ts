@@ -1,3 +1,4 @@
+import { prefGetJSON, prefSetJSON } from "./platform/prefs";
 export const MADAR_SECTION_KEYS = [
   "home",
   "quran",
@@ -159,7 +160,7 @@ export function isThemeMode(value: unknown): value is ThemeMode {
 export function readThemePreferences(): ThemePreferences {
   if (typeof window === "undefined") return {};
   try {
-    const raw = JSON.parse(window.localStorage.getItem(THEME_PREFS_STORAGE_KEY) || "null") as Record<string, unknown> | null;
+    const raw = prefGetJSON<Record<string, unknown>>(THEME_PREFS_STORAGE_KEY);
     if (!raw || typeof raw !== "object") return {};
     const rawSections = raw.sectionPalettes;
     const sectionPalettes = rawSections && typeof rawSections === "object"
@@ -182,7 +183,7 @@ export function readThemePreferences(): ThemePreferences {
 export function saveThemePreferences(preferences: ThemePreferences): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(THEME_PREFS_STORAGE_KEY, JSON.stringify(preferences));
+    prefSetJSON(THEME_PREFS_STORAGE_KEY, preferences);
   } catch {
     // A private browsing context can deny local storage; the in-memory choice
     // still works for the current session.

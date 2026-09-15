@@ -15,6 +15,7 @@ import {
 } from "@/lib/aiExport";
 import { today } from "@/lib/utils";
 import type { AppData } from "@/lib/types";
+import { saveTextFile } from "@/lib/platform/files";
 
 const SECTION_LABELS: Record<AiExportSection, string> = {
   journal: "المذكرات",
@@ -31,13 +32,7 @@ const SECTION_HINTS: Record<AiExportSection, string> = {
 };
 
 function downloadText(text: string, filename: string, type: string) {
-  const blob = new Blob([text], { type: type + ";charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  saveTextFile(filename, text, type);
 }
 
 export function AiExportCard() {

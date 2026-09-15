@@ -1,3 +1,4 @@
+import { prefGetJSON, prefSetJSON } from "./platform/prefs";
 export const FINANCE_DISPLAY_IDS = [
   "curve",
   "cycle",
@@ -28,7 +29,7 @@ function isFinanceDisplayId(value: string): value is FinanceDisplayId {
 export function readFinanceDisplayVisibility(): FinanceDisplayVisibility {
   if (typeof window === "undefined") return {};
   try {
-    const raw = JSON.parse(window.localStorage.getItem(FINANCE_DISPLAY_STORAGE_KEY) || "null") as Record<string, unknown> | null;
+    const raw = prefGetJSON<Record<string, unknown>>(FINANCE_DISPLAY_STORAGE_KEY);
     if (!raw || typeof raw !== "object") return {};
     return Object.fromEntries(
       Object.entries(raw).filter(([key, value]) => isFinanceDisplayId(key) && typeof value === "boolean")
@@ -41,7 +42,7 @@ export function readFinanceDisplayVisibility(): FinanceDisplayVisibility {
 export function saveFinanceDisplayVisibility(visibility: FinanceDisplayVisibility): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(FINANCE_DISPLAY_STORAGE_KEY, JSON.stringify(visibility));
+    prefSetJSON(FINANCE_DISPLAY_STORAGE_KEY, visibility);
   } catch {
     // تفضيل جهازي فقط؛ تبقى الجلسة الحالية عاملة حتى إن منع المتصفح التخزين.
   }

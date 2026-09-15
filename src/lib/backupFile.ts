@@ -5,6 +5,11 @@
 // (كافٍ للحفظ الذي لا وسائط له؛ للنسخة الكاملة استعمل بطاقة الإعدادات).
 import type { AppData } from "./types";
 import { today } from "./utils";
+import { saveFile } from "./platform/files";
+import { prefSet } from "./platform/prefs";
+
+/** تاريخُ آخر نسخةٍ سريعة — يقرؤه تذكيرُ النسخ. */
+export const LAST_BACKUP_KEY = "madar-last-backup";
 
 // FNV-1a — نفس خوارزمية checksum في BackupCard حتى يتطابق التحقّق عند الاستيراد.
 export function hashBackup(s: string): string {
@@ -17,7 +22,6 @@ export function hashBackup(s: string): string {
 }
 
 export function downloadPlainBackup(data: AppData, tag = ""): void {
-  if (typeof window === "undefined") return;
   const meta = {
     app: "madar",
     createdAt: new Date().toISOString(),
@@ -25,11 +29,8 @@ export function downloadPlainBackup(data: AppData, tag = ""): void {
   };
   const withMeta = { __meta: meta, ...data };
   const blob = new Blob([JSON.stringify(withMeta)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `madar-backup-${today()}${tag ? `-${tag}` : ""}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  try { window.localStorage.setItem("madar-last-backup", today()); } catch { /* غير حرج */ }
+  const saved = saveFile(`madar-backup-${today()}${tag ? `-${tag}` : ""}.json`, blob);
+  // لا يُسجَّل «آخر نسخة» إلّا إن حُفظت فعلاً — وإلّا أسكتنا تذكيرَ النسخ عن
+  // نسخةٍ لم تقع.
+  if (saved) prefSet(LAST_BACKUP_KEY, today());
 }

@@ -20,6 +20,11 @@
 // لا مسارَ استرجاع: التطبيق بلا حسابٍ ولا خادم، فرمزٌ منسيٌّ لا يُمحى إلّا
 // بمسح بيانات الموقع. وهذا ثمنُ قفلٍ لا يجيب أحداً غير صاحب الجهاز.
 
+// **وأوّلُ حارسٍ لهذا الملفّ (٠٫١٫٤٢٨).** كان الوحيد في `src/lib` الذي يلمس
+// `localStorage`/`sessionStorage` **بلا `typeof window`** — يتّكل على `try/catch`
+// وحده لابتلاع `ReferenceError`. صار خلف واجهة المنصّة كبقيّة التفضيلات.
+import { prefGet, prefGetJSON, prefRemove, prefSetJSON, sessionGet, sessionSet } from "./platform/prefs";
+
 const PIN_KEY = "madar-lock-pin";
 const UNLOCK_KEY = "madar-unlocked";
 const THROTTLE_KEY = "madar-lock-attempts";
@@ -72,11 +77,7 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 function readRaw(): string | null {
-  try {
-    return localStorage.getItem(PIN_KEY);
-  } catch {
-    return null;
-  }
+  return prefGet(PIN_KEY);
 }
 
 function parseStored(raw: string | null): StoredPin | { v: 1; hash: string } | null {
@@ -97,11 +98,7 @@ export function hasPin(): boolean {
 async function writePin(pin: string): Promise<void> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const stored: StoredPin = { v: 2, salt: toHex(salt.buffer as ArrayBuffer), hash: await derive(pin, salt) };
-  try {
-    localStorage.setItem(PIN_KEY, JSON.stringify(stored));
-  } catch {
-    /* storage unavailable — ignore */
-  }
+  prefSetJSON(PIN_KEY, stored);
 }
 
 /** مِفتاحُ الطوارئ: يمحو القفلَ والتأخيرَ معاً من وحدة تحكّم المتصفّح، لمن
@@ -118,11 +115,7 @@ export async function setPin(pin: string): Promise<void> {
 }
 
 export function clearPin(): void {
-  try {
-    localStorage.removeItem(PIN_KEY);
-  } catch {
-    /* ignore */
-  }
+  prefRemove(PIN_KEY);
   clearThrottle();
 }
 
@@ -133,29 +126,17 @@ export function clearPin(): void {
 interface Throttle { fails: number; until: number }
 
 function readThrottle(): Throttle {
-  try {
-    const t = JSON.parse(localStorage.getItem(THROTTLE_KEY) || "null") as Throttle | null;
-    if (t && Number.isFinite(t.fails) && Number.isFinite(t.until)) return t;
-  } catch {
-    /* ignore */
-  }
+  const t = prefGetJSON<Throttle>(THROTTLE_KEY);
+  if (t && Number.isFinite(t.fails) && Number.isFinite(t.until)) return t;
   return { fails: 0, until: 0 };
 }
 
 function writeThrottle(t: Throttle): void {
-  try {
-    localStorage.setItem(THROTTLE_KEY, JSON.stringify(t));
-  } catch {
-    /* ignore */
-  }
+  prefSetJSON(THROTTLE_KEY, t);
 }
 
 function clearThrottle(): void {
-  try {
-    localStorage.removeItem(THROTTLE_KEY);
-  } catch {
-    /* ignore */
-  }
+  prefRemove(THROTTLE_KEY);
 }
 
 /** مِلّي ثانيةً باقيةً قبل السماح بمحاولةٍ أخرى (صفرٌ = جرّب الآن). */
@@ -216,17 +197,9 @@ export class LockThrottledError extends Error {
 }
 
 export function isUnlocked(): boolean {
-  try {
-    return sessionStorage.getItem(UNLOCK_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return sessionGet(UNLOCK_KEY) === "1";
 }
 
 export function markUnlocked(): void {
-  try {
-    sessionStorage.setItem(UNLOCK_KEY, "1");
-  } catch {
-    /* ignore */
-  }
+  sessionSet(UNLOCK_KEY, "1");
 }

@@ -1,3 +1,4 @@
+import { prefGetJSON, prefSetJSON } from "../platform/prefs";
 // ===================== تفضيلات قراءة المصحف =====================
 // ثلاثةُ تفضيلاتٍ تحكم صورةَ الوجه في كلّ شاشةٍ تعرض المصحف (القراءة والحفظ
 // والتسميع واختبار مواضع الخطأ) — فصورةُ الوجه واحدةٌ أينما ظهر، وهي بيت
@@ -78,7 +79,7 @@ export function readPrefsFrom(raw: unknown): ReadPrefs {
 export function loadReadPrefs(): ReadPrefs {
   if (typeof window === "undefined") return DEFAULT_READ_PREFS;
   try {
-    return readPrefsFrom(JSON.parse(window.localStorage.getItem(READ_PREFS_KEY) || "null"));
+    return readPrefsFrom(prefGetJSON<unknown>(READ_PREFS_KEY));
   } catch { /* ignore */ }
   return DEFAULT_READ_PREFS;
 }
@@ -87,6 +88,6 @@ export function loadReadPrefs(): ReadPrefs {
 export function saveReadPrefs(p: Partial<ReadPrefs>): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(READ_PREFS_KEY, JSON.stringify({ ...loadReadPrefs(), ...p }));
+    prefSetJSON(READ_PREFS_KEY, { ...loadReadPrefs(), ...p });
   } catch { /* ignore */ }
 }

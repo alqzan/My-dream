@@ -1,6 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { initializeFirestore, type Firestore } from "firebase/firestore";
 import { isValidSyncSpace } from "./syncSpace";
+import { prefGet } from "./platform/prefs";
 
 // Firebase web config for the "my-dream-a" project. These NEXT_PUBLIC_
 // values are safe to ship in client code by design — access is gated by
@@ -33,12 +34,7 @@ export const SYNC_SPACE_STORAGE_KEY = "madar-sync-space";
  *  تشخّص مفتاحاً محفوظاً غير صالح وتعرض إصلاحه. لا يمرّ منها أيّ مسار مزامنة:
  *  كل من يبني مسار Firestore ينادي `getSyncSpace()` أدناه. */
 export function getStoredSyncSpace(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(SYNC_SPACE_STORAGE_KEY) || null;
-  } catch {
-    return null;
-  }
+  return prefGet(SYNC_SPACE_STORAGE_KEY) || null;
 }
 
 /** معرّف مساحة المزامنة الصالح، أو `null`. قيمةٌ محفوظة لكنها ليست مقطع مسارٍ
@@ -73,12 +69,7 @@ export type SyncKeyVersion = 1 | 2;
  *  data/media subkeys). Never inferred — an absent/unrecognized marker is
  *  always 1, so a device that has never touched this feature is unaffected. */
 export function getSyncKeyVersion(): SyncKeyVersion {
-  if (typeof window === "undefined") return 1;
-  try {
-    return localStorage.getItem(SYNC_KEY_VERSION_STORAGE_KEY) === "2" ? 2 : 1;
-  } catch {
-    return 1;
-  }
+  return prefGet(SYNC_KEY_VERSION_STORAGE_KEY) === "2" ? 2 : 1;
 }
 
 // The Bearer token for the R2 media gateway. v1 (default): identical to
@@ -87,14 +78,9 @@ export function getSyncKeyVersion(): SyncKeyVersion {
 // (see keyDerivation.test.ts) — call sites that talk to the R2 gateway
 // (cloudflare-worker/src/index.ts) should use this instead of getSyncSpace().
 export function getMediaAuthKey(): string | null {
-  if (typeof window === "undefined") return getSyncSpace();
-  try {
-    const derived = localStorage.getItem(SYNC_MEDIA_KEY_STORAGE_KEY);
-    if (derived) return derived;
-  } catch {
-    /* fall through to the v1 default below */
-  }
-  return getSyncSpace();
+  // الغائبُ والمحظورُ سواء: كلاهما `null` من الواجهة، فيسقط إلى سلوك v1 —
+  // وهو **بالضبط** ما كان يفعله `try/catch` هنا.
+  return prefGet(SYNC_MEDIA_KEY_STORAGE_KEY) || getSyncSpace();
 }
 
 // Firebase is "enabled" only when the essential config is present.

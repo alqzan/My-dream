@@ -16,6 +16,7 @@ import {
 } from "./hifz";
 import { dueQueue, type DuePage } from "./schedule";
 import { idToPage, TOTAL_AYAT, TOTAL_PAGES } from "./meta";
+import { prefGet, prefSetJSON, prefRemove } from "../platform/prefs";
 
 export type SessionStep =
   | { kind: "memorize"; portion: Portion }
@@ -176,7 +177,7 @@ export function isValidSessionSnapshot(value: unknown, todayStr: string): value 
 export function loadSession(todayStr: string): SessionSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(RESUME_KEY);
+    const raw = prefGet(RESUME_KEY);
     if (!raw) return null;
     const snap: unknown = JSON.parse(raw);
     return isValidSessionSnapshot(snap, todayStr) ? snap : null;
@@ -187,12 +188,12 @@ export function loadSession(todayStr: string): SessionSnapshot | null {
 
 export function saveSession(snap: SessionSnapshot) {
   if (typeof window === "undefined") return;
-  try { window.localStorage.setItem(RESUME_KEY, JSON.stringify(snap)); } catch {}
+  prefSetJSON(RESUME_KEY, snap);
 }
 
 export function clearSession() {
   if (typeof window === "undefined") return;
-  try { window.localStorage.removeItem(RESUME_KEY); } catch {}
+  prefRemove(RESUME_KEY);
 }
 
 // عنوانٌ مختصر لكلّ نوع خطوة — تُستعمل في شريط الخطوات وفي بطاقة «ماذا ينتظرني».

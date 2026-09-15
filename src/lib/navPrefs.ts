@@ -1,4 +1,5 @@
 import type { NavItem } from "./nav";
+import { prefGet, prefSetJSON, prefRemove } from "./platform/prefs";
 
 // تفضيلات التنقّل محلية لهذا الجهاز فقط، ولا تمسّ بيانات الأقسام أو المزامنة.
 export const NAV_PREFS_STORAGE_KEY = "madar-nav-prefs";
@@ -60,7 +61,7 @@ export function resolveNav(items: NavItem[], saved: SavedNavPrefs | string[] | n
 export function loadNavPrefs(): SavedNavPrefs | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(NAV_PREFS_STORAGE_KEY);
+    const raw = prefGet(NAV_PREFS_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     // الصيغة القديمة: كانت تحدد خمسة أبواب أساسية، ولم تكن تقصد إخفاء البقية.
@@ -86,7 +87,7 @@ export function saveNavPrefs(hrefs: string[], items: NavItem[]): void {
   if (typeof window === "undefined") return;
   try {
     const visible = sanitizeNavPrefs(hrefs, items);
-    window.localStorage.setItem(NAV_PREFS_STORAGE_KEY, JSON.stringify({ version: 2, visible }));
+    prefSetJSON(NAV_PREFS_STORAGE_KEY, { version: 2, visible });
   } catch {
     /* تخزينٌ ممتلئ/محظور — التفضيل جهازيّ غير حرج، يبقى الافتراض */
   }
@@ -95,7 +96,7 @@ export function saveNavPrefs(hrefs: string[], items: NavItem[]): void {
 export function clearNavPrefs(): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(NAV_PREFS_STORAGE_KEY);
+    prefRemove(NAV_PREFS_STORAGE_KEY);
   } catch {
     /* ignore */
   }

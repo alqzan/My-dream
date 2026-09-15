@@ -7,6 +7,7 @@ import { hifzSeries, memorizedInWindow, paceCompare, hifzReport } from "@/lib/qu
 import { showToast } from "@/components/ui/UndoToast";
 import { TrendingUp, TrendingDown, Copy } from "lucide-react";
 import { arNum } from "@/lib/madar/format";
+import { saveTextFile } from "@/lib/platform/files";
 
 // رسم تقدّم الحفظ عبر الزمن — منحنى تراكمي (بالأوجه) منذ بداية الخطة، مع ملخّص
 // «اليوم/الأسبوع/الشهر». مرسومٌ بـSVG بلغة أدوات التطبيق (تدرّج أخضر، طرفٌ لامع).
@@ -30,11 +31,7 @@ export function HifzChart() {
       showToast("نُسخ تقرير الحفظ", "success");
     } catch {
       // تعذّرت الحافظة — نزّل ملفاً نصّياً بدلاً منها.
-      const blob = new Blob([text], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `تقرير-الحفظ-${todayStr}.txt`; a.click();
-      URL.revokeObjectURL(url);
+      saveTextFile(`تقرير-الحفظ-${todayStr}.txt`, text);
     }
   }
 

@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge";
 import { mediaTombKey } from "./mediaHash";
 import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY, isPrayedStatus } from "./types";
+import { prefGetJSON } from "./platform/prefs";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -327,24 +328,17 @@ export const FALLBACK_COORDS = { lat: 24.7136, lng: 46.6753 };
 export const GEO_KEY = "madar-geo";
 
 export function getCachedCoords(): { lat: number; lng: number } {
-  try {
-    const raw = localStorage.getItem(GEO_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return FALLBACK_COORDS;
+  return prefGetJSON<{ lat: number; lng: number }>(GEO_KEY) ?? FALLBACK_COORDS;
 }
 
 export function formatClock(d: Date): string {
   return d.toLocaleTimeString("ar-SA-u-nu-arab", { hour: "numeric", minute: "2-digit" });
 }
 
-// Tiny haptic tick on satisfying actions (habit done, prayer logged).
-// Silently a no-op where the Vibration API doesn't exist (iOS Safari).
-export function buzz(ms = 12) {
-  try {
-    navigator.vibrate?.(ms);
-  } catch {}
-}
+// نقرةٌ خفيفة عند فعلٍ مُرضٍ — التنفيذُ خلف واجهة المنصّة (`platform/haptics.ts`)
+// لأنّها ميتةٌ كلياً على iOS ويقابلها ملحقٌ أصليّ في Capacitor. تُصدَّر من هنا
+// كما كانت فلا يتغيّر أيُّ متصل.
+export { buzz } from "./platform/haptics";
 
 // Percentage of the current year elapsed (0-100).
 export function yearProgress(now = new Date()): number {
