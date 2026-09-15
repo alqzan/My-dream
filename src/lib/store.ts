@@ -348,6 +348,19 @@ interface AppStore extends AppData {
  *  ترتيبُ الرقم. الاختبارُ يثبّت الناتج كما هو اليوم قبل أيّ مسٍّ به. */
 export function migratePersisted(persisted: unknown, version: number): AppData {
       let state = (persisted ?? {}) as Record<string, unknown>;
+      // **حارسُ النوع قبل أيّ كتلة (٠٫١٫٤٢٦).** كلُّ الحراسة داخل السلسلة
+      // `?? []`، وهي تمسك الغياب لا **النوعَ الخطأ**: كتلةٌ فيها
+      // `transactions: "نصّ"` كانت ترمي `TypeError`، و`persist` يبتلع الرمية،
+      // فيُقلع المالك على **تطبيقٍ فارغ** والكتلةُ المشوّهة باقيةٌ في IndexedDB
+      // تُعيد الكرّة كلَّ إقلاع. وهذا المسارُ يعمل مرّةً بلا تراجع، فالانهيارُ
+      // فيه لا يُستدرك. تسويةُ الحقل المشوّه إلى قائمةٍ فارغة لا تخسر شيئاً لم
+      // يكن خاسراً أصلاً (قيمةٌ ليست قائمةً ليست بياناتٍ يمكن قراءتها)، وتُنقذ
+      // بقيّةَ الحالة من أن تسقط معها. كشفه `store.migrate.test.ts`.
+      for (const key of ["transactions", "budgets", "categories", "reserves", "habits",
+        "books", "readingLogs", "journalEntries", "prayerLogs", "quranReflections",
+        "quranWird", "futureLetters", "countdownEvents", "knowledgeSources", "benefits"]) {
+        if (key in state && state[key] != null && !Array.isArray(state[key])) state[key] = [];
+      }
       const todayStr = today();
 
       // v2 dropped income entirely (finance is expense/budget-only) and

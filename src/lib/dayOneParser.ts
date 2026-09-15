@@ -244,6 +244,19 @@ function isVideoPath(name: string): boolean {
 // bounded by a single media file — not the whole archive. Video bytes and
 // unwanted files are never decompressed. A Day One export can be tens of GB,
 // well past the ~2GB single-ArrayBuffer limit that made big files fail.
+/** سقفُ ما يُفكّ من أرشيفٍ واحد. **الحجمُ المضغوط لا يقول شيئاً عن المفكوك**:
+ *  النصّ — وهو ما يُجمع هنا — ينضغط بنسبٍ تبلغ ١٠٠٠:١، فأرشيفٌ بميغابايتٍ واحد
+ *  قد يتمدّد إلى جيغابايت ويقتل التبويب. وكان التعليق يقول «محدود: نصٌّ فقط»
+ *  وهو تبريرٌ مقلوب — النصُّ أخطرُها لا آمنُها. والحدُّ سخيٌّ عمداً: أضخمُ
+ *  تصدير Day One حقيقيّ يبقى دونه بمراتب، فلا يُرفض أرشيفٌ صادق.
+ *  (٠٫١٫٤٢٦ — والمسارُ نفسُه يستقبل `.madarimport` من تطبيقٍ خارجيّ.) */
+const MAX_UNZIPPED_BYTES = 1_500_000_000; // 1.5 GB
+
+/** يُرمى حين يتجاوز الفكُّ السقف — يمسكه المتصل ويحوّله لرسالةٍ عربية. */
+export class ZipTooLargeError extends Error {
+  constructor() { super("zip-too-large"); this.name = "ZipTooLargeError"; }
+}
+
 async function streamZip(
   file: Blob,
   want: (name: string) => boolean,
@@ -252,13 +265,18 @@ async function streamZip(
   const unzip = new Unzip();
   unzip.register(UnzipInflate);
   const queue: { name: string; bytes: Uint8Array }[] = [];
+  let unzipped = 0;
+  let overflowed = false;
   unzip.onfile = (f) => {
     if (f.name.startsWith("__MACOSX") || isVideoPath(f.name) || !want(f.name)) return;
     const chunks: Uint8Array[] = [];
     let size = 0;
     f.ondata = (err, chunk, final) => {
       if (err) return;
+      if (overflowed) return;
       if (chunk && chunk.length) {
+        unzipped += chunk.length;
+        if (unzipped > MAX_UNZIPPED_BYTES) { overflowed = true; chunks.length = 0; return; }
         chunks.push(chunk);
         size += chunk.length;
       }
@@ -280,13 +298,16 @@ async function streamZip(
   };
   const reader = file.stream().getReader();
   for (;;) {
+    if (overflowed) { await reader.cancel().catch(() => {}); throw new ZipTooLargeError(); }
     const { value, done } = await reader.read();
     if (done) break;
     unzip.push(value, false);
     await drain(); // backpressure: finish current media before reading more
   }
+  if (overflowed) throw new ZipTooLargeError();
   unzip.push(new Uint8Array(0), true);
   await drain();
+  if (overflowed) throw new ZipTooLargeError();
 }
 
 // Day One names each media file by its md5 or identifier (which the JSON
@@ -371,12 +392,21 @@ export async function streamDayOneZipImport(
 ): Promise<BatchImportResult> {
   const batchSize = Math.max(1, cb.batchSize ?? 40);
 
-  // Pass 1 — read only the JSON(s) to learn the entries (bounded: text only).
+  // Pass 1 — read only the JSON(s) to learn the entries. **ومحدودٌ بسقفِ فكّ
+  // لا بنوعِ الملفّ**: كان التعليق هنا يقول «bounded: text only»، وهو تبرير
+  // مقلوب — النصُّ هو ما ينضغط ١٠٠٠:١ فهو أخطرُ ما يُفكّ لا آمنُه.
   const jsonFiles: Record<string, Uint8Array> = {};
   try {
     await streamZip(file, (n) => n.toLowerCase().endsWith(".json"),
       (name, bytes) => { jsonFiles[name] = bytes; });
-  } catch {
+  } catch (err) {
+    if (err instanceof ZipTooLargeError) {
+      throw new Error(
+        "محتوى الأرشيف بعد فكّ الضغط أكبر من الحدّ الآمن، فأُوقف الاستيراد قبل أن " +
+        "يتعلّق التطبيق. إن كان تصديراً حقيقياً فافتحه على جهازك واحذف مجلّد «videos» " +
+        "ثمّ أعد ضغط الباقي."
+      );
+    }
     throw new Error(hugeZipHint(file) ?? "تعذّر فك ضغط الملف. تأكّد أنه تصدير Day One.");
   }
   if (!Object.keys(jsonFiles).length) {
@@ -480,6 +510,13 @@ export async function streamDayOneZipImport(
       );
     } catch (err) {
       if (err instanceof DayOneImportCancelled) cancelled = true;
+      else if (err instanceof ZipTooLargeError) {
+        // نفسُ السقف في مرور الوسائط — ورسالةٌ مقروءة بدل `zip-too-large`.
+        throw new Error(
+          "وسائطُ الأرشيف بعد فكّ الضغط أكبر من الحدّ الآمن، فأُوقف الاستيراد. " +
+          "احذف مجلّد «videos» من الأرشيف وأعد المحاولة."
+        );
+      }
       else throw err;
     }
   }

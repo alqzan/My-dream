@@ -49,5 +49,27 @@ in the Cloudflare dashboard** — it can't be added from this file alone:
 Wire this up when convenient; until then the constant-time key check is the
 primary guard.
 
+### How much is actually exposed (measured 0.1.426)
+
+An audit claimed every unauthenticated `/v1/media/blob` request costs an HMAC
+import+sign before rejection. **It does not.** `handle()` rejects in this order,
+and the first three are essentially free:
+
+1. `assertOrigin` — wrong `Origin` never reaches a route.
+2. `parseKind` / `parseHash` (`src/index.ts:156-164`) — anything but `photos`/
+   `audios` and a 32-char hex hash is a `400` with no crypto.
+3. the `exp` check — an absent, malformed, or past expiry is a `403` with no crypto.
+
+Only a request that is **well-formed AND carries a future `exp`** reaches the
+HMAC. So the residual concern is a deliberate flood of well-formed requests
+against the free-tier request quota, not a cheap CPU-burn — smaller than the
+audit implied, and still worth the dashboard rule above.
+
+Note also that the second concern (unbounded object *count* from someone who
+already holds the sync key) is **inside** the trust boundary by design: the key
+is the credential. A per-kind object cap would need a `list` on every upload —
+real cost on the hot path to defend against an attacker who already won. Not
+worth it; a Cloudflare storage alert is the right tool.
+
 See `docs/cloudflare-r2-setup.md` in the repository root for deployment and
 migration instructions.
