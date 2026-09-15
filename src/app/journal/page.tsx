@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store";
 import { getJournalStreak, formatDate, hijriDate, today, parseDate, toDateStr, arabicMonthName, normalizeArabic, uid, entriesCount, daysCount, displayTime } from "@/lib/utils";
@@ -206,23 +206,40 @@ export default function JournalPage() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [journalEntries]);
 
+  // **كومةٌ مطبَّعةٌ واحدة لكلّ مذكرة** (٠٫١٫٤٢٧). كان البحث يستدعي
+  // `normalizeArabic` — وهي سبعُ عمليات `replace` بتعبيراتٍ نمطية تُخصّص نصّاً
+  // جديداً في كلّ مرّة — على **خمسة حقولٍ لكلّ مذكرة عند كلّ ضغطةِ مفتاح**.
+  // بألف مذكرةٍ متوسّطها ٥٠٠ حرف ذلك نصفُ مليون حرفٍ تُمسح سبعَ مرّات لكلّ حرفٍ
+  // يكتبه المالك. والآن تُطبَّع مرّةً عند تغيّر المذكرات، ويُطبَّع الاستعلامُ وحده.
+  const haystacks = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of journalEntries) {
+      m.set(e.id, normalizeArabic([
+        e.content,
+        e.title ?? "",
+        e.question ?? "",
+        ...(e.tags ?? []),
+        ...(e.attachmentRefs ?? []).map((a) => a.filename ?? ""),
+      ].join("\n")));
+    }
+    return m;
+  }, [journalEntries]);
+
+  // والبحثُ **مؤجَّل**: الكتابةُ تُحدّث الحقل فوراً (فلا يتأخّر الحرفُ تحت
+  // الإصبع) بينما التصفيةُ تنتظر إطارَ فراغ. `useDeferredValue` بلا مؤقّتٍ يُدار.
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const q = normalizeArabic(search.trim());
+    const q = normalizeArabic(deferredSearch.trim());
     const list = journalEntries.filter((e) => {
       if (selectedYear !== "الكل" && !e.date.startsWith(selectedYear)) return false;
       if (onlyStarred && !e.starred) return false;
       if (selectedTag && !(e.tags ?? []).includes(selectedTag)) return false;
       if (!q) return true;
-      return (
-        normalizeArabic(e.content).includes(q) ||
-        normalizeArabic(e.title ?? "").includes(q) ||
-        normalizeArabic(e.question ?? "").includes(q) ||
-        (e.tags ?? []).some((t) => normalizeArabic(t).includes(q)) ||
-        (e.attachmentRefs ?? []).some((a) => normalizeArabic(a.filename ?? "").includes(q))
-      );
+      return (haystacks.get(e.id) ?? "").includes(q);
     });
     return [...list].sort((a, b) => b.date.localeCompare(a.date));
-  }, [journalEntries, search, selectedYear, onlyStarred, selectedTag]);
+  }, [journalEntries, haystacks, deferredSearch, selectedYear, onlyStarred, selectedTag]);
 
   function selectYear(y: string) {
     setSelectedYear(y);
@@ -292,13 +309,12 @@ export default function JournalPage() {
     openViewer(list[Math.floor(Math.random() * list.length)]);
   }
 
-  // Browsing is paged; an active search shows all its matches.
-  const searching = search.trim().length > 0;
-  const visible = useMemo(
-    () => (searching ? filtered : filtered.slice(0, visibleCount)),
-    [filtered, searching, visibleCount]
-  );
-  const hasMore = !searching && filtered.length > visible.length;
+  // **والنتائجُ تُرقَّم كالتصفّح** (٠٫١٫٤٢٧): كان البحثُ يعرض كلَّ ما طابق دفعةً
+  // واحدة، فحرفٌ عربيٌّ واحد يُركّب ألفَ بطاقةٍ في لحظة — وكلُّ بطاقةٍ تُهيّئ
+  // مصادرَ صورها. صار يُرقَّم بزرّ «عرض المزيد» نفسِه الموجود أصلاً.
+  const searching = deferredSearch.trim().length > 0;
+  const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const hasMore = filtered.length > visible.length;
 
   // تبويب المعرض — كل صور المذكرات المطابقة للفلاتر الحالية، أحدث أولاً.
   const galleryPhotos = useMemo(() => {
@@ -504,7 +520,9 @@ export default function JournalPage() {
           type="search"
           aria-label="ابحث في المذكرات"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          // استعلامٌ جديد يعود إلى الصفحة الأولى — كما تفعل بقيّةُ المرشّحات،
+          // وإلّا تسرّب «عرض المزيد» من بحثٍ سابق إلى نتائج بحثٍ آخر.
+          onChange={(e) => { setSearch(e.target.value); setVisibleCount(PAGE); }}
           placeholder="ابحث في العناوين والنصوص والأسئلة..."
           className="mdr-journal-search w-full bg-white border border-gray-200 rounded-xl pr-9 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-journal/30"
         />

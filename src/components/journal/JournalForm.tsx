@@ -508,6 +508,11 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         // Lighter target (~140KB) so photos sync to the cloud quickly and
         // stay well under the per-photo document limit.
         compressed.push(await compressImageSmart(file, 140));
+        // **نَفَسٌ بين صورةٍ وأخرى** (٠٫١٫٤٢٧): `toDataURL` حاجبةٌ للخيط
+        // الرئيسيّ، ودفعةٌ من عشرِ صورٍ كانت تُجمّد الواجهة من أوّلها إلى آخرها
+        // خلف دوّارةٍ لا تدور. `setTimeout(0)` يُعيد الخيط للمتصفّح بين كلّ
+        // صورتين — فيُرسَم الإطار وتُحسّ الدوّارة، والزمنُ الكلّيّ هو هو.
+        await new Promise((r) => setTimeout(r, 0));
       }
       setPhotos((prev) => [...prev, ...compressed].slice(0, MAX_PHOTOS));
     } finally {

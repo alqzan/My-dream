@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, KhushuLevel, DailyBudget,
@@ -21,7 +21,7 @@ import { normalizeMerchant } from "./bankParser";
 import { offsetPlan, OFFSET_NOTE, offsetDepositId } from "./budgetFlow";
 import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan";
 import { cycleLength } from "./budgetCycle";
-import { persistedIdbStorage } from "./idbStorage";
+import { persistJSONStorage, flushPersisted } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
 // Id-keyed collections whose deletions must be tombstoned (see the `set`
@@ -1697,7 +1697,7 @@ export const useAppStore = create<AppStore>()(
         // تسجيل الصلاة هو مصدر قرارٍ مباشر للمطالبة؛ أفرغ اللقطة فوراً حتى
         // لا تعود نافذة التذكير بحالةٍ قديمة إذا أُعيد فتح التطبيق قبل مهلة
         // تجميع IndexedDB العامة (١٢٠٠ms).
-        void persistedIdbStorage.flush().catch(() => {});
+        void flushPersisted();
       },
 
       // درجةُ الخشوع تُكتب على يومٍ قائم فقط: السؤال يلي تسجيلاً وقع، فلا يوجد
@@ -1707,7 +1707,7 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({
           prayerLogs: s.prayerLogs.map((l) => (l.date === date ? withKhushu(l, prayer, level) : l)),
         }));
-        void persistedIdbStorage.flush().catch(() => {});
+        void flushPersisted();
       },
 
       // مُساعدٌ واحدٌ لكلّ ما يُكتب على يوم صلاةٍ خارج الخمس: يُنشئ اليومَ إن
@@ -2181,7 +2181,9 @@ export const useAppStore = create<AppStore>()(
       // التخزين المؤجَّل لا الخام: كلّ تعديلٍ كان يُسلسل المتجر كاملاً ويكتبه
       // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
       // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.
-      storage: createJSONStorage(() => persistedIdbStorage),
+      // يؤجّل **التسلسل** مع الكتابة لا الكتابةَ وحدها (٠٫١٫٤٢٧ — التفصيل في
+      // `idbStorage.ts`). `createJSONStorage` كان يُسلسل عند كلّ `set()`.
+      storage: persistJSONStorage<AppData>(),
       migrate: migratePersisted,
     }
   )

@@ -2,7 +2,7 @@
 // يوسّع نافذة الضياع عند الإغلاق المفاجئ، فكلّ ما يضمن نزول آخر قيمةٍ إلى
 // القرص يجب أن يكون مختبَراً — لا مفترضاً.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createDeferredStorage, PERSIST_DEBOUNCE_MS } from "./persistScheduler";
+import { createDeferredStorage, createDeferredWriter, PERSIST_DEBOUNCE_MS } from "./persistScheduler";
 import type { StateStorage } from "zustand/middleware";
 
 beforeEach(() => vi.useFakeTimers());
@@ -225,5 +225,47 @@ describe("createDeferredStorage — فشلُ التخزين لا يُسقط ال
     expect(data.get(K)).toBe("لا تضيع");
     expect(writes).toEqual(["لا تضيع", "لا تضيع"]);
     expect(s.pending()).toBe(false);
+  });
+});
+
+// ===== التسلسلُ مرّةً لا مرّةً لكلّ تعديل (٠٫١٫٤٢٧) =====
+// التأجيلُ كان يلفّ **النصّ**: يصله ما سلسله `createJSONStorage` سلفاً، فكلُّ
+// `set()` يدفع `JSON.stringify(المتجر)` كاملاً — ٥١ من ١٥٣ م.ث بقياس هذا
+// الملفّ نفسِه، كلَّ ٧٠٠ م.ث أثناء الكتابة في محرّر المذكرات. الآن يلفّ
+// **الكائن** ويُسلسل داخل الإفراغ.
+describe("createDeferredWriter — التسلسلُ داخل الإفراغ", () => {
+  it("رشقةُ عشرِ تعديلاتٍ تُسلسَل **مرّةً واحدة** لا عشراً", async () => {
+    const f = fakeStore();
+    let serialized = 0;
+    const w = createDeferredWriter<{ n: number }>(f.storage, {
+      serialize: (v) => { serialized++; return JSON.stringify(v); },
+    });
+    for (let n = 1; n <= 10; n++) await w.setItem("k", { n });
+    expect(serialized).toBe(0);       // لا شيء قبل الإفراغ
+    await w.flush();
+    expect(serialized).toBe(1);        // مرّةً واحدة على آخر قيمة
+    expect(f.writes).toEqual([JSON.stringify({ n: 10 })]);
+    expect(f.data.get("k")).toBe(JSON.stringify({ n: 10 }));
+  });
+
+  it("والقراءةُ تُرجع الكائن المعلّق بلا مرورٍ على القرص", async () => {
+    const f = fakeStore();
+    const w = createDeferredWriter<{ n: number }>(f.storage, {
+      serialize: (v) => JSON.stringify(v),
+      deserialize: (raw) => JSON.parse(raw) as { n: number },
+    });
+    await w.setItem("k", { n: 7 });
+    expect(await w.getItem("k")).toEqual({ n: 7 });
+    await w.flush();
+    expect(await w.getItem("k")).toEqual({ n: 7 }); // وبعد النزول تُقرأ وتُحلَّل
+  });
+
+  it("ومفتاحٌ لا وجود له يُرجع null لا يرمي", async () => {
+    const f = fakeStore();
+    const w = createDeferredWriter<{ n: number }>(f.storage, {
+      serialize: (v) => JSON.stringify(v),
+      deserialize: (raw) => JSON.parse(raw) as { n: number },
+    });
+    expect(await w.getItem("missing")).toBeNull();
   });
 });

@@ -37,9 +37,28 @@ export async function compressImage(file: Blob, maxKB = 200): Promise<string> {
         const mimeType = dataUrl.startsWith("data:image/webp") ? "image/webp" : "image/jpeg";
         if (mimeType !== "image/webp") dataUrl = canvas.toDataURL(mimeType, quality);
 
-        while (dataUrl.length / 1024 > maxKB * 1.37 && quality > 0.3) {
-          quality -= 0.1;
-          dataUrl = canvas.toDataURL(mimeType, quality);
+        // **بحثٌ ثنائيّ لا نزولٌ خطوةً خطوة** (٠٫١٫٤٢٧). كان النزولُ ‎-0.1 في كلّ
+        // دورة: حتى **ستّ** ترميزاتٍ إضافية فوق الأولى (والثانية على Safari)،
+        // كلُّها `toDataURL` **حاجبةٌ للخيط الرئيسيّ** وكلُّ واحدةٍ تُخصّص نصّاً
+        // base64 كاملاً لتُقاس بـ`.length`. وإضافةُ عشرِ صورٍ لمذكرةٍ كانت تعني
+        // حتى ثمانين ترميزاً متتابعاً والواجهةُ مجمّدةٌ خلف دوّارة.
+        //
+        // ثلاثُ خطواتٍ تكفي: المجالُ [0.3, 0.85] وكلُّ خطوةٍ تنصّفه، فالنتيجةُ
+        // خلال ~0.07 من الجودة المثلى — فرقٌ لا تراه العين، وثلثُ العمل.
+        // ونحتفظ **بأصغرِ ناتجٍ مقبول** لا بآخر ما جُرّب، فلا نعود بأسوأ ممّا
+        // رأينا. والحدُّ الأدنى 0.3 هو هو، والـmime هو هو — مسارُ الاحتياط لم يُمسّ.
+        const limit = maxKB * 1.37;
+        if (dataUrl.length / 1024 > limit) {
+          let lo = 0.3;
+          let hi = quality;
+          let best = dataUrl; // أصغرُ ما وجدناه، ولو لم يبلغ الحدّ
+          for (let step = 0; step < 3; step++) {
+            const mid = (lo + hi) / 2;
+            const candidate = canvas.toDataURL(mimeType, mid);
+            if (candidate.length < best.length) best = candidate;
+            if (candidate.length / 1024 > limit) hi = mid; else lo = mid;
+          }
+          dataUrl = best;
         }
 
         resolve(dataUrl);

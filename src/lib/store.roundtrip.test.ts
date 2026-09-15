@@ -13,12 +13,12 @@ import { useAppStore } from "./store";
 import { budgetTombKey, mergeAppData } from "./merge";
 import { isValidBackupPayload } from "./backupValidation";
 import type { AppData } from "./types";
-import { persistedIdbStorage } from "./idbStorage";
+import { flushPersisted } from "./idbStorage";
 
-/** التخزينُ مؤجَّلٌ عمداً (`persistScheduler.ts`)، فالكتابةُ لا تنزل فوراً.
- *  نُفرغ ما هو معلّق بدل انتظار المؤقّت. */
+/** التخزينُ مؤجَّلٌ عمداً (`persistScheduler.ts`) — والتسلسلُ معه (٠٫١٫٤٢٧)،
+ *  فالكتابةُ لا تنزل فوراً. نُفرغ ما هو معلّق بدل انتظار المؤقّت. */
 const flushPersist = async () => {
-  await persistedIdbStorage.flush();
+  await flushPersisted();
   await new Promise((r) => setTimeout(r, 0));
 };
 

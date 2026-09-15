@@ -42,13 +42,52 @@ export interface DeferredStorage extends StateStorage {
   dispose(): Promise<void>;
 }
 
+/** الطابورُ نفسُه على أيّ نوعِ قيمة. `T = string` هو الغلافُ القديم بلا تغيير،
+ *  و`T = StorageValue<S>` هو ما يُؤجّل **التسلسل** نفسَه — انظر
+ *  `createDeferredJSONStorage` في `idbStorage.ts`. */
+export interface DeferredWriter<T> {
+  getItem(name: string): Promise<T | null>;
+  setItem(name: string, value: T): Promise<void>;
+  removeItem(name: string): Promise<void>;
+  flush(): Promise<void>;
+  pending(): boolean;
+  dispose(): Promise<void>;
+}
+
+interface DeferredOptions<T> {
+  delayMs?: number;
+  /** يُنفَّذ **داخل** الإفراغ لا عند الجدولة — وهذا كلُّ المكسب الجديد. */
+  serialize?: (value: T) => string;
+  /** لقراءةِ ما على القرص حين لا شيء معلّق. */
+  deserialize?: (raw: string) => T;
+}
+
 export function createDeferredStorage(
   inner: StateStorage,
-  { delayMs = PERSIST_DEBOUNCE_MS }: { delayMs?: number } = {}
+  opts: { delayMs?: number } = {}
 ): DeferredStorage {
+  const w = createDeferredWriter<string>(inner, opts);
+  return {
+    getItem: (name) => w.getItem(name),
+    setItem: (name, value) => w.setItem(name, value),
+    removeItem: (name) => w.removeItem(name),
+    flush: () => w.flush(),
+    pending: () => w.pending(),
+    dispose: () => w.dispose(),
+  };
+}
+
+export function createDeferredWriter<T>(
+  inner: StateStorage,
+  {
+    delayMs = PERSIST_DEBOUNCE_MS,
+    serialize = (v: T) => v as unknown as string,
+    deserialize = (raw: string) => raw as unknown as T,
+  }: DeferredOptions<T> = {}
+): DeferredWriter<T> {
   // آخرُ قيمةٍ لكلّ مفتاح. `Map` لا قيمةٌ مفردة: `persist` يكتب مفتاحاً واحداً
   // اليوم، لكنّ الغلاف عامٌّ ولا يصحّ أن يخلط مفتاحين لو أُضيف ثانٍ.
-  const queued = new Map<string, string>();
+  const queued = new Map<string, T>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let writing = false;
   let disposed = false;
@@ -81,7 +120,9 @@ export function createDeferredStorage(
         queued.clear();
         try {
           for (const [name, value] of batch) {
-            await inner.setItem(name, value);
+            // **التسلسلُ هنا لا عند الجدولة**: رشقةُ عشرِ تعديلاتٍ تُسلسَل مرّةً
+            // لا عشراً. هذا نصفُ الكلفة الذي بقي بعد تأجيل الكتابة.
+            await inner.setItem(name, serialize(value));
           }
         } catch (error) {
           // Requeue the failed snapshot. If a newer value for the same key was
@@ -121,11 +162,12 @@ export function createDeferredStorage(
       // القرص، وإلا رأى قارئٌ حالةً رجعت للخلف.
       const q = queued.get(name);
       if (q != null) return q;
-      return inner.getItem(name);
+      const raw = await inner.getItem(name);
+      return raw == null ? null : deserialize(raw);
     },
 
     async setItem(name, value) {
-      if (disposed) { await inner.setItem(name, value); return; }
+      if (disposed) { await inner.setItem(name, serialize(value)); return; }
       queued.set(name, value);
       schedule();
     },
