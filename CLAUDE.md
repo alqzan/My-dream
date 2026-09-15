@@ -175,10 +175,17 @@
 
 معرّف مساحة المزامنة (`SYNC_SPACE_ID` سابقاً) لم يعد قيمة ثابتة في
 `src/lib/firebase.ts` — كان مكشوفاً نصاً في مستودع عام. النموذج الآن:
-`getSyncSpace()` في `src/lib/firebase.ts` تُرجع `NEXT_PUBLIC_SYNC_SPACE` إن
-وُجد (بناء خاص)، وإلا تقرأ `localStorage["madar-sync-space"]` (بحارس
-`typeof window`) — تُكتب مرة واحدة لكل جهاز عبر بطاقة «مفتاح المزامنة»
+`getSyncSpace()` في `src/lib/firebase.ts` تقرأ `localStorage["madar-sync-space"]`
+(بحارس `typeof window`) — تُكتب مرة واحدة لكل جهاز عبر بطاقة «مفتاح المزامنة»
 (`src/components/settings/SyncKeyCard.tsx`) ثم `location.reload()`.
+
+- **ولا يوجد «تجاوزٌ خاصّ وقتَ البناء» (٠٫١٫٤٢٢)**: كان هنا فرعٌ يقرأ
+  `NEXT_PUBLIC_SYNC_SPACE` ويصفه الكودُ بأنّه خاصّ، وذلك وصفٌ مقلوب — كلّ متغيّرٍ
+  يبدأ بـ`NEXT_PUBLIC_` يُحقَن **حرفياً** في حِزَم JS التي يُخرجها
+  `output: "export"` وتُنشر على GitHub Pages. فضبطُه ولو مرّةً كسرٍّ في المستودع
+  يعني نشرَ المفتاح الوحيد الذي يحرس Firestore وبوّابة R2 نصّاً صريحاً وإلى
+  الأبد، بلا إشارةٍ وقتَ التشغيل أنّ ذلك وقع. حُذف الفرع؛ **لا تُعِده**، وبناءٌ
+  ثابتٌ بلا خادم لا يملك أصلاً موضعاً يُخفي فيه سرّاً.
 كل استخدام لمعرّف المساحة (`sync.ts`, `SyncProvider`, `DayOneImport`,
 `PendingInboxWatcher`) يستدعي `getSyncSpace()` ويتعطّل بهدوء (لا يزامن) عند
 غيابه. `firestore.rules` و`storage.rules` في المستودع تحمل قيمة شكلية

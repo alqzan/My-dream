@@ -4,7 +4,7 @@
 // (local, cloud) → merged AppData; touches no I/O.
 import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, KhushuLevel, PrayerName } from "./types";
 import { EMPTY_HIFZ } from "./types";
-import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs } from "./utils";
+import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
 
 // Which journal shard a given entry belongs to: one document per YYYY-MM of the
 // entry's own date (stable across devices, naturally bounded). Malformed/absent
@@ -438,10 +438,29 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const dailyPageGoal = goalPt === 0 && goalSt === 0
     ? kBase.dailyPageGoal
     : (goalPt >= goalSt ? pk.dailyPageGoal : sk.dailyPageGoal);
+  // سجلُّ الصفحات يتّحد بالتاريخ ولا يتبع الفائزَ وحده: هو ما تُحسب منه وتيرةُ
+  // آخر ١٤/٣٠ يوماً، فأخذُ لقطةِ جهازٍ واحدة يمحو أيّام القراءة المسجّلة على
+  // الآخر. والأعلى يفوز في اليوم الواحد — وهو الافتراض نفسه الذي يقوم عليه
+  // `cloudHasUnseen` في `syncDecision.ts`. وبدون هذا الاتّحاد كان الشرطُ هناك
+  // يُعلن اللقطةَ «فيها جديد» والدمجُ يرميه، فتدور الأجهزة على تبنٍّ ورفعٍ لا
+  // ينتهيان على فرقٍ لا يستطيع الدمجُ حسمَه.
+  const byDate = new Map<string, number>();
+  for (const e of [...(pk.pageLog ?? []), ...(sk.pageLog ?? [])]) {
+    if (!e?.date) continue;
+    byDate.set(e.date, Math.max(byDate.get(e.date) ?? 0, e.page ?? 0));
+  }
+  // نفس نافذة `setKhatmaPage` (~٤٥ يوماً) فلا ينمو السجلّ بالدمج بلا حدّ.
+  const logCutoff = toDateStr(new Date(Date.now() - 45 * 86400000));
+  const pageLog = [...byDate.entries()]
+    .filter(([date]) => date >= logCutoff)
+    .map(([date, page]) => ({ date, page }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   const quranKhatma = {
     ...kBase,
     dailyPageGoal,
     completed: Math.max(pk.completed ?? 0, sk.completed ?? 0),
+    ...(pageLog.length ? { pageLog } : {}),
   };
 
   // Quran حفظ: دمجٌ واعٍ بجيل الخطة — الجيل الأحدث يفوز كاملاً عند اختلاف

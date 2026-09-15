@@ -5,6 +5,7 @@ import {
   applyTombstones, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD,
 } from "./merge";
 import { mediaTombKey } from "./mediaHash";
+import { toDateStr } from "./utils";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type {
   AppData, JournalEntry, Transaction, ReserveFund, Habit, HifzState, HifzPlan,
@@ -941,6 +942,50 @@ describe("mergeAppData — تعارضُ العناصر المركّبة (تبا�
       expect(d.quranKhatma.page).toBe(240);       // التقدّم من صاحب طابع التقدّم
       expect(d.quranKhatma.dailyPageGoal).toBe(5); // والهدف من صاحب طابع الهدف
       expect(d.quranKhatma.completed).toBe(2);     // ولا تنقص الختمات المكتملة
+    });
+  });
+
+  describe("سجلُّ صفحات الختمة يتّحد ولا يتبع الفائز", () => {
+    // كان `mergeAppData` يأخذ لقطةَ ختمةٍ واحدة كاملةً ويتجاوز `pageLog`، فتضيع
+    // أيّامُ القراءة المسجّلة على الجهاز الخاسر — وهي ما تُحسب منه وتيرةُ آخر
+    // ١٤/٣٠ يوماً. والأسوأ أنّ `cloudHasUnseen` يعتبر تلك الأيّامَ «جديداً» فيطلب
+    // التبنّي، والدمجُ يرميها: دورةٌ لا تنتهي على فرقٍ لا يُحسم.
+    const day = (back: number) => toDateStr(new Date(Date.now() - back * 86400000));
+
+    it("أيّامُ الجهازين كلُّها تبقى، والأعلى يفوز في اليوم المشترك", () => {
+      const iphone = base({
+        lastUpdated: 9000,
+        quranKhatma: {
+          juz: 4, completed: 0, page: 80,
+          pageLog: [{ date: day(3), page: 40 }, { date: day(1), page: 80 }],
+        },
+      });
+      const ipad = base({
+        lastUpdated: 100,
+        quranKhatma: {
+          juz: 2, completed: 0, page: 50,
+          pageLog: [{ date: day(2), page: 50 }, { date: day(1), page: 70 }],
+        },
+      });
+      for (const merged of [mergeAppData(iphone, ipad), mergeAppData(ipad, iphone)]) {
+        const log = merged.quranKhatma.pageLog ?? [];
+        expect(log.map((e) => e.date)).toEqual([day(3), day(2), day(1)]); // مفروزٌ تصاعدياً، بلا فقد
+        expect(log.find((e) => e.date === day(2))?.page).toBe(50);        // يومُ الآيباد وحده نجا
+        expect(log.find((e) => e.date === day(1))?.page).toBe(80);        // واليومُ المشترك بالأعلى
+      }
+    });
+
+    it("لا ينمو بالدمج خارج نافذة الـ٤٥ يوماً", () => {
+      const old = base({ quranKhatma: { juz: 1, completed: 0, pageLog: [{ date: day(80), page: 10 }] } });
+      const now = base({ quranKhatma: { juz: 1, completed: 0, pageLog: [{ date: day(1), page: 20 }] } });
+      const log = mergeAppData(now, old).quranKhatma.pageLog ?? [];
+      expect(log.map((e) => e.date)).toEqual([day(1)]);
+    });
+
+    it("جهازٌ بلا سجلٍّ لا يمحو سجلَّ الآخر", () => {
+      const withLog = base({ lastUpdated: 100, quranKhatma: { juz: 1, completed: 0, pageLog: [{ date: day(1), page: 30 }] } });
+      const without = base({ lastUpdated: 9000, quranKhatma: { juz: 1, completed: 0 } });
+      expect(mergeAppData(without, withLog).quranKhatma.pageLog).toEqual([{ date: day(1), page: 30 }]);
     });
   });
 });

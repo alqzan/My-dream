@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate, dailyShare, cashOut } from "@/lib/utils";
 import type { Transaction, DailyBudget } from "@/lib/types";
+import { effectiveDailyRate } from "@/lib/fundPlan";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 
 const DAYS_AR = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
@@ -35,6 +36,10 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
     dailyShareByDate.set(t.date, (dailyShareByDate.get(t.date) ?? 0) + dailyShare(t));
   }
   const maxSpend = Math.max(1, ...dates.map((d) => spendByDate.get(d) ?? 0));
+  // المصروف اليومي **الفعليّ** لا المضبوط: قطرةُ تمويل المظاريف تنزل منه،
+  // فمن ضبط ١٠٠ وعليه تمويلٌ ٣٠ يومياً حدُّه الحقيقيّ ٧٠. الصبغُ بالمضبوط
+  // كان يُظهر يومَ ٨٠ أخضرَ وهو تجاوز — وهو عينُ الخطأ المُصلَح في `0643fb7`.
+  const rate = dailyBudget ? effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) : 0;
 
   function prev() { if (month === 0) { setYear((y) => y - 1); setMonth(11); } else setMonth((m) => m - 1); }
   function next() { if (month === 11) { setYear((y) => y + 1); setMonth(0); } else setMonth((m) => m + 1); }
@@ -68,7 +73,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
           const isFuture = date > todayStr;
           const barHeight = spent > 0 ? Math.max(4, Math.round((spent / maxSpend) * 20)) : 0;
           const barColor = dailyBudget
-            ? (dailyShareByDate.get(date) ?? 0) > dailyBudget.amount ? "#e05555" : "var(--theme-accent)"
+            ? (dailyShareByDate.get(date) ?? 0) > rate ? "#e05555" : "var(--theme-accent)"
             : "#e17b6e";
           return (
             <button

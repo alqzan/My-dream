@@ -17,16 +17,22 @@ const firebaseConfig = {
 
 // The sync space id is the shared secret that gates access to the owner's
 // single Firestore document — it must never be baked into the repo (this is a
-// public codebase). It comes from NEXT_PUBLIC_SYNC_SPACE (a private build-time
-// override) or, normally, from localStorage — set once per device via the
-// settings UI (BackupCard/SyncKeyCard) and never sent anywhere but Firestore.
+// public codebase). It comes from localStorage only: set once per device via
+// the settings UI (SyncKeyCard) and never sent anywhere but Firestore.
+//
+// **لا يوجد «تجاوزٌ خاصّ وقتَ البناء»، ولا يمكن أن يوجد.** كان هنا فرعٌ يقرأ
+// `NEXT_PUBLIC_SYNC_SPACE` موصوفاً بأنّه خاصّ، وهذا وصفٌ مقلوب: كلُّ متغيّرٍ
+// يبدأ بـ`NEXT_PUBLIC_` يُحقَن **حرفياً** في حِزَم JS التي يُخرجها
+// `output: "export"` وتُنشر على GitHub Pages للعالم. فضبطُه — ولو مرّةً كسرٍّ
+// في المستودع — يعني نشرَ المفتاح الوحيد الذي يحرس Firestore وبوّابةَ R2 نصّاً
+// صريحاً وإلى الأبد، بلا أيّ إشارةٍ وقتَ التشغيل أنّ ذلك وقع. وبناءٌ ثابتٌ بلا
+// خادم لا يملك أصلاً مكاناً يُخفي فيه سرّاً، فالجوابُ الصادق: localStorage وحده.
 export const SYNC_SPACE_STORAGE_KEY = "madar-sync-space";
 
 /** القيمة المحفوظة كما هي، بلا تحقّق — **للواجهة وحدها** (SyncKeyCard) كي
  *  تشخّص مفتاحاً محفوظاً غير صالح وتعرض إصلاحه. لا يمرّ منها أيّ مسار مزامنة:
  *  كل من يبني مسار Firestore ينادي `getSyncSpace()` أدناه. */
 export function getStoredSyncSpace(): string | null {
-  if (process.env.NEXT_PUBLIC_SYNC_SPACE) return process.env.NEXT_PUBLIC_SYNC_SPACE;
   if (typeof window === "undefined") return null;
   try {
     return localStorage.getItem(SYNC_SPACE_STORAGE_KEY) || null;

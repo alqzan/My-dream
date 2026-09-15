@@ -759,12 +759,41 @@ export function reserveShare(t: Transaction, fundId: string): number {
 export function reserveBalance(fund: ReserveFund, transactions: Transaction[]): number {
   const deposited = fund.deposits.reduce((s, d) => s + d.amount, 0);
   const spent = transactions.reduce((s, t) => s + reserveShare(t, fund.id), 0);
-  return deposited - spent;
+  // `round2` ليست تجميلاً هنا: الرصيدُ يُقرأ بإشارته في حُرّاسٍ ماليّة
+  // (`pullFromReserve` و`transferBetweenReserves` و`offsetPlan` يقفون عند
+  // `<= 0`). مظروفٌ أُفرغ بنِسبٍ لا تقسم بالتساوي يهبط إلى -1e-14، فيصير
+  // زرُّ السحب لا يفعل شيئاً بصمتٍ على مظروفٍ تعرضه الشاشة «٠ ر.س».
+  return round2(deposited - spent);
 }
 
 // Total spent from a fund (for progress displays).
 export function reserveSpent(fund: ReserveFund, transactions: Transaction[]): number {
   return transactions.reduce((s, t) => s + reserveShare(t, fund.id), 0);
+}
+
+/** أرصدةُ كلِّ المظاريف في **مرورٍ واحد** على المعاملات.
+ *
+ *  `reserveBalance` تمسح قائمة المعاملات كاملةً لكلّ مظروف، فعرضُ صفحة المال
+ *  كان يمسحها ‏2×(عدد المظاريف) مرّة في كلّ رسم. الحساب هنا هو هو — مجموعُ
+ *  `reserveShare` المقرَّبة لكلّ معاملة ثمّ `round2` على الفرق — فلا ينحرف رقمٌ
+ *  عن `reserveBalance`، وهي تبقى البوّابة لحسابِ مظروفٍ مفرد. */
+export function reserveTotals(
+  reserves: ReserveFund[],
+  transactions: Transaction[]
+): Map<string, { balance: number; spent: number }> {
+  const spent = new Map<string, number>();
+  for (const t of transactions) {
+    for (const split of t.reserveSplits ?? []) {
+      spent.set(split.fundId, (spent.get(split.fundId) ?? 0) + reserveShare(t, split.fundId));
+    }
+  }
+  const out = new Map<string, { balance: number; spent: number }>();
+  for (const f of reserves) {
+    const out_ = spent.get(f.id) ?? 0;
+    const deposited = f.deposits.reduce((s, d) => s + d.amount, 0);
+    out.set(f.id, { balance: round2(deposited - out_), spent: out_ });
+  }
+  return out;
 }
 
 export interface DailyBudgetStatus {

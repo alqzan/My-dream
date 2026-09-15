@@ -79,7 +79,20 @@ describe("المعدَّل الفعليّ هو ما يُقاس عليه", () => 
   });
 });
 
+// المواضعُ التي تقرأ المضبوط **بحقّ** — كلٌّ لسببٍ مذكور. أيّ ملفٍّ آخر يقرؤه
+// خارج نداءِ `effectiveDailyRate`/`fundingPreview` فهو الخطأ نفسُه عائداً.
+const MAY_READ_CONFIGURED = new Set([
+  "/components/finance/DailyBudgetCard.tsx", // محرّرُ الرقم نفسِه، ويعرض المضبوط والفعليّ جنباً إلى جنب
+  "/lib/cycleCurve.ts",                      // خطُّ الخطّة موثَّقٌ في رأس الملفّ أنّه المضبوط
+  "/lib/backupValidation.ts",                // تحقُّقٌ من الشكل لا حساب
+  "/lib/store.ts",                           // موضعُ الحالة نفسِه
+  "/lib/utils.ts",                           // `computeDailyBudgetStatus` هي التي تشتقّ `rate`
+  "/lib/types.ts",                           // التعريف
+  "/lib/cycleOpening.ts",                    // يقرؤه في متغيّرٍ ثمّ يشتقّ منه في السطر التالي
+]);
+
 describe("حارسُ مواضع النداء", () => {
+  // الصنفُ الأوّل: تمريرُ المضبوط وسيطاً لدالّةٍ تتوقّع المعدَّل.
   it("لا `expenseWeight` ولا `offsetPlan` يُمرَّر لهما البدلُ المضبوط", () => {
     const offenders: string[] = [];
     for (const file of walk(SRC)) {
@@ -92,5 +105,26 @@ describe("حارسُ مواضع النداء", () => {
       }
     }
     expect(offenders, "مرِّر `status.rate` (المعدَّل الفعليّ) لا `dailyBudget.amount`").toEqual([]);
+  });
+
+  // الصنفُ الثاني — وهو الذي فات الحارسَ الأوّل: المضبوط يُقارَن أو يُضرب في
+  // مكانه بلا نداءٍ أصلاً. ثلاثةُ مواضع وقعت فيه: تقويمُ الصرف كان يصبغ اليوم
+  // بمقارنته بالمضبوط، وبطاقةُ المقاصة تضربه في `EVENT_DAYS` فتُعلن سقفاً لا
+  // يُنفَّذ، وصفحةُ التحليل تعدّ «أيّام التجاوز» به فتُطمئن على أيّامٍ تجاوز فيها.
+  it("لا ملفَّ يقرأ `dailyBudget.amount` خارج بوّابة الاشتقاق", () => {
+    const offenders: string[] = [];
+    for (const file of walk(SRC)) {
+      const rel = file.slice(SRC.length - 1);
+      if (MAY_READ_CONFIGURED.has(rel)) continue;
+      let src = readFileSync(file, "utf8");
+      // اقتطع وسائطَ الدوالّ التي **تستقبل** المضبوط عن قصد لتشتقّ منه.
+      for (const fn of ["effectiveDailyRate", "fundingPreview"]) {
+        for (const args of callArgs(src, fn)) src = src.split(args).join("");
+      }
+      // وتعليقاتُ السطر تشرح القاعدة ولا تطبّقها.
+      src = src.replace(/^\s*(\/\/|\*).*$/gm, "");
+      if (/dailyBudget\s*\??\.\s*amount/.test(src)) offenders.push(rel);
+    }
+    expect(offenders, "اشتقَّ المعدَّل بـ`effectiveDailyRate` أو اقرأ `status.rate`").toEqual([]);
   });
 });

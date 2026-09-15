@@ -3,6 +3,7 @@ import { useAppStore } from "@/lib/store";
 import { Card } from "@/components/ui/Card";
 import { formatAmount, cn } from "@/lib/utils";
 import { EVENT_DAYS } from "@/lib/budgetFlow";
+import { effectiveDailyRate } from "@/lib/fundPlan";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { Scale } from "lucide-react";
 
@@ -15,7 +16,12 @@ export function AutoOffsetCard() {
   const setAutoOffset = useAppStore((s) => s.setAutoOffset);
   const dailyBudget = useAppStore((s) => s.dailyBudget);
   const on = autoOffset !== false;
-  const cap = dailyBudget ? dailyBudget.amount * EVENT_DAYS : 0;
+  // السقفُ المُنفَّذ يُحسب من المصروف اليومي **الفعليّ** (`offsetPlan` في
+  // `budgetFlow.ts` يأخذ `status.rate`). قراءةُ `amount` هنا كانت تَعِد بسقفٍ
+  // أعلى ممّا يقع: مضبوطٌ ١٠٠ وتمويلٌ ٣٠ ⇒ البطاقة تقول ٣٠٠ والمحرّك يقف عند ٢١٠.
+  const cap = dailyBudget
+    ? effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) * EVENT_DAYS
+    : 0;
 
   return (
     <Card>

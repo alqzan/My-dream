@@ -16,6 +16,7 @@ import {
   cn,
 } from "@/lib/utils";
 import { biggestCashExpense } from "@/lib/financeOverview";
+import { effectiveDailyRate } from "@/lib/fundPlan";
 import type { Transaction } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { GroupLabel } from "@/components/ui/GroupLabel";
@@ -206,11 +207,15 @@ export default function SpendInsightsPage() {
     }
 
     if (dailyBudget && period !== "سنة") {
-      const daysOver = chartData.filter((d) => d.daily > dailyBudget.amount).length;
+      // المعدَّل الفعليّ لا المضبوط: قطرةُ تمويل المظاريف تنزل من اليومية، فمن
+      // ضبط ١٠٠ وعليه تمويلٌ ٣٠ حدُّه ٧٠ — وعدُّ أيّام التجاوز بالمضبوط يُطمئنه
+      // على أيّامٍ تجاوز فيها فعلاً. (نفس قاعدة `rate` في CLAUDE.md.)
+      const rate = effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay);
+      const daysOver = chartData.filter((d) => d.daily > rate).length;
       const daysTracked = chartData.filter((d) => d.key <= todayStr).length;
       list.push(
         daysOver === 0
-          ? `🟢 كل أيام الفترة ضمن ميزانيتك اليومية (${formatAmount(dailyBudget.amount)} ر.س) — ممتاز!`
+          ? `🟢 كل أيام الفترة ضمن ميزانيتك اليومية (${formatAmount(rate)} ر.س) — ممتاز!`
           : `🔴 ${daysOver} من ${daysTracked} يوم تجاوزت فيها ميزانيتك اليومية.`
       );
     }
@@ -248,6 +253,8 @@ export default function SpendInsightsPage() {
   }, [periodTx, chartData, byMain, total, dailyBudget, reserves, categories, period, todayStr]);
 
   const dailyStatus = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
+  // خطُّ الرسم وأسطورتُه يقرآن المعدَّل الفعليّ نفسَه الذي يقرأه ملخّصُ أعلاه.
+  const chartRate = dailyBudget ? effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) : 0;
   const spentFromDaily = periodTx.reduce((s, t) => s + dailyShare(t), 0);
 
   return (
@@ -325,14 +332,14 @@ export default function SpendInsightsPage() {
             data={chartData}
             period={period}
             maxBar={maxBar}
-            dailyBudgetAmount={dailyBudget && period !== "سنة" ? dailyBudget.amount : undefined}
+            dailyBudgetAmount={dailyBudget && period !== "سنة" ? chartRate : undefined}
             format={formatAmount}
           />
         </div>
         {dailyBudget && period !== "سنة" && (
           <div className="flex items-center justify-center gap-3 text-[10px] text-gray-400 pt-2">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-finance inline-block" /> ضمن اليومية</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> تجاوز ({formatAmount(dailyBudget.amount)} ر.س)</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> تجاوز ({formatAmount(chartRate)} ر.س)</span>
           </div>
         )}
       </Card>

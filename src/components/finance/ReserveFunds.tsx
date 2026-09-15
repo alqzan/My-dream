@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
-import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent, cn, firstGrapheme } from "@/lib/utils";
+import { uid, today, formatAmount, formatDateShort, reserveBalance, reserveSpent, reserveShare, reserveTotals, cn, firstGrapheme } from "@/lib/utils";
 import type { ReserveFund, Transaction } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -40,6 +40,16 @@ export function ReserveFunds() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const openFund = reserves.find((f) => f.id === expanded) ?? null;
 
+  // مرورٌ واحد على المعاملات لكلّ المظاريف بدل مسحةٍ كاملةٍ لكلّ قرصٍ ولكلّ
+  // مجموع. البطاقة تبقى محسوبةً وهي مطويّة (`CollapsibleSection` يُخفي ولا
+  // يُفكّك)، فالفرق يقع في كلّ رسمٍ لصفحة المال لا عند فتح القسم فقط.
+  const totals = useMemo(() => reserveTotals(reserves, transactions), [reserves, transactions]);
+  const grandTotal = useMemo(
+    () => reserves.reduce((sum, f) => sum + (totals.get(f.id)?.balance ?? 0), 0),
+    [reserves, totals]
+  );
+  const trips = useMemo(() => pastTrips(reserves), [reserves]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -48,7 +58,7 @@ export function ReserveFunds() {
           <span className="text-sm font-semibold text-gray-700">مظاريفي</span>
           {reserves.length > 0 && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-finance/10 text-finance">
-              {formatAmount(reserves.reduce((s, f) => s + reserveBalance(f, transactions), 0))} ر.س
+              {formatAmount(grandTotal)} ر.س
             </span>
           )}
         </div>
@@ -96,7 +106,7 @@ export function ReserveFunds() {
               <FundDial
                 key={fund.id}
                 fund={fund}
-                transactions={transactions}
+                balance={totals.get(fund.id)?.balance ?? 0}
                 active={expanded === fund.id}
                 onTap={() => setExpanded(expanded === fund.id ? null : fund.id)}
               />
@@ -108,10 +118,10 @@ export function ReserveFunds() {
       {openFund && <FundDetail key={openFund.id} fund={openFund} onClose={() => setExpanded(null)} />}
 
       {/* «كم كلّفتني كلُّ سفرة» — سجلٌّ مختصر للرحلات المنتهية، أحدثُها أوّلاً. */}
-      {pastTrips(reserves).length > 0 && (
+      {trips.length > 0 && (
         <div className="space-y-1 pt-1">
           <div className="text-[10px] font-semibold" style={{ color: "var(--ink52)" }}>رحلاتي السابقة</div>
-          {pastTrips(reserves).map((f) => {
+          {trips.map((f) => {
             const t = tripSummary(f, transactions, today());
             return (
               <button
@@ -149,16 +159,15 @@ const CIRC = 2 * Math.PI * R;
 
 function FundDial({
   fund,
-  transactions,
+  balance,
   active,
   onTap,
 }: {
   fund: ReserveFund;
-  transactions: Transaction[];
+  balance: number;
   active: boolean;
   onTap: () => void;
 }) {
-  const balance = reserveBalance(fund, transactions);
   const healthy = balance > 0;
   const pct = fund.target ? Math.min(100, Math.round((balance / fund.target) * 100)) : null;
   const hasTarget = pct !== null;
@@ -297,15 +306,22 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
   const [editing, setEditing] = useState(false);
   const [showDeposits, setShowDeposits] = useState(false);
 
-  const balance = reserveBalance(fund, transactions);
-  const spent = reserveSpent(fund, transactions);
+  const balance = useMemo(() => reserveBalance(fund, transactions), [fund, transactions]);
+  const spent = useMemo(() => reserveSpent(fund, transactions), [fund, transactions]);
   const deposited = fund.deposits.reduce((s, d) => s + d.amount, 0);
   const healthy = balance > 0;
 
-  // The transactions that took a share of this envelope, newest first.
-  const charges = transactions
-    .filter((t) => t.reserveSplits?.some((sp) => sp.fundId === fund.id))
-    .slice(0, 5);
+  // آخرُ خمسة مصاريف من هذا المظروف — **مفروزةً** بالتاريخ. بلا فرزٍ كان
+  // الترتيبُ ترتيبَ الإدراج، وهو يصير ترتيبَ الاتّحاد بعد أيّ دمجٍ سحابيّ أو
+  // إدخالٍ بتاريخٍ رجعيّ، فتُعرض خمسةٌ اعتباطية تحت عنوان «الأحدث».
+  const charges = useMemo(
+    () => transactions
+      .filter((t) => t.reserveSplits?.some((sp) => sp.fundId === fund.id))
+      .slice()
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+      .slice(0, 5),
+    [fund.id, transactions]
+  );
 
   function move(dir: 1 | -1) {
     let parsed = parseFloat(amount);
@@ -486,13 +502,16 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
         <div className="space-y-1">
           <div className="text-[10px] font-semibold text-gray-500">آخر المصاريف من هذا المظروف</div>
           {charges.map((t) => {
-            const share = t.reserveSplits!.find((sp) => sp.fundId === fund.id)!;
+            // `reserveShare` لا حسابٌ يدويّ: هي البوّابة التي تمرّ بـ`cashOut`
+            // وتُقرّب. ضربُ `t.amount` هنا كان الموضعَ الوحيد في التطبيق الذي
+            // يتجاوزها — ويعرض عشريّاتٍ غير مقرَّبة. والنسبةُ للعرض وحدها.
+            const pct = t.reserveSplits?.find((sp) => sp.fundId === fund.id)?.pct ?? 0;
             return (
               <div key={t.id} className="flex items-center justify-between text-[11px] text-gray-500 bg-white/60 dark:bg-white/5 rounded-lg px-2 py-1">
                 <span className="truncate">{t.note || "مصروف"} · {formatDateShort(t.date)}</span>
                 <span className="font-bold shrink-0 tabular-nums">
-                  {formatAmount((t.amount * share.pct) / 100)} ر.س
-                  <span className="font-normal text-gray-400"> ({share.pct}%)</span>
+                  {formatAmount(reserveShare(t, fund.id))} ر.س
+                  <span className="font-normal text-gray-400"> ({pct}%)</span>
                 </span>
               </div>
             );
