@@ -5,17 +5,32 @@
 // ولا بياناتٍ جديدة تُخترع لهذا: المصاريفُ محمَّلةٌ على المظروف أصلاً
 // (`reserveSplits`)، والتقريرُ يقرأ ما حُمِّل عليه عبر `reserveShare` — البوّابة
 // نفسها التي يقرأ بها رصيدُه. فلا مجموعَ صرفٍ ثانٍ يمكن أن ينحرف عن الأوّل.
+//
+// **والمظروفُ يحمل عدّة رحلات (٠٫١٫٤٢٥).** كان يحمل واحدةً، فبدءُ رحلةٍ ثانية
+// عليه يكتب فوق الأولى: تقريرُها يختفي بلا استرجاع، ويُقسَم صرفُ المظروف كلُّه
+// على أيّام الثانية فيُعطي `perDay` أضعافَ الحقيقة. والآن **لكلّ رحلةٍ نافذتُها**
+// والتقريرُ يقرأ ما وقع داخلها وحدها.
+//
 // منطقٌ نقيّ بلا DOM، مختبَرٌ في `trip.test.ts`.
-import type { ReserveFund, Transaction } from "./types";
+import type { ReserveFund, Transaction, Trip } from "./types";
 import { reserveShare, round2, parseDate } from "./utils";
 
-/** الرحلةُ الجارية: مظروفٌ بدأ سفرُه ولم يُنهَ. واحدةٌ فقط في كلّ وقت. */
-export function activeTrip(reserves: ReserveFund[]): ReserveFund | null {
-  return reserves.find((f) => f.trip?.startedAt && !f.trip.endedAt) ?? null;
+/** رحلةُ هذا المظروف الجارية (بلا `endedAt`)، أو `null`. */
+export function activeTripOf(fund: ReserveFund): Trip | null {
+  return fund.trips?.find((t) => t.startedAt && !t.endedAt) ?? null;
+}
+
+/** الرحلةُ الجارية في المظاريف كلِّها — واحدةٌ فقط في كلّ وقت. */
+export function activeTrip(reserves: ReserveFund[]): { fund: ReserveFund; trip: Trip } | null {
+  for (const fund of reserves) {
+    const trip = activeTripOf(fund);
+    if (trip) return { fund, trip };
+  }
+  return null;
 }
 
 export interface TripSummary {
-  total: number;        // ما كلّفته الرحلة فعلاً (مجموع ما حُمِّل على المظروف)
+  total: number;        // ما كلّفته الرحلة فعلاً (ما حُمِّل على المظروف داخل نافذتها)
   count: number;        // عدد المعاملات
   days: number;         // أيامُ الرحلة (شاملةً يومَي البداية والنهاية)
   perDay: number;       // متوسّط اليوم
@@ -24,42 +39,76 @@ export interface TripSummary {
   ongoing: boolean;
 }
 
-/** تقريرُ رحلةٍ على مظروفها. `todayStr` لحساب أيام رحلةٍ ما زالت جارية. */
-export function tripSummary(fund: ReserveFund, transactions: Transaction[], todayStr: string): TripSummary {
-  const start = fund.trip?.startedAt;
-  const end = fund.trip?.endedAt;
-  const charged = transactions.filter((t) => reserveShare(t, fund.id) > 0);
+const EMPTY: TripSummary = {
+  total: 0, count: 0, days: 0, perDay: 0, biggest: null, byCategory: [], ongoing: false,
+};
+
+/** تقريرُ **رحلةٍ بعينها** على مظروفها. `todayStr` لحساب أيام رحلةٍ ما زالت جارية.
+ *
+ *  بلا `trip` يُؤخذ الجاري، وإن لم تكن هناك رحلةٌ جارية فآخرُ رحلةٍ انتهت —
+ *  فلوحةُ المظروف تعرض شيئاً معقولاً بدل فراغ. */
+export function tripSummary(
+  fund: ReserveFund,
+  transactions: Transaction[],
+  todayStr: string,
+  trip?: Trip | null
+): TripSummary {
+  const t = trip ?? activeTripOf(fund) ?? lastEndedTrip(fund);
+  if (!t?.startedAt) return EMPTY;
+
+  // **النافذةُ هي الفرق كلُّه.** بلا حدٍّ أعلى كان صرفُ الرحلة السابقة يُحتسب
+  // على اللاحقة. الحدُّ الأعلى لرحلةٍ جارية هو اليوم، ولمنتهيةٍ يومُ انتهائها.
+  const from = t.startedAt;
+  const to = t.endedAt ?? todayStr;
+
+  const charged = transactions.filter(
+    (x) => x.date >= from && x.date <= to && reserveShare(x, fund.id) > 0
+  );
+
   let total = 0;
   let biggest: Transaction | null = null;
+  let biggestShare = 0; // مُخزَّنٌ لا مُعادُ الحساب في كلّ دورة
   const cats = new Map<string, number>();
-  for (const t of charged) {
-    const share = reserveShare(t, fund.id);
+  for (const x of charged) {
+    const share = reserveShare(x, fund.id);
     total = round2(total + share);
-    cats.set(t.category, round2((cats.get(t.category) ?? 0) + share));
-    if (!biggest || share > reserveShare(biggest, fund.id)) biggest = t;
+    cats.set(x.category, round2((cats.get(x.category) ?? 0) + share));
+    if (share > biggestShare) { biggest = x; biggestShare = share; }
   }
-  const days = start
-    ? Math.max(
-        1,
-        Math.round((parseDate(end ?? todayStr).getTime() - parseDate(start).getTime()) / 86400000) + 1
-      )
-    : 0;
+
+  const days = Math.max(
+    1,
+    Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / 86400000) + 1
+  );
+
   return {
     total,
     count: charged.length,
     days,
-    perDay: days > 0 ? round2(total / days) : 0,
+    perDay: round2(total / days),
     biggest,
     byCategory: [...cats.entries()]
-      .map(([category, t]) => ({ category, total: t }))
+      .map(([category, v]) => ({ category, total: v }))
       .sort((a, b) => b.total - a.total),
-    ongoing: !!start && !end,
+    ongoing: !t.endedAt,
   };
 }
 
-/** الرحلاتُ المنتهية، أحدثُها أوّلاً — «كم كلّفتني كلُّ سفرة». */
-export function pastTrips(reserves: ReserveFund[]): ReserveFund[] {
-  return reserves
-    .filter((f) => f.trip?.startedAt && f.trip.endedAt)
-    .sort((a, b) => (a.trip!.endedAt! < b.trip!.endedAt! ? 1 : -1));
+/** آخرُ رحلةٍ انتهت على هذا المظروف. */
+export function lastEndedTrip(fund: ReserveFund): Trip | null {
+  const ended = (fund.trips ?? []).filter((t) => t.startedAt && t.endedAt);
+  if (!ended.length) return null;
+  return ended.reduce((a, b) => (a.endedAt! >= b.endedAt! ? a : b));
+}
+
+/** الرحلاتُ المنتهية كلُّها عبر المظاريف، أحدثُها أوّلاً — «كم كلّفتني كلُّ سفرة».
+ *  مظروفٌ واحد قد يظهر **مرّاتٍ**، مرّةً لكلّ رحلةٍ عليه. */
+export function pastTrips(reserves: ReserveFund[]): { fund: ReserveFund; trip: Trip }[] {
+  const out: { fund: ReserveFund; trip: Trip }[] = [];
+  for (const fund of reserves) {
+    for (const trip of fund.trips ?? []) {
+      if (trip.startedAt && trip.endedAt) out.push({ fund, trip });
+    }
+  }
+  return out.sort((a, b) => (a.trip.endedAt! < b.trip.endedAt! ? 1 : a.trip.endedAt! > b.trip.endedAt! ? -1 : 0));
 }

@@ -435,7 +435,20 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
         return Math.abs(other.amount) > Math.abs(d.amount) ? other : d;
       })
       .filter((d) => !(depositTombKey(d.id) in deleted));
-    return { ...f, deposits };
+    // والرحلاتُ تتّحد بالمعرّف مثلَ الإيداعات: رحلتان بدأتا على جهازين تبقيان
+    // اثنتين، ورحلةٌ أُنهيت على أحدهما تصل بنهايتها. وعلى الرحلة المشتركة
+    // **المنتهيةُ تغلب الجارية**: إنهاءُ رحلةٍ فعلٌ صريحٌ من المالك، وبقاؤها
+    // «جارية» على الجهاز الآخر مجرّدُ غيابِ خبر.
+    const sTripsById = new Map((secondary.reserves.find((x) => x.id === f.id)?.trips ?? []).map((t) => [t.id, t]));
+    const pTrips = primary.reserves.find((x) => x.id === f.id)?.trips ?? [];
+    const sTrips = secondary.reserves.find((x) => x.id === f.id)?.trips ?? [];
+    const trips = unionOrdered(pTrips, sTrips, (t) => t.id).map((t) => {
+      const other = sTripsById.get(t.id);
+      if (!other || other === t) return t;
+      return { ...t, endedAt: t.endedAt ?? other.endedAt };
+    });
+
+    return { ...f, deposits, ...(trips.length ? { trips } : {}) };
   });
 
   // Prayer logs: union by date, and on a shared date resolve **each prayer on

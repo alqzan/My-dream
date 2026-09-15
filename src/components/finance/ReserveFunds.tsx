@@ -121,11 +121,13 @@ export function ReserveFunds() {
       {trips.length > 0 && (
         <div className="space-y-1 pt-1">
           <div className="text-[10px] font-semibold" style={{ color: "var(--ink52)" }}>رحلاتي السابقة</div>
-          {trips.map((f) => {
-            const t = tripSummary(f, transactions, today());
+          {/* مظروفٌ واحد قد يظهر **مرّاتٍ** — مرّةً لكلّ رحلةٍ عليه. وكلُّ سطرٍ
+              يقرأ نافذةَ رحلته وحدها، فلا يُحسب صرفُ رحلةٍ على أختها. */}
+          {trips.map(({ fund: f, trip }) => {
+            const t = tripSummary(f, transactions, today(), trip);
             return (
               <button
-                key={f.id}
+                key={trip.id}
                 onClick={() => setExpanded(expanded === f.id ? null : f.id)}
                 className="w-full flex items-center gap-2 rounded-xl px-2.5 py-1.5 press text-right"
                 style={{ background: "var(--paper)", border: "1px solid var(--line)" }}
@@ -134,7 +136,7 @@ export function ReserveFunds() {
                 <span className="flex-1 min-w-0">
                   <span className="block text-[11px] font-bold truncate" style={{ color: "var(--ink)" }}>{f.name}</span>
                   <span className="block text-[10px]" style={{ color: "var(--ink52)" }}>
-                    {formatDateShort(f.trip!.startedAt)} ← {formatDateShort(f.trip!.endedAt!)} ·{" "}
+                    {formatDateShort(trip.startedAt)} ← {formatDateShort(trip.endedAt!)} ·{" "}
                     {formatAmount(t.days)} {t.days === 1 ? "يوم" : "يوماً"}
                   </span>
                 </span>

@@ -567,6 +567,27 @@ export function migratePersisted(persisted: unknown, version: number): AppData {
         state = { ...restState, transactions: txs };
       }
 
+      // v18 يحوّل `trip` المفردة على المظروف إلى **قائمة** `trips`. الرحلةُ
+      // القائمة تُحفظ كما هي بمعرّفٍ **مشتقٍّ** من تاريخ بدئها لا عشوائيّ:
+      // جهازان يهاجران اللقطةَ نفسَها يصلان إلى المعرّف نفسِه، فلا تتضاعف
+      // الرحلةُ الواحدة عند أوّل دمج.
+      if (version < 18) {
+        const reserves = ((state.reserves as Record<string, unknown>[]) ?? []).map((f) => {
+          const { trip: legacy, ...rest } = (f ?? {}) as Record<string, unknown> & {
+            trip?: { startedAt?: string; endedAt?: string };
+          };
+          if (!legacy?.startedAt) return rest;
+          const migrated = {
+            id: `trip-${legacy.startedAt}`,
+            startedAt: legacy.startedAt,
+            ...(legacy.endedAt ? { endedAt: legacy.endedAt } : {}),
+          };
+          const existing = Array.isArray(rest.trips) ? (rest.trips as unknown[]) : [];
+          return { ...rest, trips: [...existing, migrated] };
+        });
+        state = { ...state, reserves };
+      }
+
       return state as unknown as AppData;
 }
 
@@ -1456,30 +1477,47 @@ export const useAppStore = create<AppStore>()(
           ),
         })),
 
+      // **تُضاف رحلةٌ ولا يُكتب فوق سابقة** (٠٫١٫٤٢٥): المظروف يحمل قائمةَ
+      // رحلات، فإعادةُ استعمال مظروف «سفر» — وهو أطبعُ ما يُفعل به — لم تعد
+      // تمحو تقريرَ الرحلة الماضية. وتبقى القاعدة: **واحدةٌ جارية في كلّ وقت**
+      // عبر المظاريف كلِّها، وإلّا حُمِّلت الفاتورةُ على رحلتين واختلط التقريران.
       startTrip: (fundId) =>
         set((s) => {
           const todayStr = today();
+          const closeOngoing = (f: ReserveFund): ReserveFund => {
+            const trips = f.trips ?? [];
+            if (!trips.some((t) => t.startedAt && !t.endedAt)) return f;
+            return {
+              ...f,
+              trips: trips.map((t) => (t.startedAt && !t.endedAt ? { ...t, endedAt: todayStr } : t)),
+            };
+          };
           return {
-            reserves: s.reserves.map((f) =>
-              f.id === fundId
-                ? { ...f, trip: { startedAt: todayStr } }
-                : // رحلةٌ أخرى جارية تُنهى الآن: وضعُ السفر واحدٌ لا يتداخل،
-                  // وإلّا حُمِّلت الفاتورةُ على رحلتين واختلط التقريران.
-                f.trip?.startedAt && !f.trip.endedAt
-                ? { ...f, trip: { ...f.trip, endedAt: todayStr } }
-                : f
-            ),
+            reserves: s.reserves.map((f) => {
+              const closed = closeOngoing(f);
+              if (f.id !== fundId) return closed;
+              // ورحلةٌ كانت جاريةً على هذا المظروف نفسِه أُغلقت للتوّ، فالجديدة بعدها.
+              return { ...closed, trips: [...(closed.trips ?? []), { id: uid(), startedAt: todayStr }] };
+            }),
           };
         }),
 
       endTrip: (fundId) =>
-        set((s) => ({
-          reserves: s.reserves.map((f) =>
-            f.id === fundId && f.trip?.startedAt && !f.trip.endedAt
-              ? { ...f, trip: { ...f.trip, endedAt: today() } }
-              : f
-          ),
-        })),
+        set((s) => {
+          const todayStr = today();
+          return {
+            reserves: s.reserves.map((f) =>
+              f.id === fundId && (f.trips ?? []).some((t) => t.startedAt && !t.endedAt)
+                ? {
+                    ...f,
+                    trips: (f.trips ?? []).map((t) =>
+                      t.startedAt && !t.endedAt ? { ...t, endedAt: todayStr } : t
+                    ),
+                  }
+                : f
+            ),
+          };
+        }),
 
       setAutoOffset: (on) => set(() => ({ autoOffset: !!on })),
 
@@ -2126,7 +2164,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 17,
+      version: 18,
       // التخزين المؤجَّل لا الخام: كلّ تعديلٍ كان يُسلسل المتجر كاملاً ويكتبه
       // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
       // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.

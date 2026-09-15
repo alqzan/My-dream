@@ -298,6 +298,11 @@ function validReserveDeposit(value: unknown): boolean {
     && optionalString(value.note);
 }
 
+/** رحلةٌ على مظروف: معرّفٌ وتاريخُ بدءٍ، ونهايةٌ اختيارية (غيابُها = جارية). */
+function validTrip(value: unknown): boolean {
+  return hasId(value) && nonEmptyString(value.startedAt) && optionalString(value.endedAt);
+}
+
 function validReserve(value: unknown): value is ReserveFund {
   return hasId(value)
     && typeof value.name === "string"
@@ -305,6 +310,7 @@ function validReserve(value: unknown): value is ReserveFund {
     && typeof value.color === "string"
     && optionalFiniteNumber(value.target)
     && collectionOf(value.deposits, validReserveDeposit)
+    && (value.trips === undefined || collectionOf(value.trips, validTrip))
     && nonEmptyString(value.createdAt)
     && optionalFiniteNumber(value.updatedAt);
 }

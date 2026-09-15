@@ -2,7 +2,7 @@
 import { useAppStore } from "@/lib/store";
 import type { ReserveFund } from "@/lib/types";
 import { formatAmount, formatDate, getCategoryInfo, today, cn } from "@/lib/utils";
-import { tripSummary } from "@/lib/trip";
+import { tripSummary, activeTripOf, lastEndedTrip } from "@/lib/trip";
 import { Plane, Flag } from "lucide-react";
 
 // ===================== وضعُ السفر وتقريرُها =====================
@@ -18,8 +18,12 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
   const endTrip = useAppStore((s) => s.endTrip);
 
   const todayStr = today();
-  const s = tripSummary(fund, transactions, todayStr);
-  const started = !!fund.trip?.startedAt;
+  // الجاريةُ إن وُجدت، وإلّا فآخرُ رحلةٍ انتهت على هذا المظروف — فلوحةُ مظروفٍ
+  // سافرتَ عليه مرّةً تعرض تقريرَ تلك المرّة بدل أن تُظهر «ابدأ وضع السفر» وكأنّ
+  // شيئاً لم يكن. ومظروفٌ له عدّةُ رحلات، سجلُّها كلُّه في «رحلاتي السابقة».
+  const shown = activeTripOf(fund) ?? lastEndedTrip(fund);
+  const s = tripSummary(fund, transactions, todayStr, shown);
+  const started = !!shown;
 
   if (!started) {
     return (
@@ -49,8 +53,8 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
           {s.ongoing ? "الرحلة جارية" : "انتهت الرحلة"}
         </span>
         <span className="text-[10px]" style={{ color: "var(--ink52)" }}>
-          {formatDate(fund.trip!.startedAt)}
-          {fund.trip!.endedAt ? ` ← ${formatDate(fund.trip!.endedAt)}` : ""}
+          {formatDate(shown!.startedAt)}
+          {shown!.endedAt ? ` ← ${formatDate(shown!.endedAt)}` : ""}
         </span>
         {s.ongoing && (
           <button

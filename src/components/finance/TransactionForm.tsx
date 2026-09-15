@@ -51,9 +51,10 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   // **وضع السفر**: ما دامت رحلةٌ جارية، يُفتح النموذج ومصروفُه محسوبٌ عليها
   // أصلاً — فلا يُسأل المالك عن الوجهة عند كلّ فاتورةٍ وهو في الطريق. ويبقى
   // له أن يرفعها عن هذه الفاتورة وحدها بضغطة. وتعديلُ معاملةٍ قديمة لا يُمسّ.
-  const trip = activeTrip(reserves);
+  const ongoing = activeTrip(reserves);
+  const tripFund = ongoing?.fund ?? null;
   const [splits, setSplits] = useState<ReserveSplit[]>(
-    initial?.reserveSplits ?? (trip ? [{ fundId: trip.id, pct: 100 }] : [])
+    initial?.reserveSplits ?? (tripFund ? [{ fundId: tripFund.id, pct: 100 }] : [])
   );
   const [addingSub, setAddingSub] = useState(false);
   const [newSubName, setNewSubName] = useState("");
@@ -194,10 +195,10 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
     onClose();
   }
 
-  const onTrip = !!trip && splits.some((sp) => sp.fundId === trip.id && sp.pct >= 100);
+  const onTrip = !!tripFund && splits.some((sp) => sp.fundId === tripFund.id && sp.pct >= 100);
   return (
     <div className="space-y-4">
-      {trip && !initial && (
+      {tripFund && !initial && (
         <div
           className="flex items-center gap-2 rounded-xl px-3 py-2"
           style={{ background: "var(--paper2)", border: `1px solid ${onTrip ? "var(--theme-accent)" : "var(--line)"}` }}
@@ -205,7 +206,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
           <Plane size={15} className={onTrip ? "text-finance shrink-0" : "text-gray-400 shrink-0"} />
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-bold" style={{ color: "var(--ink)" }}>
-              {onTrip ? `محسوبٌ على «${trip.name}»` : `وضع السفر مفعّل — «${trip.name}»`}
+              {onTrip ? `محسوبٌ على «${tripFund.name}»` : `وضع السفر مفعّل — «${tripFund.name}»`}
             </div>
             <div className="text-[10px]" style={{ color: "var(--ink52)" }}>
               {onTrip ? "كلّ مصاريف الرحلة تُجمع في مظروفها" : "هذا المصروف مرفوعٌ عن الرحلة"}
@@ -213,7 +214,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
           </div>
           <button
             type="button"
-            onClick={() => setSplits(onTrip ? [] : [{ fundId: trip.id, pct: 100 }])}
+            onClick={() => setSplits(onTrip ? [] : [{ fundId: tripFund.id, pct: 100 }])}
             className="text-[10px] font-semibold px-2 py-1 rounded-lg press shrink-0"
             style={{ border: "1px solid var(--line)", color: "var(--ink52)" }}
           >

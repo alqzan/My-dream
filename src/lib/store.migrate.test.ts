@@ -53,7 +53,7 @@ describe("لا ترمي أبداً — رميةٌ واحدة تعني إقلاع
   });
 
   it("وكلُّ نسخةٍ من ١ إلى ١٧ تمرّ على حمولةٍ واقعية", () => {
-    for (let v = 1; v <= 17; v++) {
+    for (let v = 1; v <= 18; v++) {
       expect(() => migratePersisted(v1Payload(), v), `v${v}`).not.toThrow();
     }
   });
@@ -165,6 +165,44 @@ describe("v17 — الكتلةُ المُتلِفة: أربعُ مجموعاتٍ
     const at17 = { transactions: [{ id: "x", date: "2026-01-01", amount: 5, category: "c", note: "" }] };
     const same = migratePersisted(structuredClone(at17), 17);
     expect(rows(same, "transactions")).toEqual(at17.transactions);
+  });
+});
+
+describe("v18 — الرحلةُ المفردة تصير قائمة", () => {
+  // المظروف كان يحمل `trip` واحدة، فبدءُ رحلةٍ ثانية عليه يمحو الأولى. الهجرةُ
+  // تحوّلها إلى `trips[]` **بمعرّفٍ مشتقّ** من تاريخ بدئها لا عشوائيّ: جهازان
+  // يهاجران اللقطةَ نفسَها يصلان إلى المعرّف نفسِه، فلا تتضاعف عند أوّل دمج.
+  const before = {
+    reserves: [
+      { id: "f1", name: "سفر", icon: "🎒", color: "#000", deposits: [], createdAt: "2026-01-01",
+        trip: { startedAt: "2026-03-10", endedAt: "2026-03-14" } },
+      { id: "f2", name: "جارية", icon: "✈️", color: "#000", deposits: [], createdAt: "2026-01-01",
+        trip: { startedAt: "2026-06-01" } },
+      { id: "f3", name: "بلا سفر", icon: "📦", color: "#000", deposits: [], createdAt: "2026-01-01" },
+    ],
+  };
+  const out = migratePersisted(structuredClone(before), 17);
+  const funds = rows(out, "reserves") ?? [];
+
+  it("المنتهيةُ تُنقل بتاريخيها", () => {
+    expect(funds[0].trips).toEqual([{ id: "trip-2026-03-10", startedAt: "2026-03-10", endedAt: "2026-03-14" }]);
+  });
+
+  it("والجاريةُ تبقى جاريةً (بلا `endedAt` مخترَع)", () => {
+    expect(funds[1].trips).toEqual([{ id: "trip-2026-06-01", startedAt: "2026-06-01" }]);
+  });
+
+  it("والحقلُ القديم يختفي فلا يبقى مصدران", () => {
+    for (const f of funds) expect(f).not.toHaveProperty("trip");
+  });
+
+  it("ومظروفٌ بلا سفرٍ لا يكتسب قائمةً فارغة", () => {
+    expect(funds[2]).not.toHaveProperty("trips");
+  });
+
+  it("والمعرّفُ مشتقٌّ — هجرتان للقطة نفسِها تعطيان المعرّف نفسَه", () => {
+    const again = rows(migratePersisted(structuredClone(before), 17), "reserves") ?? [];
+    expect((again[0].trips as { id: string }[])[0].id).toBe((funds[0].trips as { id: string }[])[0].id);
   });
 });
 

@@ -945,6 +945,37 @@ describe("mergeAppData — تعارضُ العناصر المركّبة (تبا�
     });
   });
 
+  describe("رحلاتُ المظروف تتّحد ولا تُلغي إحداها الأخرى", () => {
+    // الرحلاتُ قائمةٌ على المظروف (٠٫١٫٤٢٥)، وهي مجموعةٌ داخلية مثلُ الإيداعات:
+    // بلا اتّحادٍ بالمعرّف يأخذ الدمجُ نسخةَ الفائز كاملةً، فرحلةٌ بدأها المالك
+    // على الجوّال تختفي لأنّ الحاسوب لم يرَها.
+    const f = (trips: { id: string; startedAt: string; endedAt?: string }[]): ReserveFund => ({
+      id: "f1", name: "سفر", icon: "🎒", color: "#000", deposits: [], createdAt: "2026-01-01", trips,
+    });
+
+    it("رحلتان بدأتا على جهازين تبقيان اثنتين", () => {
+      const iphone = base({ lastUpdated: 9000, reserves: [f([{ id: "a", startedAt: "2026-03-01", endedAt: "2026-03-05" }])] });
+      const ipad = base({ lastUpdated: 100, reserves: [f([{ id: "b", startedAt: "2026-06-01", endedAt: "2026-06-02" }])] });
+      for (const m of [mergeAppData(iphone, ipad), mergeAppData(ipad, iphone)]) {
+        expect((m.reserves[0].trips ?? []).map((t) => t.id).sort()).toEqual(["a", "b"]);
+      }
+    });
+
+    it("و**المنتهيةُ تغلب الجارية** على الرحلة المشتركة — الإنهاءُ فعلٌ صريح", () => {
+      const ended = base({ lastUpdated: 100, reserves: [f([{ id: "a", startedAt: "2026-03-01", endedAt: "2026-03-05" }])] });
+      const still = base({ lastUpdated: 9000, reserves: [f([{ id: "a", startedAt: "2026-03-01" }])] });
+      for (const m of [mergeAppData(ended, still), mergeAppData(still, ended)]) {
+        expect(m.reserves[0].trips?.[0].endedAt).toBe("2026-03-05");
+      }
+    });
+
+    it("ومظروفٌ بلا رحلاتٍ لا يكتسب حقلاً فارغاً", () => {
+      const plain: ReserveFund = { id: "f1", name: "ف", icon: "📦", color: "#000", deposits: [], createdAt: "2026-01-01" };
+      const m = mergeAppData(base({ reserves: [plain] }), base({ reserves: [plain] }));
+      expect(m.reserves[0]).not.toHaveProperty("trips");
+    });
+  });
+
   describe("سجلُّ صفحات الختمة يتّحد ولا يتبع الفائز", () => {
     // كان `mergeAppData` يأخذ لقطةَ ختمةٍ واحدة كاملةً ويتجاوز `pageLog`، فتضيع
     // أيّامُ القراءة المسجّلة على الجهاز الخاسر — وهي ما تُحسب منه وتيرةُ آخر
