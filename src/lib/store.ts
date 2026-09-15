@@ -8,7 +8,7 @@ import type {
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode, FundFunding,
 } from "./types";
-import { DEFAULT_CATEGORIES, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
+import { DEFAULT_CATEGORIES, SEED_HABITS, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
@@ -18,7 +18,7 @@ import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { normalizeMerchant } from "./bankParser";
-import { offsetPlan, OFFSET_NOTE } from "./budgetFlow";
+import { offsetPlan, OFFSET_NOTE, offsetDepositId } from "./budgetFlow";
 import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan";
 import { cycleLength } from "./budgetCycle";
 import { persistedIdbStorage } from "./idbStorage";
@@ -209,7 +209,11 @@ interface AppStore extends AppData {
   sweepToReserve: (fundId: string, amount: number, note?: string) => void;
   // الاتجاه المعاكس: سحب مبلغ من احتياطي (صندوق الفوائض عادةً) وإضافته لرصيد
   // الميزانية اليومية. يرجع المبلغ المُضاف فعلاً (مقصوصاً على رصيد الصندوق).
-  pullFromReserve: (fundId: string, amount: number, note?: string) => number;
+  // `depositId` اختياريّ: مرِّر معرّفاً **مشتقّاً** (لا عشوائياً) حين يكون السحبُ
+  // آلياً قد يقع على جهازين معاً — فيُرفَع السحبُ القائم لليوم بدل أن يُضاف
+  // ثانٍ، ولا يُخصم الريال مرّتين عند الدمج. اتركه فارغاً للسحب اليدويّ:
+  // سحبان في يومٍ واحد حدثان مستقلّان يستحقّان سطرين.
+  pullFromReserve: (fundId: string, amount: number, note?: string, depositId?: string) => number;
   // **المقاصة التلقائية**: تغطية عجز اليومية من «الفوائض» بلا ضغطة. القرار كلّه
   // في `offsetPlan` (`budgetFlow.ts`) — بما فيه الوقوف عند عجزٍ أكبر من ثلاث
   // يوميّات. ترجع المبلغ المُقاصّ (0 = لم تتحرّك). آمنةٌ للنداء مراراً: بعد
@@ -599,10 +603,7 @@ export const useAppStore = create<AppStore>()(
       knowledgeSources: [],
       benefits: [],
       journalEntries: [],
-      habits: [
-        { id: "h1", name: "رياضة", icon: "🏃", color: "#3d9640", logs: [] },
-        { id: "h2", name: "قرآن", icon: "📖", color: "#7c6fcd", logs: [] },
-      ],
+      habits: structuredClone(SEED_HABITS),
       budgets: [],
       categories: DEFAULT_CATEGORIES,
       reserves: [],
@@ -1167,7 +1168,7 @@ export const useAppStore = create<AppStore>()(
       // دون المساس بالدورة الجارية ولا بحساب ما صُرف فيها. قيمةٌ سالبة لـ
       // carryAdjust مقصودة هنا (فوائض مضافة) ويقرؤها `computeDailyBudgetStatus`
       // كما هي. لا تُنشأ معاملةٌ: هذا تحريك رصيدٍ بين وعاءين لا صرفٌ نقديّ.
-      pullFromReserve: (fundId, amount, note) => {
+      pullFromReserve: (fundId, amount, note, depositId) => {
         let added = 0;
         set((s) => {
           const fund = s.reserves.find((f) => f.id === fundId);
@@ -1178,16 +1179,31 @@ export const useAppStore = create<AppStore>()(
           if (balance <= 0) return {};
           added = round2(Math.min(amount, balance));
           if (added <= 0) return {};
+          const todayStr = today();
+          // **بمعرّفٍ مشتقّ (المقاصة التلقائية): إيداعٌ واحدٌ لليوم يُرفَع، لا
+          // إيداعٌ ثانٍ يُضاف.** عجزٌ ثانٍ في اليوم نفسِه يكبّر السحبَ القائم
+          // بالفرق — فيبقى لكلّ (مظروف · يوم) سطرٌ واحد يساوي مجموعَ ما غُطّي،
+          // وهو الشكلُ الذي يحسمه الدمجُ بالأكبر فلا يُخصم الريال مرّتين.
+          // وبلا معرّف (السحبُ اليدويّ) يبقى السلوك كما كان: سحبان في يومٍ
+          // واحدٍ حدثان مستقلّان يستحقّان سطرين.
+          const existing = depositId ? fund.deposits.find((d) => d.id === depositId) : undefined;
           const deposit: ReserveDeposit = {
-            id: uid(),
-            date: today(),
-            amount: -added,
+            id: depositId ?? uid(),
+            date: todayStr,
+            amount: round2(existing ? existing.amount - added : -added),
             note: note ?? "إلى الميزانية اليومية",
           };
           const carryAdjust = Number.isFinite(s.dailyBudget.carryAdjust) ? s.dailyBudget.carryAdjust! : 0;
           return {
             reserves: s.reserves.map((f) =>
-              f.id === fundId ? { ...f, deposits: [deposit, ...f.deposits] } : f
+              f.id === fundId
+                ? {
+                    ...f,
+                    deposits: existing
+                      ? f.deposits.map((d) => (d.id === deposit.id ? deposit : d))
+                      : [deposit, ...f.deposits],
+                  }
+                : f
             ),
             dailyBudget: { ...s.dailyBudget, carryAdjust: round2(carryAdjust - added) },
           };
@@ -1255,7 +1271,7 @@ export const useAppStore = create<AppStore>()(
           s.autoOffset !== false
         );
         if (plan.amount <= 0) return 0;
-        return get().pullFromReserve(fund.id, plan.amount, OFFSET_NOTE);
+        return get().pullFromReserve(fund.id, plan.amount, OFFSET_NOTE, offsetDepositId(fund.id, today()));
       },
 
       // تمويل مظروفٍ من مظروف (رحلةُ المدينة تُموَّل من الفوائض): سحبٌ من المصدر

@@ -28,6 +28,14 @@ export const DEFAULT_CATEGORIES: FinanceCategoryDef[] = [
   { id: "cat-others", label: "للآخرين", icon: "🎁", color: "#8a6fb0" },
 ];
 
+// العادتان اللتان يشحنهما التطبيق الجديد. مصدرٌ واحد: يزرعهما المتجر، ويقيس
+// عليهما `hasData` في `syncDecision.ts` ليفرّق بين جهازٍ فارغٍ فعلاً وجهازٍ
+// أعدّ عليه المالكُ عاداته قبل تفعيل المزامنة.
+export const SEED_HABITS: Habit[] = [
+  { id: "h1", name: "رياضة", icon: "🏃", color: "#3d9640", logs: [] },
+  { id: "h2", name: "قرآن", icon: "📖", color: "#7c6fcd", logs: [] },
+];
+
 // Shown for a transaction/budget whose category was since deleted, instead
 // of crashing or silently dropping the entry.
 export const UNKNOWN_CATEGORY: FinanceCategoryDef = { id: "", label: "غير مصنف", icon: "📌", color: "#888" };

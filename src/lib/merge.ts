@@ -4,6 +4,7 @@
 // (local, cloud) → merged AppData; touches no I/O.
 import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, KhushuLevel, PrayerName } from "./types";
 import { EMPTY_HIFZ } from "./types";
+import { isOffsetDepositId } from "./budgetFlow";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
 
 // Which journal shard a given entry belongs to: one document per YYYY-MM of the
@@ -24,6 +25,81 @@ export const budgetTombKey = (category: string) => `budget:${category}`;
 export const depositTombKey = (depositId: string) => `deposit:${depositId}`;
 export const habitLogTombKey = (habitId: string, date: string) => `habitlog:${habitId}:${date}`;
 export const wirdTombKey = (date: string) => `wird:${date}`;
+
+/** المجموعاتُ المفتاحُها `id` — نفسُ قائمة `ID_COLLECTIONS` في المتجر. تُذكر هنا
+ *  أيضاً لأنّ `replaceTombstones` نقيّةٌ ولا تستورد المتجر (ولو استوردته لجرّت
+ *  Firebase وIndexedDB إلى دالّةٍ حسابية). حارسُها في `replaceTombstones.test.ts`. */
+const ID_KEYED = [
+  "transactions", "books", "readingLogs", "journalEntries",
+  "reserves", "habits", "futureLetters", "categories",
+  "quranReflections", "countdownEvents",
+  "knowledgeSources", "benefits",
+] as const;
+
+/** شواهدُ الحذف التي يُخلّفها **استبدالٌ** بنسخةٍ احتياطية.
+ *
+ *  «استبدل كل بياناتي» يمرّ بـ`hydrate`، و`hydrate` يستعمل `rawSet` عمداً (كي
+ *  لا يُختم `lastUpdated` فيُفسد مقارنةَ «الأحدث يفوز»). وثمنُ ذلك أنّ حلقةَ
+ *  الشواهد التلقائية في غلاف `set` **لا تعمل**: لا يُكتب شاهدٌ لأيّ عنصرٍ
+ *  أسقطته النسخة. فيتّحد الدمجُ التالي مع جهازٍ آخر ما زال يحمل نسخَه، ويعود
+ *  كلُّ ما حُذف — يبدو الاستبدالُ ناجحاً ثمّ ينتقض بصمت بعد أوّل مزامنة، وعلى
+ *  هذا الجهاز نفسِه بعد رحلةِ ذهابٍ وإياب.
+ *
+ *  فتُحسب الشواهدُ هنا صراحةً: كلُّ معرّفٍ كان في `before` وغاب عن `after`.
+ *  ويشمل المجموعاتِ الداخلية التي لها مفاتيحُ شواهدَ خاصّة (السقوف · إيداعات
+ *  المظاريف · سجلّات العادات · الوِرد)، فلا ينجو منها شيءٌ لأنّه ليس عنصراً
+ *  مفتاحُه `id` في الجذر.
+ *
+ *  **للاستبدال وحده.** الدمجُ يُبقي الطرفين عمداً، وكتابةُ شواهدَ له تجعله
+ *  حذفاً — وهو نقيضُ ما طُلب. والتراجعُ لا يحتاج شيئاً إضافياً: استعادةُ لقطة
+ *  ما قبل الاستبدال تُعيد خريطةَ `deleted` كما كانت فترفع هذه الشواهد معها. */
+export function replaceTombstones(
+  before: Partial<AppData>,
+  after: Partial<AppData>,
+  now = Date.now()
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const gone = (key: string) => { out[key] = now; };
+
+  for (const coll of ID_KEYED) {
+    const b = (before[coll] ?? []) as { id: string }[];
+    const a = (after[coll] ?? []) as { id: string }[];
+    if (!Array.isArray(b) || !Array.isArray(a)) continue;
+    const kept = new Set(a.map((x) => x?.id));
+    for (const item of b) if (item?.id && !kept.has(item.id)) gone(item.id);
+  }
+
+  // السقوف: مفتاحُها القسم لا `id`.
+  const keptBudgets = new Set((after.budgets ?? []).map((x) => x.category));
+  for (const b of before.budgets ?? []) {
+    if (!keptBudgets.has(b.category)) gone(budgetTombKey(b.category));
+  }
+
+  // إيداعاتُ المظاريف وسجلّاتُ العادات: مجموعاتٌ داخلية لها دمجُها المستقل،
+  // فحذفُ عنصرٍ منها لا يُرى في حذف الأب. تُفحص لكلّ أبٍ **باقٍ**؛ أمّا أبٌ
+  // ذهب كلُّه فشاهدُه أعلاه يكفي.
+  const afterFunds = new Map((after.reserves ?? []).map((f) => [f.id, f]));
+  for (const f of before.reserves ?? []) {
+    const still = afterFunds.get(f.id);
+    if (!still) continue;
+    const kept = new Set((still.deposits ?? []).map((d) => d.id));
+    for (const d of f.deposits ?? []) if (!kept.has(d.id)) gone(depositTombKey(d.id));
+  }
+
+  const afterHabits = new Map((after.habits ?? []).map((h) => [h.id, h]));
+  for (const h of before.habits ?? []) {
+    const still = afterHabits.get(h.id);
+    if (!still) continue;
+    const kept = new Set(still.logs ?? []);
+    for (const d of h.logs ?? []) if (!kept.has(d)) gone(habitLogTombKey(h.id, d));
+  }
+
+  // الوِرد القرآني: قائمةُ تواريخ لا عناصرَ بمعرّفات.
+  const keptWird = new Set(after.quranWird ?? []);
+  for (const d of before.quranWird ?? []) if (!keptWird.has(d)) gone(wirdTombKey(d));
+
+  return out;
+}
 
 // Per-key edit stamps that live in `fieldUpdatedAt` next to the singleton
 // settings (same namespacing discipline as the tombstone keys above):
@@ -345,9 +421,20 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const reserves = byIdNewer(primary.reserves, secondary.reserves).map((f) => {
     const pDep = primary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
     const sDep = secondary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
-    const deposits = unionOrdered(pDep, sDep, (d) => d.id).filter(
-      (d) => !(depositTombKey(d.id) in deleted)
-    );
+    // إيداعُ المقاصة التلقائية معرّفُه مشتقٌّ من (المظروف · اليوم)، فنسخةُ
+    // الجهازين تحمل المعرّفَ نفسَه — والاتّحادُ بالمعرّف يُبقي واحدةً فينتهي
+    // الخصمُ المزدوج. ويبقى سؤالٌ: أيُّ النسختين؟ **الأكبر**: كلُّ جهازٍ يكبّر
+    // سحبَ اليوم بقدر ما رأى من عجز، فمن رأى أكثرَ رأى الصورةَ الأحدث.
+    // (بقيّةُ الإيداعات أحداثٌ مستقلّة، والأوّلُ يفوز كما كان.)
+    const sDepById = new Map(sDep.map((d) => [d.id, d]));
+    const deposits = unionOrdered(pDep, sDep, (d) => d.id)
+      .map((d) => {
+        if (!isOffsetDepositId(d.id)) return d;
+        const other = sDepById.get(d.id);
+        if (!other || other === d) return d;
+        return Math.abs(other.amount) > Math.abs(d.amount) ? other : d;
+      })
+      .filter((d) => !(depositTombKey(d.id) in deleted));
     return { ...f, deposits };
   });
 

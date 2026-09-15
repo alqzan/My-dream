@@ -1,7 +1,26 @@
 // قرارات المزامنة — دوالٌّ نقيّة بلا Firebase ولا React، مُخرَجة من SyncProvider
 // حتى تُختبر وحدةً (كانت داخل المكوّن فلا سبيل لاختبار الشرط الذي يقرّر تبنّي
 // لقطة السحابة، وهو أخطر شرطٍ في التطبيق: خطؤه = تعديلٌ يضيع بلا أثر).
-import type { AppData } from "./types";
+import type { AppData, FinanceCategoryDef, Habit } from "./types";
+import { DEFAULT_CATEGORIES, SEED_HABITS } from "./types";
+
+/** هل هذه القائمة غيرُ ما يشحنه التطبيق الجديد؟ عنصرٌ بمعرّفٍ ليس في البذرة
+ *  **أو** بذرةٌ غُيّر اسمُها أو أيقونتُها أو لونُها = تأليفُ المالك. المقارنةُ
+ *  بالمعرّف وحده لا تكفي: من أعاد تسمية «رياضة» إلى «مشي» ألّف شيئاً، ومعرّفُه
+ *  ما زال `h1`. وعددٌ أقلُّ من البذرة تأليفٌ أيضاً — حذفُ ما لا يريد. */
+function differsFromSeed<T extends { id: string }>(
+  items: T[] | undefined,
+  seed: T[],
+  same: (a: T, b: T) => boolean
+): boolean {
+  if (!items) return false;
+  if (items.length !== seed.length) return items.length > 0;
+  const byId = new Map(seed.map((x) => [x.id, x]));
+  return items.some((it) => {
+    const s = byId.get(it.id);
+    return !s || !same(it, s);
+  });
+}
 
 // هل تحمل هذه اللقطة بياناتٍ حقيقية للمالك؟ يُستعمل حتى لا يمحو جهازٌ جديد فارغ
 // مساحةً سحابية فيها بياناته — الطوابع وحدها لا تكفي، فجهازٌ جديد يبدأ بختم
@@ -19,6 +38,14 @@ export function hasData(d: Partial<AppData>): boolean {
     arr(d.knowledgeSources) || arr(d.benefits)
   ) return true;
   if ((d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0)) return true;
+  // العاداتُ والتصنيفاتُ أنفسُها — لا سجلّاتُها وحدها. كان الحقلان غائبين عن
+  // الفحص كلِّه: من أعدّ عاداته وأقسامَه على جهازٍ جديد **قبل** أن يفعّل
+  // المزامنة يُقرأ «فارغاً»، فيتبنّى الجهازُ السحابةَ كاملةً بلا دمج ويذهب
+  // إعدادُه بلا خطأ ولا إشعار. (نفسُ صنفِ الإغفال الذي وقع مع `assets`.)
+  if (differsFromSeed<Habit>(d.habits, SEED_HABITS,
+    (a, b) => a.name === b.name && a.icon === b.icon && a.color === b.color)) return true;
+  if (differsFromSeed<FinanceCategoryDef>(d.categories, DEFAULT_CATEGORIES,
+    (a, b) => a.label === b.label && a.icon === b.icon && a.color === b.color)) return true;
   const hifz = d.quranHifz;
   if (hifz && (hifz.plan || (hifz.sessions?.length ?? 0) > 0 ||
     (hifz.reviews?.length ?? 0) > 0 || (hifz.frontierId ?? 0) > 0 ||

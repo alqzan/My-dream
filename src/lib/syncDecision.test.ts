@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { decideAdoptCloud, shouldAdoptCloud, hasData, cloudHasUnseen } from "./syncDecision";
-import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
+import { EMPTY_HIFZ, EMPTY_KHATMA, SEED_HABITS, DEFAULT_CATEGORIES } from "./types";
 import type { AppData, Transaction } from "./types";
 
 function base(over: Partial<AppData> = {}): AppData {
@@ -132,6 +132,44 @@ describe("hasData — تقدُّمُ الختمة بالصفحة بياناتٌ 
 
   it("وختمةٌ خاليةٌ تماماً تبقى فراغاً", () => {
     expect(hasData(base())).toBe(false);
+  });
+});
+
+describe("hasData — العاداتُ والأقسام تأليفٌ لا أثاثٌ افتراضيّ", () => {
+  // كان الحقلان غائبين عن الفحص كلِّه (العادةُ تُحتسب بسجلّاتها فقط، والأقسامُ
+  // لا تُذكر أصلاً). فمن أعدّ عاداته وأقسامَه على جهازٍ جديد **قبل** تفعيل
+  // المزامنة يُقرأ «فارغاً»، فيتبنّى الجهازُ السحابةَ كاملةً بلا دمج ويذهب
+  // إعدادُه بلا خطأ ولا إشعار.
+  const seedHabits = structuredClone(SEED_HABITS);
+  const seedCats = structuredClone(DEFAULT_CATEGORIES);
+
+  it("جهازٌ جديد بما يشحنه التطبيق وحده يبقى فارغاً", () => {
+    expect(hasData(base({ habits: seedHabits, categories: seedCats }))).toBe(false);
+  });
+
+  it("عادةٌ ثالثة بلا سجلٍّ واحد تأليف", () => {
+    const habits = [...seedHabits, { id: "h3", name: "مشي", icon: "🚶", color: "#111", logs: [] }];
+    expect(hasData(base({ habits, categories: seedCats }))).toBe(true);
+  });
+
+  it("وإعادةُ تسمية بذرةٍ تأليفٌ أيضاً — المعرّفُ وحده لا يكفي", () => {
+    const habits = seedHabits.map((h) => (h.id === "h1" ? { ...h, name: "مشي" } : h));
+    expect(hasData(base({ habits, categories: seedCats }))).toBe(true);
+  });
+
+  it("وحذفُ بذرةٍ تأليف", () => {
+    expect(hasData(base({ habits: [seedHabits[0]], categories: seedCats }))).toBe(true);
+  });
+
+  it("قسمٌ سادس، أو لونُ قسمٍ غُيّر", () => {
+    const extra = [...seedCats, { id: "cat-x", label: "سفر", icon: "✈️", color: "#000" }];
+    expect(hasData(base({ habits: seedHabits, categories: extra }))).toBe(true);
+    const recolored = seedCats.map((c) => (c.id === "cat-luxuries" ? { ...c, color: "#000000" } : c));
+    expect(hasData(base({ habits: seedHabits, categories: recolored }))).toBe(true);
+  });
+
+  it("والقائمتان الفارغتان (لقطةٌ قديمة) لا تُقرآن تأليفاً", () => {
+    expect(hasData(base({ habits: [], categories: [] }))).toBe(false);
   });
 });
 

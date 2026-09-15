@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { today } from "@/lib/utils";
 import { fetchInlineMedia, getLocalInlineMedia, mergeAppData } from "@/lib/sync";
+import { replaceTombstones } from "@/lib/merge";
 import { getMediaAuthKey, getSyncSpace } from "@/lib/firebase";
 import { DEFAULT_CATEGORIES } from "@/lib/types";
 import type { AppData, JournalEntry } from "@/lib/types";
@@ -416,9 +417,20 @@ export function BackupCard() {
       return;
     }
     const before = snapshot();
-    hydrate(mode === "merge" ? mergeAppData(before, pending) : pending);
+    // **الاستبدالُ ينتشر.** `hydrate` يمرّ بـ`rawSet` عمداً، فحلقةُ الشواهد
+    // التلقائية في غلاف `set` لا تعمل ولا يُكتب شاهدٌ لأيّ عنصرٍ أسقطته
+    // النسخة. وبلا شواهد يتّحد الدمجُ التالي مع جهازٍ ما زال يحمل نسخَه فيعود
+    // كلُّ ما حُذف: يبدو الاستبدال ناجحاً ثمّ ينتقض بصمت بعد أوّل مزامنة. فتُحسب
+    // الشواهدُ هنا صراحةً وتُضاف إلى خريطة النسخة قبل الترطيب — «استبدل كل
+    // بياناتي» يعني على الأجهزة كلِّها لا على هذا وحده.
+    // (والدمجُ لا شواهدَ له: هو إبقاءُ الطرفين عمداً.)
+    const next = mode === "merge"
+      ? mergeAppData(before, pending)
+      : { ...pending, deleted: { ...(pending.deleted ?? {}), ...replaceTombstones(before, pending) } };
+    hydrate(next);
     setPending(null);
     setPendingMeta(null);
+    // والتراجعُ يرفعها معه: استعادةُ لقطةِ ما قبل الاستبدال تُعيد `deleted` كما كانت.
     showUndo(mode === "merge" ? "دمجت النسخة الاحتياطية" : "استعدت النسخة الاحتياطية", () => hydrate(before));
   }
 
