@@ -160,7 +160,7 @@ export function FinanceCycleDashboard({
               <span>تقدير مبني على وتيرة صرفك الحالية، وليس رقمًا ثابتًا.</span>
             </div>
             <button type="button" onClick={() => onGo(projected.projected >= 0 ? "reserves" : "daily")}>
-              {projected.projected >= 0 ? "الاحتياطي" : "راجع الخطة"}
+              {projected.projected >= 0 ? "مظاريفي" : "راجع الخطة"}
             </button>
           </div>
         )}

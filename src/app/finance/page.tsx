@@ -13,6 +13,7 @@ import { SpendCalendar } from "@/components/finance/SpendCalendar";
 import { FinanceCycleDashboard } from "@/components/finance/FinanceCycleDashboard";
 import { VesselsStrip } from "@/components/finance/VesselsStrip";
 import { TripBanner } from "@/components/finance/TripBanner";
+import { ReconcileCard } from "@/components/finance/ReconcileCard";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DayView } from "@/components/day/DayView";
@@ -301,6 +302,13 @@ export default function FinancePage() {
         <VesselsStrip onGo={goToSection} />
       </div>
 
+      {/* **المطابقةُ تحت الأوعية مباشرةً**: هي التي تقول إن كانت أرقامُها
+          صادقةً أصلاً، فموضعُها بعدها لا في قسمٍ مطويّ يُفتح مرّةً في السنة.
+          وحين لا تحين تنكمش سطراً هادئاً لا بطاقة (`ReconcileCard`). */}
+      <div className="animate-fade-up stagger-1">
+        <ReconcileCard />
+      </div>
+
       <div className="mdr-finance-tabs" role="tablist" aria-label="واجهة المال">
         <button type="button" role="tab" aria-selected={financeView === "cycle"} className={financeView === "cycle" ? "is-active" : ""} onClick={() => setFinanceView("cycle")}>الدورة</button>
         <button type="button" role="tab" aria-selected={financeView === "now"} className={financeView === "now" ? "is-active" : ""} onClick={() => setFinanceView("now")}>الآن</button>
@@ -346,7 +354,7 @@ export default function FinancePage() {
       )}
 
       {/* أدوات المال بعد حذف الأصول والأقساط والمتكرّرة والرفّ: ما بقي كلُّه
-          يخصّ إنفاقَ يومك — المصروف اليومي والسقوف والاحتياطيات. */}
+          يخصّ إنفاقَ يومك — المصروف اليومي والسقوف والمظاريف. */}
       <div className="mdr-finance-tools">
       <div className="mdr-finance-plan-details">
 

@@ -6,7 +6,7 @@ import type {
   KnowledgeSource, Benefit,
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
-  BudgetWindowMode, FundFunding,
+  BudgetWindowMode, FundFunding, Reconcile,
 } from "./types";
 import { DEFAULT_CATEGORIES, SEED_HABITS, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -21,6 +21,7 @@ import { normalizeMerchant } from "./bankParser";
 import { offsetPlan, OFFSET_NOTE, offsetDepositId } from "./budgetFlow";
 import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan";
 import { cycleLength } from "./budgetCycle";
+import { holdings, reconcileDelta, RECONCILE_NOTE } from "./reconcile";
 import { persistJSONStorage, flushPersisted } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
@@ -30,7 +31,7 @@ const ID_COLLECTIONS = [
   "transactions", "books", "readingLogs", "journalEntries",
   "reserves", "habits", "futureLetters", "categories",
   "quranReflections", "countdownEvents",
-  "knowledgeSources", "benefits",
+  "knowledgeSources", "benefits", "reconciles",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -204,7 +205,20 @@ interface AppStore extends AppData {
   // دورة الراتب: يوم النزول + تحويل باقي الميزانية اليومية إلى «الفوائض»
   setSalaryDay: (day: number) => void;
   setBudgetWindow: (mode: BudgetWindowMode) => void;
-  confirmSalary: () => number; // ينقل الفائض لصندوق الفوائض ويصفّر العداد؛ يرجع المبلغ
+  // ينقل الفائض لصندوق الفوائض ويصفّر العداد؛ يرجع المبلغ المُرحَّل فعلاً.
+  //
+  // **و`carryOverride` هو صدقُ الفائض**: الرقمُ المحسوب مشتقٌّ من معاملاتٍ
+  // ناقصةٍ دائماً (عمليةٌ نُسيت، رسمٌ بلا رسالة)، فمن فتح كشفه ورأى أنّ الفائض
+  // ليس عنده يكتب الرقم الصحيح فلا يُرحَّل مالٌ لا وجود له إلى مظاريفه ويُبنى
+  // عليه قرار. **ونزولاً فقط** (يُقصّ على المحسوب): التصحيحُ صعوداً اختراعُ
+  // مالٍ، ومكانُه المطابقةُ الربعية حيث يقابله رقمٌ من كشفٍ بنكيّ.
+  confirmSalary: (carryOverride?: number) => number;
+  // **المطابقةُ الربعية**: يقابل ما يظنّه التطبيق (مظاريفُك + رصيدُ دورتك) بما
+  // أدخلتَه من كشوفك، ويسجّل الفرقَ تسويةً على «الفوائض» — وقيداً في
+  // `reconciles` يبقى. القاعدةُ والحسابُ في `reconcile.ts`. يرجع القيدَ
+  // المسجَّل، أو `null` حين لا رقمَ صالحاً. والمطابقةُ المطابِقة تُسجَّل أيضاً:
+  // هي التي تعيد ضبط عدّاد الثلاثة أشهر.
+  recordReconcile: (actual: number) => Reconcile | null;
   // نقل مبلغ من فائض الميزانية اليومية إلى احتياطي محدد (ويصفّر عداد اليومية)
   sweepToReserve: (fundId: string, amount: number, note?: string) => void;
   // الاتجاه المعاكس: سحب مبلغ من احتياطي (صندوق الفوائض عادةً) وإضافته لرصيد
@@ -358,7 +372,8 @@ export function migratePersisted(persisted: unknown, version: number): AppData {
       // بقيّةَ الحالة من أن تسقط معها. كشفه `store.migrate.test.ts`.
       for (const key of ["transactions", "budgets", "categories", "reserves", "habits",
         "books", "readingLogs", "journalEntries", "prayerLogs", "quranReflections",
-        "quranWird", "futureLetters", "countdownEvents", "knowledgeSources", "benefits"]) {
+        "quranWird", "futureLetters", "countdownEvents", "knowledgeSources", "benefits",
+        "reconciles"]) {
         if (key in state && state[key] != null && !Array.isArray(state[key])) state[key] = [];
       }
       const todayStr = today();
@@ -887,6 +902,7 @@ export const useAppStore = create<AppStore>()(
       monthlyIncome: null,
       futureLetters: [],
       countdownEvents: [],
+      reconciles: [],
       salaryDay: 27,
       budgetWindow: "salary",
       autoOffset: true,
@@ -1287,14 +1303,20 @@ export const useAppStore = create<AppStore>()(
 
       // «نزل الراتب»: باقي الميزانية اليومية المتراكمة يتحول لصندوق
       // «الفوائض» (يُنشأ تلقائياً إن لم يوجد)، ويبدأ عدّاد اليومية من جديد.
-      confirmSalary: () => {
+      confirmSalary: (carryOverride) => {
         let moved = 0;
         set((s) => {
           const todayStr = today();
           const balance = s.dailyBudget
             ? computeDailyBudgetStatus(s.dailyBudget, s.transactions).balance
             : 0;
-          moved = Math.max(0, Math.round(balance * 100) / 100);
+          const computed = Math.max(0, Math.round(balance * 100) / 100);
+          // **الفائضُ يُصحَّح نزولاً بيد المالك.** راجع التصريح أعلاه: رقمٌ
+          // محسوبٌ من معاملاتٍ ناقصة لا يُرحَّل إلى المظاريف بلا مراجعة.
+          moved =
+            Number.isFinite(carryOverride) && (carryOverride as number) >= 0
+              ? Math.min(computed, round2(carryOverride as number))
+              : computed;
 
           let reserves = s.reserves;
           if (moved > 0) {
@@ -1393,6 +1415,59 @@ export const useAppStore = create<AppStore>()(
           };
         });
         return moved;
+      },
+
+      recordReconcile: (actual) => {
+        if (!Number.isFinite(actual)) return null;
+        let record: Reconcile | null = null;
+        set((s) => {
+          const todayStr = today();
+          const { expected } = holdings({
+            reserves: s.reserves,
+            transactions: s.transactions,
+            dailyBudget: s.dailyBudget,
+          });
+          const result = reconcileDelta(expected, actual as number);
+          record = {
+            id: uid(),
+            date: todayStr,
+            expected: result.expected,
+            actual: result.actual,
+            delta: result.delta,
+          };
+
+          // القيدُ يُسجَّل في كلّ حال — حتى المطابِق. هو الذي يعيد ضبط عدّاد
+          // الثلاثة أشهر، فبدونه تبقى البطاقةُ تطالب بمطابقةٍ وقعت للتوّ.
+          const reconciles = [record, ...(s.reconciles ?? [])];
+          if (result.delta === 0) return { reconciles };
+
+          // التسويةُ على «الفوائض» وحدها (السببُ في ترويسة `reconcile.ts`).
+          // ويُنشأ الصندوقُ إن لم يكن — كما يفعل ترحيلُ الراتب بالضبط.
+          let reserves = s.reserves;
+          let fund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+          if (!fund) {
+            fund = {
+              id: uid(),
+              name: SURPLUS_FUND_NAME,
+              icon: "✨",
+              color: "#c9852a",
+              deposits: [],
+              createdAt: todayStr,
+            };
+            reserves = [...reserves, fund];
+          }
+          const deposit: ReserveDeposit = {
+            id: uid(),
+            date: todayStr,
+            amount: result.delta, // سالبٌ حين يكون الواقعُ أقلّ — وهو خبرٌ صحيح
+            note: RECONCILE_NOTE,
+          };
+          reserves = reserves.map((f) =>
+            f.id === fund!.id ? { ...f, deposits: [deposit, ...f.deposits] } : f
+          );
+          return { reserves, reconciles };
+        });
+        return record;
       },
 
       sweepToReserve: (fundId, amount, note) =>
@@ -2124,6 +2199,7 @@ export const useAppStore = create<AppStore>()(
           monthlyIncome: data.monthlyIncome ?? null,
           futureLetters: data.futureLetters ?? [],
           countdownEvents: data.countdownEvents ?? [],
+          reconciles: data.reconciles ?? [],
           salaryDay: data.salaryDay ?? 27,
           budgetWindow: data.budgetWindow ?? "salary",
           autoOffset: data.autoOffset ?? true,
@@ -2160,6 +2236,7 @@ export const useAppStore = create<AppStore>()(
           monthlyIncome: s.monthlyIncome,
           futureLetters: s.futureLetters,
           countdownEvents: s.countdownEvents ?? [],
+          reconciles: s.reconciles ?? [],
           salaryDay: s.salaryDay,
           budgetWindow: s.budgetWindow ?? "salary",
           autoOffset: s.autoOffset ?? true,

@@ -32,7 +32,7 @@ export const wirdTombKey = (date: string) => `wird:${date}`;
 const ID_KEYED = [
   "transactions", "books", "readingLogs", "journalEntries",
   "reserves", "habits", "futureLetters", "categories",
-  "quranReflections", "countdownEvents",
+  "quranReflections", "countdownEvents", "reconciles",
   "knowledgeSources", "benefits",
 ] as const;
 
@@ -656,6 +656,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // الأحداث المهمّة: عنصرٌ بمعرّفٍ وطابع تعديل — تعديلُ تاريخٍ على جهاز لا
     // يضيع لأن ختم مستند الجهاز الآخر أحدث، والحذف يبقى شاهداً فلا يعود.
     countdownEvents: byIdNewer(primary.countdownEvents ?? [], secondary.countdownEvents ?? []),
+    reconciles: byIdNewer(primary.reconciles ?? [], secondary.reconciles ?? []),
     salaryDay: pickSingleton("salaryDay", primary.salaryDay),
     budgetWindow: pickSingleton("budgetWindow", primary.budgetWindow ?? secondary.budgetWindow ?? "salary"),
     // المقاصة التلقائية: تبديلٌ مقصود كبقيّة الإعدادات المفردة — إيقافُها على

@@ -1088,6 +1088,19 @@ body {
 }
 .mdr-finance-page .mdr-pending-banner { background: var(--paper2) !important; border-color: var(--gline) !important; }
 .mdr-finance-page .mdr-group-label h2 { color: var(--ink52) !important; }
+
+/* ===================== دعوةُ المطابقة الربعية =====================
+   ورقُ القسم نفسه وخطُّه الذهبيّ — دعوةٌ لا إنذار: لا أحمرَ ولا صبغةَ تحذير.
+   القرارُ هنا أنّها تُقرأ كبابٍ يُفتح مرّةً كلَّ ربع، لا كخطأٍ يجب إصلاحه. */
+.mdr-reconcile-call {
+  background: var(--paper2) !important;
+  border-color: var(--gline) !important;
+  box-shadow: none !important;
+}
+.mdr-reconcile-call .text-gray-800 { color: var(--ink) !important; }
+.mdr-reconcile-call .text-gray-500,
+.mdr-reconcile-call .text-gray-300 { color: var(--ink52) !important; }
+.mdr-reconcile-call .text-finance { color: var(--gold) !important; }
 .mdr-finance-page .bg-white,
 .mdr-finance-page .card-shadow { background: var(--paper2) !important; border-color: var(--line) !important; box-shadow: none !important; }
 

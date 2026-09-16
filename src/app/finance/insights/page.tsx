@@ -225,7 +225,7 @@ export default function SpendInsightsPage() {
       0
     );
     if (reserveTotal > 0) {
-      list.push(`🪺 ${formatAmount(reserveTotal)} ر.س من صرف الفترة تحمّلها الاحتياطي بدل اليومية.`);
+      list.push(`🪺 ${formatAmount(reserveTotal)} ر.س من صرف الفترة تحمّلتها مظاريفك بدل مصروفك اليومي.`);
     }
 
     // «أكبر مصروف» بالنقد الخارج فعلاً (biggestCashExpense) — لا بـ`amount` الخام:

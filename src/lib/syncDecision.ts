@@ -35,6 +35,7 @@ export function hasData(d: Partial<AppData>): boolean {
     arr(d.readingLogs) || arr(d.budgets) ||
     arr(d.reserves) || arr(d.prayerLogs) || arr(d.futureLetters) ||
     arr(d.quranReflections) || arr(d.quranWird) || arr(d.countdownEvents) ||
+    arr(d.reconciles) ||
     arr(d.knowledgeSources) || arr(d.benefits)
   ) return true;
   if ((d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0)) return true;
@@ -90,6 +91,7 @@ export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean
     hasNewId(local.readingLogs, cloud.readingLogs) ||
     hasNewId(local.futureLetters, cloud.futureLetters) ||
     hasNewId(local.countdownEvents ?? [], cloud.countdownEvents) ||
+    hasNewId(local.reconciles ?? [], cloud.reconciles) ||
     hasNewId(local.reserves, cloud.reserves) ||
     hasNewId(local.habits, cloud.habits) ||
     hasNewId(local.categories, cloud.categories) ||

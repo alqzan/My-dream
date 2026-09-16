@@ -80,6 +80,7 @@ const FULL: Required<AppData> = {
   monthlyIncome: 12000,
   futureLetters: [{ id: "l1", writtenDate: "2026-01-01", deliveryDate: "2027-01-01", content: "رسالة" }],
   countdownEvents: [{ id: "ce1", title: "اختبار CFA", date: "2027-02-20", emoji: "📘" }],
+  reconciles: [{ id: "rc1", date: "2026-05-20", expected: 4200, actual: 3950, delta: -250 }],
   salaryDay: 25,
   budgetWindow: "month",
   lastSalaryConfirm: "2026-05-25",
