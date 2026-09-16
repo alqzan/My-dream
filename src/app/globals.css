@@ -4108,6 +4108,30 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-home-countdown .mt-1 { margin-top: 0.22rem; }
 .mdr-home-countdown .mt-0\.5 { margin-top: 0.12rem; }
 
+/* ===================== بطاقةُ التذكير اللطيف =====================
+   ورقُ البهو نفسه لا صندوقٌ أبيض وسط ورقة — كبطاقة العدّ التنازلي تماماً.
+   والألوانُ كلُّها من الرموز (`--ink`/`--gold`/`--paper2`)، فالوضعان الفاتح
+   والداكن يتبعان بلا قيمةٍ سداسيّةٍ مكتوبة هنا. */
+.mdr-home-primary .mdr-home-nudge {
+  padding: 0.78rem 0.85rem !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 1.05rem !important;
+  background: var(--paper2) !important;
+  box-shadow: none !important;
+}
+.mdr-home-nudge h2 { color: var(--ink) !important; font-size: 0.72rem; }
+.mdr-home-nudge svg { color: var(--gold) !important; }
+.mdr-home-nudge .text-gray-700 { color: var(--ink) !important; }
+.mdr-home-nudge .text-gray-500,
+.mdr-home-nudge .text-gray-400,
+.mdr-home-nudge .text-gray-300 { color: var(--ink52) !important; }
+.mdr-home-nudge .text-\[13px\] { font-size: 0.72rem; }
+.mdr-home-nudge .text-\[11px\] { font-size: 0.63rem; }
+/* النقطةُ الدالّة: ذهبٌ لما تمّ، وخطُّ الورق لما بقي — لا أحمرَ ولا إنذار. */
+.mdr-home-nudge .bg-brand-600 { background: var(--gold) !important; }
+.mdr-home-nudge .bg-gray-300 { background: var(--line) !important; }
+.mdr-home-nudge .border-t { border-color: var(--gline) !important; }
+
 .mdr-weekly-summary {
   margin-top: 0.78rem;
   padding: 0.72rem 0.82rem 0.68rem;

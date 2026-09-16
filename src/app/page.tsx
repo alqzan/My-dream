@@ -28,6 +28,7 @@ import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
 import { RamadanCard } from "@/components/dashboard/RamadanCard";
 import { CountdownCard } from "@/components/dashboard/CountdownCard";
 import { DayDigestCard } from "@/components/quran/DayDigestCard";
+import { NudgeCard } from "@/components/dashboard/NudgeCard";
 import { MosqueIcon } from "@/components/icons/MosqueIcon";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { Card } from "@/components/ui/Card";
@@ -189,6 +190,10 @@ export default function Dashboard() {
           <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
           <ThreeArcs due={dueArc(prayedToday, hifzDueCount)} arcs={arcSpecs} />
         </section>
+        {/* التذكيرُ اللطيف قبل قائمة الطقوس لا بعدها: القائمةُ تقول **ما هو**،
+            والتذكيرُ يقول **أين وقفت وكم صار لك** — والثاني هو ما يُعيد من
+            انقطع، والأوّلُ ما يُتابع من لم ينقطع. */}
+        <NudgeCard />
         <DayDigestCard compact />
         {isFirstRun && <OnboardingCard />}
         <RamadanCard />

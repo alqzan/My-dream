@@ -92,7 +92,7 @@
 | `src/lib/quran/session.ts` · `readPrefs.ts` | موضع القراءة والتفضيلات |
 | `src/components/journal/JournalForm.tsx` (`madar-journal-draft`) | مسودةُ مذكرةٍ لم تُحفظ بعد — نصٌّ كتبه المالك ولا نسخة له في المتجر |
 | `src/lib/backupFile.ts` (`madar-last-backup`) | تاريخُ آخر نسخة — يُظهر تذكيرَ نسخٍ لا داعي له |
-| `src/lib/theme.ts` (`madar-theme-preferences`) · `navPrefs.ts` (`madar-nav-prefs`) · `financePreferences.ts` (`madar-finance-display`/`madar-finance-sections`) | تفضيلاتُ عرضٍ لكلّ جهاز |
+| `src/lib/theme.ts` (`madar-theme-preferences`) · `navPrefs.ts` (`madar-nav-prefs`) · `financePreferences.ts` (`madar-finance-display`/`madar-finance-sections`) · `nudgePrefs.ts` (`madar-nudges`) | تفضيلاتُ عرضٍ لكلّ جهاز |
 | البقية (`madar-geo` · `madar-unlocked` · `madar-oldbuild` · `madar-auto-recover` · `madar-celebrated-*` · `madar-reading-start` · `madar-ai-export`) | مزعج لا كارثيّ |
 
 الحلّ: غلافٌ واحد `prefs.get/set/remove` (متزامن الواجهة، غير متزامن التنفيذ)
@@ -227,7 +227,7 @@ JPEG مباشرةً من النظام، فيسقط `heic2any` من مسار iOS 
 | `src/lib/backupFile.ts` | `document.createElement` · `localStorage` | تنزيلُ ملفّ من داخل `lib` (راجع ٣٫١) |
 | `src/lib/utils.ts` | `localStorage` (`madar-geo`) · `navigator.vibrate` | أعلى فانْ-إنْ |
 | `src/lib/firebase.ts` | `localStorage` ×٣ | مفتاحُ المساحة ونسخةُ المفتاح ومفتاحُ الوسائط |
-| `theme.ts` · `navPrefs.ts` · `financePreferences.ts` · `quran/session.ts` · `quran/readPrefs.ts` | `window.localStorage` | كلُّها محروسةٌ بـ`typeof window` |
+| `theme.ts` · `navPrefs.ts` · `financePreferences.ts` · `nudgePrefs.ts` · `quran/session.ts` · `quran/readPrefs.ts` | `window.localStorage` | كلُّها محروسةٌ بـ`typeof window` (و`nudgePrefs` تمرّ بـ`platform/prefs` فلا تلمسه أصلاً) |
 
 وفي المقابل، الموضوعُ خلف الحاجز صحيحاً: `idbStorage.ts` · `imageUtils.ts` ·
 `platform/fullscreen.ts`. و`src/lib/platform/` فيه **ملفٌّ واحد** — البنيةُ

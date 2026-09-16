@@ -9,6 +9,7 @@ import { LockCard } from "@/components/settings/LockCard";
 import { SyncKeyCard } from "@/components/settings/SyncKeyCard";
 import { AiExportCard } from "@/components/settings/AiExportCard";
 import { ThemePreferencesCard } from "@/components/settings/ThemePreferencesCard";
+import { RemindersCard } from "@/components/settings/RemindersCard";
 import { FinanceDisplayCard } from "@/components/settings/FinanceDisplayCard";
 import { BrandMark } from "@/components/layout/BrandMark";
 // الإصدار من مصدره الوحيد (src/lib/version.ts) — لا رقمَ مكتوباً بيدٍ هنا يتخلّف
@@ -23,7 +24,7 @@ export default function SettingsPage() {
     <div className="page-shell">
       <div className="animate-fade-up">
         <h1 className="page-title">الإعدادات</h1>
-        <p className="page-subtitle">الأحداث المهمّة، حساب السقوف، النسخ الاحتياطي، القفل، ومفتاح المزامنة</p>
+        <p className="page-subtitle">الأحداث المهمّة، التذكيرات، حساب السقوف، النسخ الاحتياطي، القفل، ومفتاح المزامنة</p>
       </div>
 
       {/* مرساةُ الرابط القادم من بطاقة الرئيسية (/settings#events). */}
@@ -32,6 +33,9 @@ export default function SettingsPage() {
       </div>
       <div className="animate-fade-up stagger-1">
         <ThemePreferencesCard />
+      </div>
+      <div className="animate-fade-up stagger-1">
+        <RemindersCard />
       </div>
       <div className="animate-fade-up stagger-1">
         <FinanceDisplayCard />
