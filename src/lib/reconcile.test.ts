@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   RECONCILE_DAYS, RECONCILE_TOLERANCE, holdings, lastReconcile, reconcileDelta, reconcileStatus,
 } from "./reconcile";
+import { today } from "./utils";
 import type { Reconcile, ReserveFund, Transaction } from "./types";
 
 const tx = (over: Partial<Transaction> = {}): Transaction => ({
@@ -67,8 +68,13 @@ describe("ما يظنّه التطبيق أنّك تملك", () => {
     const h = holdings({
       reserves,
       transactions: [],
-      // ميزانيةٌ بدأت اليوم: يوميّةٌ واحدة لم تُصرف
-      dailyBudget: { amount: 100, startDate: TODAY },
+      // ميزانيةٌ بدأت اليوم: يوميّةٌ واحدة لم تُصرف.
+      //
+      // و`today()` لا `TODAY`: `holdings` تقرأ الوقتَ الحقيقيّ عبر
+      // `computeDailyBudgetStatus`، فتاريخٌ مثبَّتٌ في الاختبار يعني يوميّةً
+      // إضافيةً كلَّ يومٍ يمرّ — كان الاختبار يخضرّ يومَ كُتب ويحمرّ في الغد
+      // فيقف النشرُ كلُّه (البوّابةُ تشغّل `npm test`).
+      dailyBudget: { amount: 100, startDate: today() },
     });
     expect(h.envelopesTotal).toBe(1500);
     expect(h.cycleBalance).toBe(100);

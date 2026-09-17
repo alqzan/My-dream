@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { BookMarked, BookOpen, Plus, Wallet } from "lucide-react";
+import { useSectionNav } from "@/components/layout/useSectionNav";
 import { useAppStore } from "@/lib/store";
 import { completedDayDates } from "@/lib/dayAggregator";
 import {
@@ -39,7 +39,10 @@ import { Modal } from "@/components/ui/Modal";
 // لا توجد لوحة «خلاصة اليوم» ثانية ولا درج أدوات؛ التفاصيل العميقة تعيش في
 // صفحاتها، والبهو يذكّر فقط بما يستحق نظرة سريعة.
 export default function Dashboard() {
-  const router = useRouter();
+  // أقواسُ البهو تبدّل القسم كالشريط السفلي تماماً، فتأخذ ضماناتِه نفسَها:
+  // `router.push` وحدها بلا مهلة تترك القوسَ المضغوط بلا أثرٍ إن لم تصل حمولةُ
+  // المسار — وهي الحالة التي صوّرها المالك في الشريط السفلي.
+  const { navigate } = useSectionNav();
   const journalEntries = useAppStore((s) => s.journalEntries);
   const readingLogs = useAppStore((s) => s.readingLogs);
   const transactions = useAppStore((s) => s.transactions);
@@ -109,7 +112,7 @@ export default function Dashboard() {
       ratio: prayedToday / 5,
       color: "var(--clay)",
       wash: "var(--clayw)",
-      onClick: () => router.push("/prayers"),
+      onClick: () => navigate("/prayers"),
     },
     {
       key: "quran",
@@ -124,7 +127,7 @@ export default function Dashboard() {
         : 0,
       color: "var(--green)",
       wash: "var(--greenw)",
-      onClick: () => router.push("/quran"),
+      onClick: () => navigate("/quran"),
     },
     {
       key: "mal",
@@ -137,7 +140,7 @@ export default function Dashboard() {
         : 0,
       color: "var(--blue)",
       wash: "var(--bluew)",
-      onClick: () => router.push("/finance"),
+      onClick: () => navigate("/finance"),
     },
   ];
 

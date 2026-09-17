@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { isPlainClick, nativeNavHref, shouldHardNavigate } from "./navHref";
+import {
+  IMPATIENT_RETAP_MS,
+  SOFT_NAV_DEADLINE_MS,
+  isImpatientRetap,
+  isPlainClick,
+  nativeNavHref,
+  normNavPath,
+  remainingSoftNavMs,
+  shouldHardNavigate,
+} from "./navHref";
 
 describe("nativeNavHref", () => {
   it("keeps root-hosted routes under the static export root", () => {
@@ -60,5 +69,46 @@ describe("shouldHardNavigate", () => {
     expect(shouldHardNavigate({ ...base, pending: "/prayers/" })).toBe(false);
     expect(shouldHardNavigate({ ...base, pending: null })).toBe(false);
     expect(shouldHardNavigate({ ...base, visible: false })).toBe(false);
+  });
+});
+
+// العطلُ الذي وُلدت منه هذه الثلاثة (٠٫١٫٤٣١): حمولةُ المسار لا تصل،
+// و`router.push` بلا مهلة — فالشاشةُ لا تتحرّك. والشبكةُ كانت تُستأنف مع كلّ
+// نقرة، فمن يضغط كلَّ ثانيتين لا تنقضي عنده المهلةُ أبداً.
+describe("سقفُ التنقّل الداخليّ", () => {
+  it("أوّلُ نقرةٍ تأخذ السقف كاملاً", () => {
+    expect(remainingSoftNavMs(null, 10_000)).toBe(SOFT_NAV_DEADLINE_MS);
+  });
+
+  it("النقرةُ التالية تُكمل ما بقي ولا تبدأ سقفاً جديداً", () => {
+    // نقرةٌ أولى عند 0، وثانيةٌ عند 1000 ⇒ يبقى 5000 لا 6000.
+    expect(remainingSoftNavMs(0, 1_000)).toBe(SOFT_NAV_DEADLINE_MS - 1_000);
+  });
+
+  it("سقفٌ انقضى لا يعود سالباً", () => {
+    expect(remainingSoftNavMs(0, 99_000)).toBe(0);
+  });
+});
+
+describe("النقرةُ الثانية على شاشةٍ لم تتحرّك", () => {
+  it("لا شيءَ معلّقٌ ⇒ ليست ضغطةً ثانية", () => {
+    expect(isImpatientRetap(null, 10_000)).toBe(false);
+  });
+
+  it("ضغطتان متلاحقتان ⇒ نقرٌ مزدوج لا نفادُ صبر، فلا نُعيد التحميل", () => {
+    expect(isImpatientRetap(0, IMPATIENT_RETAP_MS - 1)).toBe(false);
+  });
+
+  it("ضغطةٌ بعد صمتٍ كافٍ ⇒ خبرٌ بأنّ الداخليّ لم يقع", () => {
+    expect(isImpatientRetap(0, IMPATIENT_RETAP_MS)).toBe(true);
+    expect(isImpatientRetap(0, 5_000)).toBe(true);
+  });
+});
+
+describe("normNavPath", () => {
+  it("يُسقط الشرطةَ الأخيرة إلا على الجذر", () => {
+    expect(normNavPath("/journal/")).toBe("/journal");
+    expect(normNavPath("/journal")).toBe("/journal");
+    expect(normNavPath("/")).toBe("/");
   });
 });

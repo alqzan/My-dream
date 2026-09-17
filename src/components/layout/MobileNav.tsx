@@ -1,41 +1,14 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav";
-import { isPlainClick, nativeNavHref, shouldHardNavigate } from "@/lib/navHref";
+import { isPlainClick, nativeNavHref, normNavPath } from "@/lib/navHref";
 import { loadNavPrefs, resolveNav } from "@/lib/navPrefs";
-
-// Static export uses trailingSlash, so usePathname() returns "/journal/" while
-// the nav hrefs are "/journal" — strip a trailing slash before comparing, or
-// the active tab (and its sliding indicator) only ever lights up on the home
-// route.
-const normPath = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
-
-// شبكةُ الأمان: إن لم يقع التنقّل الداخليّ خلال هذه المهلة (حمولةُ المسار
-// متعلّقةٌ على شبكةٍ نائمة) ننتقل انتقالاً أصلياً بالرابط نفسه. فالنقرة لا تذهب
-// سدىً أبداً — وهي العلّة التي وُلدت منها الروابط الأصلية أوّلاً.
-//
-// المهلةُ سخيّة عن قصد: على شبكةِ الجوال (4G) تستغرق حمولةُ المسار أكثر من
-// ثانيةٍ كثيراً، فكانت مهلةُ ١٫٢ ثانية تقطع تنقّلاً سليماً وتُعيد تحميل المستند
-// كاملاً — فتظهر شاشةُ «مدار» وتُعاد المزامنة مع كلّ ضغطةِ تبويب. والإلغاء لا
-// ينتظرها أصلاً: وصولُ المسار يلغيها فوراً (`useEffect` على `pathname`).
-const SOFT_NAV_FALLBACK_MS = 6000;
+import { useSectionNav } from "./useSectionNav";
 
 export function MobileNav() {
-  const pathname = normPath(usePathname());
-  const router = useRouter();
-  // Read once on mount (a saved preference change reloads the page — same
-  // pattern as SyncKeyCard — so this never needs to react live).
-  const [prefs] = useState(() => loadNavPrefs());
-  const { visible } = resolveNav(NAV_ITEMS, prefs);
-
-  // كل الأبواب تظهر في شريط واحد قابل للتمرير أفقيًا؛ لا توجد قائمة «المزيد».
-  const count = visible.length;
-  const slot = 100 / count;
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-  // ===== نقرةُ التبويب تنقّلٌ داخليّ، لا إعادةَ إقلاعٍ للتطبيق =====
+  // ===== نقرةُ التبويب تنقّلٌ داخليّ يصل دائماً =====
   // الروابط الأصلية كانت تُعيد تحميل المستند كاملاً عند **كلّ** تبويب، وإعادةُ
   // التحميل في «مدار» ليست رخيصة: `ClientOnly` يحجب الواجهة كلّها خلف شاشة
   // «مدار» حتى يُرطَّب المتجر من IndexedDB، ثمّ يبدأ `SyncProvider` دورةَ
@@ -45,31 +18,21 @@ export function MobileNav() {
   // موضعه في حالة React لا في المتجر، فإعادةُ التحميل تُخرج المالك من المراجعة).
   // والشريط الجانبي على الحاسوب لم يُصَب لأنه بقي على `next/link`.
   //
+  // والضماناتُ الثلاث التي تمنع نقرةً ميّتة (السقفُ المطلق، والنقرةُ الثانية،
+  // والإضاءةُ الفورية) في `useSectionNav` — وهي مشتركةٌ مع أقواس البهو.
+  //
   // يبقى `href` أصلياً على الرابط: يعمل قبل الترطيب، ومع الضغط المطوّل وفتحِ
-  // تبويبٍ جديد، وهو نفسُه ما تستعمله شبكةُ الأمان أدناه. فلا تعود نقرةٌ ميّتة.
-  const pendingRef = useRef<string | null>(null);
-  const timerRef = useRef<number | null>(null);
+  // تبويبٍ جديد، وهو نفسُه ما يستعمله الانتقالُ الأصليّ عند التعثّر.
+  const { pathname, pending, navigate, basePath } = useSectionNav();
+  const router = useRouter();
+  // Read once on mount (a saved preference change reloads the page — same
+  // pattern as SyncKeyCard — so this never needs to react live).
+  const [prefs] = useState(() => loadNavPrefs());
+  const { visible } = resolveNav(NAV_ITEMS, prefs);
 
-  // ===== النقرةُ تُرى قبل أن تصل =====
-  // `router.push` انتقالٌ (transition) في App Router: الصفحةُ القديمة تبقى
-  // معروضةً حتى تجهز الجديدة. فبين الضغطة والوصول **لا يتغيّر في الشاشة شيء**
-  // — لا مؤشّرٌ ينزلق ولا أيقونةٌ تُضاء — فيظنّ المالك أنّ الزرّ لم يُضغط
-  // فيضغط ثانيةً وثالثة. وصفحاتُ مدار ثقيلةُ الرسم (الصلاة والقرآن خاصّةً)،
-  // فالفجوةُ محسوسة. هذا `pending` يُشعل التبويبَ المضغوط **فوراً** بلا انتظار
-  // المسار: ردٌّ بصريٌّ صادق («وصلتْ ضغطتُك، أنا في الطريق») لا كذبٌ بانتقالٍ
-  // لم يقع. يُمسح فور وصول `pathname` — أو فور فشل التنقّل.
-  const [pending, setPending] = useState<string | null>(null);
-
-  // وصلَ التنقّل الداخليّ → ألغِ الشبكة. هذا هو الإشارةُ الموثوقة (لا المهلة):
-  // `pathname` لا يتغيّر إلا بعد أن يلتزم المسار فعلاً.
-  useEffect(() => {
-    pendingRef.current = null;
-    setPending(null);
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, [pathname]);
+  // كل الأبواب تظهر في شريط واحد قابل للتمرير أفقيًا؛ لا توجد قائمة «المزيد».
+  const count = visible.length;
+  const slot = 100 / count;
 
   // ===== تسخينُ المسارات عند الفراغ =====
   // الشريطُ السفلي لا يستعمل `next/link`، فلا يرث تحميلَه المسبق. وبدونه تبدأ
@@ -95,29 +58,12 @@ export function MobileNav() {
   const go = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!isPlainClick(e)) return; // ضغطةٌ بمُعدِّل — سلوكُ الرابط للمستخدم
     e.preventDefault();
-    const target = nativeNavHref(href, basePath);
-    pendingRef.current = target;
-    setPending(normPath(href));
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    router.push(href);
-    timerRef.current = window.setTimeout(() => {
-      timerRef.current = null;
-      const hard = shouldHardNavigate({
-        pending: pendingRef.current,
-        target,
-        currentPath: window.location.pathname,
-        visible: document.visibilityState === "visible",
-      });
-      if (hard) window.location.href = target;
-      // لم ننتقل ولم نُعِد التحميل → أعِد التبويبَ إلى حقيقته بدل أن يبقى
-      // مُضاءً على وجهةٍ لم نصلها. الكذبُ البصريُّ أسوأ من الانتظار.
-      else setPending(null);
-    }, SOFT_NAV_FALLBACK_MS);
+    navigate(href);
   };
 
   // ما يُرسم نشِطاً: الوجهةُ المضغوطة إن كانت في الطريق، وإلّا المسارُ الفعليّ.
   const shownPath = pending ?? pathname;
-  const activeIndex = visible.findIndex((item) => normPath(item.href) === shownPath);
+  const activeIndex = visible.findIndex((item) => normNavPath(item.href) === shownPath);
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f4eee2]/85 dark:bg-[#171009]/85 backdrop-blur-lg border-t border-gray-100/70 pb-safe">
@@ -140,7 +86,7 @@ export function MobileNav() {
           }}
         />
         {visible.map((item) => {
-          const active = normPath(item.href) === shownPath;
+          const active = normNavPath(item.href) === shownPath;
           return (
             <a
               key={item.href}
