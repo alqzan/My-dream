@@ -206,6 +206,30 @@ describe("firestore.rules — media manifest shards (userData/{space}/mediaManif
 });
 
 describe("firestore.rules — bank-SMS inbox (userData/{space}/inbox/{itemId})", () => {
+  it.each(["AlRajhiBank", "900", "x".repeat(40)])("accepts an optional sender: %s", async (from) => {
+    await assertSucceeds(
+      clientFirestore().collection("userData").doc(REAL_SPACE).collection("inbox").add({
+        text: "Synthetic bank receipt", from,
+      })
+    );
+  });
+
+  it.each(["", "x".repeat(41), 900, null])("rejects an invalid sender: %s", async (from) => {
+    await assertFails(
+      clientFirestore().collection("userData").doc(REAL_SPACE).collection("inbox").add({
+        text: "Synthetic bank receipt", from,
+      })
+    );
+  });
+
+  it("still rejects unknown fields when a valid sender is present", async () => {
+    await assertFails(
+      clientFirestore().collection("userData").doc(REAL_SPACE).collection("inbox").add({
+        text: "Synthetic bank receipt", from: "BSF", adminOverride: true,
+      })
+    );
+  });
+
   it("accepts a minimal valid item (text only)", async () => {
     await assertSucceeds(
       clientFirestore().collection("userData").doc(REAL_SPACE).collection("inbox").add({

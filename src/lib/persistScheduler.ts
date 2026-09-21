@@ -90,6 +90,10 @@ export function createDeferredWriter<T>(
   const queued = new Map<string, T>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let writing = false;
+  // Keep the active drain promise so a strict flush called while an IndexedDB
+  // write is in flight waits for that write (and for any queued follow-up)
+  // instead of observing only the currently empty queue.
+  let activeDrain: Promise<void> | null = null;
   let disposed = false;
 
   const clear = () => {
@@ -107,35 +111,50 @@ export function createDeferredWriter<T>(
     }
   };
 
-  async function drain(): Promise<void> {
-    // كتابةٌ جاريةٌ الآن تبتلع هذه: ما يصل أثناءها يبقى في الطابور، ويُجدول له
-    // مرورٌ تالٍ في ذيل هذه الكتابة.
-    if (writing) return;
-    writing = true;
-    try {
-      while (queued.size) {
-        // نلتقط الدفعة ونُفرغ الطابور **قبل** الانتظار: تعديلٌ يقع أثناء
-        // الكتابة يدخل طابوراً نظيفاً فلا تبتلعه هذه الجولة صامتاً.
-        const batch = [...queued.entries()];
-        queued.clear();
-        try {
-          for (const [name, value] of batch) {
-            // **التسلسلُ هنا لا عند الجدولة**: رشقةُ عشرِ تعديلاتٍ تُسلسَل مرّةً
-            // لا عشراً. هذا نصفُ الكلفة الذي بقي بعد تأجيل الكتابة.
-            await inner.setItem(name, serialize(value));
+  function drain(): Promise<void> {
+    // A concurrent caller joins the same promise. This is the critical
+    // difference between a lifecycle flush and a best-effort timer callback:
+    // the caller must wait for an already-started write to settle.
+    if (activeDrain) return activeDrain;
+    // A stale timer can fire after a concurrent drain has already consumed the
+    // queue. Do not install an already-resolved promise as the next active
+    // drain; future writes must be able to create a fresh one.
+    if (!queued.size) return Promise.resolve();
+    const run = (async () => {
+      writing = true;
+      try {
+        while (queued.size) {
+          // نلتقط الدفعة ونُفرغ الطابور **قبل** الانتظار: تعديلٌ يقع أثناء
+          // الكتابة يدخل طابوراً نظيفاً فلا تبتلعه هذه الجولة صامتاً.
+          const batch = [...queued.entries()];
+          queued.clear();
+          try {
+            for (const [name, value] of batch) {
+              // **التسلسلُ هنا لا عند الجدولة**: رشقةُ عشرِ تعديلاتٍ تُسلسَل مرّةً
+              // لا عشراً. هذا نصفُ الكلفة الذي بقي بعد تأجيل الكتابة.
+              await inner.setItem(name, serialize(value));
+            }
+          } catch (error) {
+            // Requeue the failed snapshot. If a newer value for the same key was
+            // queued while the write was in flight, keep that newer value instead.
+            for (const [name, value] of batch) {
+              if (!queued.has(name)) queued.set(name, value);
+            }
+            throw error;
           }
-        } catch (error) {
-          // Requeue the failed snapshot. If a newer value for the same key was
-          // queued while the write was in flight, keep that newer value instead.
-          for (const [name, value] of batch) {
-            if (!queued.has(name)) queued.set(name, value);
-          }
-          throw error;
         }
+      } finally {
+        writing = false;
       }
-    } finally {
-      writing = false;
-    }
+    })();
+    activeDrain = run;
+    const clearActive = () => {
+      if (activeDrain === run) activeDrain = null;
+    };
+    // Attach a rejection handler to the cleanup branch so timer-driven drains
+    // never create an unhandled rejection; callers still receive `run` itself.
+    void run.then(clearActive, clearActive);
+    return run;
   }
 
   function startDrain() {
@@ -180,8 +199,10 @@ export function createDeferredWriter<T>(
     },
 
     async flush() {
-      if (!queued.size) return;
       clear();
+      // Even with an empty queue, a timer-driven drain may still be writing.
+      // Join it so callers deleting a source document cannot race the write.
+      if (!queued.size && !activeDrain) return;
       try {
         await drain();
       } catch (error) {

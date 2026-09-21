@@ -1,15 +1,6 @@
-import type { FinanceCategoryDef } from "./types";
+import type { BalanceKind, FinanceCategoryDef, ObligationHint, RefundDestination, TxnDirection, TxnKind } from "./types";
 import { isValidDateKey, parseDate, today } from "./utils";
 
-// ========== Smart Categorization ==========
-// Maps to the seeded default category ids (src/lib/types.ts). If the user
-// has since renamed or deleted one of these, the transaction just falls
-// back to "غير مصنف" via getCategoryInfo — it's never lost.
-//
-// Philosophy (the owner's rule): the line is "قوت أم تجربة؟". Buying
-// sustenance = أساسي; paying for an outing/experience = كمالي. So groceries,
-// rent, fuel, health, education are essentials, while eating out, cafes,
-// travel and subscriptions are luxuries.
 const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
   { keywords: ["سوبرماركت", "هايبر", "بقاله", "بقالة", "تموينات", "بنده", "الدانوب", "لولو", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "التميمي", "المزرعة", "نستو"], category: "cat-essentials" },
   { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
@@ -17,16 +8,14 @@ const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
   { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "طاقة", "السعودية للطاقة", "utility"], category: "cat-essentials" },
   { keywords: ["مستشفى", "عيادة", "صيدلية", "النهدي", "الدواء", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
   { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
-  // Eating out & cafes → luxuries (an experience, not sustenance).
   { keywords: ["مطعم", "برغر", "برجر", "كنتاكي", "ماكدونالدز", "هرفي", "البيك", "ستاربكس", "بارنز", "دانكن", "كافيه", "مقهى", "قهوة", "pizza", "بيتزا", "كبسه", "مندي", "سشي", "شاورما", "restaurant", "resturant", "cafe", "coffee", "burger", "grill", "kitchen", "food"], category: "cat-luxuries" },
   { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal", "booking", "بوكينج"], category: "cat-luxuries" },
   { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات", "ألعاب", "playstation", "بلايستيشن"], category: "cat-luxuries" },
   { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-luxuries" },
-  { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity"], category: "cat-charity" },
+  { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity", "ehsan", "احسان"], category: "cat-charity" },
   { keywords: ["ادخار", "توفير", "saving", "استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "cat-investment" },
 ];
 
-// Built-in keyword guess (main category). Falls back to essentials.
 function keywordCategory(text: string): string {
   const lower = text.toLowerCase();
   for (const { keywords, category } of CATEGORY_KEYWORDS) {
@@ -35,8 +24,17 @@ function keywordCategory(text: string): string {
   return "cat-essentials";
 }
 
-// Normalize a merchant/note into a stable key: drop digits & punctuation,
-// collapse spaces. "ستاربكس #١٢٣  الرياض" and "ستاربكس الرياض" map alike.
+export function normalizeSmsText(text: string): string {
+  return (text || "")
+    .normalize("NFKC")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[ـ\u064B-\u065F]/g, "")
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .toLowerCase();
+}
+
 export function normalizeMerchant(text: string): string {
   return (text || "")
     .toLowerCase()
@@ -44,305 +42,423 @@ export function normalizeMerchant(text: string): string {
     .replace(/[^\p{L}\p{N} ]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 40);
+    .slice(0, 60);
 }
 
-// A previously-learned category for this merchant, or null. Exact merchant
-// match wins, then a contained-name match. A rule pointing at a since-deleted
-// category is ignored. This is what powers "the app already knows this one".
-export function learnedCategory(
-  text: string,
-  categories: FinanceCategoryDef[],
-  merchantRules: Record<string, string> | undefined
-): string | null {
+export function learnedCategory(text: string, categories: FinanceCategoryDef[], merchantRules: Record<string, string> | undefined): string | null {
   const exists = (id: string) => categories.some((c) => c.id === id);
   const key = normalizeMerchant(text);
   if (!key || !merchantRules) return null;
   if (merchantRules[key] && exists(merchantRules[key])) return merchantRules[key];
   for (const [rk, cid] of Object.entries(merchantRules)) {
-    if (rk && cid && exists(cid) && (key.includes(rk) || rk.includes(key))) return cid;
+    const rule = normalizeMerchant(rk);
+    if (rule && cid && exists(cid) && (key.startsWith(rule) || rule.startsWith(key))) return cid;
   }
   return null;
 }
 
-// Does this parsed expense look like one that's already recorded? Same day,
-// same amount, and the same merchant (normalized). Guards against a message
-// arriving twice or an expense that was also added by hand.
-export function isLikelyDuplicate(
-  amount: number,
-  date: string,
-  note: string,
-  existing: { amount: number; date: string; note?: string }[]
-): boolean {
-  const key = normalizeMerchant(note);
-  return existing.some(
-    (t) =>
-      t.date === date &&
-      Math.abs(t.amount - amount) < 0.01 &&
-      (key ? normalizeMerchant(t.note ?? "") === key : true)
-  );
-}
-
-// The smart suggestion: your own learned rules win, otherwise the built-in
-// keyword guess.
-export function suggestCategory(
-  text: string,
-  categories: FinanceCategoryDef[],
-  merchantRules: Record<string, string> | undefined
-): string {
+export function suggestCategory(text: string, categories: FinanceCategoryDef[], merchantRules: Record<string, string> | undefined): string {
   return learnedCategory(text, categories, merchantRules) ?? keywordCategory(text);
 }
 
-// ========== SMS Parser ==========
-// Supports Al Rajhi, SNB, Riyad Bank, Al Ahli, Al Bilad, Al Inma and the
-// newer "شراء ... بـSR 22 ... لـMerchant ... رصيد:.." Apple-Pay style.
+export function isLikelyDuplicate(amount: number, date: string, note: string, existing: { amount: number; date: string; note?: string }[]): boolean {
+  const key = normalizeMerchant(note);
+  return existing.some((t) => t.date === date && Math.abs(t.amount - amount) < 0.01 && (key ? normalizeMerchant(t.note ?? "") === key : true));
+}
 
+export type SmsConfidence = "template" | "inferred" | "generic";
+export interface SmsParseOptions {
+  sender?: string;
+  receivedAt?: string;
+  sourceInboxId?: string;
+  sourceId?: string;
+  sourceIndex?: number;
+}
 export interface SmsParseResult {
   amount: number;
+  expenseAmount?: number;
+  fee?: number;
+  kind: TxnKind;
+  direction: TxnDirection;
   category: string;
   note: string;
   date: string;
+  time?: string;
+  bank?: string;
+  account?: string;
+  cardLast4?: string;
+  accountId?: string;
+  balanceAfter?: number;
+  balanceKind?: BalanceKind;
+  counterparty?: string;
+  debtRemaining?: number;
+  obligationHint?: ObligationHint;
+  refundDestination?: RefundDestination;
+  template?: string;
+  confidence: SmsConfidence;
+  eventId?: string;
+  sourceKey?: string;
+  sourceInboxId?: string;
+  sourceReceivedAt?: string;
+  suspectedDuplicate?: boolean;
+  reviewReason?: string;
 }
+export interface SmsParseEventResult extends SmsParseResult { rawText: string; }
 
-// Currency tokens seen across Saudi banks: ريال / ر.س / SR / SAR.
 const CUR = "SR|SAR|ر\\.?\\s?س|ريال";
+function normalizeDigits(s: string): string { return s.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/٫/g, ".").replace(/٬/g, ","); }
+const OTP = /رمز\s*(?:التحقق|مؤقت|التفعيل|التوثيق|شراء\s*(?:اونلاين|أونلاين)|الشراء)|رمز\s*[:：]|الرمز\s*السري|كلمة\s+(?:المرور|السر)|كلمة\s+مرور\s+ل(?:مرة|مره)\s+واحدة|(?:ننصح\s+بعدم\s+مشاركة|لا\s+تشارك(?:وا)?)\s+الرمز|one\s*time\s+password|do\s+not\s+share\s+this\s+otp|\bOTP\b|verification\s+code/i;
+const DECLINED = /مرفوض|تم\s+رفض|رفضت|فشل|لم\s+تتم|غير\s+ناجح|رصيد\s+غير\s+كاف|غير\s+كافي|declined|failed|insufficient/i;
+const HOLD = /just\s+a\s+hold|hold\s+on\s+your\s+card|حجز\s+مؤقت|حجز\s+على\s+بطاقتك/i;
+const STATEMENT = /(?:المبلغ\s+(?:ال[إا]جمالي\s+)?المستحق|[إا]جمالي\s+المستحق|مبلغ\s+مستحق|الحد\s+الأدنى\s+(?:للسداد|المستحق)|minimum\s+(?:amount\s+)?due|تاريخ\s+الاستحقاق|due\s+date|كشف\s+(?:ال)?حساب|إصدار\s+كشف|اصدار\s+كشف|تذكير\s+سداد\s+البطاقة)/i;
+// A payment-network name is evidence about the instrument, not evidence that
+// money left the account.  Keep purchase detection tied to an operation
+// phrase; otherwise a card-information/Apple Pay notice becomes a purchase
+// merely because it mentions "mada" or "purchase" in an informational line.
+const PURCHASE = /نقاط\s+البيع|عملية\s+شراء|شراء\s+(?:عبر|انترنت|أونلاين|اونلاين|دولي|ب(?:ـ|\s|$))|point\s+of\s+sale|\bpos\b|purchase(?:\s+transaction)?/i;
+const ATM = /سحب\s+(?:نقدي|من\s+الصراف|صراف(?:\s+آلي)?|نقد)|cash\s+withdrawal|\batm\b/i;
+const BILL = /سداد\s+فاتورة|مفوتر\s*[:：]|فاتورة\s+(?:كهرباء|ماء|اتصالات)|utility\s+bill/i;
+const BILL_NOTICE = /صدور\s+فاتورة|فاتورة\s+جديدة|لم\s+يتم\s+سدادها|فاتورة\s+شاملة|invoice\s+(?:generated|due)|new\s+bill/i;
+const CARD_SETTLE = /سداد|تسديد|تم\s+سداد|card\s+payment|credit\s+card\s+payment/i;
+const CARD_EVIDENCE = /بطاقة\s*(?:ائتمانية|ائتماني|فيزا|visa|ماستر|mastercard)|credit\s+card|\bvisa\b|\bmastercard\b/i;
+const BNPL = /تمارا|تابي|اشتر\s*الان\s*ادفع\s*لاحقا|tamara|tabby|buy\s*now\s*pay\s*later/i;
+const INVESTMENT_PROVIDER_NOTICE = /سداد\s+مبكر|منصة\s+الدين|معرف\s+(?:الفرصة|الاستثمار)|investment\s+opportunity|early\s+repayment/i;
+const INCOMING = /حوالة\s+(?:واردة|داخلية\s+واردة|محلية\s+واردة)|استرداد\s+نقدي\s+إلى\s+المحفظة|استرداد\s+نقدي\s+للمحفظة|إيداع|ايداع|تم\s+إضافة|تم\s+اضافة|أضيف|اضيف|إضافة\s+أموال|اضافة\s+اموال|استلام\s+(?:قطة|مبلغ|حوالة)|تحويل\s+وارد|money\s+added|cash\s+deposit|credited\s+to/i;
+const OUTGOING_TRANSFER = /حوالة\s+(?:داخلية|محلية)?\s*صادرة|حوالة\s+صادرة|تحويل\s+(?:داخلي|محلي)?\s*صادر|local\s+transfer\s+out|outgoing\s+transfer/i;
+const ADD_FUNDS = /money\s*added|add(?:ed)?\s*funds|إضافة\s+(?:أموال|اموال)|اضافة\s+(?:أموال|اموال)|اضافة\s+باستخدام|top\s*up/i;
+const SELF_TRANSFER = /حوالة\s+بين\s+(?:حساباتك|حساباتي)|تحويل\s+بين\s+(?:حساباتك|حساباتي)|تحويل\s+(?:الى|إلى)\s+(?:حسابك|حساب\s+(?:جاري|دراهم)|دراهم|المحفظة\s+الادخارية|حساباتك|حساباتي)|transfer\s+between\s+your\s+accounts|debit\s+transfer\s+internal/i;
+const INSTALLMENT = /قسط\s+تمويل|خصم\s*:\s*قسط|المبلغ\s+المتبقي/i;
+const MARKETING = /عزيزي\s+العميل|عميلنا\s+العزيز|صباح\s+الخير|هلا\s+|لحمايتك،?\s+حاولنا|تمت\s+اضافة\s+المستفيد|تم\s+تنشيط\s+المستفيد|تم\s+تسجيل\s+الدخول|apple\s+wallet|مبروك|نقاط\s+قطاف|نقاط\s+عضوية|رصيد\s+قطاف|rewards|برنامج\s+اكثر|تحديث\s+رسوم\s+التعرفة|تم\s+منحكم\s+الخصم|خصم\s+خاص|بدون\s+عمولة|discount|commission|سم\s+نفسك\s+تاجر|ملتقى\s+ريادة|اليوم\s+الأخير/i;
+const PROTECTION_INFO = /لحمايتك،?\s+حاولنا\s+التواصل|للتحقق\s+من\s+عملية|يرجى\s+مراجعة\s+التفاصيل\s+في\s+التطبيق/i;
+const OUTGOING = /دفع(?:ة)?\s+(?:مبلغ|قطة|دفعة)|حوالة\s+(?:صادرة|خارجة)|تحويل\s+صادر|تحويل\s+الى\s*[:：]?/i;
+const KNOWN_BANKS: Array<[string, RegExp]> = [["rajhi", /الراجحي|al\s*rajhi|مصرف\s+الراجحي/i], ["bsf", /الفرنسي|البنك\s+السعودي\s+الفرنسي|bsf|fransi/i], ["snb", /الاهلي|الأهلي|السعودي\s+الاهلي|snb/i], ["inma", /الإنماء|الانماء|inma/i], ["barq", /برق|barq/i], ["stcbank", /stc\s*bank|stc\s*با?نك/i], ["tamara", /تمارا|tamara/i], ["tabby", /تابي|tabby/i]];
 
-// Saudi banks sometimes send Arabic-Indic digits (٧٢٠٫٣٦). Fold them to Latin
-// so amounts and dates parse regardless of the numeral system.
-function normalizeDigits(s: string): string {
-  return s
-    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
-    .replace(/٫/g, ".")
-    .replace(/٬/g, ",");
+function inferBank(text: string, sender?: string): { bank?: string; confidence: SmsConfidence } {
+  // The sender field is authoritative evidence for the institution. Search it
+  // before message text so a merchant called Tamara, BSF, or Al Rajhi cannot
+  // overwrite the actual SMS sender.
+  const senderKnown = sender?.trim() ? KNOWN_BANKS.find(([, re]) => re.test(sender)) : undefined;
+  if (sender?.trim()) return { bank: senderKnown?.[0] ?? sender.trim().slice(0, 40), confidence: senderKnown ? "template" : "inferred" };
+  const known = KNOWN_BANKS.find(([, re]) => re.test(text));
+  return known ? { bank: known[0], confidence: "inferred" } : { confidence: "generic" };
 }
-
-// Messages that are never a transaction, whatever else they say: one-time
-// passwords and declined/failed operations.
-const NON_TRANSACTION = [
-  /رمز التحقق|الرمز السري|كلمة (?:المرور|السر)|\bOTP\b|verification code/i,
-  /مرفوضة|تم رفض|رفضت|فشلت|لم تتم|غير ناجحة|رصيد غير كاف|declined|failed|insufficient/i,
-];
-
-// Statement / bill-reminder vocabulary — skipped unless the message also
-// reports a completed payment ("تم سداد المبلغ المستحق...").
-const STATEMENT = [
-  /المبلغ (?:ال[إا]جمالي )?المستحق|[إا]جمالي المستحق|مبلغ مستحق/i,
-  /الحد الأدنى (?:للسداد|المستحق)|minimum (?:amount )?due/i,
-  /تاريخ الاستحقاق|due date/i,
-  /كشف (?:ال)?حساب/i,
-];
-const COMPLETED_OP = /تم(?:ت)?\s+(?:عملية\s+)?(?:ال)?(?:سداد|دفع|خصم|شراء|تحويل|إيداع)/i;
-
-// A live point-of-sale / Apple-Pay / mada purchase alert. Credit-card purchase
-// notifications ALSO quote "المبلغ الإجمالي المستحق" (total due) and "الرصيد
-// المتوفر" as context — which used to trip the statement/balance heuristics and
-// make the whole (real) purchase get discarded. A clear purchase signal
-// overrides those, so a genuine POS purchase is never mistaken for a bill.
-const PURCHASE_SIGNAL = /نقاط البيع|عملية شراء|شراء عبر|شراء بـ?|point of sale|\bpos\b|purchase|apple\s?pay|mada/i;
-
-// An actual money-movement keyword — tells a real transaction from a bare
-// balance notification ("الرصيد المتاح: 4279 ريال").
-const TXN_KEYWORD =
-  /شراء|خصم|سحب|دفع|سداد|إيداع|ايداع|تحويل|حوالة|استرداد|purchase|\bpos\b|transfer|refund|withdraw|deposit/i;
-const BALANCE_ONLY = /الرصيد|رصيدك|رصيد الحساب|available balance|\bbalance\b/i;
-
-// True when a message carries no real money movement and should be dropped
-// before parsing: OTPs, declines, statement reminders, balance-only alerts.
-function isNonTransaction(text: string): boolean {
-  if (NON_TRANSACTION.some((p) => p.test(text))) return true;
-  // A statement/bill reminder — but NOT when the message is a completed
-  // operation or a live purchase/POS alert that merely cites the amount due.
-  if (
-    STATEMENT.some((p) => p.test(text)) &&
-    !COMPLETED_OP.test(text) &&
-    !PURCHASE_SIGNAL.test(text)
-  )
-    return true;
-  if (BALANCE_ONLY.test(text) && !TXN_KEYWORD.test(text)) return true;
-  return false;
+export function normalizeSourceText(text: string): string { return normalizeDigits(text || "").trim().replace(/\s+/g, " "); }
+const SHA256_K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+function rotr(value: number, bits: number): number { return (value >>> bits) | (value << (32 - bits)); }
+function sha256Hex(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+  const input = new Uint8Array(paddedLength); input.set(bytes); input[bytes.length] = 0x80;
+  const bitLength = bytes.length * 8;
+  for (let i = 0; i < 8; i += 1) input[paddedLength - 1 - i] = Math.floor(bitLength / (2 ** (8 * i))) & 0xff;
+  let h0 = 0x6a09e667; let h1 = 0xbb67ae85; let h2 = 0x3c6ef372; let h3 = 0xa54ff53a;
+  let h4 = 0x510e527f; let h5 = 0x9b05688c; let h6 = 0x1f83d9ab; let h7 = 0x5be0cd19;
+  for (let offset = 0; offset < input.length; offset += 64) {
+    const words = new Uint32Array(64);
+    for (let i = 0; i < 16; i += 1) { const p = offset + i * 4; words[i] = ((input[p] << 24) | (input[p + 1] << 16) | (input[p + 2] << 8) | input[p + 3]) >>> 0; }
+    for (let i = 16; i < 64; i += 1) { const s0 = rotr(words[i - 15], 7) ^ rotr(words[i - 15], 18) ^ (words[i - 15] >>> 3); const s1 = rotr(words[i - 2], 17) ^ rotr(words[i - 2], 19) ^ (words[i - 2] >>> 10); words[i] = (words[i - 16] + s0 + words[i - 7] + s1) >>> 0; }
+    let a = h0; let b = h1; let c = h2; let d = h3; let e = h4; let f = h5; let g = h6; let hh = h7;
+    for (let i = 0; i < 64; i += 1) { const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25); const ch = (e & f) ^ (~e & g); const t1 = (hh + s1 + ch + SHA256_K[i] + words[i]) >>> 0; const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22); const maj = (a & b) ^ (a & c) ^ (b & c); const t2 = (s0 + maj) >>> 0; hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0; }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + hh) >>> 0;
+  }
+  return [h0, h1, h2, h3, h4, h5, h6, h7].map((part) => part.toString(16).padStart(8, "0")).join("");
 }
-
-const CREDIT_RE = /(?:إيداع|راتب|حوّل إليك|حُوّل إليك|تم استلام|أضيف|credit)/i;
-
-// A message that parsed to no expense but is nonetheless just *noise* —
-// an OTP, a decline, a statement/bill reminder, a bare balance alert, or an
-// incoming credit (income). These are safe to drop silently. Anything else
-// that failed to parse might be a real expense in a format we didn't catch, so
-// the inbox must surface it for manual review instead of deleting it.
-export function isNoiseMessage(smsText: string): boolean {
-  const text = normalizeDigits((smsText || "").trim());
-  if (!text) return true;
-  if (isNonTransaction(text)) return true;
-  if (CREDIT_RE.test(text)) return true;
-  return false;
+export function sourceKeyFor(text: string): string { return sha256Hex(normalizeSourceText(text)); }
+export function eventIdFor(sourceId: string, index: number): string { return `${sourceId}:${Math.max(0, Math.floor(index))}`; }
+export function cashbackEffectId(eventId: string): string { return `${eventId}:cashback`; }
+/** Create the source identity for one manual paste.  The caller must create it
+ * once for the paste and reuse it when previewing/reviewing; the parser never
+ * derives event identity from editable merchant or category fields. */
+export function createSmsSourceId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  const token = typeof randomUUID === "function"
+    ? randomUUID.call(globalThis.crypto)
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `manual:${token}`;
 }
+function validDateOrNull(s: string | undefined): string | null { return s && isValidDateKey(s) ? s : null; }
 
-// Returns null both when no amount could be read AND when the message looks
-// like an incoming deposit (income) — this tracker is expense-only, so
-// credits are silently skipped rather than logged as spending.
-export function parseBankSms(smsText: string, date: string): SmsParseResult | null {
-  const text = normalizeDigits(smsText.trim());
-  // Drop OTPs, declines, statement reminders and balance-only alerts so they
-  // never turn into bogus transactions.
-  if (isNonTransaction(text)) return null;
-  const isCredit = /(?:إيداع|راتب|حوّل إليك|حُوّل إليك|تم استلام|أضيف|credit)/i.test(text);
-  if (isCredit) return null;
-
-  // Drop the running-balance and any "total due" figures first, so neither is
-  // mistaken for the spend amount. A credit-card purchase alert quotes both the
-  // available balance ("الرصيد المتوفر: SAR 2673.04") and the outstanding total
-  // ("المبلغ الإجمالي المستحق SAR 2326.96") alongside the real purchase amount —
-  // an optional descriptor word (المتوفر/المتاح/الحالي…) may sit between the
-  // keyword and the number, and the currency may lead or trail it.
-  const numTail = `\\s*[:\\-]?\\s*(?:${CUR})?\\s*[\\d.,]+\\s*(?:${CUR})?`;
-  const body = text
-    .replace(new RegExp(`(?:رصيد|الرصيد|المتبقّ?ي|available|balance)(?:\\s+\\S+)?${numTail}`, "gi"), " ")
-    .replace(new RegExp(`(?:المبلغ (?:ال[إا]جمالي )?المستحق|[إا]جمالي المستحق|مبلغ مستحق|رسوم العملية)${numTail}`, "gi"), " ");
-
-  let amount = 0;
-  // Amount with the currency on either side (SR 22 · 22 ريال · 150.00 SAR),
-  // else a bare number right after a purchase keyword.
-  const m =
-    body.match(new RegExp(`(?:${CUR})\\s*(\\d[\\d,]*\\.?\\d*)`, "i")) ||
-    body.match(new RegExp(`(\\d[\\d,]*\\.?\\d*)\\s*(?:${CUR})`, "i")) ||
-    body.match(/(?:شراء|خصم|سحب|دفع|purchase)\D*?(\d[\d,]*\.?\d*)/i);
-  if (m) amount = parseFloat((m[1] ?? "").replace(/,/g, ""));
-  if (!amount) return null;
-
-  // Merchant markers point at either the payee ("مفوتر"/"لـ"/"لدى"/"at"/"@") or
-  // the funding SOURCE ("من {account}"). A mada/Apple-Pay alert lists both —
-  // e.g. "من9004" (source account) before "لـEHSAN" (the real merchant) — so
-  // taking the first marker grabbed the account number. A SADAD bill payment
-  // (سداد فاتورة) is the same shape the other way round: it names the biller
-  // after "مفوتر:" (السعودية للطاقة) but the funding card after "من البطاقة
-  // الائتمانية: 9407", so the "من" fallback used to record the card number as
-  // the merchant and lose the biller. Collect EVERY marker (allowing an
-  // optional ":" after it, as SADAD writes "مفوتر:"), strip a trailing currency
-  // as before, and reject empty or pure number/punctuation values (an account
-  // number is never a merchant name). Prefer a payee marker; fall back to "من"
-  // only when it names a real (lettered) merchant, so a bank that legitimately
-  // writes "من ستاربكس" still resolves correctly.
-  let merchant = "";
-  let fromMerchant = "";
-  const stripCur = (v: string) => v.replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim();
-  for (const mk of body.matchAll(/(مفوتر|لدى|لـ|من|at|@)\s*:?\s*([^\n\r,،.؛;]+)/gi)) {
-    const value = stripCur(mk[2]);
-    if (!/\p{L}/u.test(value)) continue; // empty or purely numeric/punctuation
-    if (mk[1] === "من") {
-      if (!fromMerchant) fromMerchant = value;
-    } else if (!merchant) {
-      merchant = value;
+export function extractSmsDate(text: string, reference: string): string | null {
+  const normalized = normalizeDigits(text);
+  const excludedDateStart = normalized.match(/(?:تاريخ\s+الاستحقاق|الاستحقاق|due\s+date|ابتداء(?:ً|ا)?\s+من|effective\s+from)[^\d]{0,50}\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{1,4}/i)?.index;
+  const usable = (key: string, at: number): string | null => {
+    const year = Number(key.slice(0, 4));
+    // A due/effective date describes a future obligation or tariff, not the
+    // date the notification was received. Ignore malformed year-0000 values
+    // and dates attached to those labels.
+    if (year < 1900 || !isValidDateKey(key)) return null;
+    const prefix = normalized.slice(Math.max(0, at - 32), at);
+    if (excludedDateStart !== undefined && at >= excludedDateStart) return null;
+    if (/(?:تاريخ\s+الاستحقاق|الاستحقاق|due\s+date|ابتداء(?:ً|ا)?\s+من|effective\s+from)/i.test(prefix)) return null;
+    return key;
+  };
+  let sawFourDigitDate = false;
+  for (const iso of normalized.matchAll(/(\d{4})-(\d{2})-(\d{2})/g)) {
+    sawFourDigitDate = true;
+    const key = usable(`${iso[1]}-${iso[2]}-${iso[3]}`, iso.index ?? 0); if (key) return key;
+  }
+  for (const dmy of normalized.matchAll(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/g)) {
+    sawFourDigitDate = true;
+    const [, d, m, y] = dmy; const key = usable(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`, dmy.index ?? 0); if (key) return key;
+  }
+  // Do not reinterpret the tail of an ignored YYYY-MM-DD value as a two-digit
+  // year (for example 2026-09-25 -> 2026-09-25 again).
+  if (sawFourDigitDate) return null;
+  const dmy2 = normalized.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?!\d)/);
+  if (!dmy2) return null;
+  const [, a, m, b] = dmy2;
+  const candidates: string[] = [];
+  if (Number(a) >= 1 && Number(a) <= 31) { const key = `20${b}-${m.padStart(2, "0")}-${a.padStart(2, "0")}`; if (isValidDateKey(key)) candidates.push(key); }
+  if (Number(b) >= 1 && Number(b) <= 31) { const key = `20${a.padStart(2, "0")}-${m.padStart(2, "0")}-${b.padStart(2, "0")}`; if (isValidDateKey(key)) candidates.push(key); }
+  if (!candidates.length) return null;
+  const ref = validDateOrNull(reference) ?? today();
+  return candidates.reduce((closest, candidate) => Math.abs(parseDate(candidate).getTime() - parseDate(ref).getTime()) < Math.abs(parseDate(closest).getTime() - parseDate(ref).getTime()) ? candidate : closest);
+}
+function extractDateTime(text: string, reference: string): { date: string | null; time?: string } {
+  const date = extractSmsDate(text, reference);
+  const tm = text.match(/(?:\b|؜)(\d{1,2}):(\d{2})(?:\b|؜)/);
+  return { date, time: tm ? `${tm[1].padStart(2, "0")}:${tm[2]}` : undefined };
+}
+function numberValue(value: string): number | undefined { const n = Number(normalizeDigits(value).replace(/,/g, "").replace(/[^\d.\-]/g, "")); return Number.isFinite(n) ? n : undefined; }
+function firstFieldAmount(text: string, labels: RegExp[]): number | undefined {
+  for (const label of labels) {
+    const re = new RegExp(`${label.source}[^\\n\\r]*`, `${label.flags.includes("i") ? "i" : ""}g`);
+    for (const match of text.matchAll(re)) {
+      const line = match[0];
+      // The same SMS often contains the purchase amount, total due, balance,
+      // and minimum payment. A broad `مبلغ` label must never select one of the
+      // latter fields merely because it appears first in the message.
+      if (/(?:الإجمالي|اجمالي|المستحق|الحد\s+الأدنى|الرصيد|المتبقي|due|balance)/i.test(line) && !/(?:المتبقي|remaining)/i.test(label.source)) continue;
+      const sarParen = line.match(/\(([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR|SR|ر\.?\s?س)\)/i);
+      if (sarParen) return numberValue(sarParen[1]);
+      for (const raw of line.match(/[\d٠-٩][\d٠-٩,٬]*(?:[٫.]\d+)?/g) ?? []) { const n = numberValue(raw); if (n !== undefined && n > 0) return n; }
     }
   }
-  merchant = merchant || fromMerchant;
+  return undefined;
+}
+function extractAmount(text: string, kind: TxnKind): number {
+  const normalized = normalizeDigits(text);
+  const fields: Record<string, RegExp[]> = {
+    purchase: [/مبلغ\s*[:：]?/i, /بـ?\s*(?:SR|SAR|ريال)?/i, /purchase[^\d]{0,30}/i],
+    installment: [/القسط\s*[:：]?/i, /خصم\s*[:：]?/i], card_settle: [/سداد(?:\s+بـ?)?\s*/i, /تسديد(?:\s+بـ?)?\s*/i, /payment[^\d]{0,20}/i],
+    bnpl_settle: [/دفعة\s*(?:قادمة)?[^\d]{0,20}/i, /payment[^\d]{0,20}/i], cashback: [/إضافة|اضافة|مبلغ\s*[:：]?/i], refund: [/مبلغ\s*[:：]?/i, /استلام\s+قطة[^\d]{0,20}/i],
+    deposit: [/مبلغ\s*[:：]?/i, /إيداع|ايداع[^\d]{0,20}/i], transfer_in: [/مبلغ\s*[:：]?/i, /حوالة[^\d]{0,20}/i], salary: [/مبلغ\s*[:：]?/i, /حوالة[^\d]{0,20}/i], atm: [/مبلغ\s*[:：]?/i, /سحب[^\d]{0,20}/i], bill: [/مبلغ\s*[:：]?/i, /سداد[^\d]{0,20}/i], fee: [/رسوم(?:\s+وضريبة)?\s*[:：]?/i], unknown: [/مبلغ\s*[:：]?/i],
+  };
+  const field = firstFieldAmount(normalized, fields[kind] ?? fields.unknown); if (field !== undefined) return field;
+  const currency = normalized.match(new RegExp(`(?:${CUR})\\s*([\\d,]+(?:\\.\\d+)?)|([\\d,]+(?:\\.\\d+)?)\\s*(?:${CUR})`, "i"));
+  if (currency) return numberValue(currency[1] ?? currency[2] ?? "") ?? 0;
+  const operation = normalized.match(/(?:شراء|خصم|سحب|دفع|حوالة|تحويل|إضافة|اضافة|deposit|purchase)\D{0,30}([\d,]+(?:\.\d+)?)/i);
+  return operation ? numberValue(operation[1]) ?? 0 : 0;
+}
+function extractFee(text: string): number | undefined { return firstFieldAmount(normalizeDigits(text), [/(?:ال)?رسوم\s*وضريبة\s*[:：]?/i, /(?:ال)?رسوم\s*[:：]?/i, /رسوم\s*العملية\s*[:：]?/i]); }
+function extractBalance(text: string): number | undefined { const m = normalizeDigits(text).match(/(?:الرصيد\s*(?:المتوفر|المتاح|الحالي)?|رصيد)\s*[:：]?\s*(?:SAR|SR|ريال|ر\.?\s?س)?\s*([\d,]+(?:\.\d+)?)/i); return m ? numberValue(m[1]) : undefined; }
+function extractAccount(text: string, kind: TxnKind): string | undefined {
+  const normalized = normalizeDigits(text);
+  // Prefer instrument fields that explicitly identify the account/card. A
+  // counterparty name or recipient number must not become the owner's id.
+  const explicit = normalized.match(/(?:بطاقة|حساب|عبر|visa|mastercard|ماستر)\s*[:：]?\s*(?:\*+)?(\d{4})(?:\b|\s|;|\*)/i);
+  if (explicit) return explicit[1].padStart(4, "0");
+  if (["transfer_in", "deposit", "salary", "refund", "cashback"].includes(kind)) {
+    const recipient = normalized.match(/(?:الى|إلى)\s*[:：]?\s*(?:\*+)?(\d{4})(?:\b|\s|;|\*)/i);
+    if (recipient) return recipient[1].padStart(4, "0");
+  }
+  if (["purchase", "atm", "bill", "installment", "fee", "card_settle", "self_transfer", "transfer_out"].includes(kind)) {
+    const source = normalized.match(/من\s*[:：]?\s*(?:\*+)?(\d{4})(?:\b|\s|;|\*)/i);
+    if (source) return source[1].padStart(4, "0");
+  }
+  const masked = normalized.match(/\*{2,}(\d{4})|\b(\d{4})\*{2,}/);
+  return masked?.[1] ?? masked?.[2];
+}
+function extractMerchant(text: string): string { const body = normalizeDigits(text); let merchant = ""; let from = ""; const strip = (v: string) => v.replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim(); for (const m of body.matchAll(/(مفوتر|لدى|لـ|من|الى|إلى|at|@)\s*[:：]?\s*([^\n\r,،.؛;]+)/gi)) { const v = strip(m[2]); if (!/\p{L}/u.test(v)) continue; if (/^من$/i.test(m[1])) { if (!from) from = v; } else if (!merchant) merchant = v; } return merchant || from; }
+function extractCounterparty(text: string): string | undefined { const m = normalizeDigits(text).match(/(?:من|الى|إلى)\s*[:：]?\s*([^\n\r,،;]+)/i); return m && /\p{L}/u.test(m[1]) ? m[1].trim() : undefined; }
 
+function addDays(date: string, days: number): string | undefined {
+  if (!isValidDateKey(date)) return undefined;
+  const value = parseDate(date);
+  value.setUTCDate(value.getUTCDate() + days);
+  const result = value.toISOString().slice(0, 10);
+  return isValidDateKey(result) ? result : undefined;
+}
+
+function obligationHintFor(
+  text: string,
+  eventDate: string,
+  bank: string | undefined,
+  extractedAmount: number,
+): ObligationHint | undefined {
+  if (bank !== "tamara" && bank !== "tabby") return undefined;
+  const normalized = normalizeDigits(text);
+  const providerMerchant = extractMerchant(normalized)
+    .replace(/\s+(?:مستحق(?:ة)?|سدد(?:ها)?|خلال|سيتم|تم\s+تأكيد|confirmed|track\s+your|order|payment|will\s+be).*$/i, "")
+    .trim()
+    || normalized.match(/(?:\bat\s+|your\s+)([^\n\r,.]+?)(?=\s+(?:is|payment|purchase|order|will)\b|$)/i)?.[1]?.trim();
+  const amount = extractedAmount > 0 ? extractedAmount : undefined;
+  const perPeriod = firstFieldAmount(normalized, [/قسط(?:\s+شهري)?/i, /payment\s+of/i]);
+  const periodsLeft = numberValue(normalized.match(/لمدة\s*(\d+)\s*(?:أشهر|شهر|months?)/i)?.[1] ?? "")
+    ?? numberValue(normalized.match(/مقسمة\s+إلى\s*(\d+)/i)?.[1] ?? "")
+    ?? numberValue(normalized.match(/for\s*(\d+)\s*months?/i)?.[1] ?? "");
+  let dueDate: string | undefined;
+  if (/(?:مستحق(?:ة)?|دفعتك)[^\n\r]{0,60}(?:اليوم|today)/i.test(normalized)) dueDate = eventDate;
+  else if (/(?:مستحق(?:ة)?|charged)[^\n\r]{0,80}(?:غدا|غدًا|tomorrow)/i.test(normalized)) dueDate = addDays(eventDate, 1);
+  else if (/(?:مستحق(?:ة)?|charged)[^\n\r]{0,80}(?:خلال\s+يومين|within\s+two\s+days)/i.test(normalized)) dueDate = addDays(eventDate, 2);
+  if (!amount && !providerMerchant && !dueDate && !perPeriod && !periodsLeft) return undefined;
   return {
-    amount,
-    category: keywordCategory(text + " " + merchant),
-    note: merchant || body.replace(/\s+/g, " ").trim().slice(0, 60),
-    date: extractSmsDate(text, date) ?? date,
+    ...(amount ? { amount } : {}),
+    ...(providerMerchant ? { merchant: providerMerchant } : {}),
+    ...(dueDate ? { dueDate } : {}),
+    ...(perPeriod ? { perPeriod } : {}),
+    ...(periodsLeft ? { periodsLeft } : {}),
   };
 }
 
-// Pull a Gregorian date out of a message if present (dd/mm/yyyy, yyyy-mm-dd,
-// dd-mm-yyyy). Hijri/unknown formats fall back to the caller's default.
-// `reference` is the caller's own default date (today, or the date the user
-// picked for a manual paste) — used only to disambiguate the 2-digit-year
-// case below.
-function extractSmsDate(text: string, reference: string): string | null {
-  const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const dmy = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
-  if (dmy) {
-    const [, d, m, y] = dmy;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  // A date with a 2-digit year is ambiguous: mada alerts send dd-mm-yy
-  // ("16/7/26" → 2026-07-16), but credit-card POS alerts (e.g. the Apple Pay
-  // "... في 15:12 26-07-30 ..." template) send yy-mm-dd for the SAME shape
-  // ("26-07-30" → 2026-07-30, NOT day 26 of month 07, year 2030). Reading it
-  // as always dd-mm-yy silently misfiles that second template a decade into
-  // the future. Try both orderings — yy as 20yy — and when both land on a
-  // real calendar day, keep whichever is closer to `reference`: a bank SMS is
-  // always about a transaction from around now, never years away. The
-  // trailing (?!\d) guard keeps this from biting off the first two digits of
-  // a 4-digit year (that case already returned above).
-  const dmy2 = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?!\d)/);
-  if (dmy2) {
-    const [, a, m, b] = dmy2;
-    const month = m.padStart(2, "0");
-    const na = Number(a);
-    const nb = Number(b);
-    const candidates: string[] = [];
-    if (na >= 1 && na <= 31) candidates.push(`20${b}-${month}-${a.padStart(2, "0")}`); // dd-mm-yy
-    if (nb >= 1 && nb <= 31) candidates.push(`20${a}-${month}-${b.padStart(2, "0")}`); // yy-mm-dd
-    const valid = candidates.filter(isValidDateKey);
-    if (valid.length === 0) return null;
-    if (valid.length === 1) return valid[0];
-    const refDate = parseDate(isValidDateKey(reference) ? reference : today());
-    return valid.reduce((closest, c) =>
-      Math.abs(parseDate(c).getTime() - refDate.getTime()) <
-      Math.abs(parseDate(closest).getTime() - refDate.getTime())
-        ? c
-        : closest
-    );
-  }
-  return null;
+function inferKind(text: string, bank?: string): TxnKind {
+  // Match both the original Arabic and its conservative spelling-normalized
+  // form so "ايداع"/"رمز شراء اونلاين" behave like their hamzated variants.
+  // The sender is checked before message text: Tamara/Tabby provider notices
+  // stay non-spending even when their body names a real merchant.
+  const normalized = normalizeSmsText(text);
+  const has = (re: RegExp): boolean => re.test(text) || re.test(normalized);
+  const hasFinancialOperation = has(/شراء|عملية\s+شراء|نقاط\s+البيع|مبلغ\s*[:：]|SAR|SR|ريال|لدى|purchase|point\s+of\s+sale|\bPOS\b/i);
+  if (has(OTP)) return "otp";
+  if (has(DECLINED)) return "declined";
+  if (has(HOLD)) return "hold";
+  if (bank === "tamara" || bank === "tabby") return "info";
+  if (has(/عزيزي\s+العميل|عميلنا\s+العزيز/i) && has(PROTECTION_INFO)) return "marketing";
+  if ((has(PROTECTION_INFO) && !has(/شراء|مبلغ\s*[:：]|SAR|SR|ريال|لدى/i)) || has(/تم\s+تحويل\s+عمليتك|تأكيد\s+دفعة\s+مقسمة|دفعة\s+مقسمة|تحديث\s+رسوم\s+التعرفة|سيتم\s+تحديث\s+رسوم/i)) return "info";
+  // Tamara/Tabby messages are provider confirmations or repayment notices;
+  // a bank SMS that merely names Tamara as the merchant is a normal purchase.
+  if (has(BNPL) && has(/تم\s+تحويل|تحويل\s+عمليتك|قادمة|tomorrow|مستحقة|installment/i)) return "info";
+  if (has(/استرداد\s+نقدي\s+(?:إلى|الى|ل)\s+(?:ال)?بطاقة|cashback\s+(?:to|on)\s+(?:the\s+)?card/i)) return "cashback";
+  if (has(SELF_TRANSFER)) return "self_transfer";
+  if (has(BILL_NOTICE)) return "info";
+  if (has(/عملية\s+(?:عكسية|استرجاع)|عكس\s+عملية|استرجاع\s+عملية|استرداد\s+عملية|reversal|refund/i)) return has(/عكس|reversal/i) ? "reversal" : "refund";
+  if (has(ADD_FUNDS)) return "deposit";
+  if (has(OUTGOING_TRANSFER)) return "transfer_out";
+  if (has(ATM)) return "atm";
+  if (has(/قطاف|نقاط\s+(?:مضافة|اضيفت)|رصيد\s+النقاط/i) && !has(/(?:عملية\s+شراء|مبلغ\s*[:：]|amount\s*[:：])/i)) return "marketing";
+  if (has(/تم\s+منحكم\s+الخصم|خصم\s+خاص|بدون\s+عمولة|discount|commission/i) && !has(/(?:عملية\s+شراء|مبلغ\s*[:：]|amount\s*[:：])/i)) return "marketing";
+  if (has(INVESTMENT_PROVIDER_NOTICE) && !(has(CARD_SETTLE) && has(CARD_EVIDENCE))) return "info";
+  if (has(INSTALLMENT) && !(has(CARD_SETTLE) && has(CARD_EVIDENCE))) return "installment";
+  if (has(BILL)) return "bill";
+  if (has(STATEMENT) && !has(PURCHASE)) return "statement";
+  if (has(/استرداد\s+نقدي\s+إلى\s+(?:ال)?المحفظة|محفظة\s+(?:الاسترجاع|الاسترداد)\s+النقدي|استرجاع\s+نقدي/i)) return "cashback";
+  if (has(CARD_SETTLE) && has(CARD_EVIDENCE) && !has(PURCHASE)) return "card_settle";
+  if (has(MARKETING) && has(/عزيزي\s+العميل|عميلنا\s+العزيز/i) && !hasFinancialOperation && !has(INCOMING)) return "marketing";
+  if (has(MARKETING) && !hasFinancialOperation && !has(INCOMING)) return "marketing";
+  if (has(/استلام\s+(?:قطة|مبلغ|حوالة)|استرداد\s+(?:مبلغ|عملية)|(?:حوالة|تحويل)\s+من\s*[:：]?\s*\p{L}[^\n\r]*(?:مبلغ|SAR|ريال)/iu)) return "refund";
+  if (has(/راتب/i)) return "salary";
+  if (has(/حوالة\s+(?:واردة|داخلية\s+واردة|محلية\s+واردة)|تحويل\s+وارد/i)) return "transfer_in";
+  if (has(INCOMING)) return has(/إيداع|ايداع/i) ? "deposit" : "transfer_in";
+  // A bare "خصم" is only a purchase when it carries an account/card debit
+  // shape.  Discount announcements are handled above and remain non-money.
+  if (has(/خصم\s*(?:من|على)\s*(?:حساب|بطاقة)/i) || (has(/^\s*خصم(?![\p{L}\p{N}])/imu) && has(/(?:مبلغ|SAR|SR|ريال|لدى|من\s+\p{L})/iu))) return "purchase";
+  if (has(/تبرع|صدقة|زكاة|خيري|جمعية|donation|charity/i)) return "purchase";
+  if (has(OUTGOING)) return "purchase";
+  if (has(PURCHASE) || (has(/^\s*شراء(?![\p{L}\p{N}])/imu) && has(/(?:مبلغ|SAR|SR|ريال|لدى|من\s+\p{L})/iu))) return "purchase";
+  if (has(/(?:رسوم\s*(?:وضريبة|العملية)?\s*[:：]|رسوم\s*SR)/i)) return "fee";
+  return text.trim() ? "unknown" : "info";
+}
+function directionFor(kind: TxnKind): TxnDirection { if (["purchase", "atm", "bill", "installment", "fee", "card_settle", "bnpl_settle", "transfer_out"].includes(kind)) return "out"; if (["refund", "cashback", "reversal", "transfer_in", "deposit", "salary"].includes(kind)) return "in"; return "neutral"; }
+function isExpenseKind(kind: TxnKind): boolean { return ["purchase", "atm", "bill", "installment", "fee"].includes(kind); }
+function instrumentKind(text: string, kind: TxnKind): "card" | "account" | "wallet" {
+  if (/محفظة|wallet/i.test(text)) return "wallet";
+  if (kind === "card_settle" || /بطاقة|فيزا|ماستر|مدى|visa|mastercard|apple\s*pay|credit\s*card/i.test(text)) return "card";
+  return "account";
+}
+function hasEventAmount(kind: TxnKind): boolean { return !["otp", "declined", "statement", "marketing", "info", "hold", "bnpl_settle"].includes(kind); }
+function templateFor(kind: TxnKind, text: string): string | undefined { const t = normalizeSmsText(text); if (kind === "purchase" && /شراء\s+(?:انترنت|دولي)/i.test(t) && /مبلغ/.test(t) && /لدي/.test(t)) return "rajhi.internet_purchase"; if (kind === "purchase" && /شراء\s+عبر\s+نقاط\s+البيع/i.test(t)) return "bsf.pos_purchase"; if (kind === "card_settle") return "card.settlement"; if (kind === "statement") return "card.statement"; if (kind === "installment") return "loan.installment"; if (kind === "cashback") return "cashback.wallet"; if (kind === "self_transfer") return "self.transfer"; return undefined; }
+
+export function parseBankSmsEvent(smsText: string, referenceDate: string, options: SmsParseOptions = {}): SmsParseEventResult | null {
+  const rawText = (smsText || "").trim(); if (!rawText) return null;
+  const text = normalizeDigits(rawText); const sender = inferBank(text, options.sender); const kind = inferKind(text, sender.bank); const dt = extractDateTime(text, referenceDate); const date = dt.date ?? validDateOrNull(referenceDate) ?? referenceDate;
+  const extractedAmount = extractAmount(text, kind); const amount = hasEventAmount(kind) ? extractedAmount : 0;
+  const feeBearing = new Set<TxnKind>(["purchase", "atm", "bill", "installment", "fee", "transfer_out", "self_transfer", "card_settle"]);
+  const fee = feeBearing.has(kind) ? (extractFee(text) ?? 0) : 0;
+  const account = extractAccount(text, kind); const merchant = extractMerchant(text); const counterparty = extractCounterparty(text) ?? (merchant || undefined); const balanceAfter = extractBalance(text);
+  const isCreditCard = /بطاقة\s*(?:ائتمانية|ائتماني)|credit\s*card|available\s+credit|الرصيد\s+الائتماني|الحد\s+الائتماني/i.test(text) || (kind === "card_settle" && /بطاقة\s*(?:فيزا|ماستر)|visa\s+card|mastercard/i.test(text)); const balanceKind: BalanceKind = balanceAfter === undefined ? "unknown" : isCreditCard ? "credit_available" : "unknown";
+  const template = templateFor(kind, text);
+  const obligationHint = obligationHintFor(text, date, sender.bank, extractedAmount);
+  // An inbox receipt timestamp is reliable event-date evidence when the SMS
+  // body omits its own date. Keep an unknown sender generic, but do not force
+  // every otherwise identifiable notification into manual review merely
+  // because its date came from the transport metadata.
+  const receivedDateEvidence = Boolean(options.receivedAt?.match(/\d{4}-\d{2}-\d{2}/));
+  const confidence: SmsConfidence = (dt.date || receivedDateEvidence)
+    ? (template ? sender.confidence : sender.confidence === "generic" ? "generic" : "inferred")
+    : "generic";
+  const sourceId = options.sourceId ?? options.sourceInboxId; const eventId = sourceId && options.sourceIndex !== undefined ? eventIdFor(sourceId, options.sourceIndex) : undefined;
+  const identityKind = instrumentKind(text, kind);
+  const refundDestination: RefundDestination | undefined = kind === "refund" && /بطاقة|card|visa|mastercard/i.test(text)
+    ? "merchant_card"
+    : kind === "refund" && /حساب|محفظة|نقد|bank|cash/i.test(text)
+      ? "person_bank"
+      : undefined;
+  return { rawText, amount, expenseAmount: isExpenseKind(kind) ? amount + (fee || 0) : 0, fee: fee || undefined, kind, direction: directionFor(kind), category: keywordCategory(`${text} ${merchant}`), note: merchant || obligationHint?.merchant || rawText.replace(/\s+/g, " ").slice(0, 100), date, time: dt.time, bank: sender.bank, account, cardLast4: identityKind === "card" ? account : undefined, accountId: sender.bank && account ? `${sender.bank}:${identityKind}:${account}` : undefined, balanceAfter, balanceKind, counterparty: counterparty || obligationHint?.merchant, debtRemaining: kind === "installment" ? firstFieldAmount(text, [/المبلغ\s+المتبقي\s*[:：]?/i]) : undefined, obligationHint, refundDestination, template, confidence, eventId, sourceKey: sourceKeyFor(rawText), sourceInboxId: options.sourceInboxId, sourceReceivedAt: options.receivedAt, reviewReason: kind === "unknown" ? "قالب غير معروف — يحتاج مراجعة" : undefined };
 }
 
-// Parse a blob containing many bank SMS pasted together. Splits into
-// individual messages and parses each, so the user copies everything at
-// once instead of one message at a time.
-export function parseBankSmsBulk(
-  blob: string,
-  defaultDate: string
-): { transactions: SmsParseResult[]; skippedIncome: number } {
-  const text = blob.trim();
-  if (!text) return { transactions: [], skippedIncome: 0 };
+// Legacy expense-only API. New inbox/import code should use `events` below so
+// settlement, income, and unknown events remain available for routing.
+export function parseBankSms(smsText: string, date: string): SmsParseResult | null { const event = parseBankSmsEvent(smsText, date); return event && isExpenseKind(event.kind) ? event : null; }
+export function isNoiseMessage(smsText: string): boolean {
+  const event = parseBankSmsEvent(smsText, today());
+  if (!event) return true;
+  if (event.direction === "in") return true;
+  if (event.kind === "unknown" && /(?:^|\n)\s*الرصيد\s*(?:المتاح|المتوفر|الحالي)?\s*[:：]?/i.test(smsText)) return true;
+  return ["otp", "declined", "statement", "marketing", "info", "hold", "card_settle", "bnpl_settle", "self_transfer"].includes(event.kind);
+}
 
-  // First try splitting on blank lines (typical when copying several SMS).
+export interface BulkParseOptions extends SmsParseOptions { receivedAt?: string; }
+function receivedDate(receivedAt: string | undefined, fallback: string): string { const date = receivedAt?.match(/(\d{4}-\d{2}-\d{2})/)?.[1]; return date && isValidDateKey(date) ? date : fallback; }
+export function parseBankSmsBulk(blob: string, defaultDate: string, options: BulkParseOptions = {}): { transactions: SmsParseResult[]; events: SmsParseEventResult[]; skippedIncome: number } {
+  const text = (blob || "").trim();
+  if (!text) return { transactions: [], events: [], skippedIncome: 0 };
+  const startsMessage = (value: string) => /^(?:شراء|عملية\s+شراء|خصم|سحب|دفع|حوالة|تحويل|إيداع|ايداع|استرداد|استرجاع|عكس|رمز|تم\s+رفض|عملية\s+مرفوضة|money\s*added|add(?:ed)?\s*funds|purchase|credited|cash\s+deposit)/iu.test(value.trim());
   let chunks = text.split(/\n\s*\n+/).map((c) => c.trim()).filter(Boolean);
-  // No blank lines: a line only starts a new message when it carries its own
-  // operation/alert keyword. Otherwise this is one multi-line SMS (e.g. Al
-  // Rajhi's field-per-line format) and splitting it would turn its amount and
-  // balance lines into bogus separate transactions — so keep it whole.
-  //
-  // NEVER sub-split a blob that, taken whole, is already a non-transaction (a
-  // decline/failure, OTP, statement or balance-only alert). A declined purchase
-  // quotes the very fields a real one does ("العملية: شراء" / "المبلغ: SAR
-  // 100.73") with its reason on a separate line ("تم رفض العملية: الرصيد غير
-  // كافٍ"); carving it into chunks orphans that reason and lets the
-  // amount-bearing chunk record as a real expense. Keeping it whole lets
-  // parseBankSms see the decline signal and drop the message (returns null).
-  if (chunks.length <= 1 && !isNonTransaction(text)) {
-    const lines = text.split(/\r?\n/).map((c) => c.trim()).filter(Boolean);
-    const startsChunk = (l: string) =>
-      TXN_KEYWORD.test(l) ||
-      NON_TRANSACTION.some((p) => p.test(l)) ||
-      STATEMENT.some((p) => p.test(l)) ||
-      BALANCE_ONLY.test(l);
-    if (lines.filter(startsChunk).length > 1) {
-      const grouped: string[] = [];
-      for (const line of lines) {
-        if (startsChunk(line) || grouped.length === 0) grouped.push(line);
-        else grouped[grouped.length - 1] += "\n" + line;
-      }
-      chunks = grouped;
+  // Blank lines inside one receipt commonly precede a warning, balance, or
+  // date line. Merge every continuation into the current receipt; only a
+  // clear operation header starts a second document. This keeps amount/date
+  // fields together while still allowing a pasted batch of receipts.
+  if (chunks.length > 1) {
+    const grouped: string[] = [];
+    for (const chunk of chunks) {
+      if (grouped.length && !startsMessage(chunk)) grouped[grouped.length - 1] += `\n\n${chunk}`;
+      else grouped.push(chunk);
     }
+    chunks = grouped;
   }
-
-  const isCreditRe = /(?:إيداع|راتب|حُوّل إليك|تم استلام|credit)/i;
-  const results: SmsParseResult[] = [];
-  let skippedIncome = 0;
-  for (const chunk of chunks) {
-    const parsed = parseBankSms(chunk, defaultDate);
-    if (parsed) results.push(parsed);
-    else if (isCreditRe.test(chunk)) skippedIncome++;
+  if (options.sender?.trim() && chunks.length > 1) {
+    // Inbox rows already represent one source document. Preserve its internal
+    // editorial blank lines; split only when a later chunk clearly starts a
+    // second operation in a manual multi-message paste.
+    if (!chunks.slice(1).some(startsMessage)) chunks = [text];
   }
-  return { transactions: results, skippedIncome };
+  // A single bank notification can contain an editorial blank line (security
+  // warnings are a common example). Merge a non-financial continuation into
+  // its preceding notice, while retaining blank-line separation for two real
+  // money operations in a pasted batch.
+  if (chunks.length > 1) {
+    const merged: string[] = [];
+    for (const chunk of chunks) {
+      const previous = merged[merged.length - 1];
+      const hasMoney = /(?:SAR|SR|ريال|ر\.\s?س|\b\d+[.,]\d{1,2}\b|(?:مبلغ|القسط|سداد)\s*[:：])/i.test(chunk);
+      if (previous && !startsMessage(chunk) && !hasMoney) merged[merged.length - 1] = `${previous}\n\n${chunk}`;
+      else merged.push(chunk);
+    }
+    chunks = merged;
+  }
+  if (chunks.length <= 1) { const whole = inferKind(text); if (!["otp", "declined", "statement", "marketing", "hold", "info"].includes(whole)) { const lines = text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean); if (lines.filter(startsMessage).length > 1) { chunks = []; for (const line of lines) { if (startsMessage(line) || !chunks.length) chunks.push(line); else chunks[chunks.length - 1] += `\n${line}`; } } } }
+  const receivedFallback = receivedDate(options.receivedAt, defaultDate);
+  const fullReceiptDate = extractSmsDate(text, receivedFallback);
+  const events: SmsParseEventResult[] = []; let skippedIncome = 0;
+  chunks.forEach((chunk, index) => { const chunkFallback = extractSmsDate(chunk, receivedFallback) ?? (chunks.length === 1 ? fullReceiptDate : null) ?? receivedFallback; const event = parseBankSmsEvent(chunk, chunkFallback, { ...options, sourceIndex: index }); if (!event) return; if (event.direction === "in") skippedIncome++; events.push(event); });
+  return { transactions: events.filter((e) => isExpenseKind(e.kind)), events, skippedIncome };
 }
-
-// Bank-statement file import (CSV/Excel) was intentionally removed: it saved
-// rows straight to disk with no reliable dedup, and the recommendation is to
-// keep only the SMS path, which goes through an explicit preview + confirm.
-// See src/components/finance/BankImport.tsx.

@@ -50,6 +50,48 @@ export interface ReserveSplit {
   pct: number; // 1-100
 }
 
+// Bank-event vocabulary. Keep this separate from the legacy `type` field
+// present in a few old exports: `kind` describes the source event while
+// `direction` describes its cash direction.
+export type TxnDirection = "out" | "in" | "neutral";
+export type TxnKind =
+  | "purchase" | "atm" | "bill" | "installment" | "fee"
+  | "refund" | "cashback" | "reversal" | "transfer_in" | "transfer_out" | "deposit" | "salary"
+  | "self_transfer" | "card_settle" | "bnpl_settle" | "hold"
+  | "otp" | "statement" | "declined" | "marketing" | "info" | "unknown"
+  // Explicit reconciliation debits. They are labelled ledger entries, kept
+  // outside the daily budget, and created idempotently from a resolution.
+  | "opening_debt" | "missed_expense";
+export type BalanceKind = "cash" | "credit_available" | "unknown";
+export type RefundDestination = "merchant_card" | "person_bank" | "unknown";
+
+/** Structured facts mentioned by a BNPL provider notice. They are metadata,
+ * not cash movement: the event amount remains zero until a later obligation
+ * flow explicitly consumes the hint. */
+export interface ObligationHint {
+  amount?: number;
+  merchant?: string;
+  dueDate?: string;
+  perPeriod?: number;
+  periodsLeft?: number;
+}
+
+/** Explicitly imported owner profile. The app ships with empty generic
+ * defaults; a person may opt into a local profile through Settings. */
+export interface FinanceSettingsProfile {
+  format: "madar-bank-settings";
+  version: 1;
+  ownerAccounts: string[];
+  ownerWallets: string[];
+  ownerAliases: string[];
+  salaryPayers: string[];
+  payerAliases: Record<string, string>;
+  salaryPattern?: { accountId?: string; payer?: string; day?: number; amounts?: number[] };
+  merchantRules: Record<string, string>;
+  cashbackEnabled: boolean;
+  cashbackEnvelopeId?: string;
+}
+
 export interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD
@@ -66,6 +108,154 @@ export interface Transaction {
   // فلا يصحّ أن يستهلك الميزانية اليومية ولا سقوف الأقسام فيبدو الشهر منفلتاً.
   // البوابة الوحيدة لهذا القرار: `budgetSpend` / `countsInBudget` في utils.ts.
   offBudget?: boolean;
+  kind?: TxnKind;
+  direction?: TxnDirection;
+  fee?: number;
+  time?: string;
+  bank?: string;
+  account?: string;
+  cardLast4?: string;
+  accountId?: string;
+  balanceAfter?: number;
+  balanceKind?: BalanceKind;
+  counterparty?: string;
+  debtRemaining?: number;
+  template?: string;
+  confidence?: "template" | "inferred" | "generic";
+  // Stable source identity. For inbox imports this is `${inboxId}:${index}`;
+  // it must never depend on editable merchant/kind/category fields.
+  eventId?: string;
+  sourceKey?: string;
+  sourceInboxId?: string;
+  sourceReceivedAt?: string;
+  suspectedDuplicate?: boolean;
+  reviewReason?: string;
+  linkedTransactionId?: string;
+  refundDestination?: RefundDestination;
+  originalAmount?: number;
+  obligationHint?: ObligationHint;
+  // Canonical source receipt retained with the ledger entry after a finalized
+  // import. Pending/ambiguous receipts live in inboxEvents until resolved.
+  rawText?: string;
+}
+
+export interface Account {
+  id: string;
+  bank: string;
+  last4: string;
+  kind: "account" | "card" | "wallet";
+  // Evidence-backed funding nature. A Visa label alone is never enough to
+  // choose `credit`; unknown is the safe default until the owner confirms it.
+  // `debit` means an account funded by the owner's cash; it is separate from
+  // `credit`, which represents a revolving card/credit facility.  The
+  // explicit `unknown` state prevents a Visa/network label from being treated
+  // as proof of credit.
+  fundingKind: "debit" | "credit" | "unknown";
+  network?: string;
+  label?: string;
+  isOwn: boolean;
+  firstSeen: string;
+  lastSeen: string;
+  archivedAt?: string;
+  updatedAt?: number;
+}
+
+export interface Obligation {
+  id: string;
+  kind: "card" | "loan" | "bnpl";
+  source: string;
+  ref?: string;
+  label: string;
+  outstanding: number;
+  minimum?: number;
+  dueDate?: string;
+  perPeriod?: number;
+  periodsLeft?: number;
+  observedAt: string;
+  settledAt?: string;
+  updatedAt?: number;
+}
+
+export interface ObservedBalance {
+  id: string;
+  bank?: string;
+  account?: string;
+  cardLast4?: string;
+  balance: number;
+  balanceKind: BalanceKind;
+  assetKind?: "bank_cash" | "credit_available" | "cashback_wallet" | "unknown";
+  observedAt: string;
+  updatedAt?: number;
+}
+
+export type SettlementResolutionKind = "missed_expense" | "opening_debt" | "prepaid_credit";
+export interface SettlementResolution {
+  id: string;
+  cardId: string;
+  kind: SettlementResolutionKind;
+  amount: number;
+  date: string;
+  note?: string;
+  settlementIds?: string[];
+  appliedToEventIds?: string[];
+  // Explicit allocation prevents an old excess payment from consuming a new
+  // purchase merely because both share one card.
+  allocatedAmount?: number;
+  updatedAt?: number;
+}
+
+// A card repayment is an observed cash movement, not a budget expense. Keeping
+// it as its own id-keyed record lets reconciliation allocate it to known
+// charges without allowing a later purchase to consume an older excess.
+export interface CardSettlement {
+  id: string;
+  cardId: string;
+  amount: number;
+  date: string;
+  eventId?: string;
+  sourceInboxId?: string;
+  sourceReceivedAt?: string;
+  rawText?: string;
+  updatedAt?: number;
+}
+
+export type InboxDecisionKind = "unknown" | "ignored" | "matched" | "saved" | "review" | "duplicate";
+export interface InboxEventRecord {
+  id: string;
+  eventId: string;
+  rawText: string;
+  kind: TxnKind;
+  direction: TxnDirection;
+  amount: number;
+  expenseAmount?: number;
+  fee?: number;
+  category: string;
+  note: string;
+  date: string;
+  time?: string;
+  bank?: string;
+  account?: string;
+  cardLast4?: string;
+  accountId?: string;
+  balanceAfter?: number;
+  balanceKind?: BalanceKind;
+  counterparty?: string;
+  debtRemaining?: number;
+  template?: string;
+  confidence?: "template" | "inferred" | "generic";
+  sourceKey?: string;
+  sourceInboxId?: string;
+  sourceReceivedAt?: string;
+  updatedAt?: number;
+  obligationHint?: ObligationHint;
+  refundDestination?: RefundDestination;
+}
+export interface InboxDecision {
+  id: string;
+  eventId: string;
+  decision: InboxDecisionKind;
+  reason?: string;
+  updatedAt?: number;
 }
 
 // ===================== Reserve funds (الاحتياطي) =====================
@@ -687,6 +877,10 @@ export interface Reconcile {
   actual: number;
   /** `actual − expected` — وهو ما سُجّل تسويةً على «الفوائض». */
   delta: number;
+  unsettledRecordedCharges?: number;
+  excessSettlements?: number;
+  excessByCard?: Record<string, number>;
+  blockedByExcess?: boolean;
   // طابع آخر تعديلٍ لهذا العنصر (ms) — يفوز به التعديل الأحدث في الدمج.
   updatedAt?: number;
 }
@@ -747,6 +941,20 @@ export interface AppData {
   // hand, the merchant (from the note) is remembered so the next one from the
   // same place is auto-classified your way — this is what makes it تلقائي.
   merchantRules: Record<string, string>;
+  obligations?: Obligation[];
+  observedBalances?: ObservedBalance[];
+  accounts?: Account[];
+  ownerAliases?: string[];
+  ownerWallets?: string[];
+  ownerAccounts?: string[];
+  salaryPayers?: string[];
+  payerAliases?: Record<string, string>;
+  settlementResolutions?: SettlementResolution[];
+  settlements?: CardSettlement[];
+  inboxDecisions?: InboxDecision[];
+  inboxEvents?: InboxEventRecord[];
+  cashbackEnabled?: boolean;
+  cashbackEnvelopeId?: string;
   // Tombstones: id → deletedAt (ms). A deleted item is recorded here so the
   // multi-device union-merge can't resurrect it from a device that still holds
   // a copy. Pruned after a wide window so the map can't grow forever.

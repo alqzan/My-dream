@@ -195,6 +195,32 @@ describe("createDeferredStorage — تعديلٌ أثناء الكتابة", () 
     expect(writes).toEqual(["أولى", "ثانية"]);
     expect(s.pending()).toBe(false);
   });
+
+  it("flush لا يعود قبل انتهاء كتابةٍ جاريةٍ حتى لو فرغ الطابور", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const writes: string[] = [];
+    const inner: StateStorage = {
+      getItem: async () => null,
+      setItem: async (_n, value) => { writes.push(value); await gate; },
+      removeItem: async () => {},
+    };
+    const s = createDeferredStorage(inner, { delayMs: 100 });
+
+    await s.setItem(K, "جارية");
+    vi.advanceTimersByTime(100); // يبدأ drain، ثم يتوقف في setItem
+    await Promise.resolve();
+    expect(writes).toEqual(["جارية"]);
+
+    let settled = false;
+    const barrier = s.flush().then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    await barrier;
+    expect(settled).toBe(true);
+    expect(s.pending()).toBe(false);
+  });
 });
 
 describe("createDeferredStorage — فشلُ التخزين لا يُسقط اللقطة", () => {
@@ -224,6 +250,32 @@ describe("createDeferredStorage — فشلُ التخزين لا يُسقط ال
     await s.flush();
     expect(data.get(K)).toBe("لا تضيع");
     expect(writes).toEqual(["لا تضيع", "لا تضيع"]);
+    expect(s.pending()).toBe(false);
+  });
+
+  it("الـflush الصارم ينتظر الفشل الجاري ثم يبقي اللقطة لإعادة المحاولة", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let shouldFail = true;
+    const inner: StateStorage = {
+      getItem: async () => null,
+      setItem: async () => {
+        await gate;
+        if (shouldFail) { shouldFail = false; throw new Error("delayed failure"); }
+      },
+      removeItem: async () => {},
+    };
+    const s = createDeferredStorage(inner, { delayMs: 100 });
+    await s.setItem(K, "لا تفقد");
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+
+    const barrier = s.flush();
+    release();
+    await expect(barrier).rejects.toThrow("delayed failure");
+    expect(s.pending()).toBe(true);
+
+    await s.flush();
     expect(s.pending()).toBe(false);
   });
 });

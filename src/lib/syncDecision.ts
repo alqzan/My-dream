@@ -36,7 +36,9 @@ export function hasData(d: Partial<AppData>): boolean {
     arr(d.reserves) || arr(d.prayerLogs) || arr(d.futureLetters) ||
     arr(d.quranReflections) || arr(d.quranWird) || arr(d.countdownEvents) ||
     arr(d.reconciles) ||
-    arr(d.knowledgeSources) || arr(d.benefits)
+    arr(d.knowledgeSources) || arr(d.benefits) ||
+    arr(d.obligations) || arr(d.observedBalances) || arr(d.accounts) ||
+    arr(d.settlementResolutions) || arr(d.settlements) || arr(d.inboxDecisions) || arr(d.inboxEvents)
   ) return true;
   if ((d.habits ?? []).some((h) => (h.logs?.length ?? 0) > 0)) return true;
   // العاداتُ والتصنيفاتُ أنفسُها — لا سجلّاتُها وحدها. كان الحقلان غائبين عن
@@ -60,6 +62,9 @@ export function hasData(d: Partial<AppData>): boolean {
   if (d.dailyBudget || (d.monthlyIncome ?? 0) > 0 || (d.readingGoal ?? 0) > 0) return true;
   if ((d.qadaBacklog ?? 0) > 0) return true;
   if (Object.keys(d.merchantRules ?? {}).length > 0) return true;
+  if ((d.ownerAliases?.length ?? 0) > 0 || (d.ownerWallets?.length ?? 0) > 0 ||
+    (d.ownerAccounts?.length ?? 0) > 0 || (d.salaryPayers?.length ?? 0) > 0 ||
+    Object.keys(d.payerAliases ?? {}).length > 0 || d.cashbackEnabled === true || !!d.cashbackEnvelopeId) return true;
   // A device whose only "state" is having deleted things still has real intent
   // to preserve — otherwise its tombstones can't seed a cloud that lacks them.
   if (Object.keys(d.deleted ?? {}).length > 0) return true;
@@ -97,7 +102,14 @@ export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean
     hasNewId(local.categories, cloud.categories) ||
     hasNewId(local.quranReflections ?? [], cloud.quranReflections) ||
     hasNewId(local.knowledgeSources ?? [], cloud.knowledgeSources) ||
-    hasNewId(local.benefits ?? [], cloud.benefits)
+    hasNewId(local.benefits ?? [], cloud.benefits) ||
+    hasNewId(local.obligations ?? [], cloud.obligations) ||
+    hasNewId(local.observedBalances ?? [], cloud.observedBalances) ||
+    hasNewId(local.accounts ?? [], cloud.accounts) ||
+    hasNewId(local.settlementResolutions ?? [], cloud.settlementResolutions) ||
+    hasNewId(local.settlements ?? [], cloud.settlements) ||
+    hasNewId(local.inboxDecisions ?? [], cloud.inboxDecisions) ||
+    hasNewId(local.inboxEvents ?? [], cloud.inboxEvents)
   ) return true;
   const localPrayers = new Set(local.prayerLogs.map((p) => p.date));
   if ((cloud.prayerLogs ?? []).some((p) => !localPrayers.has(p.date))) return true;

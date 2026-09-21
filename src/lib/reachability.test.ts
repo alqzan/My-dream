@@ -40,7 +40,14 @@ const PARKED_COMPONENTS: Record<string, string> = {
  *
  * أكثرُها تابعٌ لمكوّنٍ موقوفٍ أعلاه؛ وما ليس كذلك فسببُه مكتوب.
  */
-const PARKED_ACTIONS: Record<string, string> = {};
+const PARKED_ACTIONS: Record<string, string> = {
+  // Finance account/obligation/settlement persistence is part of the data
+  // contract for this slice; its ownership/settings screens are a later
+  // bounded feature and must not be exposed as unreachable controls.
+  upsertObligation: "بانتظار شاشة الالتزامات",
+  upsertObservedBalance: "بانتظار شاشة أرصدة الحسابات",
+  addCardSettlement: "بانتظار شاشة تسويات البطاقات",
+};
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

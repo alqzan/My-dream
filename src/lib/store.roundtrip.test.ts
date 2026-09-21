@@ -32,7 +32,7 @@ const flushPersist = async () => {
 // خطأ ترجمة، وهي التي وقع فيها الخلل فعلاً. بهذا لا يُترجَم الملفّ أصلاً حتى
 // يُذكر الحقل الجديد هنا، ثمّ يفحص الاختبارُ عبورَه الدورة.
 const FULL: Required<AppData> = {
-  transactions: [{ id: "t1", date: "2026-05-01", amount: 25, category: "c1", note: "قهوة" }],
+  transactions: [{ id: "t1", date: "2026-05-01", amount: 25, category: "c1", note: "قهوة", time: "07:10", bank: "rajhi", account: "7312", cardLast4: "7312", accountId: "rajhi:card:7312", kind: "purchase", direction: "out", confidence: "template", rawText: "رسالة اختبار" }],
   books: [{ id: "b1", title: "ك", author: "م", totalPages: 300, currentPage: 42, status: "أقرأ" }],
   readingLogs: [{ id: "r1", bookId: "b1", date: "2026-05-01", pagesRead: 20 }],
   // المحبرة: مصدرٌ وفائدةٌ منه. بابُهما حُذف من الواجهة (٠٫١٫٣٨٦) و**الحقلان
@@ -81,6 +81,21 @@ const FULL: Required<AppData> = {
   futureLetters: [{ id: "l1", writtenDate: "2026-01-01", deliveryDate: "2027-01-01", content: "رسالة" }],
   countdownEvents: [{ id: "ce1", title: "اختبار CFA", date: "2027-02-20", emoji: "📘" }],
   reconciles: [{ id: "rc1", date: "2026-05-20", expected: 4200, actual: 3950, delta: -250 }],
+  obligations: [{ id: "ob1", kind: "bnpl", source: "tamara", ref: "ExampleStore", label: "ExampleStore", outstanding: 397.01, dueDate: "2026-06-02", perPeriod: 132.34, periodsLeft: 3, observedAt: "2026-05-30", updatedAt: 2 }],
+  observedBalances: [{ id: "bal1", bank: "rajhi", account: "7312", cardLast4: "7312", balance: 1200, balanceKind: "cash", assetKind: "bank_cash", observedAt: "2026-05-30", updatedAt: 2 }],
+  accounts: [{ id: "rajhi:card:7312", bank: "rajhi", last4: "7312", kind: "card", fundingKind: "unknown", network: "mada", label: "الحساب الرئيسي", isOwn: true, firstSeen: "2026-05-01", lastSeen: "2026-05-30", updatedAt: 2 }],
+  ownerAliases: ["الحساب الرئيسي"],
+  ownerWallets: ["محفظة الاختبار"],
+  ownerAccounts: ["rajhi:card:7312"],
+  salaryPayers: ["جهة اختبار"],
+  payerAliases: { "جهة اختبار": "راتب" },
+  settlementResolutions: [{ id: "sr1", cardId: "rajhi:card:7312", kind: "opening_debt", amount: 100, date: "2026-05-30", note: "رصيد سابق", settlementIds: ["set1"], allocatedAmount: 100, updatedAt: 2 }],
+  settlements: [{ id: "set1", cardId: "rajhi:card:7312", amount: 100, date: "2026-05-30", eventId: "settle:1", sourceInboxId: "inbox-settle", sourceReceivedAt: "2026-05-30T10:00:00Z", rawText: "سداد بطاقة 100", updatedAt: 2 }],
+  inboxDecisions: [{ id: "decision1", eventId: "inbox-event:0", decision: "review", reason: "مراجعة", updatedAt: 2 }],
+  inboxEvents: [{ id: "inbox-event:0", eventId: "inbox-event:0", rawText: "إشعار اختبار", kind: "info", direction: "neutral", amount: 0, category: "c1", note: "إشعار", date: "2026-05-30", bank: "tamara", obligationHint: { amount: 397.01, merchant: "ExampleStore", dueDate: "2026-06-02", perPeriod: 132.34, periodsLeft: 3 }, updatedAt: 2 }],
+  cashbackEnabled: true,
+  cashbackEnvelopeId: "f1",
+  autoOffset: true,
   salaryDay: 25,
   budgetWindow: "month",
   lastSalaryConfirm: "2026-05-25",

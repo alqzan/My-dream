@@ -34,6 +34,7 @@ const ID_KEYED = [
   "reserves", "habits", "futureLetters", "categories",
   "quranReflections", "countdownEvents", "reconciles",
   "knowledgeSources", "benefits",
+  "obligations", "observedBalances", "accounts", "settlementResolutions", "settlements", "inboxDecisions", "inboxEvents",
 ] as const;
 
 /** شواهدُ الحذف التي يُخلّفها **استبدالٌ** بنسخةٍ احتياطية.
@@ -657,6 +658,13 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // يضيع لأن ختم مستند الجهاز الآخر أحدث، والحذف يبقى شاهداً فلا يعود.
     countdownEvents: byIdNewer(primary.countdownEvents ?? [], secondary.countdownEvents ?? []),
     reconciles: byIdNewer(primary.reconciles ?? [], secondary.reconciles ?? []),
+    obligations: byIdNewer(primary.obligations ?? [], secondary.obligations ?? []),
+    observedBalances: byIdNewer(primary.observedBalances ?? [], secondary.observedBalances ?? []),
+    accounts: byIdNewer(primary.accounts ?? [], secondary.accounts ?? []),
+    settlementResolutions: byIdNewer(primary.settlementResolutions ?? [], secondary.settlementResolutions ?? []),
+    settlements: byIdNewer(primary.settlements ?? [], secondary.settlements ?? []),
+    inboxDecisions: byIdNewer(primary.inboxDecisions ?? [], secondary.inboxDecisions ?? []),
+    inboxEvents: byIdNewer(primary.inboxEvents ?? [], secondary.inboxEvents ?? []),
     salaryDay: pickSingleton("salaryDay", primary.salaryDay),
     budgetWindow: pickSingleton("budgetWindow", primary.budgetWindow ?? secondary.budgetWindow ?? "salary"),
     // المقاصة التلقائية: تبديلٌ مقصود كبقيّة الإعدادات المفردة — إيقافُها على
@@ -672,6 +680,13 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // القاعدة القديمة من الجهاز الآخر. بلا طوابع (بياناتٌ قديمة) يبقى السلوك
     // السابق: نسخة الأساس تفوز.
     merchantRules: mergeMerchantRules(primary, secondary),
+    ownerAliases: pickSingleton("ownerAliases", primary.ownerAliases ?? secondary.ownerAliases ?? []),
+    ownerWallets: pickSingleton("ownerWallets", primary.ownerWallets ?? secondary.ownerWallets ?? []),
+    ownerAccounts: pickSingleton("ownerAccounts", primary.ownerAccounts ?? secondary.ownerAccounts ?? []),
+    salaryPayers: pickSingleton("salaryPayers", primary.salaryPayers ?? secondary.salaryPayers ?? []),
+    payerAliases: pickSingleton("payerAliases", primary.payerAliases ?? secondary.payerAliases ?? {}),
+    cashbackEnabled: pickSingleton("cashbackEnabled", primary.cashbackEnabled ?? secondary.cashbackEnabled ?? false),
+    cashbackEnvelopeId: pickSingleton("cashbackEnvelopeId", primary.cashbackEnvelopeId ?? secondary.cashbackEnvelopeId),
     deleted,
     deletedMedia,
     fieldUpdatedAt,

@@ -15,6 +15,7 @@ import { VesselsStrip } from "@/components/finance/VesselsStrip";
 import { TripBanner } from "@/components/finance/TripBanner";
 import { ReconcileCard } from "@/components/finance/ReconcileCard";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
+import { FinanceSignalsCard } from "@/components/finance/FinanceSignalsCard";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { DayView } from "@/components/day/DayView";
 import { Card } from "@/components/ui/Card";
@@ -337,6 +338,7 @@ export default function FinancePage() {
               </div>
             </div>
             <PendingBankBanner />
+            <FinanceSignalsCard cycleStart={cycleStart} />
             <div className="mdr-finance-now-actions">
               <Button onClick={() => setShowForm(true)} className="bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--ink)]"><Plus size={15} /> أضف مصروفًا</Button>
               <button

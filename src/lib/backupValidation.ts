@@ -13,6 +13,13 @@ import type {
   ReadingLog,
   ReserveFund,
   Transaction,
+  Account,
+  Obligation,
+  ObservedBalance,
+  SettlementResolution,
+  CardSettlement,
+  InboxDecision,
+  InboxEventRecord,
 } from "./types";
 
 /**
@@ -80,6 +87,11 @@ const HIFZ_UNITS = new Set(["ayah", "quarter", "half", "page"]);
 const HIFZ_INTENSITIES = new Set(["light", "balanced", "intense"]);
 const PRAYER_NAMES = new Set(["الفجر", "الظهر", "العصر", "المغرب", "العشاء"]);
 const PRAYER_STATUSES = new Set(["لم", "منفردة", "جماعة", "فائتة", "قضاء"]);
+const TXN_KINDS = new Set(["purchase", "atm", "bill", "installment", "fee", "refund", "cashback", "reversal", "transfer_in", "transfer_out", "deposit", "salary", "self_transfer", "card_settle", "bnpl_settle", "hold", "otp", "statement", "declined", "marketing", "info", "unknown", "opening_debt", "missed_expense"]);
+const TXN_DIRECTIONS = new Set(["out", "in", "neutral"]);
+const BALANCE_KINDS = new Set(["cash", "credit_available", "unknown"]);
+const CONFIDENCES = new Set(["template", "inferred", "generic"]);
+const REFUND_DESTINATIONS = new Set(["merchant_card", "person_bank", "unknown"]);
 
 /**
  * The minimum shape needed to merge an existing transaction safely.
@@ -118,7 +130,137 @@ export function isValidTransaction(value: unknown): value is Transaction {
       && split.pct <= 100
     ))
   )) return false;
+  if (value.kind !== undefined && !TXN_KINDS.has(String(value.kind))) return false;
+  if (value.direction !== undefined && !TXN_DIRECTIONS.has(String(value.direction))) return false;
+  if (value.balanceKind !== undefined && !BALANCE_KINDS.has(String(value.balanceKind))) return false;
+  if (value.confidence !== undefined && !CONFIDENCES.has(String(value.confidence))) return false;
+  if (!optionalFiniteNumber(value.fee) || !optionalString(value.time) || !optionalString(value.bank)
+    || !optionalString(value.account) || !optionalString(value.cardLast4) || !optionalString(value.accountId)
+    || !optionalFiniteNumber(value.balanceAfter) || !optionalString(value.counterparty)
+    || !optionalFiniteNumber(value.debtRemaining) || !optionalString(value.template)
+    || !optionalString(value.eventId) || !optionalString(value.sourceKey) || !optionalString(value.sourceInboxId)
+    || !optionalString(value.sourceReceivedAt) || !optionalBoolean(value.suspectedDuplicate)
+    || !optionalString(value.reviewReason) || !optionalString(value.linkedTransactionId)
+    || (value.refundDestination !== undefined && !REFUND_DESTINATIONS.has(String(value.refundDestination)))
+    || !validObligationHint(value.obligationHint)
+    || !optionalFiniteNumber(value.originalAmount) || !optionalString(value.rawText)) return false;
   return optionalFiniteNumber(value.updatedAt);
+}
+
+function validAccount(value: unknown): value is Account {
+  return hasId(value)
+    && nonEmptyString(value.bank)
+    && nonEmptyString(value.last4)
+    && (value.kind === "account" || value.kind === "card" || value.kind === "wallet")
+    && (value.fundingKind === undefined || value.fundingKind === "debit" || value.fundingKind === "credit" || value.fundingKind === "unknown")
+    && optionalString(value.network)
+    && optionalString(value.label)
+    && typeof value.isOwn === "boolean"
+    && nonEmptyString(value.firstSeen)
+    && nonEmptyString(value.lastSeen)
+    && optionalString(value.archivedAt)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validObligation(value: unknown): value is Obligation {
+  return hasId(value)
+    && (value.kind === "card" || value.kind === "loan" || value.kind === "bnpl")
+    && nonEmptyString(value.source)
+    && optionalString(value.ref)
+    && typeof value.label === "string"
+    && finiteNumber(value.outstanding)
+    && optionalFiniteNumber(value.minimum)
+    && optionalString(value.dueDate)
+    && optionalFiniteNumber(value.perPeriod)
+    && optionalFiniteNumber(value.periodsLeft)
+    && nonEmptyString(value.observedAt)
+    && optionalString(value.settledAt)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validObservedBalance(value: unknown): value is ObservedBalance {
+  return hasId(value)
+    && optionalString(value.bank)
+    && optionalString(value.account)
+    && optionalString(value.cardLast4)
+    && finiteNumber(value.balance)
+    && BALANCE_KINDS.has(String(value.balanceKind))
+    && (value.assetKind === undefined || ["bank_cash", "credit_available", "cashback_wallet", "unknown"].includes(String(value.assetKind)))
+    && nonEmptyString(value.observedAt)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validSettlementResolution(value: unknown): value is SettlementResolution {
+  return hasId(value)
+    && nonEmptyString(value.cardId)
+    && ["missed_expense", "opening_debt", "prepaid_credit"].includes(String(value.kind))
+    && finiteNumber(value.amount)
+    && nonEmptyString(value.date)
+    && optionalString(value.note)
+    && (value.settlementIds === undefined || stringCollection(value.settlementIds))
+    && (value.appliedToEventIds === undefined || stringCollection(value.appliedToEventIds))
+    && optionalFiniteNumber(value.allocatedAmount)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validCardSettlement(value: unknown): value is CardSettlement {
+  return hasId(value)
+    && nonEmptyString(value.cardId)
+    && finiteNumber(value.amount)
+    && nonEmptyString(value.date)
+    && optionalString(value.eventId)
+    && optionalString(value.sourceInboxId)
+    && optionalString(value.sourceReceivedAt)
+    && optionalString(value.rawText)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validInboxDecision(value: unknown): value is InboxDecision {
+  return hasId(value)
+    && nonEmptyString(value.eventId)
+    && ["unknown", "ignored", "matched", "saved", "review", "duplicate"].includes(String(value.decision))
+    && optionalString(value.reason)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validInboxEvent(value: unknown): value is InboxEventRecord {
+  return hasId(value)
+    && nonEmptyString(value.eventId)
+    && nonEmptyString(value.rawText)
+    && TXN_KINDS.has(String(value.kind))
+    && TXN_DIRECTIONS.has(String(value.direction))
+    && finiteNumber(value.amount)
+    && optionalFiniteNumber(value.expenseAmount)
+    && optionalFiniteNumber(value.fee)
+    && typeof value.category === "string"
+    && typeof value.note === "string"
+    && nonEmptyString(value.date)
+    && optionalString(value.time)
+    && optionalString(value.bank)
+    && optionalString(value.account)
+    && optionalString(value.cardLast4)
+    && optionalString(value.accountId)
+    && optionalFiniteNumber(value.balanceAfter)
+    && (value.balanceKind === undefined || BALANCE_KINDS.has(String(value.balanceKind)))
+    && optionalString(value.counterparty)
+    && optionalFiniteNumber(value.debtRemaining)
+    && validObligationHint(value.obligationHint)
+    && (value.refundDestination === undefined || REFUND_DESTINATIONS.has(String(value.refundDestination)))
+    && optionalString(value.template)
+    && (value.confidence === undefined || CONFIDENCES.has(String(value.confidence)))
+    && optionalString(value.sourceKey)
+    && optionalString(value.sourceInboxId)
+    && optionalString(value.sourceReceivedAt)
+    && optionalFiniteNumber(value.updatedAt);
+}
+
+function validObligationHint(value: unknown): boolean {
+  return value === undefined || (record(value)
+    && optionalFiniteNumber(value.amount)
+    && optionalString(value.merchant)
+    && optionalString(value.dueDate)
+    && optionalFiniteNumber(value.perPeriod)
+    && optionalFiniteNumber(value.periodsLeft));
 }
 
 function validVideoRef(value: unknown): boolean {
@@ -520,6 +662,13 @@ export function findBackupRejection(value: unknown): BackupRejection | null {
     countdownEvents: validCountdownEvent,
     journalEntries: isValidJournalEntry,
     budgets: validBudget,
+    obligations: validObligation,
+    observedBalances: validObservedBalance,
+    accounts: validAccount,
+    settlementResolutions: validSettlementResolution,
+    settlements: validCardSettlement,
+    inboxDecisions: validInboxDecision,
+    inboxEvents: validInboxEvent,
   };
   for (const [field, validator] of Object.entries(collectionValidators)) {
     if (value[field] === undefined) continue;
@@ -536,6 +685,11 @@ export function findBackupRejection(value: unknown): BackupRejection | null {
     deletedMedia: numberMap,
     fieldUpdatedAt: numberMap,
     merchantRules: stringMap,
+    ownerAliases: stringCollection,
+    ownerWallets: stringCollection,
+    ownerAccounts: stringCollection,
+    salaryPayers: stringCollection,
+    payerAliases: stringMap,
   })) {
     if (value[field] !== undefined && !validator(value[field])) {
       return { field, label: label(field) };
@@ -560,6 +714,8 @@ export function findBackupRejection(value: unknown): BackupRejection | null {
   if (value.budgetWindow !== undefined && value.budgetWindow !== "salary" && value.budgetWindow !== "month") return scalar("budgetWindow", false);
   if (value.lastSalaryConfirm !== undefined && value.lastSalaryConfirm !== null && typeof value.lastSalaryConfirm !== "string") return scalar("lastSalaryConfirm", false);
   if (value.readingGoal !== undefined && value.readingGoal !== null && !finiteNumber(value.readingGoal)) return scalar("readingGoal", false);
+  if (value.cashbackEnabled !== undefined && typeof value.cashbackEnabled !== "boolean") return scalar("cashbackEnabled", false);
+  if (value.cashbackEnvelopeId !== undefined && value.cashbackEnvelopeId !== "" && typeof value.cashbackEnvelopeId !== "string") return scalar("cashbackEnvelopeId", false);
   if (value.lastUpdated !== undefined && !nonEmptyString(value.lastUpdated)) return scalar("lastUpdated", false);
   return null;
 }

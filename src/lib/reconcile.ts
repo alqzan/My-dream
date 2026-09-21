@@ -27,7 +27,7 @@
 // النوعُ `Reconcile` في `types.ts` لا هنا: `AppData` يحمله، ولو عُرّف هنا
 // لصارت دورةُ استيرادٍ بين الملفّين.
 import type { DailyBudget, Reconcile, ReserveFund, Transaction } from "./types";
-import { computeDailyBudgetStatus, parseDate, reserveTotals, round2 } from "./utils";
+import { cashOut, computeDailyBudgetStatus, parseDate, reserveTotals, round2 } from "./utils";
 
 /** كلُّ كم يومٍ تُطلب المطابقة. ثلاثةُ أشهرَ بطلب المالك: أقصرُ منها يجعلها
  *  عادةً ثقيلة تُؤجَّل ثمّ تُتجاهَل، وأطولُ منها يجعل الفرقَ كبيراً بما يصعب
@@ -115,6 +115,34 @@ export interface Holdings {
   cycleBalance: number;
   /** المجموعُ الذي يُقابَل بالواقع. */
   expected: number;
+  /** Recorded unpaid charges on owner-confirmed credit cards. */
+  creditUnpaid: number;
+  /** Settlements with no earlier charge; these block reconciliation. */
+  creditExcess: number;
+  /** Explicitly classified prepaid credit, which is an asset rather than cash. */
+  prepaidCredit: number;
+  /** Cashback already deposited into its own envelope/wallet. */
+  cashbackAsset: number;
+  /** Explicit person-bank reimbursements received as current bank cash. */
+  bankReimbursements: number;
+  /** Merchant refunds returned to a credit card restore the cash that funded
+   * the recorded charge; any unused part remains in prepaidCredit. */
+  merchantCardRefunds: number;
+  /** Explicit owner-labelled debits (opening debt / missed expense), applied once. */
+  explicitLedgerDebits: number;
+  /** A blocked reconciliation must be resolved explicitly before recording. */
+  blockedByExcess: boolean;
+}
+
+/** The small public shape consumed by the reconciliation UI. The credit-ledger
+ * engine deliberately owns chronology; this view keeps `reconcile.ts` free of
+ * engine details and remains backwards-compatible for callers with no cards. */
+export interface CreditLedgerView {
+  unpaid: number;
+  excess: number;
+  prepaid: number;
+  byCard?: Record<string, { unpaid?: number; excess?: number; prepaid?: number }>;
+  issues?: string[];
 }
 
 /**
@@ -127,6 +155,9 @@ export function holdings(input: {
   reserves: ReserveFund[];
   transactions: Transaction[];
   dailyBudget: DailyBudget | null;
+  creditLedger?: CreditLedgerView;
+  cashbackEnabled?: boolean;
+  cashbackEnvelopeId?: string;
 }): Holdings {
   const totals = reserveTotals(input.reserves, input.transactions);
   const envelopes: HoldingRow[] = input.reserves.map((f) => ({
@@ -140,7 +171,57 @@ export function holdings(input: {
   const cycleBalance = input.dailyBudget
     ? round2(computeDailyBudgetStatus(input.dailyBudget, input.transactions).balance)
     : 0;
-  return { envelopes, envelopesTotal, cycleBalance, expected: round2(envelopesTotal + cycleBalance) };
+  const creditUnpaid = round2(Math.max(0, input.creditLedger?.unpaid ?? 0));
+  const creditExcess = round2(Math.max(0, input.creditLedger?.excess ?? 0));
+  const prepaidCredit = round2(Math.max(0, input.creditLedger?.prepaid ?? 0));
+  const cashbackAsset = input.cashbackEnabled && input.cashbackEnvelopeId
+    ? round2(input.transactions
+      .filter((transaction) => transaction.kind === "cashback" && transaction.direction === "in")
+      .filter((transaction) => {
+        const effectId = `${transaction.eventId ?? transaction.id}:cashback`;
+        return input.reserves.some((fund) => fund.id === input.cashbackEnvelopeId
+          && fund.deposits.some((deposit) => deposit.id === effectId));
+      })
+      .reduce((sum, transaction) => sum + Math.max(0, transaction.amount), 0))
+    : 0;
+  // A reimbursement paid to the owner's bank account is cash available now.
+  // It is intentionally separate from card liability: a person refund must
+  // not make an unpaid credit-card charge look settled. Merchant-card refunds
+  // are allocated by creditLedgerForState instead.
+  const bankReimbursements = round2(input.transactions
+    .filter((transaction) => (transaction.kind === "refund" || transaction.kind === "reversal" || transaction.kind === "cashback")
+      && transaction.direction === "in"
+      && transaction.refundDestination === "person_bank")
+    .reduce((sum, transaction) => sum + Math.max(0, transaction.amount), 0));
+  const merchantCardRefunds = round2(input.transactions
+    .filter((transaction) => (transaction.kind === "refund" || transaction.kind === "reversal")
+      && transaction.direction === "in"
+      && transaction.refundDestination === "merchant_card")
+    .reduce((sum, transaction) => sum + Math.max(0, transaction.amount), 0));
+  // Current resolution entries carry a 100% reserve split, so reserveTotals
+  // already removes them from an actual envelope. The fallback keeps legacy
+  // entries (created before that split existed) visible exactly once.
+  const explicitLedgerDebits = round2(input.transactions
+    .filter((transaction) => (transaction.kind === "opening_debt" || transaction.kind === "missed_expense") && !transaction.reserveSplits?.length)
+    .reduce((sum, transaction) => sum + cashOut(transaction), 0));
+  const expected = round2(envelopesTotal + cycleBalance - explicitLedgerDebits + creditUnpaid - prepaidCredit - cashbackAsset + bankReimbursements + merchantCardRefunds);
+  return {
+    envelopes,
+    envelopesTotal,
+    cycleBalance,
+    expected,
+    creditUnpaid,
+    creditExcess,
+    prepaidCredit,
+    cashbackAsset,
+    bankReimbursements,
+    merchantCardRefunds,
+    explicitLedgerDebits,
+    // A real settlement remainder blocks even when it is below the ordinary
+    // cash-rounding tolerance; tolerance is for observed bank totals, never
+    // for silently discarding a card payment.
+    blockedByExcess: creditExcess > 0 || (input.creditLedger?.issues?.length ?? 0) > 0,
+  };
 }
 
 /* ===================== الفرق ===================== */

@@ -4,10 +4,11 @@ import { ClipboardCheck, ChevronLeft } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { arabicCount, cn, formatAmount, formatDate, today } from "@/lib/utils";
+import { arabicCount, cn, formatAmount, formatDate, today, uid } from "@/lib/utils";
 import {
   RECONCILE_DAYS, holdings, reconcileDelta, reconcileStatus,
 } from "@/lib/reconcile";
+import { creditLedgerForState } from "@/lib/financeLedger";
 
 // ===================== بطاقةُ المطابقة الربعية =====================
 // «كلّ ثلاثة أشهر آخذ لي عشر دقائق: أفتح كشوفات حساباتي وأتأكّد — قد تكون فيه
@@ -25,11 +26,23 @@ export function ReconcileCard() {
   const transactions = useAppStore((s) => s.transactions);
   const dailyBudget = useAppStore((s) => s.dailyBudget);
   const reconciles = useAppStore((s) => s.reconciles);
+  const settlements = useAppStore((s) => s.settlements ?? []);
+  const accounts = useAppStore((s) => s.accounts ?? []);
+  const settlementResolutions = useAppStore((s) => s.settlementResolutions ?? []);
+  const cashbackEnabled = useAppStore((s) => s.cashbackEnabled ?? false);
+  const cashbackEnvelopeId = useAppStore((s) => s.cashbackEnvelopeId);
   const recordReconcile = useAppStore((s) => s.recordReconcile);
+  const resolveSettlement = useAppStore((s) => s.resolveSettlement);
 
   const [open, setOpen] = useState(false);
   const [raw, setRaw] = useState("");
   const [saved, setSaved] = useState<{ delta: number; actual: number } | null>(null);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  const [resolutionKind, setResolutionKind] = useState<"opening_debt" | "missed_expense" | "prepaid_credit">("opening_debt");
+  const [resolutionSettlementId, setResolutionSettlementId] = useState("");
+  const [resolutionChargeId, setResolutionChargeId] = useState("");
+  const [resolutionAmount, setResolutionAmount] = useState("");
+  const [resolutionNote, setResolutionNote] = useState("");
 
   const todayStr = today();
   const status = useMemo(
@@ -37,9 +50,27 @@ export function ReconcileCard() {
     [reconciles, transactions, todayStr]
   );
   const held = useMemo(
-    () => holdings({ reserves, transactions, dailyBudget }),
-    [reserves, transactions, dailyBudget]
+    () => holdings({
+      reserves,
+      transactions,
+      dailyBudget,
+      creditLedger: creditLedgerForState({ transactions, settlements, settlementResolutions, accounts }),
+      cashbackEnabled,
+      cashbackEnvelopeId,
+    }),
+    [reserves, transactions, dailyBudget, settlements, settlementResolutions, accounts, cashbackEnabled, cashbackEnvelopeId]
   );
+  const ledger = useMemo(
+    () => creditLedgerForState({ transactions, settlements, settlementResolutions, accounts }),
+    [transactions, settlements, settlementResolutions, accounts]
+  );
+  const resolutionSettlement = settlements.find((item) => item.id === resolutionSettlementId || item.eventId === resolutionSettlementId);
+  const resolutionCard = resolutionSettlement?.cardId ?? Object.keys(ledger.byCard).find((id) => (ledger.byCard[id]?.excessSettlement ?? 0) > 0) ?? "";
+  const resolutionCharges = transactions.filter((transaction) => {
+    if (!transaction.direction || transaction.direction !== "out" || !transaction.eventId) return false;
+    const cardId = transaction.accountId ?? transaction.id;
+    return cardId === resolutionCard && transaction.date < (resolutionSettlement?.date ?? todayStr);
+  });
 
   // بلا مرساة (تطبيقٌ بلا معاملةٍ واحدة بعد) لا معنى لمطابقةٍ ولا لسطرٍ يذكرها.
   if (!status.anchor) return null;
@@ -52,14 +83,44 @@ export function ReconcileCard() {
   function submit() {
     if (!valid) return;
     const rec = recordReconcile(typed);
-    if (rec) setSaved({ delta: rec.delta, actual: rec.actual });
+    if (rec) {
+      setSaved({ delta: rec.delta, actual: rec.actual });
+      setBlockedMessage(null);
+    } else if (held.blockedByExcess) {
+      setBlockedMessage("لا يمكن تثبيت المطابقة قبل تفسير فائض سداد البطاقة في القسم أدناه.");
+    }
     setRaw("");
+  }
+
+  function applyResolution() {
+    if (!resolutionSettlementId || !resolutionCard) return;
+    const amount = Number(resolutionAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    resolveSettlement({
+      id: uid(),
+      cardId: resolutionCard,
+      kind: resolutionKind,
+      amount,
+      date: todayStr,
+      note: resolutionNote.trim() || undefined,
+      settlementIds: [resolutionSettlementId],
+      appliedToEventIds: resolutionKind === "missed_expense" && resolutionChargeId ? [resolutionChargeId] : undefined,
+    });
+    setResolutionAmount("");
+    setResolutionNote("");
+    setResolutionChargeId("");
+    setBlockedMessage(null);
   }
 
   function close() {
     setOpen(false);
     setSaved(null);
     setRaw("");
+    setBlockedMessage(null);
+    setResolutionAmount("");
+    setResolutionNote("");
+    setResolutionChargeId("");
+    setResolutionSettlementId("");
   }
 
   return (
@@ -123,6 +184,88 @@ export function ReconcileCard() {
             <p className="text-xs text-gray-500 leading-relaxed">
               افتح كشوفَ حساباتك ومحافظك، واجمع أرصدتَها الآن. لا تُفصّل ولا تُصنّف — رقمٌ واحد يكفي.
             </p>
+
+            {held.blockedByExcess && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 space-y-2">
+                <p className="text-xs font-bold text-amber-800">تحتاج تسويات البطاقات إلى تفسير</p>
+                <p className="text-[11px] text-amber-700 leading-relaxed">
+                  يوجد سداد لا يقابله مصروف ائتماني سابق. اختر سبباً واضحاً؛ لن يُستخدم هذا المبلغ تلقائياً لمصاريف لاحقة.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={resolutionSettlementId}
+                    onChange={(event) => {
+                      const id = event.target.value;
+                      setResolutionSettlementId(id);
+                      const item = settlements.find((settlement) => settlement.id === id || settlement.eventId === id);
+                      if (item) setResolutionAmount(String(item.amount));
+                    }}
+                    aria-label="السداد المراد تفسيره"
+                    className="rounded-lg border border-amber-200 bg-white px-2 py-2 text-[11px]"
+                  >
+                    <option value="">اختر السداد</option>
+                    {settlements.map((settlement) => (
+                      <option key={settlement.id} value={settlement.id}>
+                        {settlement.cardId} · {formatAmount(settlement.amount)} ر.س
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={resolutionKind}
+                    onChange={(event) => setResolutionKind(event.target.value as typeof resolutionKind)}
+                    aria-label="سبب التسوية"
+                    className="rounded-lg border border-amber-200 bg-white px-2 py-2 text-[11px]"
+                  >
+                    <option value="opening_debt">دين افتتاحي</option>
+                    <option value="missed_expense">مصروف فات</option>
+                    <option value="prepaid_credit">رصيد مدفوع مقدماً</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={resolutionAmount}
+                    onChange={(event) => setResolutionAmount(event.target.value)}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    aria-label="مبلغ التسوية"
+                    placeholder="المبلغ"
+                    className="w-28 rounded-lg border border-amber-200 bg-white px-2 py-2 text-[11px]"
+                  />
+                  {resolutionKind === "missed_expense" && (
+                    <select
+                      value={resolutionChargeId}
+                      onChange={(event) => setResolutionChargeId(event.target.value)}
+                      aria-label="المصروف الفائت"
+                      className="flex-1 rounded-lg border border-amber-200 bg-white px-2 py-2 text-[11px]"
+                    >
+                      <option value="">مصروف فات (اختياري)</option>
+                      {resolutionCharges.map((transaction) => (
+                        <option key={transaction.id} value={transaction.eventId ?? transaction.id}>
+                          {transaction.note.slice(0, 24)} · {formatAmount(transaction.amount)} ر.س
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <input
+                  value={resolutionNote}
+                  onChange={(event) => setResolutionNote(event.target.value)}
+                  aria-label="ملاحظة التسوية"
+                  placeholder="ملاحظة اختيارية"
+                  className="w-full rounded-lg border border-amber-200 bg-white px-2 py-2 text-[11px]"
+                />
+                <Button
+                  onClick={applyResolution}
+                  disabled={!resolutionSettlementId || !resolutionAmount || !resolutionCard}
+                  className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-40"
+                >
+                  حفظ التفسير مرة واحدة
+                </Button>
+                {blockedMessage && <p className="text-[11px] font-semibold text-red-700">{blockedMessage}</p>}
+              </div>
+            )}
 
             {/* ما يظنّه مدار — مفصَّلاً حتى يعرف المالك ما الذي يقابله بالضبط. */}
             <div className="rounded-xl border border-[var(--border-subtle)] p-3 space-y-1.5">

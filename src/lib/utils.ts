@@ -705,8 +705,28 @@ export function budgetLimit(b: Budget, monthlyIncome: number | null): number {
 // الأقساط لم يبقَ نوعٌ من المعاملات لا يخرج نقداً — فكلّ معاملةٍ صرفٌ بمبلغها.
 // البوّابة باقيةٌ مع ذلك (لا تُجمع `t.amount` مباشرةً): هي المكان الوحيد الذي
 // يتغيّر لو عاد يوماً مفهومُ «التزامٌ لم يُدفع»، بدل مطاردة عشرات المجاميع.
-export function cashOut(t: Pick<Transaction, "amount">): number {
-  return t.amount;
+type CashFlowTransaction = Pick<Transaction, "amount"> & Partial<Pick<Transaction, "kind" | "direction" | "offBudget" | "fee">>;
+
+// Bank events can retain a real amount without representing spending. Keep
+// those amounts in the ledger for matching, while making the budget gateway
+// account only for confirmed expense kinds. Untyped legacy rows retain their
+// historical expense behavior.
+const BUDGET_EXPENSE_KINDS = new Set([
+  "purchase", "atm", "bill", "installment", "fee", "transfer_out",
+  // Explicit reconciliation debits are real cash leaving the bank. Their
+  // `offBudget` flag keeps them out of the daily allowance while this gateway
+  // still carries them into holdings and cash-flow totals exactly once.
+  "opening_debt", "missed_expense",
+]);
+
+export function cashOut(t: CashFlowTransaction): number {
+  if (t.kind !== undefined) {
+    // An external transfer is one cash event, so its bank fee belongs to the
+    // same spend gateway. Self-transfer fees are materialized as a separate
+    // `fee` transaction by the import store and their principal stays zero.
+    return BUDGET_EXPENSE_KINDS.has(t.kind) ? t.amount + (t.kind === "transfer_out" ? (t.fee ?? 0) : 0) : 0;
+  }
+  return t.direction === "in" ? 0 : t.amount;
 }
 
 // ===================== ما تُحاسِبه الميزانيات =====================
@@ -716,13 +736,13 @@ export function cashOut(t: Pick<Transaction, "amount">): number {
 // لا يتكرّر (رسوم اختبار، عمرة، حادث) فلا يُحاسَب عليه في الميزانية ولا السقوف.
 // كلّ حسابٍ يقارن صرفاً بميزانيةٍ أو سقفٍ يمرّ من هنا؛ وما عداه (المجاميع
 // والرسوم والإحصائيات) يبقى على `cashOut` فلا يختفي الصرف من صورة الشهر.
-export function budgetSpend(t: Pick<Transaction, "amount" | "offBudget">): number {
+export function budgetSpend(t: CashFlowTransaction): number {
   return t.offBudget ? 0 : cashOut(t);
 }
 
 // هل تُحاسِب الميزانياتُ هذه المعاملة أصلاً؟ (للتصفية قبل التجميع)
-export function countsInBudget(t: Pick<Transaction, "offBudget">): boolean {
-  return !t.offBudget;
+export function countsInBudget(t: CashFlowTransaction): boolean {
+  return !t.offBudget && cashOut(t) > 0;
 }
 
 // ===================== Reserve funds & split spending =====================

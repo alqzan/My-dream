@@ -229,7 +229,17 @@ const INBOX = "inbox";
 export interface InboxItem {
   id: string;
   text: string;
+  // Optional sender supplied by the iOS Shortcut.  Missing `from` remains
+  // valid for older/manual inbox documents; when present it lets the parser
+  // choose the bank template without mistaking a merchant name for the SMS
+  // institution.
+  from?: string;
   ts?: string;
+  /** Local review rows reuse the canonical event id after the cloud source is
+   * cleared or when the manual import never had a cloud document. */
+  sourceEventId?: string;
+  sourceInboxId?: string;
+  localOnly?: boolean;
 }
 
 // The Automation may send the text raw, base64-encoded (enc:"b64"), or
@@ -256,7 +266,12 @@ export async function loadInbox(): Promise<InboxItem[]> {
   const snap = await getDocs(collection(db, COLLECTION, space, INBOX));
   return snap.docs.map((d) => {
     const data = d.data() as Record<string, unknown>;
-    return { id: d.id, text: decodeInboxText(data), ts: typeof data.ts === "string" ? data.ts : undefined };
+    return {
+      id: d.id,
+      text: decodeInboxText(data),
+      from: typeof data.from === "string" ? data.from : undefined,
+      ts: typeof data.ts === "string" ? data.ts : undefined,
+    };
   });
 }
 
@@ -289,7 +304,12 @@ export function subscribeInbox(cb: (items: InboxItem[]) => void): () => void {
       cb(
         snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
-          return { id: d.id, text: decodeInboxText(data), ts: typeof data.ts === "string" ? data.ts : undefined };
+          return {
+            id: d.id,
+            text: decodeInboxText(data),
+            from: typeof data.from === "string" ? data.from : undefined,
+            ts: typeof data.ts === "string" ? data.ts : undefined,
+          };
         })
       );
     },

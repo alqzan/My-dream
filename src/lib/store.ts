@@ -7,6 +7,7 @@ import type {
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode, FundFunding, Reconcile,
+  Account, Obligation, ObservedBalance, SettlementResolution, CardSettlement, InboxDecision, InboxEventRecord, FinanceSettingsProfile,
 } from "./types";
 import { DEFAULT_CATEGORIES, SEED_HABITS, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -17,11 +18,12 @@ import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
-import { normalizeMerchant } from "./bankParser";
+import { cashbackEffectId, normalizeMerchant } from "./bankParser";
 import { offsetPlan, OFFSET_NOTE, offsetDepositId } from "./budgetFlow";
 import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan";
 import { cycleLength } from "./budgetCycle";
 import { holdings, reconcileDelta, RECONCILE_NOTE } from "./reconcile";
+import { creditLedgerForState } from "./financeLedger";
 import { persistJSONStorage, flushPersisted } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
@@ -32,6 +34,7 @@ const ID_COLLECTIONS = [
   "reserves", "habits", "futureLetters", "categories",
   "quranReflections", "countdownEvents",
   "knowledgeSources", "benefits", "reconciles",
+  "obligations", "observedBalances", "accounts", "settlementResolutions", "settlements", "inboxDecisions", "inboxEvents",
 ] as const;
 
 // Single-value settings that carry a per-field edit stamp (see `set` wrapper
@@ -41,6 +44,7 @@ const ID_COLLECTIONS = [
 const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
   "lastSalaryConfirm", "frozenHabits", "budgetWindow", "autoOffset", "qadaBacklog", "quranKhatma",
+  "ownerAliases", "ownerWallets", "ownerAccounts", "salaryPayers", "payerAliases", "cashbackEnabled", "cashbackEnvelopeId",
 ] as const;
 
 // These preferences are persisted on the device but deliberately excluded
@@ -102,6 +106,14 @@ function clearTombstone(
   const next = { ...deleted };
   delete next[id];
   return { deleted: next };
+}
+
+function resolutionTransactionId(resolutionId: string): string {
+  return `reconcile-resolution:${resolutionId}`;
+}
+
+function resolutionTransactionKind(kind: SettlementResolution["kind"]): Transaction["kind"] {
+  return kind === "opening_debt" ? "opening_debt" : "missed_expense";
 }
 
 // شواهد حذف سجلّات الحفظ (جلسات/مراجعات/أخطاء) تعيش داخل HifzState نفسها فتبقى
@@ -177,6 +189,19 @@ interface AppStore extends AppData {
   addTransaction: (tx: Transaction) => void;
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
+  // Stable bank-SMS import boundary. Events already carry source identity from
+  // `parseBankSmsBulk`; this action is idempotent for retries of one inbox doc
+  // while retaining same-text events arriving from different source docs.
+  importInboxEvents: (events: import("./bankParser").SmsParseEventResult[], options?: { confirmed?: boolean }) => { saved: number; settlements: number; reviewed: number; duplicates: number };
+  confirmInboxEvent: (event: import("./bankParser").SmsParseEventResult) => void;
+  decideInboxEvent: (decision: InboxDecision) => void;
+  upsertAccount: (account: Account) => void;
+  upsertObligation: (obligation: Obligation) => void;
+  upsertObservedBalance: (balance: ObservedBalance) => void;
+  addCardSettlement: (settlement: CardSettlement) => void;
+  resolveSettlement: (resolution: SettlementResolution) => void;
+  applyFinanceSettingsProfile: (profile: FinanceSettingsProfile) => void;
+  setCashbackSettings: (enabled: boolean, envelopeId?: string) => void;
 
   // Budgets — a fixed limit OR a % of monthly income
   setBudget: (category: string, cap: { limit?: number; pct?: number }) => void;
@@ -373,7 +398,8 @@ export function migratePersisted(persisted: unknown, version: number): AppData {
       for (const key of ["transactions", "budgets", "categories", "reserves", "habits",
         "books", "readingLogs", "journalEntries", "prayerLogs", "quranReflections",
         "quranWird", "futureLetters", "countdownEvents", "knowledgeSources", "benefits",
-        "reconciles"]) {
+        "reconciles", "obligations", "observedBalances", "accounts", "settlementResolutions",
+        "settlements", "inboxDecisions", "inboxEvents"]) {
         if (key in state && state[key] != null && !Array.isArray(state[key])) state[key] = [];
       }
       const todayStr = today();
@@ -616,6 +642,22 @@ export function migratePersisted(persisted: unknown, version: number): AppData {
         state = { ...state, reserves };
       }
 
+      state = {
+        ...state,
+        obligations: state.obligations ?? [],
+        observedBalances: state.observedBalances ?? [],
+        accounts: state.accounts ?? [],
+        ownerAliases: state.ownerAliases ?? [],
+        ownerWallets: state.ownerWallets ?? [],
+        ownerAccounts: state.ownerAccounts ?? [],
+        salaryPayers: state.salaryPayers ?? [],
+        payerAliases: state.payerAliases ?? {},
+        settlementResolutions: state.settlementResolutions ?? [],
+        settlements: state.settlements ?? [],
+        inboxDecisions: state.inboxDecisions ?? [],
+        inboxEvents: state.inboxEvents ?? [],
+        cashbackEnabled: state.cashbackEnabled ?? false,
+      };
       return state as unknown as AppData;
 }
 
@@ -903,6 +945,20 @@ export const useAppStore = create<AppStore>()(
       futureLetters: [],
       countdownEvents: [],
       reconciles: [],
+      obligations: [],
+      observedBalances: [],
+      accounts: [],
+      ownerAliases: [],
+      ownerWallets: [],
+      ownerAccounts: [],
+      salaryPayers: [],
+      payerAliases: {},
+      settlementResolutions: [],
+      settlements: [],
+      inboxDecisions: [],
+      inboxEvents: [],
+      cashbackEnabled: false,
+      cashbackEnvelopeId: undefined,
       salaryDay: 27,
       budgetWindow: "salary",
       autoOffset: true,
@@ -1138,6 +1194,639 @@ export const useAppStore = create<AppStore>()(
       deleteTransaction: (id) =>
         set((s) => ({
           transactions: s.transactions.filter((t) => t.id !== id),
+        })),
+
+      importInboxEvents: (events, options = {}) => {
+        let result = { saved: 0, settlements: 0, reviewed: 0, duplicates: 0 };
+        if (!events.length) return result;
+        const confirmed = options.confirmed === true;
+        set((s) => {
+          const transactions = [...s.transactions];
+          let reserves = [...s.reserves];
+          const settlements = [...(s.settlements ?? [])];
+          const decisions = [...(s.inboxDecisions ?? [])];
+          const inboxEvents = [...(s.inboxEvents ?? [])];
+          const accounts = [...(s.accounts ?? [])];
+          const balances = [...(s.observedBalances ?? [])];
+          const obligations = [...(s.obligations ?? [])];
+          // A review is not a terminal import decision.  Keeping review/unknown
+          // ids out of this set allows a corrected parse with the same stable
+          // source identity to be routed later, while a saved settlement or
+          // transaction remains idempotent on retries.
+          const terminalDecisions = new Set<InboxDecision["decision"]>(["saved", "matched", "ignored", "duplicate"]);
+          const seenEventIds = new Set([
+            ...transactions.map((t) => t.eventId).filter(Boolean),
+            ...settlements.map((x) => x.eventId).filter(Boolean),
+            ...decisions.filter((x) => terminalDecisions.has(x.decision)).map((x) => x.eventId),
+          ] as string[]);
+          const now = Date.now();
+          const expenseKinds = new Set(["purchase", "atm", "bill", "installment", "fee"]);
+          const safeAccountKinds = new Set([
+            ...expenseKinds, "card_settle", "transfer_in", "transfer_out", "self_transfer", "deposit",
+          ]);
+          const isWalletCashback = (event: Event): boolean => event.kind === "cashback"
+            && (/محفظة|wallet/i.test(event.rawText) || event.accountId?.includes(":wallet:") === true);
+          const cashbackRefundDestination = (event: Event): Transaction["refundDestination"] => {
+            if (event.kind !== "cashback" || isWalletCashback(event)) return undefined;
+            if (event.balanceKind === "credit_available" || /بطاقة|visa|mastercard|credit\s*card/i.test(event.rawText) || event.accountId?.includes(":card:") === true) {
+              return "merchant_card";
+            }
+            // An unclassified cashback receipt remains a review issue until
+            // the owner identifies whether it returned to a card or wallet.
+            return "unknown";
+          };
+          type Event = import("./bankParser").SmsParseEventResult;
+          const eventStamp = (event: Pick<Event, "date" | "time" | "sourceReceivedAt">): string => {
+            const received = event.sourceReceivedAt?.match(/T(\d{2}:\d{2}(?::\d{2})?)/)?.[1];
+            return `${event.date}T${event.time ?? received ?? "00:00"}`;
+          };
+          const contextKey = (event: Pick<Event, "sourceKey" | "date" | "time" | "bank" | "account" | "accountId">): string =>
+            [event.sourceKey ?? "", event.date, event.bank ?? "", event.accountId ?? event.account ?? ""].join("|");
+          const sourceTime = (event: Pick<Event, "date" | "time" | "sourceReceivedAt">): number | null => {
+            if (event.sourceReceivedAt) {
+              const parsed = Date.parse(event.sourceReceivedAt);
+              if (Number.isFinite(parsed)) return parsed;
+            }
+            if (event.time && /^\d{2}:\d{2}$/.test(event.time)) {
+              const parsed = Date.parse(`${event.date}T${event.time}:00Z`);
+              if (Number.isFinite(parsed)) return parsed;
+            }
+            return null;
+          };
+          const sourceTimesClose = (
+            a: Pick<Event, "date" | "time" | "sourceReceivedAt">,
+            b: Pick<Event, "date" | "time" | "sourceReceivedAt">,
+          ): boolean => {
+            const aMs = sourceTime(a); const bMs = sourceTime(b);
+            // Two identical messages without any transport/body time cannot
+            // be safely collapsed.  Inbox rows normally carry receivedAt;
+            // when they do, only a short retry window is suspicious, so two
+            // genuine purchases hours apart remain independent.
+            if (aMs === null || bMs === null) return false;
+            return Math.abs(aMs - bMs) <= 15 * 60 * 1000;
+          };
+          const recordContextKey = (record: InboxEventRecord): string =>
+            [record.sourceKey ?? "", record.date, record.bank ?? "", record.accountId ?? record.account ?? ""].join("|");
+          // Two distinct source documents carrying the same source text at
+          // nearly the same instant are a resend *candidate*.  Preflight the
+          // whole batch before applying any effects so the first item cannot
+          // be saved while the second is still being reviewed.
+          const sourceDocumentKey = (event: Pick<Event, "eventId" | "sourceInboxId">): string =>
+            event.eventId?.replace(/:\d+$/, "") ?? event.sourceInboxId ?? "";
+          const batchSuspectEventIds = new Set<string>();
+          if (!confirmed) {
+            for (let i = 0; i < events.length; i += 1) {
+              const left = events[i];
+              if (!left.eventId || !left.sourceKey) continue;
+              for (let j = i + 1; j < events.length; j += 1) {
+                const right = events[j];
+                if (!right.eventId || right.sourceKey !== left.sourceKey) continue;
+                if (contextKey(left) !== contextKey(right) || sourceDocumentKey(left) === sourceDocumentKey(right)) continue;
+                if (sourceTimesClose(left, right)) {
+                  batchSuspectEventIds.add(left.eventId);
+                  batchSuspectEventIds.add(right.eventId);
+                }
+              }
+            }
+          }
+          const upsertRawEvent = (event: Event, eventId: string) => {
+            const record: InboxEventRecord = {
+              id: eventId,
+              eventId,
+              rawText: event.rawText,
+              kind: event.kind,
+              direction: event.direction,
+              amount: event.amount,
+              expenseAmount: event.expenseAmount,
+              fee: event.fee,
+              category: event.category,
+              note: event.note,
+              date: event.date,
+              time: event.time,
+              bank: event.bank,
+              account: event.account,
+              cardLast4: event.cardLast4,
+              accountId: event.accountId,
+              balanceAfter: event.balanceAfter,
+              balanceKind: event.balanceKind,
+              counterparty: event.counterparty,
+              debtRemaining: event.debtRemaining,
+              obligationHint: event.obligationHint,
+              refundDestination: event.refundDestination,
+              template: event.template,
+              confidence: event.confidence,
+              sourceKey: event.sourceKey,
+              sourceInboxId: event.sourceInboxId,
+              sourceReceivedAt: event.sourceReceivedAt,
+              updatedAt: now,
+            };
+            const ix = inboxEvents.findIndex((x) => x.eventId === eventId);
+            if (ix >= 0) inboxEvents[ix] = { ...inboxEvents[ix], ...record };
+            else inboxEvents.unshift(record);
+          };
+          const removeRawEvent = (eventId: string) => {
+            const ix = inboxEvents.findIndex((x) => x.eventId === eventId);
+            if (ix >= 0) inboxEvents.splice(ix, 1);
+          };
+          const sameSourceElsewhere = (event: Event, eventId: string): boolean => {
+            if (!event.sourceKey) return false;
+            const current = contextKey(event);
+            const priorRecords = inboxEvents.filter((record) =>
+              record.eventId !== eventId && recordContextKey(record) === current
+              && sourceTimesClose(event, record)
+            );
+            const priorTransactions = transactions.filter((transaction) =>
+              transaction.eventId !== eventId && transaction.sourceKey === event.sourceKey
+              && contextKey({
+                sourceKey: transaction.sourceKey,
+                date: transaction.date,
+                bank: transaction.bank,
+                account: transaction.account,
+                accountId: transaction.accountId,
+              }) === current
+              && sourceTimesClose(event, transaction)
+            );
+            const prior = [...priorRecords, ...priorTransactions];
+            if (!prior.length) return false;
+            // One inbox document can contain multiple stable subevents. Those
+            // share a source text but are independent roles, so only a
+            // different source document is a suspected resend.
+            return prior.some((item) => item.sourceInboxId !== event.sourceInboxId || !event.sourceInboxId);
+          };
+          const upsertAccountFromEvent = (event: import("./bankParser").SmsParseEventResult) => {
+            if (!event.accountId || !event.account || !event.bank) return;
+            const parts = event.accountId.split(":");
+            const kind = parts[1] === "card" || parts[1] === "wallet" ? parts[1] : "account";
+            const id = event.accountId;
+            const existing = accounts.find((a) => a.id === id);
+            const newer = !existing || eventStamp(event) >= eventStamp({ date: existing.lastSeen, sourceReceivedAt: undefined });
+            const next: Account = {
+              id,
+              bank: event.bank,
+              last4: event.account,
+              kind,
+              fundingKind: event.balanceKind === "credit_available" ? "credit" : existing?.fundingKind ?? "unknown",
+              network: kind === "card" && /(?:\bmada\b|مدى)/i.test(event.rawText)
+                ? "mada" : existing?.network,
+              label: existing?.label,
+              // Discovery is evidence for a candidate; ownership is explicit
+              // user confirmation and therefore remains false by default.
+              isOwn: existing?.isOwn ?? false,
+              firstSeen: existing ? (event.date < existing.firstSeen ? event.date : existing.firstSeen) : event.date,
+              lastSeen: existing && !newer ? existing.lastSeen : event.date,
+              updatedAt: now,
+            };
+            const ix = accounts.findIndex((a) => a.id === id);
+            if (ix >= 0) accounts[ix] = { ...accounts[ix], ...next };
+            else accounts.unshift(next);
+          };
+          const upsertBalanceFromEvent = (event: import("./bankParser").SmsParseEventResult) => {
+            if (event.balanceAfter === undefined) return;
+            const id = `${event.accountId ?? event.bank ?? "unknown"}:${event.balanceKind ?? "unknown"}`;
+            const next: ObservedBalance = {
+              id,
+              bank: event.bank,
+              account: event.account,
+              cardLast4: event.account,
+              balance: event.balanceAfter,
+              balanceKind: event.balanceKind ?? "unknown",
+              assetKind: event.balanceKind === "credit_available" ? "credit_available" : event.kind === "cashback" ? "cashback_wallet" : "bank_cash",
+              observedAt: event.sourceReceivedAt ?? event.date,
+              updatedAt: now,
+            };
+            const ix = balances.findIndex((b) => b.id === id);
+            if (ix >= 0) {
+              const existing = balances[ix];
+              const oldAt = Date.parse(existing.observedAt) || Date.parse(`${existing.observedAt}T00:00:00Z`);
+              const newAt = Date.parse(next.observedAt) || Date.parse(`${next.observedAt}T00:00:00Z`);
+              if (!Number.isFinite(oldAt) || !Number.isFinite(newAt) || newAt >= oldAt) balances[ix] = { ...existing, ...next };
+            }
+            else balances.unshift(next);
+          };
+          const addDecision = (eventId: string, decision: InboxDecision["decision"], reason?: string) => {
+            const next: InboxDecision = { id: eventId, eventId, decision, reason, updatedAt: now };
+            const ix = decisions.findIndex((d) => d.eventId === eventId);
+            if (ix >= 0) decisions[ix] = { ...decisions[ix], ...next };
+            else decisions.unshift(next);
+          };
+          const addTransferFee = (event: Event, eventId: string) => {
+            // The principal of a self/internal transfer is retained for
+            // matching but is not spending. A bank fee is a separate real
+            // expense so it reaches the budget gateway exactly once.
+            if (!event.fee || event.fee <= 0 || event.kind !== "self_transfer") return;
+            const feeId = `${eventId}:fee`;
+            if (s.deleted?.[feeId] !== undefined) return;
+            if (transactions.some((transaction) => transaction.id === feeId || transaction.eventId === feeId)) return;
+            transactions.unshift({
+              id: feeId,
+              date: event.date,
+              amount: event.fee,
+              originalAmount: event.fee,
+              category: event.category || "cat-essentials",
+              note: `رسوم ${event.note}`,
+              kind: "fee",
+              direction: "out",
+              fee: event.fee,
+              time: event.time,
+              bank: event.bank,
+              account: event.account,
+              accountId: event.accountId,
+              template: event.template,
+              confidence: event.confidence,
+              eventId: feeId,
+              sourceKey: event.sourceKey,
+              sourceInboxId: event.sourceInboxId,
+              sourceReceivedAt: event.sourceReceivedAt,
+              linkedTransactionId: eventId,
+              rawText: event.rawText,
+            });
+            result.saved++;
+          };
+          const addCashbackDeposit = (event: Event, eventId: string) => {
+            if (!isWalletCashback(event) || !s.cashbackEnabled || !s.cashbackEnvelopeId || event.amount <= 0) return;
+            const effectId = cashbackEffectId(eventId);
+            const fund = reserves.find((item) => item.id === s.cashbackEnvelopeId);
+            if (!fund || fund.deposits.some((deposit) => deposit.id === effectId)) return;
+            const deposit: ReserveDeposit = {
+              id: effectId,
+              date: event.date,
+              amount: event.amount,
+              note: `استرداد نقدي · ${event.note}`,
+            };
+            reserves = reserves.map((item) => item.id === fund.id
+              ? { ...item, deposits: [deposit, ...item.deposits] }
+              : item);
+          };
+          for (const event of events) {
+            const eventId = event.eventId ?? `manual:${event.sourceKey ?? `${event.date}:${event.amount}`}`;
+            if (seenEventIds.has(eventId)) {
+              // A retry after an explicit ignore/duplicate decision must stay
+              // inert. Recreate a transfer fee only when the original
+              // principal effect is still present; a deleted fee is protected
+              // by its own tombstone above.
+              const priorDecision = decisions.find((decision) => decision.eventId === eventId);
+              const hasSavedEffect = transactions.some((transaction) => transaction.eventId === eventId || transaction.id === eventId)
+                || settlements.some((settlement) => settlement.eventId === eventId || settlement.id === eventId);
+              if (hasSavedEffect && priorDecision?.decision !== "ignored" && priorDecision?.decision !== "duplicate") {
+                addTransferFee(event, eventId);
+              }
+              result.duplicates++;
+              continue;
+            }
+            // A live tombstone is a terminal owner deletion. Do not let a
+            // later inbox retry resurrect its transaction or raw review row.
+            if (s.deleted?.[eventId] !== undefined) {
+              result.duplicates++;
+              continue;
+            }
+            const sameSource = batchSuspectEventIds.has(eventId) || sameSourceElsewhere(event, eventId);
+            upsertRawEvent(event, eventId);
+
+            // A generic parse, a suspected resend, and an unknown/refund-like
+            // event are review records only.  They never discover an account,
+            // alter a balance, or create budget spend before the user resolves
+            // them.
+            if (!confirmed && (sameSource || (expenseKinds.has(event.kind) && event.confidence === "generic"))) {
+              const reason = sameSource
+                ? "نص مطابق من مصدر آخر؛ راجع قبل الاعتماد"
+                : (event.reviewReason ?? "ثقة منخفضة — اختر نوع العملية قبل الاعتماد");
+              addDecision(eventId, "review", reason);
+              result.reviewed++;
+              if (sameSource) result.duplicates++;
+              continue;
+            }
+
+            if (expenseKinds.has(event.kind)) {
+              upsertAccountFromEvent(event);
+              upsertBalanceFromEvent(event);
+              const merchantKey = normalizeMerchant(event.note);
+              const category = (merchantKey && s.merchantRules?.[merchantKey]) || event.category || "cat-essentials";
+              const tx: Transaction = {
+                id: eventId,
+                date: event.date,
+                amount: event.expenseAmount ?? event.amount,
+                originalAmount: event.amount,
+                category,
+                note: event.note,
+                kind: event.kind,
+                direction: event.direction,
+                fee: event.fee,
+                time: event.time,
+                bank: event.bank,
+                account: event.account,
+                cardLast4: event.cardLast4,
+                accountId: event.accountId,
+                balanceAfter: event.balanceAfter,
+                balanceKind: event.balanceKind,
+                counterparty: event.counterparty,
+                debtRemaining: event.debtRemaining,
+                refundDestination: event.refundDestination ?? cashbackRefundDestination(event),
+                obligationHint: event.obligationHint,
+                template: event.template,
+                confidence: event.confidence,
+                eventId,
+                sourceKey: event.sourceKey,
+                sourceInboxId: event.sourceInboxId,
+                sourceReceivedAt: event.sourceReceivedAt,
+                reviewReason: event.reviewReason,
+                rawText: event.rawText,
+              };
+              transactions.unshift(tx);
+              removeRawEvent(eventId);
+              seenEventIds.add(eventId);
+              result.saved++;
+              addDecision(eventId, "saved", tx.reviewReason);
+              if (event.kind === "installment") {
+                const obligationId = `${event.bank ?? "unknown"}:${event.accountId ?? event.account ?? "loan"}:loan`;
+                const ix = obligations.findIndex((o) => o.id === obligationId);
+                const obligation: Obligation = {
+                  id: obligationId,
+                  kind: "loan",
+                  source: event.bank ?? "unknown",
+                  ref: event.account,
+                  label: event.counterparty || "قسط تمويل",
+                  outstanding: event.debtRemaining ?? 0,
+                  perPeriod: event.amount,
+                  observedAt: event.date,
+                  updatedAt: now,
+                };
+                if (ix >= 0) obligations[ix] = { ...obligations[ix], ...obligation };
+                else obligations.unshift(obligation);
+              }
+              continue;
+            }
+            if (event.kind === "card_settle") {
+              upsertAccountFromEvent(event);
+              upsertBalanceFromEvent(event);
+              const settlement: CardSettlement = {
+                id: eventId,
+                cardId: event.accountId ?? `${event.bank ?? "unknown"}:card:${event.account ?? "unknown"}`,
+                amount: event.amount,
+                date: event.date,
+                eventId,
+                sourceInboxId: event.sourceInboxId,
+                sourceReceivedAt: event.sourceReceivedAt,
+                rawText: event.rawText,
+                updatedAt: now,
+              };
+              settlements.unshift(settlement);
+              removeRawEvent(eventId);
+              seenEventIds.add(eventId);
+              result.settlements++;
+              addDecision(eventId, "matched");
+              continue;
+            }
+            // Provider notices carry future obligation facts even though they
+            // are not cash movement. Keep the structured hint in the durable
+            // inbox review record for the obligation flow instead of dropping
+            // it with generic informational noise.
+            if (event.obligationHint) {
+              addDecision(eventId, "review", "إشعار التزام — يحتاج ربطاً لاحقاً");
+              result.reviewed++;
+              continue;
+            }
+            if (["unknown", "declined", "self_transfer", "refund", "reversal", "cashback", "salary"].includes(event.kind) && !confirmed) {
+              // Salary, refund, reversal, and cashback need a link/owner
+              // decision before their cash effect is recorded.  They remain
+              // fully represented in inboxEvents for the review UI.
+              addDecision(eventId, "review", event.reviewReason ?? "يحتاج ربطاً أو مراجعة يدوية");
+              result.reviewed++;
+              continue;
+            }
+            if (["refund", "reversal", "cashback", "salary"].includes(event.kind) && confirmed) {
+              upsertAccountFromEvent(event);
+              upsertBalanceFromEvent(event);
+              const transaction: Transaction = {
+                id: eventId,
+                date: event.date,
+                amount: event.amount,
+                originalAmount: event.amount,
+                category: event.category || "cat-essentials",
+                note: event.note,
+                kind: event.kind,
+                direction: event.direction,
+                fee: event.fee,
+                time: event.time,
+                bank: event.bank,
+                account: event.account,
+                cardLast4: event.cardLast4,
+                accountId: event.accountId,
+                balanceAfter: event.balanceAfter,
+                balanceKind: event.balanceKind,
+                counterparty: event.counterparty,
+                debtRemaining: event.debtRemaining,
+                refundDestination: event.refundDestination ?? cashbackRefundDestination(event),
+                obligationHint: event.obligationHint,
+                template: event.template,
+                confidence: event.confidence,
+                eventId,
+                sourceKey: event.sourceKey,
+                sourceInboxId: event.sourceInboxId,
+                sourceReceivedAt: event.sourceReceivedAt,
+                suspectedDuplicate: sameSource || undefined,
+                rawText: event.rawText,
+              };
+              transactions.unshift(transaction);
+              if (event.kind === "cashback") addCashbackDeposit(event, eventId);
+              addTransferFee(event, eventId);
+              removeRawEvent(eventId);
+              seenEventIds.add(eventId);
+              result.saved++;
+              addDecision(eventId, "saved");
+              continue;
+            }
+            if (safeAccountKinds.has(event.kind)) {
+              upsertAccountFromEvent(event);
+              upsertBalanceFromEvent(event);
+              // Incoming and self-transfer events are stored as actual
+              // non-expense transactions so matching/reconciliation retains
+              // the source amount. Their direction keeps them out of budget
+              // spend calculations.
+              const transaction: Transaction = {
+                id: eventId,
+                date: event.date,
+                amount: event.amount,
+                originalAmount: event.amount,
+                category: event.category || "cat-essentials",
+                note: event.note,
+                kind: event.kind,
+                direction: event.direction,
+                fee: event.fee,
+                time: event.time,
+                bank: event.bank,
+                account: event.account,
+                cardLast4: event.cardLast4,
+                accountId: event.accountId,
+                balanceAfter: event.balanceAfter,
+                balanceKind: event.balanceKind,
+                counterparty: event.counterparty,
+                debtRemaining: event.debtRemaining,
+                refundDestination: event.refundDestination ?? cashbackRefundDestination(event),
+                obligationHint: event.obligationHint,
+                template: event.template,
+                confidence: event.confidence,
+                eventId,
+                sourceKey: event.sourceKey,
+                sourceInboxId: event.sourceInboxId,
+                sourceReceivedAt: event.sourceReceivedAt,
+                rawText: event.rawText,
+              };
+              transactions.unshift(transaction);
+              if (event.kind === "self_transfer") addTransferFee(event, eventId);
+              removeRawEvent(eventId);
+              seenEventIds.add(eventId);
+              result.saved++;
+              addDecision(eventId, "saved");
+              continue;
+            }
+            addDecision(eventId, "ignored", event.kind === "declined" ? "عملية مرفوضة" : undefined);
+            removeRawEvent(eventId);
+            seenEventIds.add(eventId);
+          }
+          return { transactions, reserves, settlements, inboxDecisions: decisions, inboxEvents, accounts, observedBalances: balances, obligations };
+        });
+        return result;
+      },
+
+      // The review UI calls this only after an explicit owner action. Keeping
+      // confirmation separate prevents generic, suspected, and ambiguous
+      // events from gaining an accounting effect merely because they arrived.
+      confirmInboxEvent: (event) => {
+        get().importInboxEvents([event], { confirmed: true });
+      },
+
+      decideInboxEvent: (decision) =>
+        set((s) => {
+          const next = [...(s.inboxDecisions ?? [])];
+          const ix = next.findIndex((d) => d.eventId === decision.eventId);
+          const value = { ...decision, id: decision.id || decision.eventId, updatedAt: Date.now() };
+          if (ix >= 0) next[ix] = { ...next[ix], ...value };
+          else next.unshift(value);
+          return { inboxDecisions: next };
+        }),
+
+      upsertAccount: (account) =>
+        set((s) => {
+          const next = [...(s.accounts ?? [])]; const ix = next.findIndex((a) => a.id === account.id);
+          if (ix >= 0) next[ix] = { ...next[ix], ...account, updatedAt: Date.now() }; else next.unshift({ ...account, updatedAt: Date.now() });
+          return { accounts: next, ...clearTombstone(s.deleted, account.id) };
+        }),
+
+      upsertObligation: (obligation) =>
+        set((s) => {
+          const next = [...(s.obligations ?? [])]; const ix = next.findIndex((o) => o.id === obligation.id);
+          if (ix >= 0) next[ix] = { ...next[ix], ...obligation, updatedAt: Date.now() }; else next.unshift({ ...obligation, updatedAt: Date.now() });
+          return { obligations: next, ...clearTombstone(s.deleted, obligation.id) };
+        }),
+
+      upsertObservedBalance: (balance) =>
+        set((s) => {
+          const next = [...(s.observedBalances ?? [])]; const ix = next.findIndex((b) => b.id === balance.id);
+          if (ix >= 0) next[ix] = { ...next[ix], ...balance, updatedAt: Date.now() }; else next.unshift({ ...balance, updatedAt: Date.now() });
+          return { observedBalances: next, ...clearTombstone(s.deleted, balance.id) };
+        }),
+
+      addCardSettlement: (settlement) =>
+        set((s) => {
+          if ((s.settlements ?? []).some((x) => x.id === settlement.id || (settlement.eventId && x.eventId === settlement.eventId))) return {};
+          return { settlements: [{ ...settlement, updatedAt: Date.now() }, ...(s.settlements ?? [])], ...clearTombstone(s.deleted, settlement.id) };
+        }),
+
+      resolveSettlement: (resolution) =>
+        set((s) => {
+          // A resolution is an owner decision, so malformed or zero values
+          // must be inert. The deterministic debit below makes retries and
+          // cross-device merges idempotent instead of posting a second debit.
+          if (!resolution.id || !resolution.cardId || !/^\d{4}-\d{2}-\d{2}$/.test(resolution.date)
+            || !Number.isFinite(resolution.amount) || resolution.amount <= 0) return {};
+          const now = Date.now();
+          const next = [...(s.settlementResolutions ?? [])];
+          const ix = next.findIndex((r) => r.id === resolution.id);
+          const stored = { ...resolution, amount: round2(resolution.amount), updatedAt: now };
+          if (ix >= 0) next[ix] = { ...next[ix], ...stored };
+          else next.unshift(stored);
+          const txId = resolutionTransactionId(resolution.id);
+          const linkedChargeIds = resolution.appliedToEventIds ?? [];
+          const linkedRecordedCharge = resolution.kind === "missed_expense"
+            && linkedChargeIds.some((id) => s.transactions.some((transaction) => transaction.id === id || transaction.eventId === id));
+          // A deleted explicit entry is a user tombstone. Replaying an inbox
+          // or merging an old device must never resurrect its cash effect.
+          const existing = s.transactions.find((transaction) => transaction.id === txId);
+          const kind = resolution.kind === "prepaid_credit" ? undefined : resolutionTransactionKind(resolution.kind);
+          const needsExplicitDebit = Boolean(kind && !linkedRecordedCharge && s.deleted?.[txId] === undefined);
+          let candidateReserves = s.reserves;
+          let ledgerFund = candidateReserves.find((fund) => fund.name === SURPLUS_FUND_NAME);
+          if (needsExplicitDebit && !ledgerFund) {
+            ledgerFund = {
+              id: "reconcile-surplus",
+              name: SURPLUS_FUND_NAME,
+              icon: "✨",
+              color: "#c9852a",
+              deposits: [],
+              createdAt: resolution.date,
+            };
+            candidateReserves = [...candidateReserves, ledgerFund];
+          }
+          const explicitDebit = needsExplicitDebit
+            ? {
+                id: txId,
+                date: resolution.date,
+                amount: stored.amount,
+                originalAmount: stored.amount,
+                category: "cat-essentials",
+                note: stored.note?.trim() || (kind === "opening_debt" ? "سداد دين افتتاحي معلّم" : "مصروف فائت معلّم"),
+                kind,
+                direction: "out" as const,
+                offBudget: true,
+                accountId: resolution.cardId,
+                confidence: "inferred" as const,
+                eventId: txId,
+                linkedTransactionId: resolution.settlementIds?.[0],
+                reserveSplits: [{ fundId: ledgerFund!.id, pct: 100 }],
+                updatedAt: now,
+              }
+            : undefined;
+          // Resolve against the candidate state before writing. This rejects a
+          // wrong-card, unknown-settlement, or overallocated decision without
+          // leaving behind a debit that the ledger cannot honour.
+          let candidateTransactions = s.transactions.filter((item) => item.id !== txId);
+          if (explicitDebit) candidateTransactions = [explicitDebit, ...candidateTransactions];
+          const candidate = creditLedgerForState({
+            ...s,
+            transactions: candidateTransactions,
+            settlementResolutions: next,
+          });
+          const invalidResolution = candidate.issues.some((issue) => issue.severity === "error" && issue.recordId === resolution.id);
+          if (invalidResolution) return {};
+
+          const liftedResolution = clearTombstone(s.deleted, resolution.id);
+          const liftedDebit = clearTombstone(liftedResolution.deleted ?? s.deleted, txId);
+          return {
+            settlementResolutions: next,
+            transactions: candidateTransactions,
+            reserves: candidateReserves,
+            ...liftedResolution,
+            ...liftedDebit,
+          };
+        }),
+
+      applyFinanceSettingsProfile: (profile) =>
+        set((s) => ({
+          ownerAliases: profile.ownerAliases,
+          ownerWallets: profile.ownerWallets,
+          ownerAccounts: profile.ownerAccounts,
+          salaryPayers: profile.salaryPayers,
+          payerAliases: profile.payerAliases,
+          merchantRules: { ...s.merchantRules, ...profile.merchantRules },
+          ...(profile.salaryPattern?.day !== undefined ? { salaryDay: profile.salaryPattern.day } : {}),
+          cashbackEnabled: profile.cashbackEnabled,
+          ...(profile.cashbackEnvelopeId !== undefined ? { cashbackEnvelopeId: profile.cashbackEnvelopeId } : {}),
+        })),
+
+      setCashbackSettings: (enabled, envelopeId) =>
+        set((s) => ({
+          cashbackEnabled: enabled === true,
+          cashbackEnvelopeId: enabled === true ? (envelopeId || s.cashbackEnvelopeId) : undefined,
         })),
 
       setBudget: (category, cap) =>
@@ -1422,11 +2111,22 @@ export const useAppStore = create<AppStore>()(
         let record: Reconcile | null = null;
         set((s) => {
           const todayStr = today();
+          const creditLedger = creditLedgerForState(s);
           const { expected } = holdings({
             reserves: s.reserves,
             transactions: s.transactions,
             dailyBudget: s.dailyBudget,
+            creditLedger,
+            cashbackEnabled: s.cashbackEnabled,
+            cashbackEnvelopeId: s.cashbackEnvelopeId,
           });
+          // A settlement without a provable earlier charge is an unresolved
+          // excess, not permission to move the surplus envelope. Ambiguous
+          // chronology and malformed credit records are blocked at this store
+          // boundary too, so a disabled button cannot be bypassed by calling
+          // the action directly.
+          const blocked = creditLedger.excessSettlement > 0 || creditLedger.issues.length > 0;
+          if (blocked) return {};
           const result = reconcileDelta(expected, actual as number);
           record = {
             id: uid(),
@@ -1434,6 +2134,10 @@ export const useAppStore = create<AppStore>()(
             expected: result.expected,
             actual: result.actual,
             delta: result.delta,
+            unsettledRecordedCharges: creditLedger.unsettledRecordedCharges,
+            excessSettlements: creditLedger.excessSettlement,
+            excessByCard: Object.fromEntries(Object.entries(creditLedger.byCard).filter(([, card]) => card.excessSettlement > 0).map(([id, card]) => [id, card.excessSettlement])),
+            blockedByExcess: false,
           };
 
           // القيدُ يُسجَّل في كلّ حال — حتى المطابِق. هو الذي يعيد ضبط عدّاد
@@ -2200,6 +2904,20 @@ export const useAppStore = create<AppStore>()(
           futureLetters: data.futureLetters ?? [],
           countdownEvents: data.countdownEvents ?? [],
           reconciles: data.reconciles ?? [],
+          obligations: data.obligations ?? [],
+          observedBalances: data.observedBalances ?? [],
+          accounts: data.accounts ?? [],
+          ownerAliases: data.ownerAliases ?? [],
+          ownerWallets: data.ownerWallets ?? [],
+          ownerAccounts: data.ownerAccounts ?? [],
+          salaryPayers: data.salaryPayers ?? [],
+          payerAliases: data.payerAliases ?? {},
+          settlementResolutions: data.settlementResolutions ?? [],
+          settlements: data.settlements ?? [],
+          inboxDecisions: data.inboxDecisions ?? [],
+          inboxEvents: data.inboxEvents ?? [],
+          cashbackEnabled: data.cashbackEnabled ?? false,
+          cashbackEnvelopeId: data.cashbackEnvelopeId,
           salaryDay: data.salaryDay ?? 27,
           budgetWindow: data.budgetWindow ?? "salary",
           autoOffset: data.autoOffset ?? true,
@@ -2237,6 +2955,20 @@ export const useAppStore = create<AppStore>()(
           futureLetters: s.futureLetters,
           countdownEvents: s.countdownEvents ?? [],
           reconciles: s.reconciles ?? [],
+          obligations: s.obligations ?? [],
+          observedBalances: s.observedBalances ?? [],
+          accounts: s.accounts ?? [],
+          ownerAliases: s.ownerAliases ?? [],
+          ownerWallets: s.ownerWallets ?? [],
+          ownerAccounts: s.ownerAccounts ?? [],
+          salaryPayers: s.salaryPayers ?? [],
+          payerAliases: s.payerAliases ?? {},
+          settlementResolutions: s.settlementResolutions ?? [],
+          settlements: s.settlements ?? [],
+          inboxDecisions: s.inboxDecisions ?? [],
+          inboxEvents: s.inboxEvents ?? [],
+          cashbackEnabled: s.cashbackEnabled ?? false,
+          cashbackEnvelopeId: s.cashbackEnvelopeId,
           salaryDay: s.salaryDay,
           budgetWindow: s.budgetWindow ?? "salary",
           autoOffset: s.autoOffset ?? true,

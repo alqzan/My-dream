@@ -162,10 +162,11 @@ service cloud.firestore {
       let d = request.resource.data;
       let keys = d.keys();
       return keys.hasAll(['text'])
-        && keys.hasOnly(['text', 'enc', 'ts'])
+        && keys.hasOnly(['text', 'enc', 'ts', 'from'])
         && d.text is string && d.text.size() > 0 && d.text.size() <= 6000
         && (!('enc' in d) || (d.enc is string && d.enc in ['b64', 'url']))
-        && (!('ts' in d) || (d.ts is string && d.ts.size() <= 40));
+        && (!('ts' in d) || (d.ts is string && d.ts.size() <= 40))
+        && (!('from' in d) || (d.from is string && d.from.size() > 0 && d.from.size() <= 40));
     }
   }
 }

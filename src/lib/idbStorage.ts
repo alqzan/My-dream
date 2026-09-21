@@ -83,6 +83,14 @@ export async function flushPersisted(): Promise<void> {
   ]);
 }
 
+/** Persistence barrier for flows that are about to delete their source.  The
+ * lifecycle helper above intentionally swallows failures because it has no UI
+ * caller; import/review must keep the remote inbox item when this barrier
+ * fails so a retry cannot lose the receipt. */
+export async function flushPersistedStrict(): Promise<void> {
+  await Promise.all([persistedIdbStorage.flush(), jsonWriter.flush()]);
+}
+
 // **الشرط الذي يجعل التأجيل آمناً**: أفرِغ ما هو معلّق قبل أن تختفي الصفحة.
 // بدونه يضيع آخر تعديلٍ سُجّل قبل الإغلاق بلحظة.
 //

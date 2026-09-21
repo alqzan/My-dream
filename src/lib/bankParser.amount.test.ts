@@ -261,7 +261,7 @@ describe("parseBankSmsBulk", () => {
   });
 
   it("نصٌّ فارغ لا يرمي", () => {
-    expect(parseBankSmsBulk("", D)).toEqual({ transactions: [], skippedIncome: 0 });
+    expect(parseBankSmsBulk("", D)).toEqual({ transactions: [], events: [], skippedIncome: 0 });
     expect(parseBankSmsBulk("   \n  ", D).transactions).toHaveLength(0);
   });
 });

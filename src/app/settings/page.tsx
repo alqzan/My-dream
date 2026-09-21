@@ -11,6 +11,9 @@ import { AiExportCard } from "@/components/settings/AiExportCard";
 import { ThemePreferencesCard } from "@/components/settings/ThemePreferencesCard";
 import { RemindersCard } from "@/components/settings/RemindersCard";
 import { FinanceDisplayCard } from "@/components/settings/FinanceDisplayCard";
+import { FinanceOwnershipCard } from "@/components/settings/FinanceOwnershipCard";
+import { AccountRegistryCard } from "@/components/settings/AccountRegistryCard";
+import { CashbackSettingsCard } from "@/components/settings/CashbackSettingsCard";
 import { BrandMark } from "@/components/layout/BrandMark";
 // الإصدار من مصدره الوحيد (src/lib/version.ts) — لا رقمَ مكتوباً بيدٍ هنا يتخلّف
 // عن package.json. الرقم = عدد التعديلات الجوهرية منذ أوّل نسخة مستقرة.
@@ -39,6 +42,15 @@ export default function SettingsPage() {
       </div>
       <div className="animate-fade-up stagger-1">
         <FinanceDisplayCard />
+      </div>
+      <div className="animate-fade-up stagger-1">
+        <FinanceOwnershipCard />
+      </div>
+      <div className="animate-fade-up stagger-1">
+        <AccountRegistryCard />
+      </div>
+      <div className="animate-fade-up stagger-1">
+        <CashbackSettingsCard />
       </div>
       <div className="animate-fade-up stagger-1">
         <BudgetWindowCard />
