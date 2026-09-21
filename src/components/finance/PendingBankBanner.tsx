@@ -19,7 +19,7 @@ export function PendingBankBanner() {
         <div className="text-sm font-bold text-gray-800 dark:text-white">
           {count} معاملة بنك جديدة
         </div>
-        <div className="text-[11px] text-gray-500">وصلت تلقائياً — راجعها ووافق</div>
+        <div className="text-[11px] text-gray-500">الواضح يُضاف تلقائياً — راجع الحالات الخاصة</div>
       </div>
       <ChevronLeft size={18} className="text-finance shrink-0" />
     </button>

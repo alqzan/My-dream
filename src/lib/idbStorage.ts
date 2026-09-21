@@ -2,11 +2,32 @@ import { get, set, del } from "idb-keyval";
 import type { StateStorage, PersistStorage, StorageValue } from "zustand/middleware";
 import { createDeferredStorage, createDeferredWriter } from "./persistScheduler";
 
+// Safari/iOS can temporarily reject an IndexedDB transaction (private mode,
+// storage pressure, or a connection being evicted) even though the origin's
+// small localStorage area is still writable. Keep a compact recovery copy only
+// for that failure path; normal reads and writes remain IndexedDB-backed.
+const LOCAL_FALLBACK_PREFIX = "my-dream-idb-fallback:";
+function fallbackKey(name: string): string { return `${LOCAL_FALLBACK_PREFIX}${name}`; }
+function localFallbackGet(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.localStorage.getItem(fallbackKey(name)); } catch { return null; }
+}
+function localFallbackSet(name: string, value: string): boolean {
+  if (typeof window === "undefined") return false;
+  try { window.localStorage.setItem(fallbackKey(name), value); return true; } catch { return false; }
+}
+function localFallbackRemove(name: string): void {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(fallbackKey(name)); } catch { /* ignore */ }
+}
+
 // IndexedDB-backed storage for the persisted store. localStorage caps at
 // ~5MB and overflows once there are many journal entries + daily photos
 // ("The quota has been exceeded"); IndexedDB allows hundreds of MB.
 export const idbStorage: StateStorage = {
   getItem: async (name) => {
+    const fallback = localFallbackGet(name);
+    if (fallback != null) return fallback;
     const value = await get<string>(name);
     if (value != null) return value;
     // One-time migration: if nothing in IDB yet, pull any legacy value that
@@ -22,10 +43,20 @@ export const idbStorage: StateStorage = {
     return null;
   },
   setItem: async (name, value) => {
-    await set(name, value);
+    try {
+      await set(name, value);
+      localFallbackRemove(name);
+    } catch (error) {
+      // Keep the full serialized snapshot when the browser can still provide
+      // its small synchronous store. The deferred writer will report the
+      // original error only if both stores reject, so source inbox documents
+      // remain protected in the genuinely unavailable case.
+      if (!localFallbackSet(name, value)) throw error;
+    }
   },
   removeItem: async (name) => {
     await del(name);
+    localFallbackRemove(name);
   },
 };
 
@@ -88,7 +119,16 @@ export async function flushPersisted(): Promise<void> {
  * caller; import/review must keep the remote inbox item when this barrier
  * fails so a retry cannot lose the receipt. */
 export async function flushPersistedStrict(): Promise<void> {
-  await Promise.all([persistedIdbStorage.flush(), jsonWriter.flush()]);
+  const flushAll = () => Promise.allSettled([persistedIdbStorage.flush(), jsonWriter.flush()]);
+  const first = await flushAll();
+  if (first.every((result) => result.status === "fulfilled")) return;
+
+  // A transaction can reject while the browser is closing/reopening its IDB
+  // connection. Both deferred writers retain their snapshots, so one immediate
+  // retry is safe and avoids forcing the owner to press approve a second time.
+  const second = await flushAll();
+  const failed = second.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failed) throw failed.reason;
 }
 
 // **الشرط الذي يجعل التأجيل آمناً**: أفرِغ ما هو معلّق قبل أن تختفي الصفحة.

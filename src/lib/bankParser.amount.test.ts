@@ -26,6 +26,8 @@ const D = "2026-08-01";
 const cats: FinanceCategoryDef[] = [
   { id: "cat-essentials", label: "أساسيات", icon: "🧺", color: "#c1663f" },
   { id: "cat-luxuries", label: "كماليات", icon: "✨", color: "#c9852a" },
+  { id: "cat-restaurants", label: "مطاعم", icon: "🍽️", color: "#c9852a", parentId: "cat-luxuries" },
+  { id: "cat-coffee", label: "قهوة ومقاهي", icon: "☕", color: "#c9852a", parentId: "cat-luxuries" },
   { id: "cat-charity", label: "صدقة", icon: "🤲", color: "#1f7a6c" },
   { id: "cat-investment", label: "استثمار", icon: "📊", color: "#3d9640" },
 ];
@@ -220,11 +222,17 @@ describe("learnedCategory / suggestCategory", () => {
   it("قاعدةٌ تشير إلى تصنيفٍ محذوف تُتجاهَل ويعود التخمين المدمج", () => {
     const rules = { ستاربكس: "cat-deleted" };
     expect(learnedCategory("ستاربكس الرياض", cats, rules)).toBeNull();
-    expect(suggestCategory("ستاربكس الرياض", cats, rules)).toBe("cat-luxuries");
+    expect(suggestCategory("ستاربكس الرياض", cats.filter((category) => !category.parentId), rules)).toBe("cat-luxuries");
   });
 
   it("بلا قواعد: التخمين المدمج، وأساسيات عند الجهل", () => {
     expect(suggestCategory("متجر لا يعرفه أحد", cats, undefined)).toBe("cat-essentials");
+  });
+
+  it("يختار القسم الفرعي الموجود تلقائياً للتاجر العربي أو الإنجليزي", () => {
+    expect(suggestCategory("HERFY", cats, undefined)).toBe("cat-restaurants");
+    expect(suggestCategory("هرفي", cats, undefined)).toBe("cat-restaurants");
+    expect(suggestCategory("STARBUCKS", cats, undefined)).toBe("cat-coffee");
   });
 });
 

@@ -1,8 +1,9 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { spendWindow } from "@/lib/budgetCycle";
 import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate, type SmsParseEventResult } from "@/lib/bankParser";
+import { isAutoApprovableBankEvent, isReviewNoiseKind } from "@/lib/bankImportPolicy";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
 import { today, formatAmount, getCategoryInfo, cn, toLatinDigits, firstGrapheme, uid } from "@/lib/utils";
 import { budgetWarningFor } from "@/lib/budgetStatus";
@@ -78,9 +79,6 @@ const REVIEW_KINDS: TxnKind[] = [
   "purchase", "atm", "bill", "installment", "fee", "card_settle", "transfer_in",
   "transfer_out", "deposit", "salary", "refund", "reversal", "cashback", "self_transfer", "declined", "info", "unknown",
 ];
-const NON_EXPENSE_NOISE = new Set<TxnKind>([
-  "otp", "declined", "statement", "marketing", "info", "hold", "bnpl_settle", "self_transfer",
-]);
 function kindLabel(kind: TxnKind): string {
   const labels: Partial<Record<TxnKind, string>> = {
     purchase: "مصروف/شراء", atm: "سحب نقدي", bill: "فاتورة", installment: "قسط",
@@ -176,12 +174,15 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
           amount,
           note: r.note,
           date: r.date,
-          catId: known ?? r.category ?? suggestCategory(r.note ?? "", categories, merchantRules),
+          // The parser only knows the two seeded parent categories. Re-run the
+          // suggestion here so an existing user-owned child such as «مطاعم»
+          // or «قهوة» is selected automatically.
+          catId: known ?? suggestCategory(r.note ?? "", categories, merchantRules),
           learned: !!known,
           dup,
           // Generic confidence and non-expense/noise rows require an explicit
           // review choice; they must never be selected by an approve-all click.
-          included: r.direction === "out" && r.kind !== "unknown" && r.confidence !== "generic" && !NON_EXPENSE_NOISE.has(r.kind) && !dup,
+          included: r.direction === "out" && r.kind !== "unknown" && r.confidence !== "generic" && !isReviewNoiseKind(r.kind) && !dup,
           ignored: false,
           kind: r.kind,
           event: r,
@@ -268,6 +269,15 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   const [showNonExpenses, setShowNonExpenses] = useState(false);
   const visibleRows = showNonExpenses ? rows : rows.filter((row) => !isNonExpenseRow(row));
 
+  // A fully legible, non-duplicate expense does not need an approval tap. The
+  // effect is guarded per source snapshot so a persistence failure leaves the
+  // sheet available for a manual retry without creating duplicate ledger rows.
+  const autoAttemptedRef = useRef<string | null>(null);
+  const autoKey = rows.map((row) => row.key).join("|");
+  const autoApprovable = rows.length > 0 && rows.every((row) =>
+    !row.ignored && !row.manual && row.included && isAutoApprovableBankEvent(row.event, row.dup)
+  );
+
   async function handleAdd() {
     const approved = new Set(chosen.map((r) => r.key));
     const explicitlyIgnored = rows.filter((r) => r.ignored);
@@ -313,13 +323,23 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     }
     try {
       await flushPersistedStrict();
-    } catch {
-      showToast("حُفظت المراجعة محلياً مؤقتاً — أبقيت رسالة البنك لإعادة المحاولة.", "warning");
+    } catch (error) {
+      const detail = error instanceof Error && error.name ? ` (${error.name})` : "";
+      showToast(`حُفظت المراجعة محلياً مؤقتاً — أبقيت رسالة البنك لإعادة المحاولة.${detail}`, "warning");
       return;
     }
     await clearInbox(resolved);
     onClose();
   }
+
+  useEffect(() => {
+    if (!autoApprovable || !autoKey || autoAttemptedRef.current === autoKey) return;
+    autoAttemptedRef.current = autoKey;
+    void handleAdd();
+    // `handleAdd` reads the current rows snapshot; the key/guard above prevents
+    // reruns when the store publishes the resulting transaction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoApprovable, autoKey]);
 
   async function handleDiscard() {
     // “تجاهل الكل” is an explicit terminal decision, unlike simply leaving an
@@ -353,7 +373,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 bg-finance/10 text-finance rounded-xl px-3 py-2 text-xs font-semibold">
-        <Sparkles size={15} /> وصلتك {rows.length} رسالة — راجع النوع ثم اعتمد أو تجاهل صراحةً.
+        <Sparkles size={15} /> المعاملات الواضحة تُضاف تلقائياً — هذه الرسائل تحتاج مراجعة.
       </div>
 
       {unreadableCount > 0 && (

@@ -1,25 +1,55 @@
 import type { BalanceKind, FinanceCategoryDef, ObligationHint, RefundDestination, TxnDirection, TxnKind } from "./types";
-import { isValidDateKey, parseDate, today } from "./utils";
+import { isValidDateKey, parseDate, today, toDateStr } from "./utils";
 
-const CATEGORY_KEYWORDS: { keywords: string[]; category: string }[] = [
-  { keywords: ["سوبرماركت", "هايبر", "بقاله", "بقالة", "تموينات", "بنده", "الدانوب", "لولو", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "التميمي", "المزرعة", "نستو"], category: "cat-essentials" },
-  { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials" },
-  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "ساسكو", "fuel", "petrol"], category: "cat-essentials" },
-  { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "طاقة", "السعودية للطاقة", "utility"], category: "cat-essentials" },
-  { keywords: ["مستشفى", "عيادة", "صيدلية", "النهدي", "الدواء", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials" },
-  { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials" },
-  { keywords: ["مطعم", "برغر", "برجر", "كنتاكي", "ماكدونالدز", "هرفي", "البيك", "ستاربكس", "بارنز", "دانكن", "كافيه", "مقهى", "قهوة", "pizza", "بيتزا", "كبسه", "مندي", "سشي", "شاورما", "restaurant", "resturant", "cafe", "coffee", "burger", "grill", "kitchen", "food"], category: "cat-luxuries" },
-  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal", "booking", "بوكينج"], category: "cat-luxuries" },
-  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات", "ألعاب", "playstation", "بلايستيشن"], category: "cat-luxuries" },
-  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-luxuries" },
+interface CategoryKeywordRule {
+  keywords: string[];
+  category: string;
+  // Labels are user-owned, so these are hints used to select an existing
+  // child category without creating or renaming anything for the owner.
+  subcategoryKeywords?: string[];
+}
+
+const CATEGORY_KEYWORDS: CategoryKeywordRule[] = [
+  { keywords: ["سوبرماركت", "هايبر", "بقاله", "بقالة", "تموينات", "بنده", "الدانوب", "لولو", "كارفور", "عثمان", "عبدالله العثيم", "أسواق", "التميمي", "المزرعة", "نستو"], category: "cat-essentials", subcategoryKeywords: ["مقاضي", "بقاله", "بقالة", "غذاء", "سوبر", "تموين"] },
+  { keywords: ["إيجار", "ايجار", "rent"], category: "cat-essentials", subcategoryKeywords: ["ايجار", "إيجار", "سكن", "منزل"] },
+  { keywords: ["وقود", "بنزين", "أرامكو", "محطة", "ساسكو", "fuel", "petrol"], category: "cat-essentials", subcategoryKeywords: ["وقود", "بنزين", "سياره", "سيارة"] },
+  { keywords: ["فاتورة", "كهرباء", "ماء", "مياه", "الكهرباء", "طاقة", "السعودية للطاقة", "utility"], category: "cat-essentials", subcategoryKeywords: ["فاتوره", "فاتورة", "اتصالات", "انترنت", "ماء", "كهرباء"] },
+  { keywords: ["مستشفى", "عيادة", "صيدلية", "النهدي", "الدواء", "دواء", "طبي", "hospital", "clinic", "pharmacy"], category: "cat-essentials", subcategoryKeywords: ["صحه", "صحة", "طبي", "دواء", "صيدليه", "صيدلية"] },
+  { keywords: ["جامعة", "مدرسة", "دورة", "كورس", "تعليم", "udemy", "coursera"], category: "cat-essentials", subcategoryKeywords: ["تعليم", "دراسه", "دراسة", "جامعة", "مدرسة"] },
+  { keywords: ["ستاربكس", "starbucks", "بارنز", "barns", "دانكن", "dunkin", "كافيه", "مقهى", "قهوة", "cafe", "coffee"], category: "cat-luxuries", subcategoryKeywords: ["مقاهي", "مقهى", "قهوه", "قهوة", "كافيه", "coffee", "cafe"] },
+  { keywords: ["مطعم", "برغر", "برجر", "كنتاكي", "ماكدونالدز", "هرفي", "herfy", "البيك", "albaik", "ستاربكس", "starbucks", "بارنز", "barns", "دانكن", "dunkin", "كافيه", "مقهى", "قهوة", "pizza", "بيتزا", "كبسه", "مندي", "سشي", "شاورما", "restaurant", "resturant", "cafe", "coffee", "burger", "grill", "kitchen", "food"], category: "cat-luxuries", subcategoryKeywords: ["مطاعم", "مطعم", "اكل", "أكل", "طعام", "وجبات", "برجر"] },
+  { keywords: ["فندق", "طيران", "سفر", "رحلة", "hotel", "flight", "saudia", "flynas", "flyadeal", "booking", "بوكينج"], category: "cat-luxuries", subcategoryKeywords: ["سفر", "رحلات", "فندق", "طيران"] },
+  { keywords: ["نتفليكس", "شاهد", "يوتيوب", "سبوتيفاي", "netflix", "spotify", "stc", "موبايلي", "زين", "الاتصالات", "ألعاب", "playstation", "بلايستيشن"], category: "cat-luxuries", subcategoryKeywords: ["ترفيه", "اشتراكات", "العاب", "ألعاب", "اتصالات"] },
+  { keywords: ["أوبر", "كريم", "تاكسي", "uber", "careem"], category: "cat-luxuries", subcategoryKeywords: ["مواصلات", "نقل", "سياره", "سيارة"] },
   { keywords: ["تبرع", "صدقة", "زكاة", "خيري", "جمعية", "donation", "charity", "ehsan", "احسان"], category: "cat-charity" },
   { keywords: ["ادخار", "توفير", "saving", "استثمار", "صندوق", "أسهم", "تداول", "invest"], category: "cat-investment" },
 ];
 
-function keywordCategory(text: string): string {
-  const lower = text.toLowerCase();
-  for (const { keywords, category } of CATEGORY_KEYWORDS) {
-    if (keywords.some((k) => lower.includes(k.toLowerCase()))) return category;
+function subcategoryForRule(text: string, categories: FinanceCategoryDef[], rule: CategoryKeywordRule): string | null {
+  if (!rule.subcategoryKeywords?.length) return null;
+  const children = categories.filter((category) => category.parentId === rule.category);
+  if (!children.length) return null;
+  const hints = rule.subcategoryKeywords.map((hint) => normalizeSmsText(hint)).filter(Boolean);
+  const normalizedText = normalizeSmsText(text);
+  // Prefer a child whose own label is present in the merchant/message. This
+  // lets a user-created label such as «مطاعم سريعة» win over a broad hint.
+  const explicit = children.find((child) => {
+    const label = normalizeSmsText(child.label);
+    return label.length > 1 && (normalizedText.includes(label) || label.includes(normalizedText));
+  });
+  if (explicit) return explicit.id;
+  return children.find((child) => {
+    const label = normalizeSmsText(child.label);
+    return hints.some((hint) => label.includes(hint) || hint.includes(label));
+  })?.id ?? null;
+}
+
+function keywordCategory(text: string, categories?: FinanceCategoryDef[]): string {
+  const lower = normalizeSmsText(text);
+  for (const rule of CATEGORY_KEYWORDS) {
+    if (rule.keywords.some((keyword) => lower.includes(normalizeSmsText(keyword)))) {
+      return (categories && subcategoryForRule(text, categories, rule)) ?? rule.category;
+    }
   }
   return "cat-essentials";
 }
@@ -58,7 +88,7 @@ export function learnedCategory(text: string, categories: FinanceCategoryDef[], 
 }
 
 export function suggestCategory(text: string, categories: FinanceCategoryDef[], merchantRules: Record<string, string> | undefined): string {
-  return learnedCategory(text, categories, merchantRules) ?? keywordCategory(text);
+  return learnedCategory(text, categories, merchantRules) ?? keywordCategory(text, categories);
 }
 
 export function isLikelyDuplicate(amount: number, date: string, note: string, existing: { amount: number; date: string; note?: string }[]): boolean {
@@ -284,8 +314,11 @@ function extractCounterparty(text: string): string | undefined { const m = norma
 function addDays(date: string, days: number): string | undefined {
   if (!isValidDateKey(date)) return undefined;
   const value = parseDate(date);
-  value.setUTCDate(value.getUTCDate() + days);
-  const result = value.toISOString().slice(0, 10);
+  // `parseDate` deliberately creates local midnight. Advancing its UTC day
+  // shifts Riyadh and other positive-offset calendars back by one date; use
+  // the local calendar fields for an obligation such as «خلال يومين».
+  value.setDate(value.getDate() + days);
+  const result = toDateStr(value);
   return isValidDateKey(result) ? result : undefined;
 }
 
