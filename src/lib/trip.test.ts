@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { activeTrip, activeTripOf, lastEndedTrip, tripSummary, pastTrips } from "./trip";
-import type { ReserveFund, Transaction, Trip } from "./types";
+import { activeTrip, activeTripOf, isTripEligibleFund, lastEndedTrip, tripSummary, pastTrips } from "./trip";
+import { GENERAL_FUND_NAME, SURPLUS_FUND_NAME, type ReserveFund, type Transaction, type Trip } from "./types";
 
 const fund = (over: Partial<ReserveFund> & { id: string }): ReserveFund => ({
   name: "رحلة المدينة", icon: "🎒", color: "#000", deposits: [], createdAt: "2026-03-01", ...over,
@@ -39,6 +39,25 @@ describe("activeTrip — واحدةٌ جارية في كلّ وقت", () => {
     const many = fund({ id: "f-y", trips: [t("a", "2026-01-01", "2026-01-05"), t("b", "2026-05-01", "2026-05-03")] });
     expect(lastEndedTrip(many)?.id).toBe("b");
     expect(lastEndedTrip(fund({ id: "f-none" }))).toBeNull();
+  });
+});
+
+describe("المظاريف العامة ليست وضع سفر", () => {
+  it("يفصل «عام» و«الفوائض» عن الرحلات", () => {
+    expect(isTripEligibleFund(fund({ id: "f-trip", name: "رحلة المدينة" }))).toBe(true);
+    expect(isTripEligibleFund(fund({ id: "f-general", name: GENERAL_FUND_NAME }))).toBe(false);
+    expect(isTripEligibleFund(fund({ id: "f-surplus", name: SURPLUS_FUND_NAME }))).toBe(false);
+  });
+
+  it("لا يعرض رحلة قديمة أو صرفها على مظروفٍ عام", () => {
+    const general = fund({
+      id: "f-general", name: GENERAL_FUND_NAME,
+      trips: [t("tr-rent", "2026-09-20", "2026-09-20")],
+    });
+    const rent = { ...tx("rent", "2026-09-20", 20850, "cat-essentials"), reserveSplits: [{ fundId: "f-general", pct: 100 }] };
+    expect(activeTripOf(general)).toBeNull();
+    expect(pastTrips([general])).toEqual([]);
+    expect(tripSummary(general, [rent], "2026-09-21").total).toBe(0);
   });
 });
 

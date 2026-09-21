@@ -24,6 +24,7 @@ import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan"
 import { cycleLength } from "./budgetCycle";
 import { holdings, reconcileDelta, RECONCILE_NOTE } from "./reconcile";
 import { creditLedgerForState } from "./financeLedger";
+import { isTripEligibleFund } from "./trip";
 import { persistJSONStorage, flushPersisted } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
@@ -2286,6 +2287,7 @@ export const useAppStore = create<AppStore>()(
           };
           return {
             reserves: s.reserves.map((f) => {
+              if (!isTripEligibleFund(f)) return f;
               const closed = closeOngoing(f);
               if (f.id !== fundId) return closed;
               // ورحلةٌ كانت جاريةً على هذا المظروف نفسِه أُغلقت للتوّ، فالجديدة بعدها.
@@ -2299,7 +2301,7 @@ export const useAppStore = create<AppStore>()(
           const todayStr = today();
           return {
             reserves: s.reserves.map((f) =>
-              f.id === fundId && (f.trips ?? []).some((t) => t.startedAt && !t.endedAt)
+              f.id === fundId && isTripEligibleFund(f) && (f.trips ?? []).some((t) => t.startedAt && !t.endedAt)
                 ? {
                     ...f,
                     trips: (f.trips ?? []).map((t) =>

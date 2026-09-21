@@ -11,7 +11,7 @@ vi.mock("idb-keyval", () => ({
 
 import { useAppStore } from "./store";
 import { today, computeDailyBudgetStatus, reserveBalance } from "./utils";
-import { SURPLUS_FUND_NAME } from "./types";
+import { GENERAL_FUND_NAME, SURPLUS_FUND_NAME } from "./types";
 
 beforeEach(() => {
   useAppStore.setState({ transactions: [], deleted: {} });
@@ -92,5 +92,16 @@ describe("pullFromReserve — الفوائض ترجع لليومية", () => {
     s = useAppStore.getState();
     expect(computeDailyBudgetStatus(s.dailyBudget!, s.transactions).balance).toBe(before);
     expect(reserveBalance(s.reserves[0], s.transactions)).toBe(0);
+  });
+});
+
+describe("startTrip — المظاريف العامة تبقى أوعيةً لا رحلات", () => {
+  it("لا يضيف رحلة إلى «عام» أو «الفوائض»", () => {
+    const general = { id: "f-general", name: GENERAL_FUND_NAME, icon: "🏠", color: "#000", deposits: [], createdAt: today() };
+    const surplus = { id: "f-surplus", name: SURPLUS_FUND_NAME, icon: "✨", color: "#000", deposits: [], createdAt: today() };
+    useAppStore.setState({ reserves: [general, surplus] });
+    useAppStore.getState().startTrip(general.id);
+    useAppStore.getState().startTrip(surplus.id);
+    expect(useAppStore.getState().reserves.map((f) => f.trips)).toEqual([undefined, undefined]);
   });
 });

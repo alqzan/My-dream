@@ -9,7 +9,7 @@ import { Plus, Trash2, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Wallet, X, P
 import { FundPlanEditor } from "@/components/finance/FundPlanEditor";
 import { GoalWizard } from "@/components/finance/GoalWizard";
 import { TripPanel } from "@/components/finance/TripPanel";
-import { pastTrips, tripSummary } from "@/lib/trip";
+import { isTripEligibleFund, pastTrips, tripSummary } from "@/lib/trip";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -51,9 +51,9 @@ export function ReserveFunds() {
   const trips = useMemo(() => pastTrips(reserves), [reserves]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className="space-y-3 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <PiggyBank size={16} className="text-finance" />
           <span className="text-sm font-semibold text-gray-700">مظاريفي</span>
           {reserves.length > 0 && (
@@ -62,7 +62,7 @@ export function ReserveFunds() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
           <button
             onClick={() => { setGoal((v) => !v); setAdding(false); }}
             className="flex items-center gap-1 text-[11px] font-bold text-finance bg-finance/10 hover:bg-finance/15 rounded-full px-2.5 py-1 press"
@@ -93,7 +93,7 @@ export function ReserveFunds() {
 
       {reserves.length > 0 && (
         <div className="overflow-x-auto scrollbar-none -mx-1 px-1 pt-1">
-          <div className="relative flex gap-1.5 w-max min-w-full">
+          <div className="relative flex w-max min-w-full justify-end gap-1.5">
             {/* خيط القافلة الذهبي يمرّ خلف الأقراص */}
             <div
               className="pointer-events-none absolute inset-x-2 h-px"
@@ -418,25 +418,25 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
       <FundPlanEditor fund={fund} balance={balance} />
 
       {/* وضعُ السفر وتقريرُه — نافذةٌ زمنية على هذا المظروف. */}
-      <TripPanel fund={fund} />
+      {isTripEligibleFund(fund) && <TripPanel fund={fund} />}
 
-      <div className="flex gap-1.5">
+      <div className="flex min-w-0 flex-wrap gap-1.5">
         <NumberInput
           value={amount}
           onChange={setAmount}
           placeholder="المبلغ"
           inputMode="decimal"
-          className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
+          className="basis-full min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40 sm:basis-auto sm:flex-1"
         />
         <button
           onClick={() => move(1)}
-          className="flex items-center gap-1 text-[11px] font-bold text-finance bg-finance/10 rounded-lg px-2.5 press shrink-0"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[11px] font-bold text-finance bg-finance/10 rounded-lg px-2 press shrink-0"
         >
           <ArrowDownToLine size={12} /> تعبئة
         </button>
         <button
           onClick={() => move(-1)}
-          className="flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-500/20 rounded-lg px-2.5 press shrink-0"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-500/20 rounded-lg px-2 press shrink-0"
         >
           <ArrowUpFromLine size={12} /> سحب
         </button>

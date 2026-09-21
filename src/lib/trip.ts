@@ -12,11 +12,23 @@
 // والتقريرُ يقرأ ما وقع داخلها وحدها.
 //
 // منطقٌ نقيّ بلا DOM، مختبَرٌ في `trip.test.ts`.
-import type { ReserveFund, Transaction, Trip } from "./types";
+import { GENERAL_FUND_NAME, SURPLUS_FUND_NAME, type ReserveFund, type Transaction, type Trip } from "./types";
 import { reserveShare, round2, parseDate } from "./utils";
+
+/**
+ * The general and surplus envelopes are holding accounts, not trip trackers.
+ * A trip accidentally started on either one used to make unrelated charges
+ * (notably rent) appear in «رحلاتي السابقة». Dedicated event envelopes remain
+ * eligible for trip mode.
+ */
+export function isTripEligibleFund(fund: Pick<ReserveFund, "name">): boolean {
+  const name = fund.name.trim();
+  return name !== GENERAL_FUND_NAME && name !== SURPLUS_FUND_NAME;
+}
 
 /** رحلةُ هذا المظروف الجارية (بلا `endedAt`)، أو `null`. */
 export function activeTripOf(fund: ReserveFund): Trip | null {
+  if (!isTripEligibleFund(fund)) return null;
   return fund.trips?.find((t) => t.startedAt && !t.endedAt) ?? null;
 }
 
@@ -53,6 +65,7 @@ export function tripSummary(
   todayStr: string,
   trip?: Trip | null
 ): TripSummary {
+  if (!isTripEligibleFund(fund)) return EMPTY;
   const t = trip ?? activeTripOf(fund) ?? lastEndedTrip(fund);
   if (!t?.startedAt) return EMPTY;
 
@@ -106,6 +119,7 @@ export function lastEndedTrip(fund: ReserveFund): Trip | null {
 export function pastTrips(reserves: ReserveFund[]): { fund: ReserveFund; trip: Trip }[] {
   const out: { fund: ReserveFund; trip: Trip }[] = [];
   for (const fund of reserves) {
+    if (!isTripEligibleFund(fund)) continue;
     for (const trip of fund.trips ?? []) {
       if (trip.startedAt && trip.endedAt) out.push({ fund, trip });
     }
