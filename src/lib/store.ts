@@ -2276,6 +2276,11 @@ export const useAppStore = create<AppStore>()(
       // عبر المظاريف كلِّها، وإلّا حُمِّلت الفاتورةُ على رحلتين واختلط التقريران.
       startTrip: (fundId) =>
         set((s) => {
+          // الحسابان العام والفوائض أوعيةٌ محمية: طلب بدء السفر عليهما
+          // لا يغيّر أي مظروف، ولا يغلق رحلةً جارية في مظروفٍ مخصّص آخر.
+          const target = s.reserves.find((f) => f.id === fundId);
+          if (!target || !isTripEligibleFund(target)) return s;
+
           const todayStr = today();
           const closeOngoing = (f: ReserveFund): ReserveFund => {
             const trips = f.trips ?? [];

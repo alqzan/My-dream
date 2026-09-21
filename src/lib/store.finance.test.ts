@@ -104,4 +104,15 @@ describe("startTrip — المظاريف العامة تبقى أوعيةً لا
     useAppStore.getState().startTrip(surplus.id);
     expect(useAppStore.getState().reserves.map((f) => f.trips)).toEqual([undefined, undefined]);
   });
+
+  it("لا يغلق رحلة مظروف مخصّص عند محاولة البدء من مظروف محمي", () => {
+    const general = { id: "f-general", name: GENERAL_FUND_NAME, icon: "🏠", color: "#000", deposits: [], createdAt: today() };
+    const tripFund = {
+      id: "f-trip", name: "رحلة", icon: "✈️", color: "#000", deposits: [], createdAt: today(),
+      trips: [{ id: "trip-1", startedAt: today() }],
+    };
+    useAppStore.setState({ reserves: [general, tripFund] });
+    useAppStore.getState().startTrip(general.id);
+    expect(useAppStore.getState().reserves[1].trips).toEqual(tripFund.trips);
+  });
 });
