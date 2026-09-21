@@ -30,7 +30,7 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
       <button
         type="button"
         onClick={() => startTrip(fund.id)}
-        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 press text-right"
+        className="w-full min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 press text-right"
         style={{ background: "var(--paper)", border: "1px dashed var(--theme-accent-line)" }}
       >
         <Plane size={15} className="text-finance shrink-0" />
@@ -46,13 +46,13 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
 
   const top = s.byCategory.slice(0, 4);
   return (
-    <div className="rounded-xl px-3 py-2.5 space-y-2" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-      <div className="flex items-center gap-2">
+    <div className="min-w-0 rounded-xl px-3 py-2.5 space-y-2" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Plane size={14} className={s.ongoing ? "text-finance" : "text-gray-400"} />
-        <span className="text-[11px] font-bold" style={{ color: "var(--ink)" }}>
+        <span className="min-w-0 flex-1 text-[11px] font-bold" style={{ color: "var(--ink)" }}>
           {s.ongoing ? "الرحلة جارية" : "انتهت الرحلة"}
         </span>
-        <span className="text-[10px]" style={{ color: "var(--ink52)" }}>
+        <span className="shrink-0 text-[10px]" style={{ color: "var(--ink52)" }}>
           {formatDate(shown!.startedAt)}
           {shown!.endedAt ? ` ← ${formatDate(shown!.endedAt)}` : ""}
         </span>
@@ -67,11 +67,11 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
         )}
       </div>
 
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-xl font-bold tabular-nums" style={{ color: "var(--ink)" }}>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-1.5">
+        <span className="shrink-0 text-xl font-bold tabular-nums" style={{ color: "var(--ink)" }}>
           {formatAmount(Math.round(s.total))}
         </span>
-        <span className="text-[10px]" style={{ color: "var(--ink52)" }}>
+        <span className="min-w-0 text-[10px]" style={{ color: "var(--ink52)" }}>
           ر.س {s.ongoing ? "حتى الآن" : "كلّفتك"} · {formatAmount(s.days)} {s.days === 1 ? "يوم" : "يوماً"} ·{" "}
           {formatAmount(Math.round(s.perDay))} ر.س/يوم · {formatAmount(s.count)} معاملة
         </span>
@@ -86,7 +86,7 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
               <div key={c.category} className="flex items-center gap-1.5">
                 <span className="text-xs shrink-0">{info.icon}</span>
                 <span className="text-[10px] w-16 shrink-0 truncate" style={{ color: "var(--ink52)" }}>{info.label}</span>
-                <span className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--theme-accent-soft)" }}>
+                <span className="min-w-0 flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--theme-accent-soft)" }}>
                   <span className="block h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: info.color }} />
                 </span>
                 <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--ink52)" }}>

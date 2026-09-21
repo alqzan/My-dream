@@ -91,7 +91,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
     const perDay = dailyBudget ? fundingPreview(dailyBudget.amount, 0, f.perCycle, len).perDay : 0;
     return (
       <div
-        className="rounded-xl px-3 py-2 space-y-1"
+        className="min-w-0 rounded-xl px-3 py-2 space-y-1"
         style={{
           background: "var(--paper2)",
           border: "1px solid var(--line)",
@@ -99,8 +99,8 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
           borderInlineStartColor: "var(--theme-accent)",
         }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <span className="min-w-0 flex-1 text-[11px] font-bold text-gray-700 dark:text-gray-200">
             {f.stop === "zero" ? "🩹 خطة سداد" : f.stop === "target" ? "🎯 خطة ادخار" : "🔁 تمويل مستمرّ"}
             {" — "}
             <span className="text-finance">{formatAmount(f.perCycle)} ر.س</span> كل دورة
@@ -163,10 +163,10 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
   const active = MODES.find((m) => m.id === mode);
   return (
     <div
-      className="rounded-xl p-2.5 space-y-2 animate-fade-up"
+      className="min-w-0 rounded-xl p-2.5 space-y-2 animate-fade-up"
       style={{ background: "var(--paper2)", border: "1px solid var(--theme-accent-line)" }}
     >
-      <div className="flex gap-1">
+      <div className="flex flex-wrap gap-1">
         {modes.map((m) => (
           <button
             key={m.id}
@@ -222,13 +222,13 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
         </div>
       )}
 
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap gap-1.5">
         <NumberInput
           value={amount}
           onChange={setAmount}
           placeholder="المبلغ لكل دورة"
           inputMode="decimal"
-          className="flex-1 min-w-0 text-sm border border-gray-200 dark:border-white/15 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
+          className="basis-full min-w-0 text-sm border border-gray-200 dark:border-white/15 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40 sm:basis-auto sm:flex-1"
           aria-label="المبلغ لكل دورة"
         />
         {gap > 0 && (
@@ -242,7 +242,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
         )}
       </div>
 
-      <div className="flex bg-white/70 dark:bg-white/5 rounded-lg p-1 gap-1">
+      <div className="flex flex-wrap bg-white/70 dark:bg-white/5 rounded-lg p-1 gap-1">
         {([["salary", "من الراتب"], ["surplus", `من ${SURPLUS_FUND_NAME}`]] as [FundFunding["source"], string][]).map(
           ([id, label]) => (
             <button
@@ -285,7 +285,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
         </p>
       )}
 
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap gap-1.5">
         <button
           onClick={save}
           disabled={perCycle <= 0}
