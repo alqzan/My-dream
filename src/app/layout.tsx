@@ -67,6 +67,7 @@ import { UndoToast } from "@/components/ui/UndoToast";
 import { ThemeApplier } from "@/components/layout/ThemeToggle";
 import { IndicDigits } from "@/components/layout/IndicDigits";
 import { SyncProvider } from "@/components/sync/SyncProvider";
+import { BootGuard } from "@/components/layout/BootGuard";
 import { PendingInboxWatcher } from "@/components/finance/PendingInboxWatcher";
 import { DeficitOffsetWatcher } from "@/components/finance/DeficitOffsetWatcher";
 import { PrayerReminderWatcher } from "@/components/prayer/PrayerReminderWatcher";
@@ -125,6 +126,7 @@ export default function RootLayout({
                 <Sidebar />
                 <main className="flex-1 min-w-0 lg:mr-56 pb-20 lg:pb-0">
                   <MobileHeader />
+                  <BootGuard />
                   <PageTransition>{children}</PageTransition>
                 </main>
               </div>

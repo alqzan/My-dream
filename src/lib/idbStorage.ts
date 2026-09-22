@@ -1,6 +1,7 @@
 import { get, set, del } from "idb-keyval";
 import type { StateStorage, PersistStorage, StorageValue } from "zustand/middleware";
 import { createDeferredStorage, createDeferredWriter } from "./persistScheduler";
+import { beginBoot, markBootPhase, recordStoreBytes } from "./platform/bootGuard";
 
 // Safari/iOS can temporarily reject an IndexedDB transaction (private mode,
 // storage pressure, or a connection being evicted) even though the origin's
@@ -79,11 +80,21 @@ export const persistedIdbStorage = createDeferredStorage(idbStorage);
 // `AppStore` (دَوْرٌ في الاستيراد: المتجر يستورد هذا الملف).
 const jsonWriter = createDeferredWriter<StorageValue<unknown>>(idbStorage, {
   serialize: (v) => JSON.stringify(v),
-  deserialize: (raw) => JSON.parse(raw) as StorageValue<unknown>,
+  deserialize: (raw) => {
+    // الحجمُ قبل التحليل: إن قتل النظامُ الصفحةَ هنا فهو الدليل الباقي.
+    recordStoreBytes(raw.length);
+    markBootPhase("store:parse");
+    const value = JSON.parse(raw) as StorageValue<unknown>;
+    markBootPhase("store:migrate");
+    return value;
+  },
 });
 
 const jsonStorage: PersistStorage<unknown> = {
   getItem: async (name) => {
+    // أوّلُ ما يقع في الإقلاع — قبل أيّ بايتٍ من المتجر (`platform/bootGuard.ts`).
+    beginBoot();
+    markBootPhase("store:read");
     try {
       return await jsonWriter.getItem(name);
     } catch {

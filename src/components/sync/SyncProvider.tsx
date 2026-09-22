@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { isFirebaseEnabled, getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
+import { isSafeMode, markBootPhase } from "@/lib/platform/bootGuard";
 import {
   loadUserMain,
   readCloudMain,
@@ -68,7 +69,8 @@ export const useSync = () => useContext(SyncContext);
 // fixed secret space id, so opening the app just works — no email, no login.
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const spaceId = getSyncSpace();
-  const syncEnabled = isFirebaseEnabled && !!spaceId;
+  // الوضع الآمن (`platform/bootGuard.ts`) يوقف المزامنة كلَّها: أثقلُ ما يعمل بعد الإقلاع.
+  const syncEnabled = isFirebaseEnabled && !!spaceId && !isSafeMode();
   const [status, setStatus] = useState<SyncState>(syncEnabled ? "syncing" : "idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [mediaPending, setMediaPending] = useState(false);
@@ -101,7 +103,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const space = getSyncSpace();
-    if (!isFirebaseEnabled || !space) return;
+    if (!isFirebaseEnabled || !space || isSafeMode()) return;
     // Separate media-gateway auth from the Firestore space (see
     // src/lib/keyDerivation.ts). Identical to `space` unless this device has
     // opted into separated data/media keys — inert today, every device is v1.
@@ -235,6 +237,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       //    genuinely newer. Only push local up when it actually has data, so a
       //    blank device can never wipe a cloud space that holds real data.
       try {
+        markBootPhase("sync:read");
         const cloudMain = await loadUserMain(space);
         const local = snapshot();
         const cloudHasData = !!cloudMain && hasData(cloudMain);
@@ -258,6 +261,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // و`adoptCloudSnapshot` تحرس النافذة نفسها من جهةٍ ثانية: `local`
           // أعلاه لقطةٌ أُخذت قبل الانتظار، فإن سجّل المالك عمليةً أثناء تنزيل
           // الصور أُعيد الدمج على أحدث لقطةٍ بدل أن يمحوها `hydrate`.
+          markBootPhase("sync:merge");
           const { display, save } = await adoptCloudSnapshot({
             snapshot, cloud: cloudMain, toDisplay, editSeq: () => editSeqRef.current,
           });
@@ -268,6 +272,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // **الناتج الغنيّ بالمراجع** (`save`) لا نسخةَ العرض، فيبقى الاستكمال
           // الجزئي: مرجعٌ لم يُنزَّل هذه الجلسة يعود كما هو بدل أن يُسقَط.
           const merged = save;
+          markBootPhase("sync:save");
           const r = await saveUserData(space, merged, cloudMain.revision ?? 0, mediaKey);
           mediaComplete = r.mediaComplete;
           setMediaPending(!r.mediaComplete);
@@ -282,6 +287,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // الشواهد **قبل** الترطيب: صورةٌ محذوفة يُسقط مرجعَها التنقيةُ، فلا
           // تُنزَّل بايتاتها أصلاً (كنّا ننزّلها ثمّ نرميها).
           const mark = editSeqRef.current;
+          markBootPhase("sync:media");
           const full = await hydrateCloudPhotos(space, applyTombstones(cloudMain), mediaKey);
           const shown = await inlineCachedMedia(space, mergeLocalPhotos(full, local), mediaKey);
           // الجهاز كان فارغاً حين قرأنا، لكنّ التنزيل يستغرق — وقد يكتب المالك
@@ -306,6 +312,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           lastCloudUpdatedRef.current = cloudMain?.lastUpdated ?? "";
           lastRevisionRef.current = cloudMain?.revision ?? 0;
         }
+        markBootPhase("sync:done");
         markSynced(mediaComplete);
       } catch {
         setStatus("offline");

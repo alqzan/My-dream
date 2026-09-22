@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { formatAmount } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
+import { isSafeMode } from "@/lib/platform/bootGuard";
 
 // مراقبٌ واحد للمقاصة التلقائية، مركّبٌ في التخطيط العام. لماذا هنا لا داخل
 // `addTransaction`؟ لأنّ العجز يظهر من مسالكَ عدّة: نموذجُ المصروف، وتعديلُ
@@ -23,7 +24,7 @@ export function DeficitOffsetWatcher() {
   const lastRef = useRef(0);
 
   useEffect(() => {
-    if (autoOffset === false || !dailyBudget) return;
+    if (autoOffset === false || !dailyBudget || isSafeMode()) return;
     const t = setTimeout(() => {
       const moved = run();
       // صفرٌ = لا عجز الآن، فتُنسى آخرُ رسالة: مقاصةٌ لاحقةٌ بالمبلغ نفسه تُعلَن

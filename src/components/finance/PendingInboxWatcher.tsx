@@ -8,6 +8,7 @@ import { parseBankSmsBulk } from "@/lib/bankParser";
 import { today } from "@/lib/utils";
 import { usePending } from "@/lib/pending";
 import { useAppStore } from "@/lib/store";
+import { isSafeMode, markBootPhase } from "@/lib/platform/bootGuard";
 
 // App-wide watcher: it keeps a LIVE listener on the automatic bank-SMS inbox,
 // so a message the iOS Automation delivers surfaces the review sheet at once —
@@ -38,7 +39,9 @@ export function PendingInboxWatcher() {
     // items it surfaced, so processing a newer snapshot mid-review could delete
     // an expense the user never saw. Held-back items are picked up the moment
     // the sheet closes (the reviewing→false effect below re-runs drain).
-    if (reviewingRef.current || busyRef.current) return;
+    // الوضع الآمن (`platform/bootGuard.ts`) لا يستورد رسائل البنك.
+    if (reviewingRef.current || busyRef.current || isSafeMode()) return;
+    markBootPhase("inbox:drain");
     const cloudInbox = latestRef.current;
     const cloudIds = new Set(cloudInbox.map((item) => item.id));
     const terminal = new Set(["saved", "matched", "ignored", "duplicate"]);
@@ -98,6 +101,7 @@ export function PendingInboxWatcher() {
   }, [inboxDecisions, localEvents, openReview, setItems]);
 
   useEffect(() => {
+    if (isSafeMode()) return;
     if (!isFirebaseEnabled || !getSyncSpace()) {
       latestRef.current = [];
       void drain();
