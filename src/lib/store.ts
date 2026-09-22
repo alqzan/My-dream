@@ -1942,7 +1942,13 @@ export const useAppStore = create<AppStore>()(
         }),
 
       addReserve: (fund) =>
-        set((s) => ({ reserves: normalizeReserveFunds([...s.reserves, fund]) })),
+        // A fund created through the app is user-owned even if its display
+        // name happens to match a legacy system envelope. Legacy snapshots
+        // are inferred at the restore boundary; new records carry identity.
+        set((s) => ({ reserves: normalizeReserveFunds([
+          ...s.reserves,
+          { ...fund, role: fund.role ?? "custom" },
+        ]) })),
 
       updateReserve: (id, updates) =>
         set((s) => {

@@ -118,6 +118,20 @@ describe("startTrip — المظاريف العامة تبقى أوعيةً لا
 });
 
 describe("deleteReserve — يحمي أوعية الحساب وينظف وجهة الكاش باك", () => {
+  it("يبقي المظروف الجديد مخصّصاً حتى لو وافق اسمه اسماً قديماً محجوزاً", () => {
+    useAppStore.setState({ reserves: [] });
+    const base = {
+      icon: "📦", color: "#000", deposits: [], createdAt: today(),
+    };
+    useAppStore.getState().addReserve({ id: "custom-general", name: GENERAL_FUND_NAME, ...base });
+    useAppStore.getState().addReserve({ id: "custom-surplus", name: SURPLUS_FUND_NAME, ...base });
+
+    expect(useAppStore.getState().reserves.map((fund) => fund.role)).toEqual(["custom", "custom"]);
+    useAppStore.getState().deleteReserve("custom-general");
+    useAppStore.getState().deleteReserve("custom-surplus");
+    expect(useAppStore.getState().reserves).toEqual([]);
+  });
+
   it("hydrate يطبّع هوية المظاريف والتقسيمات القديمة قبل عرضها", () => {
     useAppStore.getState().hydrate({
       reserves: [{ id: "legacy", name: SURPLUS_FUND_NAME, icon: "✨", color: "#000", deposits: [], createdAt: today() }],
