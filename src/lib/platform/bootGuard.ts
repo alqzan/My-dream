@@ -19,6 +19,7 @@ const PHASE_KEY = "madar-boot-phase";
 const CRASH_PHASE_KEY = "madar-boot-crash-phase";
 const SAFE_KEY = "madar-safe-mode";
 const STORE_BYTES_KEY = "madar-boot-store-bytes";
+const RESCUE_KEY = "madar-store-rescue";
 
 /** كم إقلاعاً منهاراً متتالياً قبل الوضع الآمن. */
 export const CRASH_THRESHOLD = 2;
@@ -27,6 +28,7 @@ export const STABLE_AFTER_MS = 20_000;
 
 let started = false;
 let safe = false;
+let rescue = false;
 
 /** يُنادى مرّةً في أوّل الإقلاع (قبل قراءة المتجر). متكرّرُه بلا أثر. */
 export function beginBoot(): boolean {
@@ -34,9 +36,19 @@ export function beginBoot(): boolean {
   started = true;
   const unfinished = Number(prefGet(ATTEMPTS_KEY) ?? "0") || 0;
   // إقلاعٌ سابقٌ لم يستقرّ = انهار. طورُه الأخير هو الدليل.
-  if (unfinished > 0) prefSet(CRASH_PHASE_KEY, prefGet(PHASE_KEY) ?? "start");
-  if (unfinished >= CRASH_THRESHOLD) prefSet(SAFE_KEY, "1");
+  const crashPhase = unfinished > 0 ? prefGet(PHASE_KEY) ?? "start" : null;
+  if (crashPhase) prefSet(CRASH_PHASE_KEY, crashPhase);
+  if (unfinished >= CRASH_THRESHOLD) {
+    // **الانهيارُ داخل قراءة المتجر نفسِها** (`store:*`) لا يعالجه الوضع الآمن:
+    // هو يقرأ الكتلة نفسَها فينهار في النقطة نفسِها إلى الأبد. فهنا **إنقاذ**:
+    // تُترك الكتلةُ القديمة في IndexedDB كما هي — لا تُقرأ ولا يُكتب فوقها —
+    // ويعمل التطبيق على مفتاحٍ جديد تملؤه المزامنةُ من السحابة (وهي تحمل
+    // مراجعَ الوسائط لا بايتاتها، فتبقى صغيرة). والمزامنةُ لذلك **تعمل** هنا.
+    if (crashPhase?.startsWith("store:")) prefSet(RESCUE_KEY, "1");
+    else prefSet(SAFE_KEY, "1");
+  }
   safe = prefGet(SAFE_KEY) === "1";
+  rescue = prefGet(RESCUE_KEY) === "1";
   prefSet(ATTEMPTS_KEY, String(unfinished + 1));
   prefSet(PHASE_KEY, "start");
   return safe;
@@ -44,6 +56,17 @@ export function beginBoot(): boolean {
 
 export function isSafeMode(): boolean {
   return safe;
+}
+
+/** المتجرُ القديم معزولٌ لأنّ قراءتَه تُسقط الصفحة (راجع `beginBoot`). */
+export function isStoreRescue(): boolean {
+  return rescue;
+}
+
+/** المفتاحُ الذي يُقرأ منه المتجر ويُكتب إليه. في الإنقاذ مفتاحٌ مجاور، فتبقى
+ *  الكتلةُ القديمة سليمةً لاستعادةٍ لاحقة بدل أن يُكتب فوقها. */
+export function storeKeyFor(name: string): string {
+  return rescue ? `${name}:rescue` : name;
 }
 
 /** يسجّل طور الإقلاع الجاري — يبقى بعد القتل فيدلّ أين وقع. */
@@ -88,4 +111,5 @@ export function exitSafeMode(): void {
 export function __resetBootGuardForTests(): void {
   started = false;
   safe = false;
+  rescue = false;
 }

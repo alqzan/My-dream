@@ -1,7 +1,7 @@
 import { get, set, del } from "idb-keyval";
 import type { StateStorage, PersistStorage, StorageValue } from "zustand/middleware";
 import { createDeferredStorage, createDeferredWriter } from "./persistScheduler";
-import { beginBoot, markBootPhase, recordStoreBytes } from "./platform/bootGuard";
+import { beginBoot, markBootPhase, recordStoreBytes, storeKeyFor } from "./platform/bootGuard";
 
 // Safari/iOS can temporarily reject an IndexedDB transaction (private mode,
 // storage pressure, or a connection being evicted) even though the origin's
@@ -25,8 +25,13 @@ function localFallbackRemove(name: string): void {
 // IndexedDB-backed storage for the persisted store. localStorage caps at
 // ~5MB and overflows once there are many journal entries + daily photos
 // ("The quota has been exceeded"); IndexedDB allows hundreds of MB.
+// مفتاحُ المتجر الرئيس وحده يُحوَّل في الإنقاذ (`platform/bootGuard.ts`).
+const MAIN_STORE = "my-dream-store";
+const keyOf = (name: string): string => (name === MAIN_STORE ? storeKeyFor(name) : name);
+
 export const idbStorage: StateStorage = {
-  getItem: async (name) => {
+  getItem: async (rawName) => {
+    const name = keyOf(rawName);
     const fallback = localFallbackGet(name);
     if (fallback != null) return fallback;
     const value = await get<string>(name);
@@ -43,7 +48,8 @@ export const idbStorage: StateStorage = {
     }
     return null;
   },
-  setItem: async (name, value) => {
+  setItem: async (rawName, value) => {
+    const name = keyOf(rawName);
     try {
       await set(name, value);
       localFallbackRemove(name);
@@ -55,7 +61,8 @@ export const idbStorage: StateStorage = {
       if (!localFallbackSet(name, value)) throw error;
     }
   },
-  removeItem: async (name) => {
+  removeItem: async (rawName) => {
+    const name = keyOf(rawName);
     await del(name);
     localFallbackRemove(name);
   },

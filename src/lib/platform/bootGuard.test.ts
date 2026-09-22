@@ -6,6 +6,8 @@ import {
   bootReport,
   exitSafeMode,
   isSafeMode,
+  isStoreRescue,
+  storeKeyFor,
   markBootPhase,
   markBootStable,
   recordStoreBytes,
@@ -77,5 +79,39 @@ describe("حارسُ حلقة الانهيار", () => {
     beginBoot();
     beginBoot();
     expect(relaunch()).toBe(false);
+  });
+});
+
+describe("الإنقاذ: الانهيارُ داخل قراءة المتجر", () => {
+  beforeEach(() => {
+    memory.clear();
+    __resetBootGuardForTests();
+  });
+
+  it("انهياران في `store:*` ⇒ مفتاحٌ مجاور، والمزامنة لا تُوقف", () => {
+    relaunch();
+    markBootPhase("store:parse");
+    relaunch();
+    markBootPhase("store:parse");
+    relaunch();
+    expect(isStoreRescue()).toBe(true);
+    expect(isSafeMode()).toBe(false);
+    expect(storeKeyFor("my-dream-store")).toBe("my-dream-store:rescue");
+  });
+
+  it("الإنقاذ لازم: الإقلاعُ المستقرّ بعده لا يعود إلى الكتلة القديمة", () => {
+    relaunch(); markBootPhase("store:read");
+    relaunch(); markBootPhase("store:read");
+    relaunch(); markBootStable();
+    relaunch();
+    expect(storeKeyFor("my-dream-store")).toBe("my-dream-store:rescue");
+  });
+
+  it("انهيارٌ بعد القراءة لا يعزل المتجر", () => {
+    relaunch(); markBootPhase("sync:merge");
+    relaunch(); markBootPhase("sync:merge");
+    relaunch();
+    expect(isStoreRescue()).toBe(false);
+    expect(storeKeyFor("my-dream-store")).toBe("my-dream-store");
   });
 });

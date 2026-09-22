@@ -6,6 +6,7 @@ import {
   bootReport,
   exitSafeMode,
   isSafeMode,
+  isStoreRescue,
   markBootPhase,
   markBootStable,
 } from "@/lib/platform/bootGuard";
@@ -15,6 +16,7 @@ import { toIndicDigits } from "@/lib/utils";
 // ويعرض شريط الوضع الآمن حين يكون الإقلاع آمناً. المنطق في `platform/bootGuard.ts`.
 export function BootGuard() {
   const [safe] = useState(isSafeMode);
+  const [rescue] = useState(isStoreRescue);
   const [report] = useState(bootReport);
 
   useEffect(() => {
@@ -33,6 +35,18 @@ export function BootGuard() {
     };
   }, []);
 
+  if (rescue && !safe) {
+    return (
+      <div dir="rtl" className="mx-3 mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-1 leading-relaxed">
+        <p className="font-bold text-sm">وضعُ الإنقاذ — التطبيق يعمل من نسخة السحابة</p>
+        <p>
+          قراءةُ بياناتك المحفوظة على هذا الجهاز كانت تُسقط التطبيق، فتركناها كما هي
+          (<b>لم تُحذف</b>) وحمّلنا بياناتك من المزامنة. ما سجّلته ولم يتزامن قبل العطل
+          باقٍ في تلك النسخة ويمكن استرجاعه لاحقاً.
+        </p>
+      </div>
+    );
+  }
   if (!safe) return null;
   const mb = report.storeBytes ? toIndicDigits((report.storeBytes / 1_048_576).toFixed(1)) : null;
   return (
