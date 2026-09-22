@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>إنقاذ مدار</title>
+<!--
+  صفحةُ إنقاذ مستقلّة عن التطبيق: لا React ولا Next ولا المتجر ولا المزامنة.
+  لماذا: حين يقتل Safari الصفحةَ قبل أن يعمل أيُّ كود من التطبيق (فلا يبلغ
+  حارسُ الإقلاع `src/lib/platform/bootGuard.ts` حتى نقطةَ البدء)، لا يبقى
+  للمالك بابٌ إلى جهازه. هذه الصفحة تشخّص خطوةً خطوة، وتفعّل الإنقاذ يدوياً.
+
+  **لا تحذف بيانات المالك أبداً**: لا تلمس IndexedDB إلا قراءةَ المفاتيح، ولا
+  `localStorage` إلا مفاتيحَ الحارس. «تنظيف الملفات المؤقتة» يمسح عاملَ الخدمة
+  وخزنَ HTTP وحدهما — نسخُ ملفّات التطبيق، لا بياناته.
+  المفاتيح هنا يجب أن تطابق `bootGuard.ts` و`idbStorage.ts`.
+-->
+<style>
+  :root { --bg:#f4eee2; --ink:#2c2418; --mute:#8a7a5f; --card:#fffaf0; --line:#e3d6bd; --brand:#a96c20; --ok:#2f7d4f; --bad:#b0412e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#171009; --ink:#f1e6d2; --mute:#b3a283; --card:#221910; --line:#3a2c1c; --brand:#e8b15a; --ok:#7fc79a; --bad:#f08b76; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.7 -apple-system, "SF Arabic", Tahoma, sans-serif; padding:16px; }
+  main { max-width:560px; margin:0 auto; }
+  h1 { font-size:20px; margin:8px 0 4px; }
+  p { margin:6px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin:12px 0; }
+  .mute { color:var(--mute); font-size:13px; }
+  button, a.btn { display:block; width:100%; margin:8px 0; padding:12px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--ink); font:inherit; font-weight:700; text-align:center; text-decoration:none; }
+  .primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  pre { white-space:pre-wrap; word-break:break-all; direction:ltr; text-align:left; font-size:12px; background:rgba(0,0,0,.05); border-radius:10px; padding:10px; margin:6px 0 0; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>إنقاذ مدار</h1>
+  <p class="mute">هذه الصفحة منفصلة عن التطبيق ولا تحذف أيّاً من بياناتك.</p>
+
+  <div class="card">
+    <p><b>١) معلومات سريعة</b></p>
+    <pre id="info">…</pre>
+  </div>
+
+  <div class="card">
+    <p><b>٢) افتح التطبيق في وضع الإنقاذ</b></p>
+    <p class="mute">يترك بياناتك المحفوظة على الجوال كما هي (لا تُحذف) ويحمّل بياناتك من المزامنة.</p>
+    <button class="primary" id="rescue">فعّل الإنقاذ وافتح التطبيق</button>
+  </div>
+
+  <div class="card">
+    <p><b>٣) إن لم ينفع: نظّف ملفات التطبيق المؤقتة</b></p>
+    <p class="mute">يمسح نسخ ملفات التطبيق المخزّنة فقط (لتنزل أحدث نسخة)، لا بياناتك.</p>
+    <button id="clean">نظّف الملفات المؤقتة</button>
+    <pre id="cleanOut" hidden></pre>
+  </div>
+
+  <div class="card">
+    <p><b>٤) فحص قاعدة البيانات</b></p>
+    <p class="mute">يقرأ أسماء المحفوظات فقط. إن أغلق Safari الصفحة عند هذه الخطوة فأخبرني — هذا هو مكان العطل.</p>
+    <button id="idb">افحص</button>
+    <pre id="idbOut" hidden></pre>
+  </div>
+
+  <a class="btn" href="./">افتح التطبيق عادياً</a>
+</main>
+<script>
+(function () {
+  "use strict";
+  var BOOT_KEYS = ["madar-boot-attempts", "madar-boot-phase", "madar-boot-crash-phase",
+    "madar-safe-mode", "madar-store-rescue", "madar-boot-store-bytes"];
+  function ls(k) { try { return localStorage.getItem(k); } catch (e) { return "ERR " + e.name; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function mb(n) { return (n / 1048576).toFixed(1) + " MB"; }
+  function $(id) { return document.getElementById(id); }
+
+  var lines = [];
+  BOOT_KEYS.forEach(function (k) { lines.push(k + " = " + ls(k)); });
+  lines.push("sync key set = " + (ls("madar-sync-space") ? "yes" : "no"));
+  lines.push("standalone = " + (window.navigator.standalone === true));
+  $("info").textContent = lines.join("\n");
+
+  var extra = [];
+  function flush() { $("info").textContent = lines.concat(extra).join("\n"); }
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(function (e) {
+      extra.push("storage used = " + mb(e.usage || 0) + " / quota " + mb(e.quota || 0));
+      flush();
+    }).catch(function () {});
+  }
+  if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+    navigator.serviceWorker.getRegistrations().then(function (r) {
+      extra.push("service workers = " + r.length); flush();
+    }).catch(function () {});
+  }
+  if (window.caches) {
+    caches.keys().then(function (k) { extra.push("caches = " + k.join(", ")); flush(); }).catch(function () {});
+  }
+
+  $("rescue").onclick = function () {
+    // يطابق `bootGuard.ts`: الإنقاذُ لازم، والعدّاد يبدأ من صفر.
+    var ok = lsSet("madar-store-rescue", "1") && lsSet("madar-boot-attempts", "0");
+    lsSet("madar-boot-crash-phase", "manual-rescue");
+    if (!ok) { alert("تعذّر الحفظ في هذا المتصفح (وضع التصفح الخاص؟)."); return; }
+    location.href = "./";
+  };
+
+  $("clean").onclick = function () {
+    var out = $("cleanOut"); out.hidden = false; out.textContent = "…";
+    var jobs = [];
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+        return Promise.all(rs.map(function (r) { return r.unregister(); })).then(function () { return "service workers removed: " + rs.length; });
+      }));
+    }
+    if (window.caches) {
+      jobs.push(caches.keys().then(function (ks) {
+        return Promise.all(ks.map(function (k) { return caches.delete(k); })).then(function () { return "caches removed: " + ks.length; });
+      }));
+    }
+    Promise.all(jobs).then(function (r) { out.textContent = r.join("\n") + "\nتم. افتح التطبيق الآن."; })
+      .catch(function (e) { out.textContent = "ERR " + e; });
+  };
+
+  $("idb").onclick = function () {
+    var out = $("idbOut"); out.hidden = false; out.textContent = "opening…";
+    try {
+      var req = indexedDB.open("keyval-store");
+      req.onerror = function () { out.textContent = "open error: " + (req.error && req.error.name); };
+      req.onsuccess = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains("keyval")) { out.textContent = "no keyval store"; return; }
+        var q = db.transaction("keyval").objectStore("keyval").getAllKeys();
+        q.onerror = function () { out.textContent = "keys error: " + (q.error && q.error.name); };
+        q.onsuccess = function () {
+          var keys = q.result.map(String);
+          var media = keys.filter(function (k) { return k.indexOf("madar-media:") === 0; }).length;
+          var other = keys.filter(function (k) { return k.indexOf("madar-media:") !== 0; });
+          out.textContent = "total keys = " + keys.length + "\nmedia items = " + media + "\nother = " + other.join(", ");
+        };
+      };
+    } catch (e) { out.textContent = "ERR " + e; }
+  };
+})();
+</script>
+</body>
+</html>
