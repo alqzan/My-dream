@@ -9,7 +9,7 @@ import type {
   BudgetWindowMode, FundFunding, Reconcile,
   Account, Obligation, ObservedBalance, SettlementResolution, CardSettlement, InboxDecision, InboxEventRecord, FinanceSettingsProfile,
 } from "./types";
-import { DEFAULT_CATEGORIES, SEED_HABITS, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
+import { DEFAULT_CATEGORIES, SEED_HABITS, GENERAL_FUND_NAME, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
@@ -25,6 +25,14 @@ import { cycleLength } from "./budgetCycle";
 import { holdings, reconcileDelta, RECONCILE_NOTE } from "./reconcile";
 import { creditLedgerForState } from "./financeLedger";
 import { isTripEligibleFund } from "./trip";
+import {
+  SURPLUS_FUND_ID,
+  findReserveByRole,
+  isSystemReserveFund,
+  normalizeReserveFunds,
+  normalizeTransactionReserveSplits,
+  reserveFundRole,
+} from "./reserveFunds";
 import { persistJSONStorage, flushPersisted } from "./idbStorage";
 import { MADAR_SECTION_KEYS, isAccentPalette, saveThemePreferences, type AccentPalette, type MadarSectionKey, type ThemeMode } from "./theme";
 
@@ -643,6 +651,17 @@ export function migratePersisted(persisted: unknown, version: number): AppData {
         state = { ...state, reserves };
       }
 
+      // v19 gives the two system envelopes stable roles and canonicalizes
+      // legacy reserve splits. No id or deposit is changed, so existing
+      // transactions remain attached to the same user data.
+      const persistedReserves = Array.isArray(state.reserves) ? state.reserves as ReserveFund[] : [];
+      const persistedTransactions = Array.isArray(state.transactions) ? state.transactions as Transaction[] : [];
+      state = {
+        ...state,
+        reserves: normalizeReserveFunds(persistedReserves),
+        transactions: persistedTransactions.map(normalizeTransactionReserveSplits),
+      };
+
       state = {
         ...state,
         obligations: state.obligations ?? [],
@@ -1180,7 +1199,7 @@ export const useAppStore = create<AppStore>()(
 
       addTransaction: (tx) =>
         set((s) => ({
-          transactions: [{ ...tx, updatedAt: Date.now() }, ...s.transactions],
+          transactions: [{ ...normalizeTransactionReserveSplits(tx), updatedAt: Date.now() }, ...s.transactions],
           // Re-adding a just-deleted id (Undo) must lift its tombstone (see above).
           ...clearTombstone(s.deleted, tx.id),
         })),
@@ -1188,7 +1207,7 @@ export const useAppStore = create<AppStore>()(
       updateTransaction: (id, updates) =>
         set((s) => ({
           transactions: s.transactions.map((t) =>
-            t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
+            t.id === id ? { ...normalizeTransactionReserveSplits({ ...t, ...updates }), updatedAt: Date.now() } : t
           ),
         })),
 
@@ -1756,11 +1775,12 @@ export const useAppStore = create<AppStore>()(
           const kind = resolution.kind === "prepaid_credit" ? undefined : resolutionTransactionKind(resolution.kind);
           const needsExplicitDebit = Boolean(kind && !linkedRecordedCharge && s.deleted?.[txId] === undefined);
           let candidateReserves = s.reserves;
-          let ledgerFund = candidateReserves.find((fund) => fund.name === SURPLUS_FUND_NAME);
+          let ledgerFund = findReserveByRole(candidateReserves, "surplus");
           if (needsExplicitDebit && !ledgerFund) {
             ledgerFund = {
               id: "reconcile-surplus",
               name: SURPLUS_FUND_NAME,
+              role: "surplus",
               icon: "✨",
               color: "#c9852a",
               deposits: [],
@@ -1922,24 +1942,55 @@ export const useAppStore = create<AppStore>()(
         }),
 
       addReserve: (fund) =>
-        set((s) => ({ reserves: [...s.reserves, fund] })),
+        set((s) => ({ reserves: normalizeReserveFunds([...s.reserves, fund]) })),
 
       updateReserve: (id, updates) =>
-        set((s) => ({
-          reserves: s.reserves.map((f) => (f.id === id ? { ...f, ...updates } : f)),
-        })),
+        set((s) => {
+          const current = s.reserves.find((fund) => fund.id === id);
+          if (!current) return {};
+          // Infer the role from the legacy display name too: a cloud snapshot
+          // can reach this action before its v19 hydration pass completes.
+          const inferredRole = reserveFundRole(current);
+          const role = inferredRole === "general" || inferredRole === "surplus" ? inferredRole : undefined;
+          // System envelope identity is immutable; presentation and funding
+          // fields remain editable.
+          const { id: _id, role: _role, ...candidateUpdates } = updates;
+          const safeUpdates = role
+            ? (() => {
+                const { name: _name, ...withoutName } = candidateUpdates;
+                return withoutName;
+              })()
+            : candidateUpdates;
+          const reserves = s.reserves.map((fund) => fund.id === id
+            ? { ...fund, ...safeUpdates, ...(role ? { role, name: role === "general" ? GENERAL_FUND_NAME : SURPLUS_FUND_NAME } : {}) }
+            : fund);
+          return { reserves: normalizeReserveFunds(reserves) };
+        }),
 
       deleteReserve: (id) =>
-        set((s) => ({
-          reserves: s.reserves.filter((f) => f.id !== id),
-          // Splits pointing at a deleted fund would silently re-charge those
-          // amounts nowhere; fold them back into the daily budget instead.
-          transactions: s.transactions.map((t) =>
-            t.reserveSplits?.some((sp) => sp.fundId === id)
-              ? { ...t, reserveSplits: t.reserveSplits.filter((sp) => sp.fundId !== id) }
-              : t
-          ),
-        })),
+        set((s) => {
+          const fund = s.reserves.find((item) => item.id === id);
+          // These two funds are ledger infrastructure, not user envelopes.
+          // Removing one would silently change daily-budget/reconciliation
+          // semantics, so the action is an intentional no-op until a migration
+          // can replace name-based special-fund identity with stable roles.
+          if (!fund || isSystemReserveFund(fund)) return {};
+          const clearsCashback = s.cashbackEnvelopeId === id;
+          return {
+            reserves: s.reserves.filter((f) => f.id !== id),
+            // Splits pointing at a deleted fund would silently re-charge those
+            // amounts nowhere; fold them back into the daily budget instead.
+            transactions: s.transactions.map((t) =>
+              t.reserveSplits?.some((sp) => sp.fundId === id)
+                ? { ...t, reserveSplits: t.reserveSplits.filter((sp) => sp.fundId !== id) }
+                : t
+            ),
+            // A deleted cashback destination must never leave settings pointing
+            // at a missing fund: subsequent imports would report cashback as
+            // enabled while dropping its deposit silently.
+            ...(clearsCashback ? { cashbackEnabled: false, cashbackEnvelopeId: undefined } : {}),
+          };
+        }),
 
       addReserveDeposit: (fundId, deposit) =>
         set((s) => ({
@@ -1997,6 +2048,11 @@ export const useAppStore = create<AppStore>()(
         let moved = 0;
         set((s) => {
           const todayStr = today();
+          // The salary confirmation is one accounting event per local day.
+          // Returning a no-op here makes a double tap and two UI mounts safe;
+          // deterministic deposit ids below make the same event merge-safe
+          // when two devices confirm while offline.
+          if (s.lastSalaryConfirm === todayStr) return {};
           const balance = s.dailyBudget
             ? computeDailyBudgetStatus(s.dailyBudget, s.transactions).balance
             : 0;
@@ -2010,11 +2066,12 @@ export const useAppStore = create<AppStore>()(
 
           let reserves = s.reserves;
           if (moved > 0) {
-            let fund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+            let fund = findReserveByRole(reserves, "surplus");
             if (!fund) {
               fund = {
-                id: uid(),
+                id: SURPLUS_FUND_ID,
                 name: SURPLUS_FUND_NAME,
+                role: "surplus",
                 icon: "✨",
                 color: "#c9852a",
                 deposits: [],
@@ -2023,13 +2080,15 @@ export const useAppStore = create<AppStore>()(
               reserves = [...reserves, fund];
             }
             const deposit: ReserveDeposit = {
-              id: uid(),
+              id: `salary:${todayStr}:surplus-rollover`,
               date: todayStr,
               amount: moved,
               note: "فوائض دورة الراتب",
             };
             reserves = reserves.map((f) =>
-              f.id === fund!.id ? { ...f, deposits: [deposit, ...f.deposits] } : f
+              f.id === fund!.id && !f.deposits.some((item) => item.id === deposit.id)
+                ? { ...f, deposits: [deposit, ...f.deposits] }
+                : f
             );
           }
 
@@ -2041,7 +2100,7 @@ export const useAppStore = create<AppStore>()(
           // الحلقةُ نفسُها صارت في `planCycleFunding` (`fundPlan.ts`) فتقرأها
           // افتتاحيةُ الدورة قبل التأكيد وتنفّذها هذه الدالّة بعده — رقمٌ واحد
           // لا نسختان تفترقان. وهنا التنفيذُ وحده: تحويلُ النيّة إلى إيداعات.
-          const surplusId = reserves.find((f) => f.name === SURPLUS_FUND_NAME)?.id;
+          const surplusId = findReserveByRole(reserves, "surplus")?.id;
           const plan = planCycleFunding({
             reserves,
             transactions: s.transactions,
@@ -2053,9 +2112,11 @@ export const useAppStore = create<AppStore>()(
           const fromSalary = plan.fromSalary;
           const deposits = new Map<string, ReserveDeposit[]>();
           const clearPlan = new Set<string>();
-          const addDeposit = (fundId: string, amount: number, note: string) => {
+          const addDeposit = (fundId: string, amount: number, note: string, source: string) => {
             const list = deposits.get(fundId) ?? [];
-            list.unshift({ id: uid(), date: todayStr, amount, note });
+            const id = `salary:${todayStr}:funding:${source}:${fundId}`;
+            if (list.some((item) => item.id === id) || reserves.some((fund) => fund.id === fundId && fund.deposits.some((item) => item.id === id))) return;
+            list.unshift({ id, date: todayStr, amount, note });
             deposits.set(fundId, list);
           };
 
@@ -2064,9 +2125,9 @@ export const useAppStore = create<AppStore>()(
             if (!fund) continue;
             if (move.amount > 0) {
               if (move.source === "surplus" && surplusId) {
-                addDeposit(surplusId, -move.amount, `تمويل «${fund.name}»`);
+                addDeposit(surplusId, -move.amount, `تمويل «${fund.name}»`, "surplus-out");
               }
-              addDeposit(fund.id, move.amount, fund.funding?.stop === "zero" ? "سداد الدورة" : "تمويل الدورة");
+              addDeposit(fund.id, move.amount, fund.funding?.stop === "zero" ? "سداد الدورة" : "تمويل الدورة", move.source);
             }
             if (move.done) clearPlan.add(fund.id);
           }
@@ -2099,7 +2160,7 @@ export const useAppStore = create<AppStore>()(
           }
 
           return {
-            reserves,
+            reserves: normalizeReserveFunds(reserves),
             lastSalaryConfirm: todayStr,
             dailyBudget,
           };
@@ -2149,11 +2210,12 @@ export const useAppStore = create<AppStore>()(
           // التسويةُ على «الفوائض» وحدها (السببُ في ترويسة `reconcile.ts`).
           // ويُنشأ الصندوقُ إن لم يكن — كما يفعل ترحيلُ الراتب بالضبط.
           let reserves = s.reserves;
-          let fund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+          let fund = findReserveByRole(reserves, "surplus");
           if (!fund) {
             fund = {
-              id: uid(),
+              id: SURPLUS_FUND_ID,
               name: SURPLUS_FUND_NAME,
+              role: "surplus",
               icon: "✨",
               color: "#c9852a",
               deposits: [],
@@ -2170,7 +2232,7 @@ export const useAppStore = create<AppStore>()(
           reserves = reserves.map((f) =>
             f.id === fund!.id ? { ...f, deposits: [deposit, ...f.deposits] } : f
           );
-          return { reserves, reconciles };
+          return { reserves: normalizeReserveFunds(reserves), reconciles };
         });
         return record;
       },
@@ -2329,7 +2391,7 @@ export const useAppStore = create<AppStore>()(
       autoOffsetDeficit: () => {
         const s = get();
         if (!s.dailyBudget) return 0;
-        const fund = s.reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+        const fund = findReserveByRole(s.reserves, "surplus");
         if (!fund) return 0;
         const status = computeDailyBudgetStatus(s.dailyBudget, s.transactions);
         // **السقفُ على المعدَّل الفعليّ لا على المضبوط** (`status.rate` محسوبٌ في
@@ -2887,7 +2949,7 @@ export const useAppStore = create<AppStore>()(
       // fresh one here would defeat the newer-wins merge comparison).
       hydrate: (data) =>
         rawSet(() => ({
-          transactions: data.transactions ?? [],
+          transactions: (data.transactions ?? []).map(normalizeTransactionReserveSplits),
           books: data.books ?? [],
           readingLogs: data.readingLogs ?? [],
           knowledgeSources: data.knowledgeSources ?? [],
@@ -2899,7 +2961,7 @@ export const useAppStore = create<AppStore>()(
           // CLAUDE.md؛ إغفال أحدها عطلٌ صامت (كانت `assets` غائبةً عن hydrate).
           budgets: data.budgets ?? [],
           categories: data.categories ?? DEFAULT_CATEGORIES,
-          reserves: data.reserves ?? [],
+          reserves: normalizeReserveFunds(data.reserves ?? []),
           prayerLogs: data.prayerLogs ?? [],
           qadaBacklog: data.qadaBacklog ?? 0,
           quranReflections: data.quranReflections ?? [],
@@ -2993,7 +3055,7 @@ export const useAppStore = create<AppStore>()(
     },
     {
       name: "my-dream-store",
-      version: 18,
+      version: 19,
       // التخزين المؤجَّل لا الخام: كلّ تعديلٍ كان يُسلسل المتجر كاملاً ويكتبه
       // (~153ms على جوّالٍ متوسّط ببيانات سنوات). التفصيل والقياس في
       // `persistScheduler.ts`، والإفراغ عند إخفاء الصفحة في `idbStorage.ts`.

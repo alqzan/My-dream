@@ -26,6 +26,7 @@ import { FinancePace } from "@/components/finance/FinancePace";
 import { spendWindow, cycleDays } from "@/lib/budgetCycle";
 import { daysUntilSalary } from "@/lib/financeOverview";
 import { BudgetDisciplineScore } from "@/components/finance/BudgetDisciplineScore";
+import { useSync } from "@/components/sync/SyncProvider";
 import dynamic from "next/dynamic";
 // recharts (~90KB) loads on demand so the insights shell paints without
 // waiting on it. The placeholder keeps the card height stable.
@@ -84,6 +85,7 @@ function periodRanges(period: Period, todayStr: string) {
 const inRange = (t: Transaction, start: string, end: string) => t.date >= start && t.date <= end;
 
 export default function SpendInsightsPage() {
+  const { enabled: syncEnabled, status: syncStatus } = useSync();
   const transactions = useAppStore((s) => s.transactions);
   const categories = useAppStore((s) => s.categories);
   const reserves = useAppStore((s) => s.reserves);
@@ -168,6 +170,7 @@ export default function SpendInsightsPage() {
   }, [periodTx, period, ranges.start, ranges.end, todayStr]);
 
   const maxBar = Math.max(...chartData.map((d) => d.value), 1);
+  const hasChartData = chartData.some((point) => point.value > 0);
 
   // ---------- Category rollup (main → subs) ----------
   const byMain = useMemo(() => {
@@ -257,6 +260,25 @@ export default function SpendInsightsPage() {
   const chartRate = dailyBudget ? effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) : 0;
   const spentFromDaily = periodTx.reduce((s, t) => s + dailyShare(t), 0);
 
+  // Do not present a mixture of the local snapshot and an incoming cloud
+  // snapshot as a finished analysis. The finance page remains available, but
+  // this derived report waits for one coherent source of truth.
+  if (syncEnabled && syncStatus === "syncing") {
+    return (
+      <div className="page-shell" aria-busy="true">
+        <div className="animate-fade-up">
+          <h1 className="page-title">متابعة الصرف</h1>
+          <p className="page-subtitle">جارٍ تثبيت أحدث بيانات المزامنة…</p>
+        </div>
+        <div role="status" aria-live="polite">
+          <Card className="flex min-h-44 items-center justify-center text-center">
+            <p className="text-sm text-gray-500">ننتظر اكتمال المزامنة قبل حساب المؤشرات.</p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-shell">
       <div className="animate-fade-up">
@@ -265,10 +287,12 @@ export default function SpendInsightsPage() {
       </div>
 
       {/* Period segmented control */}
-      <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-1">
+      <div className="flex bg-gray-100 dark:bg-[#2c2318] rounded-xl p-1 animate-fade-up stagger-1" role="group" aria-label="الفترة الزمنية">
         {(["أسبوع", "شهر", "سنة"] as Period[]).map((p) => (
           <button
             key={p}
+            type="button"
+            aria-pressed={period === p}
             onClick={() => { setPeriod(p); setExpandedCat(null); }}
             className={cn(
               "flex-1 text-sm font-semibold py-2 rounded-lg transition-all",
@@ -327,15 +351,21 @@ export default function SpendInsightsPage() {
             <span className="text-[10px] text-gray-400">— خط ميزانيتك اليومية</span>
           )}
         </div>
-        <div className="h-44" dir="ltr">
-          <InsightsChart
-            data={chartData}
-            period={period}
-            maxBar={maxBar}
-            dailyBudgetAmount={dailyBudget && period !== "سنة" ? chartRate : undefined}
-            format={formatAmount}
-          />
-        </div>
+        {hasChartData ? (
+          <div className="h-44" dir="ltr" role="img" aria-label={`رسم الصرف ${ranges.label}`}>
+            <InsightsChart
+              data={chartData}
+              period={period}
+              maxBar={maxBar}
+              dailyBudgetAmount={dailyBudget && period !== "سنة" ? chartRate : undefined}
+              format={formatAmount}
+            />
+          </div>
+        ) : (
+          <div className="h-44 flex items-center justify-center rounded-xl bg-gray-50 dark:bg-[#2c2318] text-center" role="status">
+            <p className="text-xs text-gray-400">لا يوجد صرف مسجّل في هذه الفترة بعد.</p>
+          </div>
+        )}
         {dailyBudget && period !== "سنة" && (
           <div className="flex items-center justify-center gap-3 text-[10px] text-gray-400 pt-2">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-finance inline-block" /> ضمن اليومية</span>

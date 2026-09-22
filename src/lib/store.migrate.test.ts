@@ -208,6 +208,25 @@ describe("v18 — الرحلةُ المفردة تصير قائمة", () => {
   });
 });
 
+describe("هجرة هوية المظاريف وتقسيماتها", () => {
+  it("تضيف الأدوار وتطبّع التكرار دون تغيير معرفات المظاريف", () => {
+    const out = migratePersisted({
+      reserves: [
+        { id: "g", name: "عام", icon: "🏠", color: "#000", deposits: [], createdAt: "2026-01-01" },
+        { id: "s", name: "الفوائض", icon: "✨", color: "#000", deposits: [], createdAt: "2026-01-01" },
+      ],
+      transactions: [{
+        id: "t", date: "2026-01-01", amount: 100, category: "c", note: "",
+        reserveSplits: [{ fundId: "x", pct: 20 }, { fundId: "x", pct: 30 }, { fundId: "y", pct: 10 }],
+      }],
+    }, 18);
+    const reserves = rows(out, "reserves")!;
+    const transactions = rows(out, "transactions")!;
+    expect(reserves.map((f) => [f.id, f.role])).toEqual([["g", "general"], ["s", "surplus"]]);
+    expect(transactions[0].reserveSplits).toEqual([{ fundId: "x", pct: 50 }, { fundId: "y", pct: 10 }]);
+  });
+});
+
 describe("السلسلةُ كاملةً من v1: لا فقدَ غيرَ المقصود، وناتجٌ صالح", () => {
   const out = migratePersisted(v1Payload(), 1);
 

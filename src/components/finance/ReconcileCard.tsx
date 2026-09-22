@@ -8,7 +8,7 @@ import { arabicCount, cn, formatAmount, formatDate, today, uid } from "@/lib/uti
 import {
   RECONCILE_DAYS, holdings, reconcileDelta, reconcileStatus,
 } from "@/lib/reconcile";
-import { creditLedgerForState } from "@/lib/financeLedger";
+import { canonicalCardId, creditLedgerForState } from "@/lib/financeLedger";
 
 // ===================== بطاقةُ المطابقة الربعية =====================
 // «كلّ ثلاثة أشهر آخذ لي عشر دقائق: أفتح كشوفات حساباتي وأتأكّد — قد تكون فيه
@@ -64,12 +64,38 @@ export function ReconcileCard() {
     () => creditLedgerForState({ transactions, settlements, settlementResolutions, accounts }),
     [transactions, settlements, settlementResolutions, accounts]
   );
-  const resolutionSettlement = settlements.find((item) => item.id === resolutionSettlementId || item.eventId === resolutionSettlementId);
-  const resolutionCard = resolutionSettlement?.cardId ?? Object.keys(ledger.byCard).find((id) => (ledger.byCard[id]?.excessSettlement ?? 0) > 0) ?? "";
+  // The ledger is the authority for what remains unexplained. A settlement
+  // that has already been allocated (or explicitly resolved) must disappear
+  // from this picker; showing it again invites a second owner decision and
+  // the store correctly rejects that amount only after the click. The
+  // normalized ledger id is used here because imported settlements may carry
+  // an eventId different from their local storage id.
+  const unresolvedSettlements = useMemo(() => {
+    const bySettlement = new Map<string, { amount: number; cardId: string }>();
+    for (const allocation of ledger.allocations) {
+      if (allocation.kind !== "unallocated_excess" || !allocation.settlementId || allocation.amount <= 0) continue;
+      const current = bySettlement.get(allocation.settlementId);
+      bySettlement.set(allocation.settlementId, {
+        amount: (current?.amount ?? 0) + allocation.amount,
+        cardId: allocation.cardId,
+      });
+    }
+    return settlements.flatMap((settlement) => {
+      const ledgerId = settlement.eventId ?? settlement.id;
+      const remainder = bySettlement.get(ledgerId);
+      if (!remainder || remainder.amount <= 0) return [];
+      return [{ settlement, ledgerId, ...remainder }];
+    });
+  }, [ledger.allocations, settlements]);
+  const resolutionSettlement = unresolvedSettlements.find((item) => item.ledgerId === resolutionSettlementId);
+  const resolutionCard = resolutionSettlement?.cardId
+    ?? unresolvedSettlements[0]?.cardId
+    ?? Object.keys(ledger.byCard).find((id) => (ledger.byCard[id]?.excessSettlement ?? 0) > 0)
+    ?? "";
   const resolutionCharges = transactions.filter((transaction) => {
-    if (!transaction.direction || transaction.direction !== "out" || !transaction.eventId) return false;
-    const cardId = transaction.accountId ?? transaction.id;
-    return cardId === resolutionCard && transaction.date < (resolutionSettlement?.date ?? todayStr);
+    if (!transaction.direction || transaction.direction !== "out") return false;
+    const cardId = canonicalCardId(transaction, accounts);
+    return cardId === resolutionCard && transaction.date < (resolutionSettlement?.settlement.date ?? todayStr);
   });
 
   // بلا مرساة (تطبيقٌ بلا معاملةٍ واحدة بعد) لا معنى لمطابقةٍ ولا لسطرٍ يذكرها.
@@ -93,9 +119,16 @@ export function ReconcileCard() {
   }
 
   function applyResolution() {
-    if (!resolutionSettlementId || !resolutionCard) return;
+    if (!resolutionSettlement || !resolutionCard) return;
     const amount = Number(resolutionAmount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBlockedMessage("أدخل مبلغاً صحيحاً أكبر من صفر.");
+      return;
+    }
+    if (amount > resolutionSettlement.amount) {
+      setBlockedMessage(`المبلغ لا يتجاوز المتبقي ${formatAmount(resolutionSettlement.amount)} ر.س.`);
+      return;
+    }
     resolveSettlement({
       id: uid(),
       cardId: resolutionCard,
@@ -197,16 +230,16 @@ export function ReconcileCard() {
                     onChange={(event) => {
                       const id = event.target.value;
                       setResolutionSettlementId(id);
-                      const item = settlements.find((settlement) => settlement.id === id || settlement.eventId === id);
+                      const item = unresolvedSettlements.find((row) => row.ledgerId === id);
                       if (item) setResolutionAmount(String(item.amount));
                     }}
                     aria-label="السداد المراد تفسيره"
                     className="rounded-lg border border-amber-200 bg-white px-2 py-2 text-[11px]"
                   >
                     <option value="">اختر السداد</option>
-                    {settlements.map((settlement) => (
-                      <option key={settlement.id} value={settlement.id}>
-                        {settlement.cardId} · {formatAmount(settlement.amount)} ر.س
+                    {unresolvedSettlements.map(({ settlement, ledgerId, amount }) => (
+                      <option key={ledgerId} value={ledgerId}>
+                        {settlement.cardId} · متبقٍ {formatAmount(amount)} ر.س
                       </option>
                     ))}
                   </select>
@@ -224,9 +257,13 @@ export function ReconcileCard() {
                 <div className="flex gap-2">
                   <input
                     value={resolutionAmount}
-                    onChange={(event) => setResolutionAmount(event.target.value)}
+                    onChange={(event) => {
+                      setResolutionAmount(event.target.value);
+                      setBlockedMessage(null);
+                    }}
                     type="number"
                     min="0"
+                    max={resolutionSettlement?.amount}
                     step="0.01"
                     inputMode="decimal"
                     aria-label="مبلغ التسوية"
@@ -242,7 +279,7 @@ export function ReconcileCard() {
                     >
                       <option value="">مصروف فات (اختياري)</option>
                       {resolutionCharges.map((transaction) => (
-                        <option key={transaction.id} value={transaction.eventId ?? transaction.id}>
+                        <option key={transaction.eventId ?? transaction.id} value={transaction.eventId ?? transaction.id}>
                           {transaction.note.slice(0, 24)} · {formatAmount(transaction.amount)} ر.س
                         </option>
                       ))}
@@ -258,11 +295,16 @@ export function ReconcileCard() {
                 />
                 <Button
                   onClick={applyResolution}
-                  disabled={!resolutionSettlementId || !resolutionAmount || !resolutionCard}
+                  disabled={!resolutionSettlement || !resolutionAmount || !resolutionCard}
                   className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-40"
                 >
                   حفظ التفسير مرة واحدة
                 </Button>
+                {unresolvedSettlements.length === 0 && (
+                  <p className="text-[11px] text-amber-700">
+                    لا توجد دفعات غير مفسّرة متاحة للاختيار. حدّث البيانات أو راجع تفاصيل المزامنة قبل المتابعة.
+                  </p>
+                )}
                 {blockedMessage && <p className="text-[11px] font-semibold text-red-700">{blockedMessage}</p>}
               </div>
             )}

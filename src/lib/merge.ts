@@ -6,6 +6,7 @@ import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState,
 import { EMPTY_HIFZ } from "./types";
 import { isOffsetDepositId } from "./budgetFlow";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
+import { normalizeReserveFunds, normalizeTransactionReserveSplits } from "./reserveFunds";
 
 // Which journal shard a given entry belongs to: one document per YYYY-MM of the
 // entry's own date (stable across devices, naturally bounded). Malformed/absent
@@ -419,7 +420,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   // Reserve funds: union by id, and union each fund's deposits by deposit id —
   // dropping any deposit the user deleted (tombstoned deposit:<id>), so removing
   // a deposit on one device isn't resurrected from the other's copy.
-  const reserves = byIdNewer(primary.reserves, secondary.reserves).map((f) => {
+  const reserves = normalizeReserveFunds(byIdNewer(primary.reserves, secondary.reserves).map((f) => {
     const pDep = primary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
     const sDep = secondary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
     // إيداعُ المقاصة التلقائية معرّفُه مشتقٌّ من (المظروف · اليوم)، فنسخةُ
@@ -446,11 +447,18 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     const trips = unionOrdered(pTrips, sTrips, (t) => t.id).map((t) => {
       const other = sTripsById.get(t.id);
       if (!other || other === t) return t;
-      return { ...t, endedAt: t.endedAt ?? other.endedAt };
+      // Ending a trip is a monotonic fact. Two devices can finish the same
+      // trip while offline; keep the later valid end date instead of letting
+      // whichever snapshot happened to be primary choose the older one.
+      const endedAt = [t.endedAt, other.endedAt]
+        .filter((value): value is string => !!value)
+        .sort()
+        .at(-1);
+      return endedAt ? { ...t, endedAt } : t;
     });
 
     return { ...f, deposits, ...(trips.length ? { trips } : {}) };
-  });
+  }));
 
   // Prayer logs: union by date, and on a shared date resolve **each prayer on
   // its own stamp** — the day is five independent values, so a prayer logged
@@ -605,7 +613,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   }
 
   return {
-    transactions: byIdNewer(primary.transactions, secondary.transactions),
+    transactions: byIdNewer(primary.transactions, secondary.transactions).map(normalizeTransactionReserveSplits),
     // الكتب وجلسات القراءة: تعديلُ عنصرٍ قائم (رقم الصفحة، الحالة، التقييم) يفوز
     // بطابعه هو — كان يخسر لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً فيرجع التقدّم.
     books: byIdNewer(primary.books, secondary.books),

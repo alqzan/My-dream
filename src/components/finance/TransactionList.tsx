@@ -36,8 +36,16 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
         return (
           <div
             key={tx.id}
-            className="flex items-center gap-3 rounded-xl border p-3 bg-white border-gray-100 card-shadow cursor-pointer press"
+            className="flex items-center gap-3 rounded-xl border p-3 bg-white border-gray-100 card-shadow cursor-pointer press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-finance/50"
+            role={onEdit ? "button" : undefined}
+            tabIndex={onEdit ? 0 : undefined}
+            aria-label={onEdit ? `تعديل ${tx.note || info.label}` : undefined}
             onClick={() => onEdit?.(tx)}
+            onKeyDown={(event) => {
+              if (!onEdit || (event.key !== "Enter" && event.key !== " ")) return;
+              event.preventDefault();
+              onEdit(tx);
+            }}
           >
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
@@ -88,8 +96,10 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
               </span>
               {onDelete && (
                 <button
+                  type="button"
+                  aria-label={`حذف ${tx.note || info.label}`}
                   onClick={(e) => { e.stopPropagation(); onDelete(tx.id); }}
-                  className="p-1 text-gray-300 hover:text-red-400 rounded-lg"
+                  className="p-2 text-gray-300 hover:text-red-400 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
                 >
                   <Trash2 size={14} />
                 </button>

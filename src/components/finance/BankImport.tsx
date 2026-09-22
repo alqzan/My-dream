@@ -6,6 +6,16 @@ import { today, getCategoryInfo, formatAmount } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
 
+const EXPENSE_KINDS = new Set<SmsParseEventResult["kind"]>([
+  "purchase", "atm", "bill", "installment", "fee",
+]);
+
+function isExpensePreview(event: SmsParseEventResult): boolean {
+  return event.direction === "out"
+    && EXPENSE_KINDS.has(event.kind)
+    && (event.expenseAmount ?? event.amount) > 0;
+}
+
 export function BankImport({ onClose, initialSms }: { onClose: () => void; initialSms?: string }) {
   const categories = useAppStore((s) => s.categories);
   const merchantRules = useAppStore((s) => s.merchantRules);
@@ -21,7 +31,6 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
   const [preview, setPreview] = useState<SmsParseEventResult[]>([]);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const [skippedIncome, setSkippedIncome] = useState(0);
   const [importResult, setImportResult] = useState<{ saved: number; settlements: number; reviewed: number; duplicates: number } | null>(null);
   const sourceIdRef = useRef(createSmsSourceId());
   const lastParsedTextRef = useRef<string | null>(null);
@@ -52,7 +61,6 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
 
   function handleSmsPreview(text: string = smsText, sourceId: string = sourceIdRef.current) {
     setError("");
-    setSkippedIncome(0);
     lastParsedTextRef.current = text;
     const { events: results, skippedIncome: skipped } = parseBankSmsBulk(text, date, { sourceId });
     if (!results.length) {
@@ -65,7 +73,6 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
     }
     const txs = results.map(classify);
     setPreview(txs);
-    setSkippedIncome(skipped);
   }
 
   function handleConfirm() {
@@ -100,8 +107,9 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
         من تطبيق الرسائل، حدّد رسائل البنك وانسخها كلها مرة وحدة والصقها هنا — التطبيق يفصلها ويحفظ القرار لكل رسالة. الوارد والراتب لا يُحسبان صرفاً قبل مراجعتك.
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">رسائل البنك (واحدة أو أكثر)</label>
+        <label htmlFor="finance-bank-sms" className="block text-xs font-medium text-gray-500 mb-1">رسائل البنك (واحدة أو أكثر)</label>
         <textarea
+          id="finance-bank-sms"
           value={smsText}
           onChange={(e) => setSmsText(e.target.value)}
           rows={7}
@@ -112,8 +120,8 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ افتراضي (للرسائل بدون تاريخ)</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+        <label htmlFor="finance-bank-default-date" className="block text-xs font-medium text-gray-500 mb-1">تاريخ افتراضي (للرسائل بدون تاريخ)</label>
+        <input id="finance-bank-default-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40" />
       </div>
       <Button onClick={() => {
@@ -124,6 +132,7 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
         استخراج الكل تلقائياً 🤖
       </Button>
       <button
+        type="button"
         onClick={handlePasteClipboard}
         className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-finance bg-finance/10 rounded-xl py-2.5 press"
       >
@@ -143,29 +152,42 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
       {preview.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-700">معاينة ({preview.length} معاملة)</p>
-            <button onClick={() => setPreview([])} className="text-xs text-gray-400 hover:text-red-400">مسح</button>
-          </div>
-          {skippedIncome > 0 && (
-            <p className="text-[11px] text-gray-400">
-              (وجدت {skippedIncome} رسالة واردة أو غير مصروفة — محفوظة للمراجعة ولا تُحسب صرفاً)
+            <p className="text-sm font-semibold text-gray-700">
+              معاينة ({preview.length} عنصر)
             </p>
-          )}
+            <button type="button" onClick={() => setPreview([])} className="text-xs text-gray-400 hover:text-red-400">مسح</button>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500" aria-live="polite">
+            <span>{preview.filter(isExpensePreview).length} مصروف قابل للتصنيف</span>
+            {preview.filter((tx) => tx.direction === "in").length > 0 && (
+              <span className="text-finance">{preview.filter((tx) => tx.direction === "in").length} وارد لا يُحسب صرفاً</span>
+            )}
+            {preview.filter((tx) => !isExpensePreview(tx) && tx.direction !== "in").length > 0 && (
+              <span className="text-amber-700">{preview.filter((tx) => !isExpensePreview(tx) && tx.direction !== "in").length} للمراجعة</span>
+            )}
+          </div>
           <div className="max-h-52 overflow-y-auto space-y-2">
             {preview.map((tx, index) => {
               const info = getCategoryInfo(categories, tx.category);
               const rowId = tx.eventId ?? `${tx.sourceKey ?? "manual"}:${index}`;
+              const expense = isExpensePreview(tx);
+              const incoming = tx.direction === "in";
+              const displayAmount = expense ? (tx.expenseAmount ?? tx.amount) : tx.amount;
+              const stateLabel = expense ? "مصروف" : incoming ? "وارد" : "للمراجعة";
+              const amountLabel = displayAmount > 0
+                ? `${expense ? "−" : incoming ? "+" : ""}${formatAmount(displayAmount)} ر.س`
+                : "لا مبلغ";
               return (
                 <div key={rowId} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5">
                   <span className="text-lg">{info.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-gray-700 truncate">{tx.note || info.label}</div>
-                    <div className="text-[10px] text-gray-400">{tx.date} · {info.label}</div>
+                    <div className="text-[10px] text-gray-400">{tx.date} · {stateLabel} · {info.label}</div>
                   </div>
-                  <span className="text-sm font-bold shrink-0 text-red-500">
-                    -{formatAmount(tx.amount)}
+                  <span className={`text-sm font-bold shrink-0 ${expense ? "text-red-500" : incoming ? "text-finance" : "text-amber-700"}`}>
+                    {amountLabel}
                   </span>
-                  <button onClick={() => removePreview(rowId)} className="p-1 text-gray-300 hover:text-red-400">
+                  <button type="button" aria-label={`إزالة ${stateLabel} ${tx.note || info.label}`} onClick={() => removePreview(rowId)} className="p-2 text-gray-300 hover:text-red-400 rounded-lg">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -174,7 +196,7 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
           </div>
           <div className="flex gap-2">
             <Button onClick={handleConfirm} className="flex-1 bg-finance hover:bg-finance/90">
-              استيراد {preview.length} معاملة ✓
+              حفظ {preview.length} عنصر للمراجعة ✓
             </Button>
             <Button variant="secondary" onClick={onClose}>إلغاء</Button>
           </div>

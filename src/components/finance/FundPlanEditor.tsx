@@ -5,6 +5,7 @@ import type { FundFunding, ReserveFund } from "@/lib/types";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { formatAmount, cn, today, reserveBalance } from "@/lib/utils";
 import { cycleLength } from "@/lib/budgetCycle";
+import { findReserveByRole } from "@/lib/reserveFunds";
 import {
   suggestPayoffPerCycle, cyclesRemaining, fundingPreview, cyclesForGap,
   PAYOFF_CYCLES, PAYOFF_CYCLE_CHOICES, LONG_PLAN_CYCLES,
@@ -63,7 +64,7 @@ export function FundPlanEditor({ fund, balance }: { fund: ReserveFund; balance: 
   const len = cycleLength(salaryDay ?? 27, today());
   const perCycle = parseFloat(amount) || 0;
   const surplusBalance = (() => {
-    const f = reserves.find((x) => x.name === SURPLUS_FUND_NAME);
+    const f = findReserveByRole(reserves, "surplus");
     return f ? reserveBalance(f, transactions) : 0;
   })();
   const preview = dailyBudget

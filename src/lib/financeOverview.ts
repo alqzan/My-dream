@@ -6,7 +6,7 @@ import type {
   DailyBudget, Transaction, ReserveFund, Budget, FinanceCategoryDef,
 } from "./types";
 import { computeDailyBudgetStatus, reserveBalance, cashOut, parseDate } from "./utils";
-import { SURPLUS_FUND_NAME } from "./types";
+import { findReserveByRole } from "./reserveFunds";
 import { budgetStatuses } from "./budgetStatus";
 
 export interface FinanceOverview {
@@ -146,7 +146,7 @@ export function surplusPullSource(
   hasDailyBudget: boolean
 ): { fundId: string; balance: number } | null {
   if (!hasDailyBudget) return null;
-  const fund = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+  const fund = findReserveByRole(reserves, "surplus");
   if (!fund) return null;
   const balance = reserveBalance(fund, transactions);
   return balance > 0 ? { fundId: fund.id, balance } : null;

@@ -116,3 +116,71 @@ describe("startTrip — المظاريف العامة تبقى أوعيةً لا
     expect(useAppStore.getState().reserves[1].trips).toEqual(tripFund.trips);
   });
 });
+
+describe("deleteReserve — يحمي أوعية الحساب وينظف وجهة الكاش باك", () => {
+  it("hydrate يطبّع هوية المظاريف والتقسيمات القديمة قبل عرضها", () => {
+    useAppStore.getState().hydrate({
+      reserves: [{ id: "legacy", name: SURPLUS_FUND_NAME, icon: "✨", color: "#000", deposits: [], createdAt: today() }],
+      transactions: [{
+        id: "t", date: today(), amount: 100, category: "cat-essentials", note: "",
+        reserveSplits: [{ fundId: "legacy", pct: 60 }, { fundId: "legacy", pct: 20 }],
+      }],
+    });
+    const s = useAppStore.getState();
+    expect(s.reserves[0].role).toBe("surplus");
+    expect(s.transactions[0].reserveSplits).toEqual([{ fundId: "legacy", pct: 80 }]);
+  });
+
+  it("لا يحذف «عام» أو «الفوائض» لأنهما جزء من دفتر المال", () => {
+    const general = { id: "f-general", name: GENERAL_FUND_NAME, icon: "🏠", color: "#000", deposits: [], createdAt: today() };
+    const surplus = { id: "f-surplus", name: SURPLUS_FUND_NAME, icon: "✨", color: "#000", deposits: [], createdAt: today() };
+    useAppStore.setState({ reserves: [general, surplus] });
+
+    useAppStore.getState().deleteReserve(general.id);
+    useAppStore.getState().deleteReserve(surplus.id);
+
+    expect(useAppStore.getState().reserves.map((fund) => fund.id)).toEqual([general.id, surplus.id]);
+  });
+
+  it("يحافظ على دور الحساب المحجوز عند محاولة إعادة تسميته", () => {
+    const surplus = { id: "f-surplus", name: SURPLUS_FUND_NAME, role: "surplus" as const, icon: "✨", color: "#000", deposits: [], createdAt: today() };
+    useAppStore.setState({ reserves: [surplus] });
+    useAppStore.getState().updateReserve(surplus.id, { name: "رحلة" });
+    expect(useAppStore.getState().reserves[0]).toMatchObject({ role: "surplus", name: SURPLUS_FUND_NAME });
+  });
+
+  it("يحمي المظروف القديم بالاسم حتى قبل اكتمال التطبيع", () => {
+    const legacy = { id: "legacy-surplus", name: SURPLUS_FUND_NAME, icon: "✨", color: "#000", deposits: [], createdAt: today() };
+    useAppStore.setState({ reserves: [legacy] });
+    useAppStore.getState().updateReserve(legacy.id, { name: "رحلة" });
+    expect(useAppStore.getState().reserves[0]).toMatchObject({ role: "surplus", name: SURPLUS_FUND_NAME });
+  });
+
+  it("يبقي إعادة تسمية المظروف العادي متاحة", () => {
+    const fund = { id: "f-custom", name: "سفر", icon: "✈️", color: "#000", deposits: [], createdAt: today() };
+    useAppStore.setState({ reserves: [fund] });
+    useAppStore.getState().updateReserve(fund.id, { name: "رحلة المدينة" });
+    expect(useAppStore.getState().reserves[0].name).toBe("رحلة المدينة");
+  });
+
+  it("يعطّل الكاش باك إذا حُذف الظرف المعيّن له", () => {
+    const cashback = { id: "f-cashback", name: "كاش باك", icon: "💳", color: "#000", deposits: [], createdAt: today() };
+    const other = { id: "f-other", name: "سفر", icon: "✈️", color: "#000", deposits: [], createdAt: today() };
+    useAppStore.setState({
+      reserves: [cashback, other],
+      cashbackEnabled: true,
+      cashbackEnvelopeId: cashback.id,
+      transactions: [{
+        id: "t1", date: today(), amount: 10, category: "cat-essentials", note: "عملية",
+        reserveSplits: [{ fundId: cashback.id, pct: 100 }],
+      }],
+    });
+
+    useAppStore.getState().deleteReserve(cashback.id);
+    const state = useAppStore.getState();
+    expect(state.cashbackEnabled).toBe(false);
+    expect(state.cashbackEnvelopeId).toBeUndefined();
+    expect(state.reserves.map((fund) => fund.id)).toEqual([other.id]);
+    expect(state.transactions[0].reserveSplits).toEqual([]);
+  });
+});

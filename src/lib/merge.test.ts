@@ -969,6 +969,14 @@ describe("mergeAppData — تعارضُ العناصر المركّبة (تبا�
       }
     });
 
+    it("تأخذ تاريخ النهاية الأحدث إذا أنهى الجهازان الرحلة نفسها", () => {
+      const early = base({ reserves: [f([{ id: "a", startedAt: "2026-03-01", endedAt: "2026-03-05" }])] });
+      const late = base({ reserves: [f([{ id: "a", startedAt: "2026-03-01", endedAt: "2026-03-07" }])] });
+      for (const m of [mergeAppData(early, late), mergeAppData(late, early)]) {
+        expect(m.reserves[0].trips?.[0].endedAt).toBe("2026-03-07");
+      }
+    });
+
     it("ومظروفٌ بلا رحلاتٍ لا يكتسب حقلاً فارغاً", () => {
       const plain: ReserveFund = { id: "f1", name: "ف", icon: "📦", color: "#000", deposits: [], createdAt: "2026-01-01" };
       const m = mergeAppData(base({ reserves: [plain] }), base({ reserves: [plain] }));

@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import { getMonthDates, arabicMonthName, formatAmount, hijriMonthLabel, hijriDay, today, parseDate, dailyShare, cashOut } from "@/lib/utils";
 import type { Transaction, DailyBudget } from "@/lib/types";
 import { effectiveDailyRate } from "@/lib/fundPlan";
@@ -11,16 +10,22 @@ interface SpendCalendarProps {
   transactions: Transaction[];
   dailyBudget: DailyBudget | null;
   onDayClick: (date: string) => void;
+  /** The calendar follows the month selected by the history controls. */
+  monthFilter: string;
+  onMonthChange: (month: string) => void;
 }
 
 // A month at a glance: each day is a little bar sized by that day's spend.
 // With a daily budget set, the bar is tinted by whether that day kept to
 // the daily rate (green) or ran over it (red); otherwise it's a plain
 // relative-height bar.
-export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCalendarProps) {
+export function SpendCalendar({ transactions, dailyBudget, onDayClick, monthFilter, onMonthChange }: SpendCalendarProps) {
+  const [yearText, monthText] = monthFilter.split("-");
+  const parsedYear = Number(yearText);
+  const parsedMonth = Number(monthText) - 1;
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  const year = Number.isInteger(parsedYear) && parsedYear >= 1900 ? parsedYear : now.getFullYear();
+  const month = Number.isInteger(parsedMonth) && parsedMonth >= 0 && parsedMonth <= 11 ? parsedMonth : now.getMonth();
 
   const dates = getMonthDates(year, month);
   const firstDay = new Date(year, month, 1).getDay();
@@ -41,8 +46,12 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
   // كان يُظهر يومَ ٨٠ أخضرَ وهو تجاوز — وهو عينُ الخطأ المُصلَح في `0643fb7`.
   const rate = dailyBudget ? effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) : 0;
 
-  function prev() { if (month === 0) { setYear((y) => y - 1); setMonth(11); } else setMonth((m) => m - 1); }
-  function next() { if (month === 11) { setYear((y) => y + 1); setMonth(0); } else setMonth((m) => m + 1); }
+  function setVisibleMonth(offset: number) {
+    const next = new Date(year, month + offset, 1);
+    onMonthChange(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`);
+  }
+  function prev() { setVisibleMonth(-1); }
+  function next() { setVisibleMonth(1); }
 
   return (
     <div className="space-y-3">
@@ -52,7 +61,7 @@ export function SpendCalendar({ transactions, dailyBudget, onDayClick }: SpendCa
           <ChevronRight size={16} className="text-gray-400" />
         </button>
         <div className="text-center">
-          <span className="block text-sm font-semibold text-gray-700">{arabicMonthName(month)} {year}</span>
+          <span className="block text-sm font-semibold text-gray-700" aria-live="polite">{arabicMonthName(month)} {year}</span>
           <span className="block text-[10px] text-gray-400 mt-0.5">{hijriMonthLabel(year, month)}</span>
         </div>
         <button onClick={prev} aria-label="الشهر السابق" className="h-11 w-11 flex items-center justify-center hover:bg-gray-100 rounded-full">

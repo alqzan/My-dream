@@ -1,7 +1,7 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import type { ReserveFund } from "@/lib/types";
-import { formatAmount, formatDate, getCategoryInfo, today, cn } from "@/lib/utils";
+import { formatAmount, formatDate, getCategoryInfo, today, cn, reserveShare } from "@/lib/utils";
 import { tripSummary, activeTripOf, lastEndedTrip } from "@/lib/trip";
 import { Plane, Flag } from "lucide-react";
 
@@ -100,7 +100,7 @@ export function TripPanel({ fund }: { fund: ReserveFund }) {
 
       {s.biggest && (
         <div className="text-[10px]" style={{ color: "var(--ink52)" }}>
-          أكبرها: {s.biggest.note || "مصروف"} — {formatAmount(Math.round(s.biggest.amount))} ر.س
+          أكبرها: {s.biggest.note || "مصروف"} — {formatAmount(Math.round(reserveShare(s.biggest, fund.id)))} ر.س
         </div>
       )}
 

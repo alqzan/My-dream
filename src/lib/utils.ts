@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge";
 import { mediaTombKey } from "./mediaHash";
 import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY, isPrayedStatus } from "./types";
+import { normalizeReserveSplits } from "./reserveFunds";
 import { prefGetJSON } from "./platform/prefs";
 
 export function cn(...inputs: ClassValue[]) {
@@ -758,14 +759,15 @@ export function dailyShare(t: Transaction): number {
   // المؤجّل لا يستهلك ميزانيةً (لم يُدفع)، والموسوم `offBudget` لا يستهلكها
   // (دُفع لكنّه استثناءٌ لا يُحاسَب عليه) — كلاهما عبر البوابة الواحدة.
   const paid = budgetSpend(t);
-  if (!t.reserveSplits?.length) return paid;
-  const reservedPct = Math.min(100, t.reserveSplits.reduce((s, sp) => s + sp.pct, 0));
+  const splits = normalizeReserveSplits(t.reserveSplits);
+  if (!splits?.length) return paid;
+  const reservedPct = splits.reduce((s, sp) => s + sp.pct, 0);
   return round2((paid * (100 - reservedPct)) / 100);
 }
 
 // Share of a transaction charged to one specific reserve fund.
 export function reserveShare(t: Transaction, fundId: string): number {
-  const split = t.reserveSplits?.find((s) => s.fundId === fundId);
+  const split = normalizeReserveSplits(t.reserveSplits)?.find((s) => s.fundId === fundId);
   return split ? round2((cashOut(t) * split.pct) / 100) : 0;
 }
 
@@ -797,7 +799,7 @@ export function reserveTotals(
 ): Map<string, { balance: number; spent: number }> {
   const spent = new Map<string, number>();
   for (const t of transactions) {
-    for (const split of t.reserveSplits ?? []) {
+    for (const split of normalizeReserveSplits(t.reserveSplits) ?? []) {
       spent.set(split.fundId, (spent.get(split.fundId) ?? 0) + reserveShare(t, split.fundId));
     }
   }

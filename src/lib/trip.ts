@@ -12,8 +12,9 @@
 // والتقريرُ يقرأ ما وقع داخلها وحدها.
 //
 // منطقٌ نقيّ بلا DOM، مختبَرٌ في `trip.test.ts`.
-import { GENERAL_FUND_NAME, SURPLUS_FUND_NAME, type ReserveFund, type Transaction, type Trip } from "./types";
+import { type ReserveFund, type Transaction, type Trip } from "./types";
 import { reserveShare, round2, parseDate } from "./utils";
+import { isSystemReserveFund } from "./reserveFunds";
 
 /**
  * The general and surplus envelopes are holding accounts, not trip trackers.
@@ -21,9 +22,8 @@ import { reserveShare, round2, parseDate } from "./utils";
  * (notably rent) appear in «رحلاتي السابقة». Dedicated event envelopes remain
  * eligible for trip mode.
  */
-export function isTripEligibleFund(fund: Pick<ReserveFund, "name">): boolean {
-  const name = fund.name.trim();
-  return name !== GENERAL_FUND_NAME && name !== SURPLUS_FUND_NAME;
+export function isTripEligibleFund(fund: Pick<ReserveFund, "name" | "role">): boolean {
+  return !isSystemReserveFund(fund);
 }
 
 /** رحلةُ هذا المظروف الجارية (بلا `endedAt`)، أو `null`. */

@@ -10,6 +10,7 @@ import { FundPlanEditor } from "@/components/finance/FundPlanEditor";
 import { GoalWizard } from "@/components/finance/GoalWizard";
 import { TripPanel } from "@/components/finance/TripPanel";
 import { isTripEligibleFund, pastTrips, tripSummary } from "@/lib/trip";
+import { isSystemReserveFund } from "@/lib/reserveFunds";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -546,12 +547,16 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
           >
             <Pencil size={12} /> تعديل المظروف
           </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 press"
-          >
-            <Trash2 size={12} /> حذف المظروف
-          </button>
+          {isSystemReserveFund(fund) ? (
+            <span className="text-[10px] text-gray-400">حساب أساسي — لا يُحذف</span>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 press"
+            >
+              <Trash2 size={12} /> حذف المظروف
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -580,6 +585,7 @@ function FundForm({
   onSave?: (updates: Partial<ReserveFund>) => void;
 }) {
   const editing = fund !== undefined;
+  const protectedFund = editing && fund ? isSystemReserveFund(fund) : false;
   const [name, setName] = useState(fund?.name ?? "");
   const [icon, setIcon] = useState(fund?.icon ?? "🏠");
   const [color, setColor] = useState(fund?.color ?? COLORS[0]);
@@ -620,8 +626,10 @@ function FundForm({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
+          disabled={protectedFund}
+          aria-label={protectedFund ? "اسم الحساب الأساسي ثابت" : "اسم المظروف"}
           placeholder="مخصص لـ... (الإيجار، سفرة الصيف)"
-          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40"
+          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-finance/40 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
         />
       </div>
       <div className="flex items-center gap-1 flex-wrap">
@@ -679,6 +687,7 @@ function FundForm({
       </div>
       {editing && (
         <p className="text-[10px] text-gray-400">
+          {protectedFund ? "اسم الحساب الأساسي ثابت؛ يمكنك تعديل مظهره وخطته فقط. " : ""}
           الرصيد لا يُحرَّر هنا — هو حصيلةُ التعبئة والسحب. لتصحيحه احذف قيدَه من «الإيداعات».
         </p>
       )}

@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { computeDailyBudgetStatus, formatAmount, cn, uid, today } from "@/lib/utils";
+import { computeDailyBudgetStatus, formatAmount, cn, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { daysUntilSalary, projectedCycleSurplus, surplusPullSource } from "@/lib/financeOverview";
+import { findReserveByRole, SURPLUS_FUND_ID } from "@/lib/reserveFunds";
 import { cyclePace, offsetPlan } from "@/lib/budgetFlow";
 import { DailyRateSplit } from "@/components/finance/DailyRateSplit";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -140,8 +141,11 @@ export function DailyBudgetCard() {
 
   function handleSweepToNewSurplus(balance: number) {
     const fund = {
-      id: uid(),
+      // The system surplus envelope must converge when two offline devices
+      // create it from the same daily-budget prompt.
+      id: SURPLUS_FUND_ID,
       name: SURPLUS_FUND_NAME,
+      role: "surplus" as const,
       icon: "✨",
       color: SECTION.brand,
       deposits: [],
@@ -187,8 +191,11 @@ export function DailyBudgetCard() {
         </div>
 
         {mode === "fixed" ? (
-          <div className="flex gap-2">
+          <div>
+            <label htmlFor="finance-daily-amount" className="sr-only">المبلغ اليومي (ريال)</label>
+            <div className="flex gap-2">
             <NumberInput
+              id="finance-daily-amount"
               value={amount} onChange={setAmount}
               placeholder="مثلاً 500" inputMode="decimal"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
@@ -196,19 +203,21 @@ export function DailyBudgetCard() {
             <button onClick={handleSave} className="bg-finance text-white text-sm px-4 py-2 rounded-lg hover:bg-finance/90 shrink-0">
               {dailyBudget ? "تحديث" : "ابدأ"}
             </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-2.5 animate-fade-up">
             <div>
-              <label className="block text-[10px] text-gray-400 mb-1">دخلك الشهري (ريال)</label>
+              <label htmlFor="finance-monthly-income" className="block text-[10px] text-gray-400 mb-1">دخلك الشهري (ريال)</label>
               <NumberInput
+                id="finance-monthly-income"
                 value={income} onChange={setIncome}
                 placeholder="مثلاً 10000" inputMode="decimal"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
               />
             </div>
             <div>
-              <label className="block text-[10px] text-gray-400 mb-1">نسبة المصروف اليومي من الدخل</label>
+              <span id="finance-daily-rate-label" className="block text-[10px] text-gray-400 mb-1">نسبة المصروف اليومي من الدخل</span>
               <div className="flex gap-1.5 items-center">
                 {PCT_PRESETS.map((p) => (
                   <button
@@ -225,6 +234,7 @@ export function DailyBudgetCard() {
                   </button>
                 ))}
                 <NumberInput
+                  aria-labelledby="finance-daily-rate-label"
                   value={pct} onChange={setPct}
                   placeholder="٪" inputMode="numeric" min={1} max={100}
                   className="w-16 text-xs text-center border border-gray-200 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-finance/40"
@@ -251,8 +261,9 @@ export function DailyBudgetCard() {
         )}
 
         <div>
-          <label className="block text-[10px] text-gray-400 mb-1">يوم نزول الراتب — يظهر بعده سؤال «نزل الراتب؟» وتتحول البواقي للفوائض</label>
+          <label htmlFor="finance-salary-day" className="block text-[10px] text-gray-400 mb-1">يوم نزول الراتب — يظهر بعده سؤال «نزل الراتب؟» وتتحول البواقي للفوائض</label>
           <NumberInput
+            id="finance-salary-day"
             value={salaryDayInput} onChange={setSalaryDayInput}
             min={1} max={31} inputMode="numeric"
             className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-finance/40"
@@ -430,7 +441,7 @@ export function DailyBudgetCard() {
                 <span className="flex-1 text-right text-gray-700 font-medium">{f.name}</span>
               </button>
             ))}
-            {!reserves.some((f) => f.name === SURPLUS_FUND_NAME) && (
+            {!findReserveByRole(reserves, "surplus") && (
               <button
                 onClick={() => handleSweepToNewSurplus(status.balance)}
                 className="w-full flex items-center gap-2 text-sm bg-white dark:bg-white/10 border border-dashed border-finance/40 rounded-lg px-3 py-2 text-finance font-medium press"

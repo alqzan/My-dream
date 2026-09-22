@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, reserveBalance, round2, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
 import { cycleLength } from "@/lib/budgetCycle";
+import { findReserveByRole } from "@/lib/reserveFunds";
 import { cycleOpening, type CycleOpening as Opening } from "@/lib/cycleOpening";
 import { CycleOpening } from "@/components/finance/CycleOpening";
 import { Modal } from "@/components/ui/Modal";
@@ -48,7 +49,7 @@ export function SalaryBanner() {
   const [openedWith, setOpenedWith] = useState<Opening | null>(null);
 
   const todayStr = today();
-  const surplus = reserves.find((f) => f.name === SURPLUS_FUND_NAME);
+  const surplus = findReserveByRole(reserves, "surplus");
   const opening = useMemo(
     () =>
       cycleOpening({

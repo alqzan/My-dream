@@ -66,6 +66,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   // «تجاهله من الميزانيات»: مصروفٌ حقيقيّ لكنّه استثناءٌ لا يتكرّر (رسوم اختبار…)
   // فلا يستهلك اليومية ولا السقوف — ويبقى في السجل والإحصائيات كما هو.
   const [offBudget, setOffBudget] = useState(!!initial?.offBudget);
+  const [saveAttempted, setSaveAttempted] = useState(false);
   // **نيّةُ المصروف الكبير**: ما يُنشأ ويُموَّل ويُسدَّد — تُنفَّذ عند حفظ المعاملة
   // لا قبله، فإغلاقُ الورقة بلا حفظ لا يترك مظروفاً يتيماً ولا خطةً بلا عجز.
   // (كانت تُنفَّذ فور «اعتمد»، فظهر مظروفٌ فارغ وخطةٌ «اكتملت» ومصروفٌ غير مربوط.)
@@ -160,7 +161,10 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   }
 
   function handleSave() {
-    if (!parsedAmount || parsedAmount <= 0) return;
+    if (!parsedAmount || parsedAmount <= 0) {
+      setSaveAttempted(true);
+      return;
+    }
     // تُنفَّذ النيّة أوّلاً فيوجد المظروفُ قبل أن تُحمَّل عليه المعاملة.
     if (intent) applyExpenseIntent(intent);
     const tx: Transaction = {
@@ -224,8 +228,9 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       )}
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">المبلغ (ريال)</label>
+        <label htmlFor="finance-transaction-amount" className="block text-xs font-medium text-gray-500 mb-1">المبلغ (ريال)</label>
         <NumberInput
+          id="finance-transaction-amount"
           value={amount}
           onChange={setAmount}
           placeholder="0.00"
@@ -237,12 +242,16 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
           className="w-full border border-gray-200 rounded-xl px-4 py-3 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-finance/40"
           inputMode="decimal"
         />
+        {saveAttempted && parsedAmount <= 0 && (
+          <p className="mt-1 text-xs text-red-600" role="alert">أدخل مبلغاً أكبر من صفر قبل الحفظ.</p>
+        )}
       </div>
 
       {/* المتجر/الملاحظة — ثانياً، ليخدم التصنيف التلقائي */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">المتجر أو الملاحظة</label>
+        <label htmlFor="finance-transaction-note" className="block text-xs font-medium text-gray-500 mb-1">المتجر أو الملاحظة</label>
         <input
+          id="finance-transaction-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="مثل: قهوة، بنزين، بقالة…"
@@ -282,12 +291,12 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       {(showCats || !suggestionLabel) && (
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-xs font-medium text-gray-500">القسم الرئيسي</label>
+          <span id="finance-transaction-category-label" className="block text-xs font-medium text-gray-500">القسم الرئيسي</span>
           {suggestionLabel && (
             <button onClick={() => { setShowCats(false); setTouchedCat(false); }} className="text-[11px] text-gray-400 press">استخدم الاقتراح</button>
           )}
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="finance-transaction-category-label">
           {mains.map((cat) => (
             <button
               key={cat.id}
@@ -339,6 +348,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
             {addingSub && (
               <div className="flex gap-1.5 mt-2 animate-fade-up">
                 <input
+                  aria-label="اسم القسم الفرعي الجديد"
                   value={newSubName}
                   onChange={(e) => setNewSubName(e.target.value)}
                   placeholder="اكتب اسم القسم الفرعي... (بنزين، فواتير)"
@@ -429,8 +439,9 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
 
       {showDetails && (
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">التاريخ</label>
+          <label htmlFor="finance-transaction-date" className="block text-xs font-medium text-gray-500 mb-1">التاريخ</label>
           <input
+            id="finance-transaction-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -517,10 +528,10 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       )}
 
       <div className="flex gap-2">
-        <Button onClick={handleSave} className="flex-1 bg-finance hover:bg-finance/90">
+        <Button type="button" onClick={handleSave} className="flex-1 bg-finance hover:bg-finance/90">
           {initial ? "حفظ" : "إضافة"}
         </Button>
-        <Button variant="secondary" onClick={onClose}>إلغاء</Button>
+        <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
       </div>
     </div>
   );

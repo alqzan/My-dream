@@ -56,6 +56,38 @@ describe("backup validation", () => {
     expect(isValidJournalEntry({ id: "j1", date: "2026-08-01", content: "نص", photoRefs: [42] })).toBe(false);
   });
 
+  it("يحرس خطط تمويل المظروف ونافذة الرحلة والتواريخ قبل الاستعادة", () => {
+    const reserve = {
+      id: "r1", name: "سفرة", icon: "✈️", color: "#000", createdAt: "2026-08-01", deposits: [],
+      funding: { perCycle: 500, source: "salary", stop: "target" },
+      trips: [{ id: "trip-1", startedAt: "2026-08-10", endedAt: "2026-08-15" }],
+    };
+    expect(isValidBackupPayload({ ...valid, reserves: [reserve] })).toBe(true);
+    expect(isValidBackupPayload({ ...valid, reserves: [{ ...reserve, funding: { perCycle: 0, source: "salary" } }] })).toBe(false);
+    expect(isValidBackupPayload({ ...valid, reserves: [{ ...reserve, funding: { perCycle: 500, source: "cash" } }] })).toBe(false);
+    expect(isValidBackupPayload({ ...valid, reserves: [{ ...reserve, trips: [{ id: "trip-1", startedAt: "2026-08-15", endedAt: "2026-08-10" }] }] })).toBe(false);
+    expect(isValidBackupPayload({ ...valid, reserves: [{ ...reserve, createdAt: "2026-02-30" }] })).toBe(false);
+    expect(isValidBackupPayload({ ...valid, dailyBudget: { amount: 100, startDate: "2026-02-30" } })).toBe(false);
+  });
+
+  it("يرفض تقسيمات المظروف التي تتجاوز 100%", () => {
+    expect(isValidTransaction({
+      id: "t-over", date: "2026-08-01", amount: 10, category: "food", note: "قهوة",
+      reserveSplits: [{ fundId: "r1", pct: 60 }, { fundId: "r2", pct: 41 }],
+    })).toBe(false);
+  });
+
+  it("يتحقق من تمويل المظروف وترتيب تواريخ الرحلة", () => {
+    const reserve = {
+      id: "r1", name: "سفر", icon: "✈️", color: "#000", deposits: [], createdAt: "2026-08-01",
+      funding: { perCycle: 200, source: "salary", stop: "target" },
+      trips: [{ id: "trip-1", startedAt: "2026-08-10", endedAt: "2026-08-12" }],
+    };
+    expect(isValidBackupPayload({ ...valid, reserves: [reserve] })).toBe(true);
+    expect(isValidBackupPayload({ ...valid, reserves: [{ ...reserve, funding: { perCycle: 0, source: "salary" } }] })).toBe(false);
+    expect(isValidBackupPayload({ ...valid, reserves: [{ ...reserve, trips: [{ id: "trip-1", startedAt: "2026-08-12", endedAt: "2026-08-10" }] }] })).toBe(false);
+  });
+
   it("keeps the cloud read boundary compatible with legacy optional fields", () => {
     const legacyJournal = {
       id: "j-legacy",

@@ -304,6 +304,9 @@ export interface FundFunding {
 export interface ReserveFund {
   id: string;
   name: string; // e.g. "الإيجار", "سفرة الصيف"
+  // Stable system role. Legacy records omit this field and are normalized from
+  // their old reserved names at the persistence/restore boundary.
+  role?: "general" | "surplus" | "custom";
   icon: string; // any emoji
   color: string;
   target?: number; // optional goal amount for the envelope

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useAppStore } from "@/lib/store";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
@@ -25,7 +25,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionSignet } from "@/components/layout/SectionSignet";
 import type { Transaction } from "@/lib/types";
 import { Plus, Smartphone, Repeat, Tags, ChevronLeft, Search, X, Wallet, Gauge, Landmark, CalendarClock, Package, Hourglass } from "lucide-react";
-import { getCategoryInfo, normalizeArabic, formatAmount, today, uid } from "@/lib/utils";
+import { getCategoryInfo, normalizeArabic, formatAmount, today, uid, cashOut } from "@/lib/utils";
 import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
@@ -101,7 +101,10 @@ export default function FinancePage() {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [financeView, setFinanceView] = useState<"cycle" | "now">("cycle");
+  const cycleTabRef = useRef<HTMLButtonElement>(null);
+  const nowTabRef = useRef<HTMLButtonElement>(null);
   const [financeVisibility, setFinanceVisibility] = useState<FinanceDisplayVisibility>({});
+  const [temporaryFinanceVisibility, setTemporaryFinanceVisibility] = useState<FinanceDisplayVisibility>({});
   const [financeVisibilityReady, setFinanceVisibilityReady] = useState(false);
 
   useEffect(() => {
@@ -114,7 +117,7 @@ export default function FinancePage() {
   }, [financeVisibility, financeVisibilityReady]);
 
   function isFinanceSectionVisible(id: FinanceDisplayId): boolean {
-    return isFinanceDisplayVisible(financeVisibility, id);
+    return isFinanceDisplayVisible(financeVisibility, id) || temporaryFinanceVisibility[id] === true;
   }
 
   useEffect(() => {
@@ -139,7 +142,9 @@ export default function FinancePage() {
     const hash = window.location.hash.slice(1);
     const id = hash === "history" ? "history" : planSectionFromHash(hash);
     if (id && !isFinanceDisplayVisible(financeVisibility, id as FinanceDisplayId)) {
-      setFinanceVisibility((current) => ({ ...current, [id as FinanceDisplayId]: true }));
+      // A deep link must reveal its target for this visit without silently
+      // rewriting the owner's saved display preference.
+      setTemporaryFinanceVisibility((current) => ({ ...current, [id as FinanceDisplayId]: true }));
     }
   }, [financeVisibility, financeVisibilityReady]);
 
@@ -180,6 +185,10 @@ export default function FinancePage() {
   const currentMonth = today().slice(0, 7);
 
   const byMonth = transactions.filter((t) => t.date.startsWith(monthFilter));
+  const selectedMonthSpend = useMemo(
+    () => byMonth.reduce((sum, transaction) => sum + cashOut(transaction), 0),
+    [byMonth]
+  );
 
   const [txSearch, setTxSearch] = useState("");
   const q = normalizeArabic(txSearch.trim());
@@ -271,8 +280,20 @@ export default function FinancePage() {
     }, 60);
   }
 
+  function handleFinanceTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    let next: "cycle" | "now" | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = "now";
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = "cycle";
+    if (event.key === "Home") next = "cycle";
+    if (event.key === "End") next = "now";
+    if (!next) return;
+    event.preventDefault();
+    setFinanceView(next);
+    requestAnimationFrame(() => (next === "cycle" ? cycleTabRef : nowTabRef).current?.focus());
+  }
+
   return (
-    <div className={`page-shell page-shell--wide mdr-finance-page ${financeView === "now" ? "is-now" : ""}`}>
+    <div className={`page-shell page-shell--wide min-w-0 mdr-finance-page ${financeView === "now" ? "is-now" : ""}`}>
       <div className="mdr-finance-header flex items-center justify-between animate-fade-up">
         <div>
           <div className="flex items-center gap-2.5">
@@ -311,12 +332,34 @@ export default function FinancePage() {
       </div>
 
       <div className="mdr-finance-tabs" role="tablist" aria-label="واجهة المال">
-        <button type="button" role="tab" aria-selected={financeView === "cycle"} className={financeView === "cycle" ? "is-active" : ""} onClick={() => setFinanceView("cycle")}>الدورة</button>
-        <button type="button" role="tab" aria-selected={financeView === "now"} className={financeView === "now" ? "is-active" : ""} onClick={() => setFinanceView("now")}>الآن</button>
+        <button
+          id="finance-tab-cycle"
+          ref={cycleTabRef}
+          type="button"
+          role="tab"
+          aria-selected={financeView === "cycle"}
+          aria-controls="finance-panel-cycle"
+          tabIndex={financeView === "cycle" ? 0 : -1}
+          className={financeView === "cycle" ? "is-active" : ""}
+          onKeyDown={handleFinanceTabKeyDown}
+          onClick={() => setFinanceView("cycle")}
+        >الدورة</button>
+        <button
+          id="finance-tab-now"
+          ref={nowTabRef}
+          type="button"
+          role="tab"
+          aria-selected={financeView === "now"}
+          aria-controls="finance-panel-now"
+          tabIndex={financeView === "now" ? 0 : -1}
+          className={financeView === "now" ? "is-active" : ""}
+          onKeyDown={handleFinanceTabKeyDown}
+          onClick={() => setFinanceView("now")}
+        >الآن</button>
       </div>
 
       {financeView === "cycle" ? (
-        <div className="mdr-finance-cycle-surface">
+        <div id="finance-panel-cycle" role="tabpanel" aria-labelledby="finance-tab-cycle" tabIndex={0} className="mdr-finance-cycle-surface">
           <FinanceCycleDashboard
             curve={cycleCurve}
             overview={overview}
@@ -328,7 +371,7 @@ export default function FinancePage() {
           {isFinanceSectionVisible("daily") && <div className="mdr-finance-salary"><SalaryBanner /></div>}
         </div>
       ) : (
-        <div className="mdr-finance-now-surface">
+        <div id="finance-panel-now" role="tabpanel" aria-labelledby="finance-tab-now" tabIndex={0} className="mdr-finance-now-surface">
           <div className="mdr-finance-now-card">
             <div className="mdr-finance-now-heading">
               <div>
@@ -407,7 +450,7 @@ export default function FinancePage() {
         className="mdr-finance-tool"
         open={historyOpen}
         onToggle={() => setHistoryOpen((open) => !open)}
-        summary={byMonth.length ? `${formatAmount(byMonth.length)} عملية · ${formatAmount(overview.monthSpend)} ر.س هذا الشهر` : "لا عمليات هذا الشهر"}
+        summary={byMonth.length ? `${formatAmount(byMonth.length)} عملية · ${formatAmount(selectedMonthSpend)} ر.س في ${monthLabel(monthFilter)}` : `لا عمليات في ${monthLabel(monthFilter)}`}
       >
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -457,7 +500,13 @@ export default function FinancePage() {
             <span className="text-sm font-semibold text-gray-700">سجل الشهر</span>
             <span className="text-xs text-gray-400">اضغط أي يوم للتفاصيل 👆</span>
           </div>
-          <SpendCalendar transactions={byMonth} dailyBudget={dailyBudget} onDayClick={setSelectedDay} />
+          <SpendCalendar
+            transactions={byMonth}
+            dailyBudget={dailyBudget}
+            monthFilter={monthFilter}
+            onMonthChange={setMonthFilter}
+            onDayClick={setSelectedDay}
+          />
         </Card>
 
         {byMonth.length === 0 ? (

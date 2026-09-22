@@ -11,6 +11,7 @@ const LUX = "cat-luxuries";
 // No teal (teal belongs to prayer only). The category defs still supply the
 // icons/labels; only the two-arc gauge is fixed to the section palette.
 const ESS_COLOR = "var(--theme-accent)"; // necessary spend follows the selected theme
+const ESS_TINT = "color-mix(in srgb, var(--theme-accent) 8%, transparent)";
 const LUX_COLOR = "#c9852a"; // brand gold — the discretionary spend
 const GOLD_LINE = "#e8b15a"; // thin warm gold line-work (frame · needle · marks)
 
@@ -239,7 +240,7 @@ export function SpendingPatternCard({
           type="button"
           onClick={() => pick("ess")}
           className={`text-right rounded-xl p-2.5 transition-all press ${essActive ? "ring-2" : "ring-1 ring-transparent"}`}
-          style={{ backgroundColor: ESS_COLOR + "14", boxShadow: essActive ? `inset 0 0 0 1.5px ${ESS_COLOR}` : undefined }}
+          style={{ backgroundColor: ESS_TINT, boxShadow: essActive ? `inset 0 0 0 1.5px ${ESS_COLOR}` : undefined }}
         >
           <div className="text-[11px] text-gray-500">{essDef?.icon ?? "🧺"} {essDef?.label ?? "أساسيات"}</div>
           <div className="text-sm font-bold text-gray-800">{formatAmount(view.ess)} <span className="text-[10px] font-normal text-gray-400">ر.س</span></div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reserveTotals, reserveBalance, reserveSpent, reserveShare } from "./utils";
+import { dailyShare, reserveTotals, reserveBalance, reserveSpent, reserveShare } from "./utils";
 import type { ReserveFund, Transaction } from "./types";
 
 // ===== أرصدةُ المظاريف: مرورٌ واحد، ورقمٌ مقرَّب عند الحدّ =====
@@ -69,5 +69,27 @@ describe("رصيدُ المظروف مقرَّبٌ عند الحدّ", () => {
     const t = tx("x", 99.99, [{ fundId: "f", pct: 33 }]);
     expect(reserveShare(t, "f")).toBe(33);   // 32.9967 → 33
     expect(reserveShare(t, "other")).toBe(0);
+  });
+
+  it("التكرارُ يُدمج، وتبقى اليوميةُ والمظروفُ على معادلةٍ واحدة", () => {
+    const t = tx("duplicate", 100, [
+      { fundId: "f", pct: 20 },
+      { fundId: "f", pct: 30 },
+      { fundId: "other", pct: 10 },
+    ]);
+    expect(dailyShare(t)).toBe(40);
+    expect(reserveShare(t, "f")).toBe(50);
+    expect(reserveShare(t, "other")).toBe(10);
+  });
+
+  it("الحمولة القديمة فوق 100 تُقصّ متناسباً ولا تنشئ صرفاً يومياً سالباً", () => {
+    const t = tx("over", 100, [
+      { fundId: "f", pct: 80 },
+      { fundId: "other", pct: 40 },
+    ]);
+    expect(dailyShare(t)).toBe(0);
+    expect(reserveShare(t, "f") + reserveShare(t, "other")).toBe(100);
+    const totals = reserveTotals([fund("f", [100]), fund("other", [100])], [t]);
+    expect(totals.get("f")!.spent + totals.get("other")!.spent).toBe(100);
   });
 });

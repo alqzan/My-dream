@@ -30,6 +30,23 @@ const balanceOf = (id: string) => {
   const s = state();
   return reserveBalance(s.reserves.find((f) => f.id === id)!, s.transactions);
 };
+// Confirming twice on one local day is intentionally idempotent. To model the
+// next salary cycle in a unit test, advance the persisted cycle marker.
+const confirmNextCycle = () => {
+  const current = useAppStore.getState();
+  // The production key includes the local salary date. Keep the test clock
+  // fixed and move prior synthetic-cycle ids out of the current date instead.
+  useAppStore.setState({
+    lastSalaryConfirm: null,
+    reserves: current.reserves.map((fund) => ({
+      ...fund,
+      deposits: fund.deposits.map((deposit, index) =>
+        deposit.id.startsWith(`salary:${T}:`) ? { ...deposit, id: `historical:${index}:${deposit.id}` } : deposit
+      ),
+    })),
+  });
+  return state().confirmSalary();
+};
 
 beforeEach(() => {
   useAppStore.setState({
@@ -42,6 +59,34 @@ beforeEach(() => {
 });
 
 describe("تمويل المظاريف عند «نزل الراتب»", () => {
+  it("تأكيد الراتب مرتين في اليوم نفسه لا يكرر الترحيل أو التمويل", () => {
+    useAppStore.setState({
+      reserves: [fund({ id: "f-rent", name: "الإيجار", funding: { perCycle: 200, source: "salary" } })],
+    });
+    expect(state().confirmSalary()).toBe(0);
+    const once = state();
+    const depositsAfterFirst = once.reserves.flatMap((f) => f.deposits);
+    expect(state().confirmSalary()).toBe(0);
+    const twice = state();
+    expect(twice.lastSalaryConfirm).toBe(T);
+    expect(twice.reserves.flatMap((f) => f.deposits)).toEqual(depositsAfterFirst);
+  });
+
+  it("يولد نفس معرفات الإيداع على جهازين يؤكدان الدورة نفسها", () => {
+    const initial = {
+      transactions: [], reserves: [fund({ id: "f-rent", name: "الإيجار", funding: { perCycle: 200, source: "salary" } })],
+      dailyBudget: { amount: 100, startDate: T, carryAdjust: 100 },
+      lastSalaryConfirm: null,
+    };
+    useAppStore.setState(initial);
+    state().confirmSalary();
+    const deviceA = state().reserves.flatMap((f) => f.deposits).map((d) => d.id).sort();
+    useAppStore.setState(initial);
+    state().confirmSalary();
+    const deviceB = state().reserves.flatMap((f) => f.deposits).map((d) => d.id).sort();
+    expect(deviceB).toEqual(deviceA);
+  });
+
   it("الإيجار (خطة مستمرّة من الراتب): يُموَّل كل دورة وينزل البدل بقطرته", () => {
     useAppStore.setState({
       reserves: [fund({ id: "f-rent", name: "الإيجار", funding: { perCycle: 2000, source: "salary" } })],
@@ -72,17 +117,17 @@ describe("تمويل المظاريف عند «نزل الراتب»", () => {
     });
     expect(balanceOf("f-trip")).toBe(-900);
 
-    state().confirmSalary();
+    confirmNextCycle();
     expect(balanceOf("f-trip")).toBe(-400);
     expect(state().reserves[0].funding?.perCycle).toBe(500); // ما زال هناك عجز
 
-    state().confirmSalary();
+    confirmNextCycle();
     expect(balanceOf("f-trip")).toBe(0); // آخر دورة تنقل الباقي (٤٠٠) لا ٥٠٠
     expect(state().reserves[0].funding).toBeUndefined(); // ارتفعت الخطة وحدها
     // وقطرةُ هذه الدورة تعكس الدفعة الأخيرة (٤٠٠) لأنّها صُرفت فعلاً فيها…
     expect(state().dailyBudget!.fundingPerDay).toBe(fundingPerDay(400, CYCLE_LEN));
     // …ثمّ يعود البدل كاملاً في الدورة التالية بلا أيّ تدخّل
-    state().confirmSalary();
+    confirmNextCycle();
     expect(state().dailyBudget!.fundingPerDay).toBeUndefined();
     expect(computeDailyBudgetStatus(state().dailyBudget!, state().transactions).rate).toBe(100);
   });

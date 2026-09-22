@@ -13,6 +13,7 @@ import { Download, Upload, ShieldCheck, GitMerge, Replace, Loader2, Lock, KeyRou
 import { showUndo, showToast } from "@/components/ui/UndoToast";
 import { encryptJson, decryptJson, isEncryptedBackup, type EncryptedBackup } from "@/lib/backupCrypto";
 import { describeBackupRejection, findBackupRejection, MAX_BACKUP_BYTES } from "@/lib/backupValidation";
+import { normalizeReserveFunds, normalizeTransactionReserveSplits } from "@/lib/reserveFunds";
 
 // Journal media is either a local `data:` URL or (since the move to Cloud
 // Storage) an `https://` download URL — the doc keeps only a lightweight
@@ -221,7 +222,7 @@ function inspectBackup(parsed: Record<string, unknown>): {
 export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
   const g = <T,>(k: string, fallback: T): T => (d[k] === undefined ? fallback : (d[k] as T));
   return {
-    transactions: g("transactions", []),
+    transactions: g("transactions", []).map(normalizeTransactionReserveSplits),
     books: g("books", []),
     readingLogs: g("readingLogs", []),
     knowledgeSources: g("knowledgeSources", []),
@@ -230,7 +231,7 @@ export function normalizeBackup(d: Record<string, unknown>): Required<AppData> {
     habits: g("habits", []),
     budgets: g("budgets", []),
     categories: g("categories", DEFAULT_CATEGORIES),
-    reserves: g("reserves", []),
+    reserves: normalizeReserveFunds(g("reserves", [])),
     prayerLogs: g("prayerLogs", []),
     qadaBacklog: g("qadaBacklog", 0),
     quranReflections: g("quranReflections", []),

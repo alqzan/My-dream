@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { ReserveSplit } from "@/lib/types";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
+import { isSurplusFund } from "@/lib/reserveFunds";
 import { computeDailyBudgetStatus, formatAmount, cn, uid, today, reserveBalance } from "@/lib/utils";
 import { expenseWeight } from "@/lib/budgetFlow";
 import {
@@ -93,7 +94,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onP
 
   // مظاريفُ الأحداث (كلُّها عدا «الفوائض» — ذاك وعاءُ تمويلٍ لا وجهةُ صرف).
   const targets = useMemo(
-    () => reserves.filter((f) => f.name !== SURPLUS_FUND_NAME).map((f) => ({ fund: f, balance: reserveBalance(f, transactions) })),
+    () => reserves.filter((f) => !isSurplusFund(f)).map((f) => ({ fund: f, balance: reserveBalance(f, transactions) })),
     [reserves, transactions]
   );
   // اقتراحُ الوجهة: مظروفٌ يذكر اسمُه في الملاحظة (أو تذكرُه هي) — كأن تكتب

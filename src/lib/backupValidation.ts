@@ -1,4 +1,4 @@
-import { toIndicDigits } from "./utils";
+import { isValidDateKey, toIndicDigits } from "./utils";
 import type {
   AppData,
   Benefit,
@@ -130,6 +130,8 @@ export function isValidTransaction(value: unknown): value is Transaction {
       && split.pct <= 100
     ))
   )) return false;
+  if (Array.isArray(value.reserveSplits)
+    && value.reserveSplits.reduce((sum, split) => sum + (record(split) && finiteNumber(split.pct) ? split.pct : 0), 0) > 100) return false;
   if (value.kind !== undefined && !TXN_KINDS.has(String(value.kind))) return false;
   if (value.direction !== undefined && !TXN_DIRECTIONS.has(String(value.direction))) return false;
   if (value.balanceKind !== undefined && !BALANCE_KINDS.has(String(value.balanceKind))) return false;
@@ -435,25 +437,40 @@ function validCategory(value: unknown): value is FinanceCategoryDef {
 
 function validReserveDeposit(value: unknown): boolean {
   return hasId(value)
-    && nonEmptyString(value.date)
+    && typeof value.date === "string"
+    && isValidDateKey(value.date)
     && finiteNumber(value.amount)
     && optionalString(value.note);
 }
 
 /** رحلةٌ على مظروف: معرّفٌ وتاريخُ بدءٍ، ونهايةٌ اختيارية (غيابُها = جارية). */
 function validTrip(value: unknown): boolean {
-  return hasId(value) && nonEmptyString(value.startedAt) && optionalString(value.endedAt);
+  return hasId(value)
+    && typeof value.startedAt === "string"
+    && isValidDateKey(value.startedAt)
+    && (value.endedAt === undefined || (typeof value.endedAt === "string" && isValidDateKey(value.endedAt) && value.endedAt >= value.startedAt));
+}
+
+function validReserveFunding(value: unknown): boolean {
+  return record(value)
+    && finiteNumber(value.perCycle)
+    && value.perCycle > 0
+    && (value.source === "salary" || value.source === "surplus")
+    && (value.stop === undefined || value.stop === "zero" || value.stop === "target");
 }
 
 function validReserve(value: unknown): value is ReserveFund {
   return hasId(value)
     && typeof value.name === "string"
+    && (value.role === undefined || value.role === "general" || value.role === "surplus" || value.role === "custom")
     && typeof value.icon === "string"
     && typeof value.color === "string"
     && optionalFiniteNumber(value.target)
+    && (value.funding === undefined || validReserveFunding(value.funding))
     && collectionOf(value.deposits, validReserveDeposit)
     && (value.trips === undefined || collectionOf(value.trips, validTrip))
-    && nonEmptyString(value.createdAt)
+    && typeof value.createdAt === "string"
+    && isValidDateKey(value.createdAt)
     && optionalFiniteNumber(value.updatedAt);
 }
 
@@ -706,13 +723,13 @@ export function findBackupRejection(value: unknown): BackupRejection | null {
     return scalar("dailyBudget", false);
   }
   if (record(value.dailyBudget)) {
-    if (!finiteNumber(value.dailyBudget.amount) || !nonEmptyString(value.dailyBudget.startDate)) return scalar("dailyBudget", false);
+    if (!finiteNumber(value.dailyBudget.amount) || value.dailyBudget.amount <= 0 || typeof value.dailyBudget.startDate !== "string" || !isValidDateKey(value.dailyBudget.startDate)) return scalar("dailyBudget", false);
     if (!optionalFiniteNumber(value.dailyBudget.monthlyIncome) || !optionalFiniteNumber(value.dailyBudget.incomePct) || !optionalFiniteNumber(value.dailyBudget.carryAdjust)) return scalar("dailyBudget", false);
   }
   if (value.monthlyIncome !== undefined && value.monthlyIncome !== null && !finiteNumber(value.monthlyIncome)) return scalar("monthlyIncome", false);
   if (value.salaryDay !== undefined && !finiteNumber(value.salaryDay)) return scalar("salaryDay", false);
   if (value.budgetWindow !== undefined && value.budgetWindow !== "salary" && value.budgetWindow !== "month") return scalar("budgetWindow", false);
-  if (value.lastSalaryConfirm !== undefined && value.lastSalaryConfirm !== null && typeof value.lastSalaryConfirm !== "string") return scalar("lastSalaryConfirm", false);
+  if (value.lastSalaryConfirm !== undefined && value.lastSalaryConfirm !== null && (typeof value.lastSalaryConfirm !== "string" || !isValidDateKey(value.lastSalaryConfirm))) return scalar("lastSalaryConfirm", false);
   if (value.readingGoal !== undefined && value.readingGoal !== null && !finiteNumber(value.readingGoal)) return scalar("readingGoal", false);
   if (value.cashbackEnabled !== undefined && typeof value.cashbackEnabled !== "boolean") return scalar("cashbackEnabled", false);
   if (value.cashbackEnvelopeId !== undefined && value.cashbackEnvelopeId !== "" && typeof value.cashbackEnvelopeId !== "string") return scalar("cashbackEnvelopeId", false);
