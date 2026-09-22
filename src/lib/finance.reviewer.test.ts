@@ -10,7 +10,8 @@ vi.mock("idb-keyval", () => ({
 import { parseBankSmsBulk, type SmsParseEventResult } from "./bankParser";
 import { useAppStore } from "./store";
 import { mergeAppData } from "./merge";
-import { cashOut, computeDailyBudgetStatus, today } from "./utils";
+import { cashOut, computeDailyBudgetStatus, parseDate, toDateStr, today } from "./utils";
+import { tripSummary } from "./trip";
 
 const initial = useAppStore.getState().snapshot();
 const text = "شراء عبر نقاط البيع\nبطاقة: 7312\nمبلغ: SAR 37.50\nلدى: TEST GROCER";
@@ -145,6 +146,94 @@ describe("independent acceptance through the bank import boundary", () => {
     const state = useAppStore.getState();
     expect(state.transactions.reduce((sum, transaction) => sum + cashOut(transaction), 0)).toBe(500);
     expect(computeDailyBudgetStatus(dailyBudget, state.transactions).balance).toBe(-400);
+  });
+
+  it("keeps a reviewed expense destination on its source-linked transaction", () => {
+    const date = today();
+    useAppStore.setState({
+      dailyBudget: { amount: 100, startDate: date },
+      reserves: [{
+        id: "trip-envelope", name: "رحلة اختبار", icon: "🎒", color: "#8a6fb0",
+        deposits: [], createdAt: date,
+      }],
+    });
+    const receipt = {
+      ...event("routed-large-expense"), date, amount: 500, expenseAmount: 500,
+      confidence: "inferred" as const, reviewReason: "مصروف كبير — اختير المظروف يدوياً",
+    };
+    useAppStore.getState().confirmInboxEvent(receipt, {
+      reserveSplits: [{ fundId: "trip-envelope", pct: 100 }],
+    });
+
+    const state = useAppStore.getState();
+    expect(state.transactions).toHaveLength(1);
+    expect(state.transactions[0]).toMatchObject({
+      id: "routed-large-expense:0",
+      eventId: "routed-large-expense:0",
+      reserveSplits: [{ fundId: "trip-envelope", pct: 100 }],
+    });
+    expect(state.inboxDecisions?.find((decision) => decision.eventId === "routed-large-expense:0")?.decision).toBe("saved");
+  });
+
+  it("routes confirmed SMS spending by its event date, while non-expense events stay off the trip", () => {
+    const day = today();
+    const previousDay = toDateStr(new Date(parseDate(day).getTime() - 86400000));
+    const tripFund = {
+      id: "sms-trip", name: "رحلة الرسائل", icon: "✈️", color: "#8a6fb0",
+      deposits: [{ id: "deposit-trip", date: previousDay, amount: 500 }],
+      createdAt: previousDay, trips: [{ id: "trip-current", startedAt: day }],
+    };
+    useAppStore.setState({ reserves: [tripFund] });
+    const purchase = { ...event("sms-trip-purchase"), date: day };
+    const beforeTrip = { ...event("sms-before-trip"), date: previousDay };
+    const selfTransfer = { ...event("sms-trip-transfer"), date: day, kind: "self_transfer" as const, direction: "out" as const, expenseAmount: 0 };
+    const settlement = { ...event("sms-trip-settlement"), date: day, kind: "card_settle" as const, direction: "out" as const, expenseAmount: 0 };
+
+    useAppStore.getState().confirmInboxEvent(purchase);
+    useAppStore.getState().confirmInboxEvent(beforeTrip);
+    useAppStore.getState().confirmInboxEvent(selfTransfer);
+    useAppStore.getState().confirmInboxEvent(settlement);
+
+    const state = useAppStore.getState();
+    expect(state.transactions.find((row) => row.id === "sms-trip-purchase:0")?.reserveSplits).toEqual([
+      { fundId: "sms-trip", pct: 100 },
+    ]);
+    expect(state.transactions.find((row) => row.id === "sms-before-trip:0")?.reserveSplits).toBeUndefined();
+    expect(state.transactions.find((row) => row.id === "sms-trip-transfer:0")?.reserveSplits).toBeUndefined();
+    expect(state.settlements?.find((row) => row.id === "sms-trip-settlement:0")).toBeTruthy();
+    expect(tripSummary(tripFund, state.transactions, day).total).toBe(purchase.amount);
+  });
+
+  it("routes a late SMS receipt to its ended trip and links a card refund back to that envelope", () => {
+    const day = today();
+    const ended = toDateStr(new Date(parseDate(day).getTime() - 86400000));
+    const started = toDateStr(new Date(parseDate(day).getTime() - 2 * 86400000));
+    const tripFund = {
+      id: "sms-old-trip", name: "رحلة انتهت", icon: "✈️", color: "#8a6fb0",
+      deposits: [{ id: "deposit-old-trip", date: started, amount: 100 }],
+      createdAt: started, trips: [{ id: "trip-ended", startedAt: started, endedAt: ended }],
+    };
+    useAppStore.setState({ reserves: [tripFund] });
+    const purchase = { ...event("late-trip-purchase"), date: ended };
+    useAppStore.getState().confirmInboxEvent(purchase);
+    const refund = {
+      ...event("late-trip-refund"), date: day, kind: "refund" as const,
+      direction: "in" as const, amount: 10, expenseAmount: 0,
+      note: purchase.note, accountId: purchase.accountId,
+      refundDestination: "merchant_card" as const,
+    };
+    useAppStore.getState().confirmInboxEvent(refund);
+
+    const state = useAppStore.getState();
+    const savedPurchase = state.transactions.find((row) => row.id === "late-trip-purchase:0");
+    const savedRefund = state.transactions.find((row) => row.id === "late-trip-refund:0");
+    expect(savedPurchase?.reserveSplits).toEqual([{ fundId: "sms-old-trip", pct: 100 }]);
+    expect(savedRefund).toMatchObject({
+      linkedTransactionId: "late-trip-purchase:0",
+      reserveSplits: [{ fundId: "sms-old-trip", pct: 100 }],
+      refundDestination: "merchant_card",
+    });
+    expect(tripSummary(tripFund, state.transactions, day, tripFund.trips?.[0]).total).toBe(purchase.amount - 10);
   });
 
   it.each([

@@ -3,15 +3,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { spendWindow } from "@/lib/budgetCycle";
 import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate, type SmsParseEventResult } from "@/lib/bankParser";
-import { isAutoApprovableBankEvent, isReviewNoiseKind } from "@/lib/bankImportPolicy";
+import { bankImportRouteReason, defaultIncluded, isAutoApprovableBankEvent } from "@/lib/bankImportPolicy";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
 import { today, formatAmount, getCategoryInfo, cn, toLatinDigits, firstGrapheme, uid } from "@/lib/utils";
 import { budgetWarningFor } from "@/lib/budgetStatus";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
-import { Sparkles, BrainCircuit, Check, Copy, Plus, X } from "lucide-react";
-import type { FinanceCategoryDef, InboxEventRecord, TxnKind } from "@/lib/types";
+import { Sparkles, BrainCircuit, Check, Copy, Plus, X, Plane } from "lucide-react";
+import type { FinanceCategoryDef, InboxEventRecord, InboxExpenseRoute, ReserveSplit, TxnKind } from "@/lib/types";
 import { flushPersistedStrict } from "@/lib/idbStorage";
+import { effectiveDailyRate } from "@/lib/fundPlan";
+import { BigExpenseRouter, applyExpenseIntent, expenseFundIdForEvent, type ExpenseIntent } from "@/components/finance/BigExpenseRouter";
+import { tripSplitFor } from "@/lib/trip";
 
 interface Pending {
   key: string;
@@ -27,7 +30,14 @@ interface Pending {
   kind: SmsParseEventResult["kind"];
   event: SmsParseEventResult;
   itemId: string;
+  routeRequired?: boolean;
+  routeChoice?: { expenseRoute: InboxExpenseRoute; intent?: ExpenseIntent };
+  tripSplit?: ReserveSplit[];
+  useTrip?: boolean;
+  preselectReason?: string;
 }
+
+const TRIP_EXPENSE_KINDS = new Set<TxnKind>(["purchase", "atm", "bill", "fee"]);
 
 // Tidy a raw bank SMS into a short readable note for a manual row.
 function rawNote(text: string): string {
@@ -42,6 +52,32 @@ function closeSourceTimes(a: SmsParseEventResult, b: SmsParseEventResult): boole
   const aAt = a.sourceReceivedAt ? Date.parse(a.sourceReceivedAt) : NaN;
   const bAt = b.sourceReceivedAt ? Date.parse(b.sourceReceivedAt) : NaN;
   return Number.isFinite(aAt) && Number.isFinite(bAt) && Math.abs(aAt - bAt) <= 15 * 60 * 1000;
+}
+
+function categoryForParsedEvent(
+  event: SmsParseEventResult,
+  categories: FinanceCategoryDef[],
+  merchantRules: Record<string, string>,
+): string {
+  const learned = learnedCategory(event.note ?? "", categories, merchantRules);
+  if (learned) return learned;
+  const suggested = suggestCategory(event.note ?? "", categories, merchantRules);
+  const parserCategory = categories.find((category) => category.id === event.category);
+  const suggestedCategory = categories.find((category) => category.id === suggested);
+  // Keep a useful parser category as the fallback, but retain owner-defined
+  // children suggested for a seeded parent (for example a custom cafe label).
+  if (parserCategory && suggestedCategory?.parentId === parserCategory.id) return suggested;
+  if (parserCategory && !["cat-essentials", "cat-luxuries"].includes(parserCategory.id)) return parserCategory.id;
+  return suggested || parserCategory?.id || "cat-essentials";
+}
+
+function withImportReviewReason(event: SmsParseEventResult, dailyRate: number, onTrip = false): SmsParseEventResult {
+  const prior = (event.reviewReason ?? "").split(" · ").filter((reason) =>
+    reason && !reason.startsWith("قسط تمويل —") && !reason.startsWith("مصروف كبير (يعادل")
+  );
+  const routeReason = bankImportRouteReason(event, dailyRate, onTrip);
+  const reasons = [...prior, ...(routeReason ? [routeReason] : [])];
+  return { ...event, reviewReason: reasons.length ? reasons.join(" · ") : undefined };
 }
 
 function storedInboxEvent(record: InboxEventRecord): SmsParseEventResult {
@@ -72,6 +108,7 @@ function storedInboxEvent(record: InboxEventRecord): SmsParseEventResult {
     sourceKey: record.sourceKey,
     sourceInboxId: record.sourceInboxId,
     sourceReceivedAt: record.sourceReceivedAt,
+    reviewReason: record.reviewReason,
   };
 }
 
@@ -97,13 +134,17 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   const categories = useAppStore((s) => s.categories);
   const merchantRules = useAppStore((s) => s.merchantRules);
   const transactions = useAppStore((s) => s.transactions);
+  const reserves = useAppStore((s) => s.reserves);
   const inboxEvents = useAppStore((s) => s.inboxEvents ?? []);
   const budgets = useAppStore((s) => s.budgets);
   const monthlyIncome = useAppStore((s) => s.monthlyIncome);
+  const dailyBudget = useAppStore((s) => s.dailyBudget);
+  const ownerWallets = useAppStore((s) => s.ownerWallets ?? []);
   const addCategory = useAppStore((s) => s.addCategory);
   const rememberMerchant = useAppStore((s) => s.rememberMerchant);
   const confirmInboxEvent = useAppStore((s) => s.confirmInboxEvent);
   const decideInboxEvent = useAppStore((s) => s.decideInboxEvent);
+  const dailyRate = dailyBudget ? effectiveDailyRate(dailyBudget.amount, dailyBudget.fundingPerDay) : 0;
   // Which row is currently showing the inline "new category" form (by key).
   const [addingFor, setAddingFor] = useState<string | null>(null);
 
@@ -124,6 +165,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
             receivedAt: item.ts,
             sourceInboxId: item.sourceInboxId ?? (item.localOnly ? undefined : item.id),
             sourceId: item.sourceEventId?.replace(/:\d+$/, ""),
+            ownerWallets,
           }).events.map((event, index) => item.sourceEventId && index === 0
             ? { ...event, eventId: item.sourceEventId }
             : event);
@@ -159,6 +201,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
           kind: event.kind,
           event,
           itemId: item.id,
+          preselectReason: "غير معروف",
         });
         continue;
       }
@@ -166,6 +209,11 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
         const known = learnedCategory(r.note ?? "", categories, merchantRules);
         const dup = r.direction === "out" && isLikelyDuplicate(r.expenseAmount ?? r.amount, r.date, r.note ?? "", transactions);
         const amount = (r.expenseAmount ?? 0) > 0 ? r.expenseAmount ?? 0 : r.amount;
+        const tripSplit = TRIP_EXPENSE_KINDS.has(r.kind) ? tripSplitFor(reserves, r.date) : undefined;
+        const useTrip = Boolean(tripSplit);
+        const event = withImportReviewReason(r, dailyRate, useTrip);
+        const selection = defaultIncluded(event, dup, { dailyRate, onTrip: useTrip });
+        const requiresLargeRoute = Boolean(bankImportRouteReason(event, dailyRate, useTrip));
         out.push({
           key: `${item.id}-${i}`,
           // Keep the source amount for incoming, settlement, and other
@@ -177,17 +225,21 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
           // The parser only knows the two seeded parent categories. Re-run the
           // suggestion here so an existing user-owned child such as «مطاعم»
           // or «قهوة» is selected automatically.
-          catId: known ?? suggestCategory(r.note ?? "", categories, merchantRules),
+          catId: known ?? categoryForParsedEvent(r, categories, merchantRules),
           learned: !!known,
           dup,
-          // Generic confidence and non-expense/noise rows require an explicit
-          // review choice; they must never be selected by an approve-all click.
-          included: r.direction === "out" && r.kind !== "unknown" && r.confidence !== "generic" && !isReviewNoiseKind(r.kind) && !dup,
+          // Default selection is separate from auto-save confidence. Generic
+          // expenses stay checked for convenient review, while risk is explicit.
+          included: selection.included && !requiresLargeRoute,
           ignored: false,
           kind: r.kind,
-          event: r,
+          event,
           itemId: item.id,
           manual: r.kind === "unknown",
+          routeRequired: requiresLargeRoute,
+          tripSplit,
+          useTrip,
+          preselectReason: selection.reason,
         });
       });
     }
@@ -203,11 +255,13 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
         if (!closeSourceTimes(left.event, right.event)) continue;
         left.dup = true; left.included = false;
         right.dup = true; right.included = false;
+        left.preselectReason = "مكرّر";
+        right.preselectReason = "مكرّر";
       }
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [categories, merchantRules, transactions, inboxEvents, items]);
+    }, [categories, merchantRules, transactions, reserves, inboxEvents, items, dailyRate, ownerWallets]);
 
   const [rows, setRows] = useState<Pending[]>(initial);
 
@@ -221,7 +275,48 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   }
 
   function toggleInclude(key: string) {
-    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, included: !r.included, ignored: false } : r)));
+    setRows((rs) => rs.map((r) => {
+      if (r.key !== key) return r;
+      if (!r.included && r.routeRequired && !r.routeChoice) return r;
+      return { ...r, included: !r.included, ignored: false };
+    }));
+  }
+
+  function chooseExpenseRoute(key: string, route: InboxExpenseRoute, intent?: ExpenseIntent) {
+    setRows((rs) => rs.map((r) => r.key === key
+      ? { ...r, routeChoice: { expenseRoute: route, intent }, included: true, ignored: false }
+      : r));
+  }
+
+  const tripRows = rows.filter((row) => row.tripSplit && TRIP_EXPENSE_KINDS.has(row.kind));
+  const allTripRowsOn = tripRows.length > 0 && tripRows.every((row) => row.useTrip);
+
+  function setTripForRows(keys: Set<string>, enabled: boolean) {
+    setRows((rs) => rs.map((row) => {
+      if (!keys.has(row.key) || !row.tripSplit || !TRIP_EXPENSE_KINDS.has(row.kind)) return row;
+      const event = withImportReviewReason(row.event, dailyRate, enabled);
+      const routeRequired = Boolean(bankImportRouteReason(event, dailyRate, enabled));
+      const selection = defaultIncluded(event, row.dup, { dailyRate, onTrip: enabled });
+      return {
+        ...row,
+        useTrip: enabled,
+        routeChoice: undefined,
+        routeRequired,
+        included: !row.ignored && selection.included && !routeRequired,
+        preselectReason: selection.reason ?? (routeRequired ? "وجّه المصروف" : undefined),
+        event,
+      };
+    }));
+  }
+
+  function toggleTripForRow(key: string) {
+    const row = rows.find((item) => item.key === key);
+    if (!row?.tripSplit) return;
+    setTripForRows(new Set([key]), !row.useTrip);
+  }
+
+  function toggleTripForAll() {
+    setTripForRows(new Set(tripRows.map((row) => row.key)), !allTripRowsOn);
   }
 
   function ignoreRow(key: string) {
@@ -233,11 +328,20 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     const expense = new Set<TxnKind>(["purchase", "atm", "bill", "installment", "fee"]);
     setRows((rs) => rs.map((r) => {
       if (r.key !== key) return r;
-      const direction: SmsParseEventResult["direction"] = incoming.has(kind) ? "in" : expense.has(kind) || kind === "card_settle" || kind === "transfer_out" ? "out" : "neutral";
+      const direction: SmsParseEventResult["direction"] = incoming.has(kind) ? "in" : expense.has(kind) || kind === "card_settle" || kind === "transfer_out" ? "out" : kind === "self_transfer" ? r.event.direction : "neutral";
       const event = { ...r.event, kind, direction, confidence: "inferred" as const, category: r.catId,
         ...(kind === "refund" || kind === "reversal" ? { refundDestination: undefined } : {}),
         expenseAmount: expense.has(kind) ? r.amount + (r.event.fee ?? 0) : 0 };
-      return { ...r, kind, event, included: false, ignored: false, manual: kind === "unknown" };
+      const tripSplit = TRIP_EXPENSE_KINDS.has(kind) ? tripSplitFor(reserves, r.date) : undefined;
+      const useTrip = Boolean(tripSplit);
+      const updatedEvent = withImportReviewReason(event, dailyRate, useTrip);
+      const routeRequired = Boolean(bankImportRouteReason(updatedEvent, dailyRate, useTrip));
+      const selection = defaultIncluded(updatedEvent, r.dup, { dailyRate, onTrip: useTrip });
+      return {
+        ...r, kind, event: updatedEvent, included: false, ignored: false,
+        manual: kind === "unknown", routeRequired, routeChoice: undefined,
+        tripSplit, useTrip, preselectReason: selection.reason ?? "راجع النوع",
+      };
     }));
   }
 
@@ -255,13 +359,22 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
       const kind = r.kind === "unknown" ? "purchase" as const : r.kind;
       const incoming = new Set<TxnKind>(["refund", "cashback", "reversal", "transfer_in", "deposit", "salary"]);
       const expense = new Set<TxnKind>(["purchase", "atm", "bill", "installment", "fee"]);
-      const direction = incoming.has(kind) ? "in" as const : expense.has(kind) || kind === "card_settle" || kind === "transfer_out" ? "out" as const : "neutral" as const;
-      const event = { ...r.event, amount: n, expenseAmount: expense.has(kind) ? n : 0, kind, direction, confidence: "inferred" as const, category: r.catId };
-      return { ...r, amount: n, included: n > 0, kind: event.kind, event, manual: false };
+      const direction = incoming.has(kind) ? "in" as const : expense.has(kind) || kind === "card_settle" || kind === "transfer_out" ? "out" as const : kind === "self_transfer" ? r.event.direction : "neutral" as const;
+      const baseEvent = { ...r.event, amount: n, expenseAmount: expense.has(kind) ? n : 0, kind, direction, confidence: "inferred" as const, category: r.catId };
+      const tripSplit = TRIP_EXPENSE_KINDS.has(kind) ? tripSplitFor(reserves, r.date) : undefined;
+      const useTrip = Boolean(tripSplit);
+      const event = withImportReviewReason(baseEvent, dailyRate, useTrip);
+      const routeRequired = Boolean(bankImportRouteReason(event, dailyRate, useTrip));
+      const selection = defaultIncluded(event, r.dup, { dailyRate, onTrip: useTrip });
+      return {
+        ...r, amount: n, included: n > 0 && selection.included && !routeRequired,
+        kind: event.kind, event, manual: false, routeRequired, routeChoice: undefined,
+        tripSplit, useTrip, preselectReason: n > 0 ? selection.reason : "راجع المبلغ",
+      };
     }));
   }
 
-  const chosen = rows.filter((r) => r.included && !r.ignored && (!r.manual || r.amount > 0));
+  const chosen = rows.filter((r) => r.included && !r.ignored && (!r.manual || r.amount > 0) && (!r.routeRequired || r.routeChoice));
   const unreadableCount = rows.filter((r) => r.kind === "unknown" || r.manual).length;
   const isNonExpenseRow = (row: Pending) =>
     row.kind !== "transfer_out" && ((row.event.expenseAmount ?? 0) <= 0 || row.event.direction !== "out");
@@ -275,7 +388,8 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   const autoAttemptedRef = useRef<string | null>(null);
   const autoKey = rows.map((row) => row.key).join("|");
   const autoApprovable = rows.length > 0 && rows.every((row) =>
-    !row.ignored && !row.manual && row.included && isAutoApprovableBankEvent(row.event, row.dup)
+    !row.ignored && !row.manual && row.included && !row.routeRequired
+      && isAutoApprovableBankEvent(row.event, row.dup, { dailyRate, onTrip: row.useTrip })
   );
 
   async function handleAdd() {
@@ -285,7 +399,35 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
       const event = { ...r.event, category: r.catId, note: r.note, date: r.date,
         // Explicit approval resolves generic confidence and a source resend.
         confidence: r.event.confidence === "generic" ? "inferred" as const : r.event.confidence };
-      confirmInboxEvent(event);
+      const eventId = event.eventId ?? `${r.itemId}:0`;
+      const current = useAppStore.getState();
+      const alreadyHandled = current.transactions.some((transaction) => transaction.id === eventId || transaction.eventId === eventId)
+        || current.settlements?.some((settlement) => settlement.id === eventId || settlement.eventId === eventId)
+        || current.inboxDecisions?.some((decision) => decision.eventId === eventId && ["saved", "matched", "ignored", "duplicate"].includes(decision.decision))
+        || current.deleted?.[eventId] !== undefined;
+      const intent = r.routeChoice?.intent
+        ? { ...r.routeChoice.intent, eventId }
+        : undefined;
+      if (!alreadyHandled && intent) applyExpenseIntent(intent, eventId);
+      const route = r.routeChoice?.expenseRoute
+        ? (() => {
+            // A route saved by an older render may carry a random new-fund id.
+            // Repair that in memory before the transaction is persisted so its
+            // split agrees with the deterministic event fund created above.
+            const oldFundId = r.routeChoice.intent?.fundId;
+            const nextFundId = r.routeChoice.intent?.newFund && eventId
+              ? expenseFundIdForEvent(eventId)
+              : oldFundId;
+            if (!oldFundId || !nextFundId || oldFundId === nextFundId) return r.routeChoice.expenseRoute;
+            return {
+              ...r.routeChoice.expenseRoute,
+              reserveSplits: r.routeChoice.expenseRoute.reserveSplits?.map((split) =>
+                split.fundId === oldFundId ? { ...split, fundId: nextFundId } : split
+              ),
+            };
+          })()
+        : r.tripSplit ? (r.useTrip ? { reserveSplits: r.tripSplit } : {}) : undefined;
+      confirmInboxEvent(event, route);
     }
     for (const r of explicitlyIgnored) {
       // Route a neutral copy first so the raw canonical event is retained, then
@@ -396,6 +538,17 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
         </button>
       )}
 
+      {tripRows.length > 0 && (
+        <button
+          type="button"
+          onClick={toggleTripForAll}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-finance/25 bg-finance/5 px-3 py-2 text-[11px] font-bold text-finance"
+        >
+          <Plane size={14} />
+          {allTripRowsOn ? "لا شيء على الرحلة" : `احسب ${tripRows.length} مصروف على الرحلة`}
+        </button>
+      )}
+
       <div className="max-h-[52vh] overflow-y-auto space-y-2 pr-0.5">
         {visibleRows.map((r) => {
           const info = getCategoryInfo(categories, r.catId);
@@ -412,7 +565,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
                 <button
                   onClick={() => toggleInclude(r.key)}
                   aria-label={r.included ? "إبقاء للمراجعة" : "اعتماد"}
-                  disabled={r.ignored}
+                  disabled={r.ignored || (!r.included && r.routeRequired && !r.routeChoice)}
                   className={cn(
                     "w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors",
                     r.included ? "bg-finance border-finance text-white" : "bg-white border-gray-300 text-transparent"
@@ -462,6 +615,47 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
                   </span>
                 )}
               </div>
+              {r.event.reviewReason && (
+                <p className="rounded-lg bg-amber-50 text-amber-800 px-2.5 py-1.5 text-[10px] leading-relaxed">
+                  {r.event.reviewReason}
+                </p>
+              )}
+              {r.preselectReason && !r.included && !r.ignored && (
+                <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800">
+                  {r.preselectReason}
+                </span>
+              )}
+              {r.tripSplit && TRIP_EXPENSE_KINDS.has(r.kind) && (
+                <button
+                  type="button"
+                  onClick={() => toggleTripForRow(r.key)}
+                  aria-pressed={Boolean(r.useTrip)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold",
+                    r.useTrip ? "bg-finance/10 text-finance" : "bg-gray-100 text-gray-600"
+                  )}
+                >
+                  <Plane size={11} />
+                  {r.useTrip
+                    ? `على رحلة ${reserves.find((fund) => fund.id === r.tripSplit?.[0]?.fundId)?.name ?? "السفر"} · اضغط للإزالة`
+                    : `إلى الرحلة ${reserves.find((fund) => fund.id === r.tripSplit?.[0]?.fundId)?.name ?? "السفر"}`}
+                </button>
+              )}
+              {r.routeRequired && (
+                <BigExpenseRouter
+                  amount={r.event.expenseAmount ?? r.amount}
+                  note={r.note}
+                  eventId={r.event.eventId ?? r.key}
+                  splits={r.routeChoice?.expenseRoute.reserveSplits ?? []}
+                  offBudget={r.routeChoice?.expenseRoute.offBudget ?? false}
+                  intent={r.routeChoice?.intent ?? null}
+                  onDaily={() => chooseExpenseRoute(r.key, {})}
+                  onPlan={(intent) => chooseExpenseRoute(r.key, {
+                    reserveSplits: [{ fundId: intent.fundId, pct: intent.pct }],
+                  }, intent)}
+                  onOffBudget={() => chooseExpenseRoute(r.key, { offBudget: true })}
+                />
+              )}
               <div className="flex items-center gap-1.5">
                 <select
                   value={r.kind}

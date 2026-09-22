@@ -768,7 +768,15 @@ export function dailyShare(t: Transaction): number {
 // Share of a transaction charged to one specific reserve fund.
 export function reserveShare(t: Transaction, fundId: string): number {
   const split = normalizeReserveSplits(t.reserveSplits)?.find((s) => s.fundId === fundId);
-  return split ? round2((cashOut(t) * split.pct) / 100) : 0;
+  if (!split) return 0;
+  // A confirmed merchant-card refund linked to a routed purchase restores the
+  // same reserve share. It remains zero cash-out for the daily budget, while
+  // the envelope balance and the trip's net cost both move back correctly.
+  const isRoutedCardRefund = (t.kind === "refund" || t.kind === "reversal")
+    && t.refundDestination === "merchant_card"
+    && Boolean(t.linkedTransactionId);
+  const amount = isRoutedCardRefund ? -Math.abs(t.amount) : cashOut(t);
+  return round2((amount * split.pct) / 100);
 }
 
 // Live balance of a fund: deposits in, charged transaction shares out.

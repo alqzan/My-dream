@@ -7,6 +7,7 @@ import {
 import { INTENSITY } from "./intensity";
 import { pageRange } from "./meta";
 import type { HifzState, HifzSession, HifzReviewLog, HifzRating } from "../types";
+import { parseDate, toDateStr } from "../utils";
 
 function hz(o: Partial<HifzState> = {}): HifzState {
   return { plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01" }, frontierId: 0, sessions: [], reviews: [], mistakes: [], ...o };
@@ -253,9 +254,9 @@ describe("السقفُ اليوميّ يتكيّف مع المواظبة", () =>
   // يغيّر جدول الأوجه، فيبقى المقيس هو المواظبة وحدها).
   const daily = (days: number, endStr: string) =>
     Array.from({ length: days }, (_, i) => {
-      const d = new Date(`${endStr}T00:00:00`);
+      const d = parseDate(endStr);
       d.setDate(d.getDate() - i);
-      return rev(1, 5, d.toISOString().slice(0, 10));
+      return rev(1, 5, toDateStr(d));
     });
 
   it("المواظبة نسبةُ أيام النشاط في آخر أسبوعين", () => {

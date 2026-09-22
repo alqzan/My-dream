@@ -7,7 +7,7 @@ import type {
   ReserveFund, ReserveDeposit, FutureLetter, CountdownEvent,
   QuranReflection, HifzUnit, HifzRating, HifzIntensity, HifzMistake, HifzState, HifzSession, HifzReviewLog,
   BudgetWindowMode, FundFunding, Reconcile,
-  Account, Obligation, ObservedBalance, SettlementResolution, CardSettlement, InboxDecision, InboxEventRecord, FinanceSettingsProfile,
+  Account, Obligation, ObservedBalance, SettlementResolution, CardSettlement, InboxDecision, InboxEventRecord, InboxExpenseRoute, FinanceSettingsProfile,
 } from "./types";
 import { DEFAULT_CATEGORIES, SEED_HABITS, GENERAL_FUND_NAME, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
@@ -24,13 +24,16 @@ import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan"
 import { cycleLength } from "./budgetCycle";
 import { holdings, reconcileDelta, RECONCILE_NOTE } from "./reconcile";
 import { creditLedgerForState } from "./financeLedger";
-import { isTripEligibleFund } from "./trip";
+import { isTripEligibleFund, tripSplitFor } from "./trip";
 import {
   SURPLUS_FUND_ID,
+  canonicalizeReserveFunds,
   findReserveByRole,
   isSystemReserveFund,
   normalizeReserveFunds,
   normalizeTransactionReserveSplits,
+  normalizeTransactionReserveSplitsForFunds,
+  reserveTransferDepositId,
   reserveFundRole,
 } from "./reserveFunds";
 import { persistJSONStorage, flushPersisted } from "./idbStorage";
@@ -201,8 +204,8 @@ interface AppStore extends AppData {
   // Stable bank-SMS import boundary. Events already carry source identity from
   // `parseBankSmsBulk`; this action is idempotent for retries of one inbox doc
   // while retaining same-text events arriving from different source docs.
-  importInboxEvents: (events: import("./bankParser").SmsParseEventResult[], options?: { confirmed?: boolean }) => { saved: number; settlements: number; reviewed: number; duplicates: number };
-  confirmInboxEvent: (event: import("./bankParser").SmsParseEventResult) => void;
+  importInboxEvents: (events: import("./bankParser").SmsParseEventResult[], options?: { confirmed?: boolean; expenseRoutes?: Record<string, InboxExpenseRoute> }) => { saved: number; settlements: number; reviewed: number; duplicates: number };
+  confirmInboxEvent: (event: import("./bankParser").SmsParseEventResult, route?: InboxExpenseRoute) => void;
   decideInboxEvent: (decision: InboxDecision) => void;
   upsertAccount: (account: Account) => void;
   upsertObligation: (obligation: Obligation) => void;
@@ -277,7 +280,7 @@ interface AppStore extends AppData {
   // نقلٌ بين مظروفين (تمويل مظروف حدثٍ من الفوائض مثلاً): سحبٌ من الأول وإيداعٌ
   // في الثاني بالمبلغ نفسه — لا معاملة ولا صرف، تحريكُ رصيدٍ بين وعاءين.
   // يرجع المنقول فعلاً (مقصوصاً على رصيد المصدر).
-  transferBetweenReserves: (fromId: string, toId: string, amount: number, note?: string) => number;
+  transferBetweenReserves: (fromId: string, toId: string, amount: number, note?: string, operationId?: string) => number;
 
   // رسائل لنفسك المستقبلية
   // الأحداث المهمّة (العدّ التنازلي) — إضافة/تعديل/حذف كبقيّة العناصر
@@ -652,14 +655,21 @@ export function migratePersisted(persisted: unknown, version: number): AppData {
       }
 
       // v19 gives the two system envelopes stable roles and canonicalizes
-      // legacy reserve splits. No id or deposit is changed, so existing
-      // transactions remain attached to the same user data.
+      // duplicate role copies. Any changed system id is redirected through
+      // the same alias map as its transaction splits, so data stays attached.
       const persistedReserves = Array.isArray(state.reserves) ? state.reserves as ReserveFund[] : [];
       const persistedTransactions = Array.isArray(state.transactions) ? state.transactions as Transaction[] : [];
+      const reserveIdentity = canonicalizeReserveFunds(normalizeReserveFunds(persistedReserves));
       state = {
         ...state,
-        reserves: normalizeReserveFunds(persistedReserves),
-        transactions: persistedTransactions.map(normalizeTransactionReserveSplits),
+        reserves: reserveIdentity.reserves,
+        transactions: persistedTransactions.map((transaction) => normalizeTransactionReserveSplitsForFunds(
+          transaction,
+          reserveIdentity.aliases,
+        )),
+        ...(typeof state.cashbackEnvelopeId === "string"
+          ? { cashbackEnvelopeId: reserveIdentity.aliases[state.cashbackEnvelopeId] ?? state.cashbackEnvelopeId }
+          : {}),
       };
 
       state = {
@@ -1256,6 +1266,28 @@ export const useAppStore = create<AppStore>()(
             return "unknown";
           };
           type Event = import("./bankParser").SmsParseEventResult;
+          const linkedTripPurchaseForRefund = (event: Event): Transaction | undefined => {
+            if ((event.kind !== "refund" && event.kind !== "reversal")
+              || event.refundDestination !== "merchant_card"
+              || !event.accountId || event.amount <= 0) return undefined;
+            const merchant = normalizeMerchant(event.note || event.counterparty || "");
+            if (merchant.length < 2) return undefined;
+            const candidates = transactions.filter((transaction) => {
+              if (!transaction.accountId || transaction.accountId !== event.accountId
+                || transaction.date > event.date
+                || !["purchase", "atm", "bill", "fee"].includes(transaction.kind ?? "")
+                || normalizeMerchant(transaction.note || "") !== merchant) return false;
+              const tripSplit = tripSplitFor(reserves, transaction.date);
+              if (!tripSplit?.some((split) => transaction.reserveSplits?.some((saved) => saved.fundId === split.fundId && saved.pct > 0))) return false;
+              const alreadyRefunded = transactions
+                .filter((prior) => (prior.kind === "refund" || prior.kind === "reversal")
+                  && prior.refundDestination === "merchant_card"
+                  && prior.linkedTransactionId === transaction.id)
+                .reduce((sum, prior) => sum + Math.abs(prior.amount), 0);
+              return transaction.amount - alreadyRefunded >= event.amount - 0.01;
+            });
+            return candidates.length === 1 ? candidates[0] : undefined;
+          };
           const eventStamp = (event: Pick<Event, "date" | "time" | "sourceReceivedAt">): string => {
             const received = event.sourceReceivedAt?.match(/T(\d{2}:\d{2}(?::\d{2})?)/)?.[1];
             return `${event.date}T${event.time ?? received ?? "00:00"}`;
@@ -1338,6 +1370,7 @@ export const useAppStore = create<AppStore>()(
               sourceKey: event.sourceKey,
               sourceInboxId: event.sourceInboxId,
               sourceReceivedAt: event.sourceReceivedAt,
+              reviewReason: event.reviewReason,
               updatedAt: now,
             };
             const ix = inboxEvents.findIndex((x) => x.eventId === eventId);
@@ -1519,6 +1552,12 @@ export const useAppStore = create<AppStore>()(
             if (expenseKinds.has(event.kind)) {
               upsertAccountFromEvent(event);
               upsertBalanceFromEvent(event);
+              const hasExplicitRoute = Boolean(options.expenseRoutes
+                && Object.prototype.hasOwnProperty.call(options.expenseRoutes, eventId));
+              const route = options.expenseRoutes?.[eventId];
+              const tripRoute = !hasExplicitRoute && event.kind !== "installment"
+                ? tripSplitFor(reserves, event.date)
+                : undefined;
               const merchantKey = normalizeMerchant(event.note);
               const category = (merchantKey && s.merchantRules?.[merchantKey]) || event.category || "cat-essentials";
               const tx: Transaction = {
@@ -1528,6 +1567,8 @@ export const useAppStore = create<AppStore>()(
                 originalAmount: event.amount,
                 category,
                 note: event.note,
+                reserveSplits: hasExplicitRoute ? route?.reserveSplits : tripRoute,
+                offBudget: route?.offBudget || undefined,
                 kind: event.kind,
                 direction: event.direction,
                 fee: event.fee,
@@ -1616,12 +1657,13 @@ export const useAppStore = create<AppStore>()(
             if (["refund", "reversal", "cashback", "salary"].includes(event.kind) && confirmed) {
               upsertAccountFromEvent(event);
               upsertBalanceFromEvent(event);
+              const refundTarget = linkedTripPurchaseForRefund(event);
               const transaction: Transaction = {
                 id: eventId,
                 date: event.date,
                 amount: event.amount,
                 originalAmount: event.amount,
-                category: event.category || "cat-essentials",
+                category: refundTarget?.category ?? (event.category || "cat-essentials"),
                 note: event.note,
                 kind: event.kind,
                 direction: event.direction,
@@ -1636,6 +1678,10 @@ export const useAppStore = create<AppStore>()(
                 counterparty: event.counterparty,
                 debtRemaining: event.debtRemaining,
                 refundDestination: event.refundDestination ?? cashbackRefundDestination(event),
+                ...(refundTarget ? {
+                  linkedTransactionId: refundTarget.id,
+                  reserveSplits: refundTarget.reserveSplits,
+                } : {}),
                 obligationHint: event.obligationHint,
                 template: event.template,
                 confidence: event.confidence,
@@ -1711,8 +1757,12 @@ export const useAppStore = create<AppStore>()(
       // The review UI calls this only after an explicit owner action. Keeping
       // confirmation separate prevents generic, suspected, and ambiguous
       // events from gaining an accounting effect merely because they arrived.
-      confirmInboxEvent: (event) => {
-        get().importInboxEvents([event], { confirmed: true });
+      confirmInboxEvent: (event, route) => {
+        const eventId = event.eventId ?? `manual:${event.sourceKey ?? `${event.date}:${event.amount}`}`;
+        get().importInboxEvents([event], {
+          confirmed: true,
+          ...(route !== undefined ? { expenseRoutes: { [eventId]: route } } : {}),
+        });
       },
 
       decideInboxEvent: (decision) =>
@@ -1945,10 +1995,16 @@ export const useAppStore = create<AppStore>()(
         // A fund created through the app is user-owned even if its display
         // name happens to match a legacy system envelope. Legacy snapshots
         // are inferred at the restore boundary; new records carry identity.
-        set((s) => ({ reserves: normalizeReserveFunds([
-          ...s.reserves,
-          { ...fund, role: fund.role ?? "custom" },
-        ]) })),
+        set((s) => {
+          // Event-derived fund ids are retried across devices. Treating an
+          // existing id as an add would duplicate the same logical envelope;
+          // edits still go through updateReserve explicitly.
+          if (s.reserves.some((existing) => existing.id === fund.id)) return {};
+          return { reserves: normalizeReserveFunds([
+            ...s.reserves,
+            { ...fund, role: fund.role ?? "custom" },
+          ]) };
+        }),
 
       updateReserve: (id, updates) =>
         set((s) => {
@@ -2418,12 +2474,21 @@ export const useAppStore = create<AppStore>()(
       // تمويل مظروفٍ من مظروف (رحلةُ المدينة تُموَّل من الفوائض): سحبٌ من المصدر
       // وإيداعٌ في الوجهة بالمبلغ نفسه في تعديلٍ واحد — مجموعُ الاحتياطيات لا
       // يتغيّر، والميزانية اليومية لا تُمسّ (هذا ليس صرفاً).
-      transferBetweenReserves: (fromId, toId, amount, note) => {
+      transferBetweenReserves: (fromId, toId, amount, note, operationId) => {
         let moved = 0;
         set((s) => {
           const from = s.reserves.find((f) => f.id === fromId);
           const to = s.reserves.find((f) => f.id === toId);
           if (!from || !to || from.id === to.id || !Number.isFinite(amount) || amount <= 0) return {};
+          const outgoingId = operationId ? reserveTransferDepositId(operationId, "out") : undefined;
+          const incomingId = operationId ? reserveTransferDepositId(operationId, "in") : undefined;
+          const existingOut = outgoingId ? from.deposits.find((d) => d.id === outgoingId) : undefined;
+          const existingIn = incomingId ? to.deposits.find((d) => d.id === incomingId) : undefined;
+          // A bank import can be retried by two offline devices. Stable paired
+          // deposit ids make the second application a no-op after the merge,
+          // while ordinary manual transfers (without operationId) remain
+          // independent events with their existing random ids.
+          if (operationId && (existingOut || existingIn)) return {};
           const available = reserveBalance(from, s.transactions);
           if (available <= 0) return {};
           moved = round2(Math.min(amount, available));
@@ -2433,9 +2498,9 @@ export const useAppStore = create<AppStore>()(
           return {
             reserves: s.reserves.map((f) =>
               f.id === from.id
-                ? { ...f, deposits: [{ id: uid(), date: todayStr, amount: -moved, note: label }, ...f.deposits] }
+                ? { ...f, deposits: [{ id: outgoingId ?? uid(), date: todayStr, amount: -moved, note: label }, ...f.deposits] }
                 : f.id === to.id
-                ? { ...f, deposits: [{ id: uid(), date: todayStr, amount: moved, note: `من «${from.name}»` }, ...f.deposits] }
+                ? { ...f, deposits: [{ id: incomingId ?? uid(), date: todayStr, amount: moved, note: `من «${from.name}»` }, ...f.deposits] }
                 : f
             ),
           };
@@ -2953,9 +3018,17 @@ export const useAppStore = create<AppStore>()(
 
       // Uses rawSet so the cloud's own lastUpdated is preserved (stamping a
       // fresh one here would defeat the newer-wins merge comparison).
-      hydrate: (data) =>
-        rawSet(() => ({
-          transactions: (data.transactions ?? []).map(normalizeTransactionReserveSplits),
+      hydrate: (data) => {
+        const reserveIdentity = canonicalizeReserveFunds(normalizeReserveFunds(data.reserves ?? []));
+        const transactions = (data.transactions ?? []).map((transaction) => normalizeTransactionReserveSplitsForFunds(
+          transaction,
+          reserveIdentity.aliases,
+        ));
+        const cashbackEnvelopeId = data.cashbackEnvelopeId
+          ? reserveIdentity.aliases[data.cashbackEnvelopeId] ?? data.cashbackEnvelopeId
+          : data.cashbackEnvelopeId;
+        return rawSet(() => ({
+          transactions,
           books: data.books ?? [],
           readingLogs: data.readingLogs ?? [],
           knowledgeSources: data.knowledgeSources ?? [],
@@ -2967,7 +3040,7 @@ export const useAppStore = create<AppStore>()(
           // CLAUDE.md؛ إغفال أحدها عطلٌ صامت (كانت `assets` غائبةً عن hydrate).
           budgets: data.budgets ?? [],
           categories: data.categories ?? DEFAULT_CATEGORIES,
-          reserves: normalizeReserveFunds(data.reserves ?? []),
+          reserves: reserveIdentity.reserves,
           prayerLogs: data.prayerLogs ?? [],
           qadaBacklog: data.qadaBacklog ?? 0,
           quranReflections: data.quranReflections ?? [],
@@ -2992,7 +3065,7 @@ export const useAppStore = create<AppStore>()(
           inboxDecisions: data.inboxDecisions ?? [],
           inboxEvents: data.inboxEvents ?? [],
           cashbackEnabled: data.cashbackEnabled ?? false,
-          cashbackEnvelopeId: data.cashbackEnvelopeId,
+          cashbackEnvelopeId,
           salaryDay: data.salaryDay ?? 27,
           budgetWindow: data.budgetWindow ?? "salary",
           autoOffset: data.autoOffset ?? true,
@@ -3004,7 +3077,8 @@ export const useAppStore = create<AppStore>()(
           deletedMedia: data.deletedMedia ?? {},
           fieldUpdatedAt: data.fieldUpdatedAt ?? {},
           lastUpdated: data.lastUpdated ?? new Date().toISOString(),
-        })),
+        }));
+      },
 
       snapshot: () => {
         const s = get();

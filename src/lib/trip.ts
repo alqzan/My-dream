@@ -12,8 +12,8 @@
 // والتقريرُ يقرأ ما وقع داخلها وحدها.
 //
 // منطقٌ نقيّ بلا DOM، مختبَرٌ في `trip.test.ts`.
-import { type ReserveFund, type Transaction, type Trip } from "./types";
-import { reserveShare, round2, parseDate } from "./utils";
+import { type ReserveFund, type ReserveSplit, type Transaction, type Trip } from "./types";
+import { reserveShare, round2, parseDate, isValidDateKey, today } from "./utils";
 import { isSystemReserveFund } from "./reserveFunds";
 
 /**
@@ -39,6 +39,30 @@ export function activeTrip(reserves: ReserveFund[]): { fund: ReserveFund; trip: 
     if (trip) return { fund, trip };
   }
   return null;
+}
+
+/** وجهةُ المصروف من تاريخ وقوعه، بما فيها الرحلة المنتهية التي وصل إيصالها
+ * بعد العودة. `todayStr` اختياري للاختبارات؛ المسارُ الفعلي يستخدم تاريخ اليوم. */
+export function tripSplitFor(
+  reserves: ReserveFund[],
+  date: string,
+  todayStr = today(),
+): ReserveSplit[] | undefined {
+  if (!isValidDateKey(date) || !isValidDateKey(todayStr) || date > todayStr) return undefined;
+  const matches = reserves.flatMap((fund) => {
+    if (!isTripEligibleFund(fund)) return [];
+    return (fund.trips ?? []).filter((trip) =>
+      isValidDateKey(trip.startedAt)
+      && date >= trip.startedAt
+      && date <= (trip.endedAt && isValidDateKey(trip.endedAt) ? trip.endedAt : todayStr)
+      && (!trip.endedAt || (isValidDateKey(trip.endedAt) && trip.endedAt >= trip.startedAt))
+    ).map((trip) => ({ fundId: fund.id, trip }));
+  });
+  if (!matches.length) return undefined;
+  // Legacy/imported data can contain overlapping windows. Prefer the latest
+  // started trip deterministically, then the stable fund id.
+  matches.sort((a, b) => b.trip.startedAt.localeCompare(a.trip.startedAt) || a.fundId.localeCompare(b.fundId));
+  return [{ fundId: matches[0].fundId, pct: 100 }];
 }
 
 export interface TripSummary {
@@ -74,9 +98,20 @@ export function tripSummary(
   const from = t.startedAt;
   const to = t.endedAt ?? todayStr;
 
-  const charged = transactions.filter(
+  const tripCharges = transactions.filter(
     (x) => x.date >= from && x.date <= to && reserveShare(x, fund.id) > 0
   );
+  const tripChargeIds = new Set(tripCharges.map((x) => x.id));
+  // A confirmed card refund can arrive after the trip window. It still returns
+  // the purchase's share to that trip envelope and reduces the trip's net cost.
+  const tripRefunds = transactions.filter((x) =>
+    (x.kind === "refund" || x.kind === "reversal")
+    && x.refundDestination === "merchant_card"
+    && Boolean(x.linkedTransactionId && tripChargeIds.has(x.linkedTransactionId))
+    && x.date <= todayStr
+    && reserveShare(x, fund.id) < 0
+  );
+  const charged = [...tripCharges, ...tripRefunds];
 
   let total = 0;
   let biggest: Transaction | null = null;

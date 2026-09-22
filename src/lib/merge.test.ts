@@ -5,7 +5,7 @@ import {
   applyTombstones, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD,
 } from "./merge";
 import { mediaTombKey } from "./mediaHash";
-import { toDateStr } from "./utils";
+import { dailyShare, toDateStr } from "./utils";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 import type {
   AppData, JournalEntry, Transaction, ReserveFund, Habit, HifzState, HifzPlan,
@@ -851,6 +851,54 @@ describe("mergeAppData — تعارضُ العناصر المركّبة (تبا�
     check(mergeAppData(a, b));
     check(mergeAppData(b, a));
   };
+
+  it("يوحّد أدوار عام/فوائض المختلفة المعرّف ويعيد توجيه التقسيمات والكاش باك", () => {
+    const general = (id: string, depositId: string): ReserveFund => ({
+      id, name: "عام", role: "general", icon: "🏠", color: "#000",
+      deposits: [{ id: depositId, amount: 100, date: "2026-05-01" }], createdAt: "2026-01-01",
+    });
+    const iphone = base({
+      reserves: [general("legacy-general", "d-phone"), { id: "custom", name: "عام", role: "custom", icon: "📦", color: "#000", deposits: [], createdAt: "2026-01-01" }],
+      transactions: [tx({ id: "t-phone", reserveSplits: [{ fundId: "legacy-general", pct: 50 }] })],
+      cashbackEnabled: true, cashbackEnvelopeId: "legacy-general",
+    });
+    const ipad = base({
+      reserves: [general("fund-general", "d-pad")],
+      transactions: [tx({ id: "t-pad", reserveSplits: [{ fundId: "fund-general", pct: 50 }] })],
+      cashbackEnabled: true, cashbackEnvelopeId: "fund-general",
+    });
+
+    for (const merged of [mergeAppData(iphone, ipad), mergeAppData(ipad, iphone)]) {
+      expect(merged.reserves.filter((fund) => fund.role === "general")).toHaveLength(1);
+      expect(merged.reserves.find((fund) => fund.id === "fund-general")?.deposits.map((d) => d.id).sort()).toEqual(["d-pad", "d-phone"]);
+      expect(merged.reserves.find((fund) => fund.id === "custom")?.role).toBe("custom");
+      expect(merged.transactions.flatMap((transaction) => transaction.reserveSplits ?? []).sort((a, b) => a.fundId.localeCompare(b.fundId))).toEqual([
+        { fundId: "fund-general", pct: 50 },
+        { fundId: "fund-general", pct: 50 },
+      ]);
+      expect(merged.cashbackEnvelopeId).toBe("fund-general");
+    }
+  });
+
+  it("يسقط تقسيم مظروف محذوف بعد دمج جهازٍ يحمل معاملة قديمة ويعيد الباقي لليومية", () => {
+    const deleted = base({
+      reserves: [],
+      deleted: { "fund-stale": Date.now() },
+    });
+    const stale = base({
+      reserves: [{ id: "fund-live", name: "سفر", icon: "🎒", color: "#000", deposits: [], createdAt: "2026-01-01" }],
+      transactions: [tx({
+        id: "stale-expense",
+        amount: 100,
+        reserveSplits: [{ fundId: "fund-stale", pct: 50 }, { fundId: "fund-live", pct: 50 }],
+      })],
+    });
+    for (const merged of [mergeAppData(deleted, stale), mergeAppData(stale, deleted)]) {
+      expect(merged.reserves.map((fund) => fund.id)).toEqual(["fund-live"]);
+      expect(merged.transactions[0].reserveSplits).toEqual([{ fundId: "fund-live", pct: 50 }]);
+      expect(dailyShare(merged.transactions[0])).toBe(50);
+    }
+  });
 
   it("تسجيلُ يومِ عادةٍ لا يرفع طابعها فيبتلع إعادةَ التسمية على الجهاز الآخر", () => {
     const habit = (o: Partial<Habit> & { id: string }): Habit => ({

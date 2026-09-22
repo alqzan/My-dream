@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { spendWindow } from "@/lib/budgetCycle";
 import type { Transaction, ReserveSplit } from "@/lib/types";
@@ -8,7 +8,7 @@ import { budgetWarningFor } from "@/lib/budgetStatus";
 import { suggestCategory } from "@/lib/bankParser";
 import { showToast } from "@/components/ui/UndoToast";
 import { BigExpenseRouter, applyExpenseIntent, type ExpenseIntent } from "@/components/finance/BigExpenseRouter";
-import { activeTrip } from "@/lib/trip";
+import { tripSplitFor } from "@/lib/trip";
 import { Plane } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -48,13 +48,13 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   const [amount, setAmount] = useState(initial?.amount?.toString() ?? prefill?.amount?.toString() ?? "");
   const [note, setNote] = useState(initial?.note ?? prefill?.note ?? "");
   const [date, setDate] = useState(initial?.date ?? today());
-  // **وضع السفر**: ما دامت رحلةٌ جارية، يُفتح النموذج ومصروفُه محسوبٌ عليها
-  // أصلاً — فلا يُسأل المالك عن الوجهة عند كلّ فاتورةٍ وهو في الطريق. ويبقى
-  // له أن يرفعها عن هذه الفاتورة وحدها بضغطة. وتعديلُ معاملةٍ قديمة لا يُمسّ.
-  const ongoing = activeTrip(reserves);
-  const tripFund = ongoing?.fund ?? null;
-  const [splits, setSplits] = useState<ReserveSplit[]>(
-    initial?.reserveSplits ?? (tripFund ? [{ fundId: tripFund.id, pct: 100 }] : [])
+  // **وضع السفر** يقرأ تاريخ المعاملة نفسه حتى تصل الرسالة المتأخرة إلى
+  // الرحلة الصحيحة، وتبقى المعاملة السابقة للسفر خارجها. تعديلٌ قديم لا يتغيّر.
+  const tripSplits = tripSplitFor(reserves, date);
+  const tripFund = tripSplits?.[0] ? reserves.find((fund) => fund.id === tripSplits[0].fundId) ?? null : null;
+  const splitTouched = useRef(Boolean(initial));
+  const [splits, setSplits] = useState<ReserveSplit[]>(() =>
+    initial?.reserveSplits ?? tripSplits ?? []
   );
   const [addingSub, setAddingSub] = useState(false);
   const [newSubName, setNewSubName] = useState("");
@@ -90,6 +90,11 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
       setSubCat("");
     }
   }, [note, initial, touchedCat, categories, merchantRules]);
+
+  useEffect(() => {
+    if (initial || splitTouched.current) return;
+    setSplits(tripSplitFor(reserves, date) ?? []);
+  }, [reserves, date, initial]);
 
   const selectedMain = categories.find((c) => c.id === mainCat);
   const subs = getSubCategories(categories, mainCat);
@@ -129,6 +134,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
     setNote(lastTx.note ?? "");
     pickCategoryFor(lastTx.category);
     setTouchedCat(true);
+    splitTouched.current = true;
     setSplits(lastTx.reserveSplits ?? []);
   }
 
@@ -140,6 +146,7 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   })();
 
   function setSplitPct(fundId: string, pct: number) {
+    splitTouched.current = true;
     setSplits((prev) => {
       const others = prev.filter((s) => s.fundId !== fundId);
       const othersPct = others.reduce((s, sp) => s + sp.pct, 0);
@@ -218,7 +225,10 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
           </div>
           <button
             type="button"
-            onClick={() => setSplits(onTrip ? [] : [{ fundId: tripFund.id, pct: 100 }])}
+            onClick={() => {
+              splitTouched.current = true;
+              setSplits(onTrip ? [] : (tripSplits ?? [{ fundId: tripFund.id, pct: 100 }]));
+            }}
             className="text-[10px] font-semibold px-2 py-1 rounded-lg press shrink-0"
             style={{ border: "1px solid var(--line)", color: "var(--ink52)" }}
           >

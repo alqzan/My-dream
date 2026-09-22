@@ -125,6 +125,21 @@ describe("transferBetweenReserves — تمويل مظروف حدثٍ من الف
     expect(balance()).toBe(before);
   });
 
+  it("المعرّف التشغيلي يجعل إعادة تمويل حدث البنك بلا خصم أو إيداع ثانٍ", () => {
+    useAppStore.setState({ reserves: [
+      { ...surplusFund(900), role: "surplus" as const },
+      { ...trip, role: "custom" as const },
+    ] });
+    const transferId = "big-expense:inbox-event-1";
+    expect(useAppStore.getState().transferBetweenReserves("f-surplus", "f-trip", 600, "رحلة", transferId)).toBe(600);
+    expect(useAppStore.getState().transferBetweenReserves("f-surplus", "f-trip", 600, "رحلة", transferId)).toBe(0);
+    const s = useAppStore.getState();
+    expect(s.reserves[0].deposits.filter((d) => d.id.includes(transferId))).toHaveLength(1);
+    expect(s.reserves[1].deposits.filter((d) => d.id.includes(transferId))).toHaveLength(1);
+    expect(reserveBalance(s.reserves[0], s.transactions)).toBe(300);
+    expect(reserveBalance(s.reserves[1], s.transactions)).toBe(600);
+  });
+
   it("لا يخرج من المصدر أكثر مما فيه", () => {
     useAppStore.setState({ reserves: [surplusFund(200), trip] });
     expect(useAppStore.getState().transferBetweenReserves("f-surplus", "f-trip", 1000)).toBe(200);

@@ -50,6 +50,12 @@ export interface ReserveSplit {
   pct: number; // 1-100
 }
 
+/** Explicit destination selected while reviewing an imported bank expense. */
+export interface InboxExpenseRoute {
+  reserveSplits?: ReserveSplit[];
+  offBudget?: boolean;
+}
+
 // Bank-event vocabulary. Keep this separate from the legacy `type` field
 // present in a few old exports: `kind` describes the source event while
 // `direction` describes its cash direction.
@@ -249,6 +255,7 @@ export interface InboxEventRecord {
   updatedAt?: number;
   obligationHint?: ObligationHint;
   refundDestination?: RefundDestination;
+  reviewReason?: string;
 }
 export interface InboxDecision {
   id: string;

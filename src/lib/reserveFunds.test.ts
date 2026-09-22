@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   GENERAL_FUND_ID,
   SURPLUS_FUND_ID,
+  canonicalizeReserveFunds,
   normalizeReserveFunds,
   normalizeReserveSplits,
+  normalizeTransactionReserveSplitsForFunds,
   reserveFundRole,
 } from "./reserveFunds";
 import type { ReserveFund } from "./types";
@@ -41,6 +43,28 @@ describe("هوية المظاريف المحجوزة", () => {
     expect(out[0].role).toBe("general");
     expect(out[1].role).toBe("custom");
     expect(reserveFundRole(out[1])).toBeUndefined();
+  });
+
+  it("يوحّد نسختي الدور عبر الجهازين ويرجع مراجع المعاملات إلى المعرف الفائز", () => {
+    const result = canonicalizeReserveFunds([
+      fund({ id: "legacy-general-b", role: "general", name: "عام", deposits: [{ id: "d-b", date: "2026-09-02", amount: 200 }] }),
+      fund({ id: GENERAL_FUND_ID, role: "general", name: "عام", deposits: [{ id: "d-a", date: "2026-09-01", amount: 100 }] }),
+      fund({ id: "custom-same-name", role: "custom", name: "عام" }),
+    ]);
+
+    expect(result.reserves.filter((f) => f.role === "general")).toHaveLength(1);
+    expect(result.reserves.find((f) => f.id === GENERAL_FUND_ID)?.deposits.map((d) => d.id)).toEqual(["d-b", "d-a"]);
+    expect(result.aliases["legacy-general-b"]).toBe(GENERAL_FUND_ID);
+    expect(result.reserves.find((f) => f.id === "custom-same-name")?.role).toBe("custom");
+    expect(normalizeTransactionReserveSplitsForFunds(
+      { id: "t", reserveSplits: [
+        { fundId: "legacy-general-b", pct: 25 },
+        { fundId: GENERAL_FUND_ID, pct: 25 },
+        { fundId: "missing", pct: 50 },
+      ] },
+      result.aliases,
+      new Set(result.reserves.map((f) => f.id)),
+    ).reserveSplits).toEqual([{ fundId: GENERAL_FUND_ID, pct: 50 }]);
   });
 });
 

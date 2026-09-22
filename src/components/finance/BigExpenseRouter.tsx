@@ -28,27 +28,44 @@ export interface ExpenseIntent {
   newFund?: { name: string; target?: number };
   fromSurplus?: { fromId: string; amount: number };
   funding?: { perCycle: number };
+  /** Stable bank-event identity; absent for ordinary manual transactions. */
+  eventId?: string;
 }
 
-export function applyExpenseIntent(intent: ExpenseIntent) {
+/** The event route must produce the same fund id on every offline device. */
+export function expenseFundIdForEvent(eventId: string): string {
+  return `fund-expense:${encodeURIComponent(eventId)}`;
+}
+
+export function applyExpenseIntent(intent: ExpenseIntent, eventId = intent.eventId) {
   const s = useAppStore.getState();
-  const name = intent.newFund?.name ?? s.reserves.find((f) => f.id === intent.fundId)?.name ?? "مظروف";
+  const stableEventId = eventId || undefined;
+  const fundId = intent.newFund && stableEventId ? expenseFundIdForEvent(stableEventId) : intent.fundId;
+  const name = intent.newFund?.name ?? s.reserves.find((f) => f.id === fundId)?.name ?? "مظروف";
   if (intent.newFund) {
-    s.addReserve({
-      id: intent.fundId,
-      name: intent.newFund.name,
-      icon: EVENT_ICON,
-      color: EVENT_COLOR,
-      target: intent.newFund.target,
-      deposits: [],
-      createdAt: today(),
-    });
+    if (!s.reserves.some((fund) => fund.id === fundId)) {
+      s.addReserve({
+        id: fundId,
+        name: intent.newFund.name,
+        icon: EVENT_ICON,
+        color: EVENT_COLOR,
+        target: intent.newFund.target,
+        deposits: [],
+        createdAt: today(),
+      });
+    }
   }
   if (intent.fromSurplus && intent.fromSurplus.amount > 0) {
-    s.transferBetweenReserves(intent.fromSurplus.fromId, intent.fundId, intent.fromSurplus.amount, `تمويل «${name}»`);
+    s.transferBetweenReserves(
+      intent.fromSurplus.fromId,
+      fundId,
+      intent.fromSurplus.amount,
+      `تمويل «${name}»`,
+      stableEventId ? `big-expense:${stableEventId}` : undefined,
+    );
   }
   if (intent.funding && intent.funding.perCycle > 0) {
-    s.setReserveFunding(intent.fundId, { perCycle: intent.funding.perCycle, source: "salary", stop: "zero" });
+    s.setReserveFunding(fundId, { perCycle: intent.funding.perCycle, source: "salary", stop: "zero" });
   }
 }
 
@@ -77,6 +94,7 @@ const TITLES: Record<PlanKind, string> = {
 interface Props {
   amount: number;
   note: string;
+  eventId?: string;
   splits: ReserveSplit[];
   offBudget: boolean;
   onDaily: () => void;
@@ -86,7 +104,7 @@ interface Props {
   intent: ExpenseIntent | null;
 }
 
-export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onPlan, onOffBudget, intent }: Props) {
+export function BigExpenseRouter({ amount, note, eventId, splits, offBudget, onDaily, onPlan, onOffBudget, intent }: Props) {
   const dailyBudget = useAppStore((s) => s.dailyBudget);
   const transactions = useAppStore((s) => s.transactions);
   const reserves = useAppStore((s) => s.reserves);
@@ -107,7 +125,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onP
 
   const [dest, setDest] = useState<string>("");
   // معرّفُ المظروف الجديد يُولَد مرّةً ويثبت، فيحمله الانقسامُ ويُنشأ به المظروف.
-  const [newFundId] = useState(() => uid());
+  const newFundId = useMemo(() => eventId ? expenseFundIdForEvent(eventId) : uid(), [eventId]);
   const [newName, setNewName] = useState("");
   const [tripBudget, setTripBudget] = useState("");
   const [picked, setPicked] = useState<PlanKind>("mix");
@@ -170,6 +188,7 @@ export function BigExpenseRouter({ amount, note, splits, offBudget, onDaily, onP
           ? { fromId: surplus.fundId, amount: option.plan.fromSurplus }
           : undefined,
       funding: needed > 0 && option.plan.financed > 0 && perCycle > 0 ? { perCycle } : undefined,
+      eventId,
     });
   }
 

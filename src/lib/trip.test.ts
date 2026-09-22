@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { activeTrip, activeTripOf, isTripEligibleFund, lastEndedTrip, tripSummary, pastTrips } from "./trip";
+import { activeTrip, activeTripOf, isTripEligibleFund, lastEndedTrip, tripSplitFor, tripSummary, pastTrips } from "./trip";
 import { GENERAL_FUND_NAME, SURPLUS_FUND_NAME, type ReserveFund, type Transaction, type Trip } from "./types";
+import { reserveBalance, reserveShare } from "./utils";
 
 const fund = (over: Partial<ReserveFund> & { id: string }): ReserveFund => ({
   name: "رحلة المدينة", icon: "🎒", color: "#000", deposits: [], createdAt: "2026-03-01", ...over,
@@ -61,6 +62,25 @@ describe("المظاريف العامة ليست وضع سفر", () => {
   });
 });
 
+describe("tripSplitFor — الرحلة تتبع تاريخ المعاملة", () => {
+  const live = fund({ id: "f-live", trips: [t("tr-live", "2026-03-10")] });
+  const ended = fund({ id: "f-ended", trips: [t("tr-ended", "2026-03-10", "2026-03-12")] });
+
+  it("routes dates inside ongoing and completed trips, including receipts imported later", () => {
+    expect(tripSplitFor([live], "2026-03-11", "2026-03-12")).toEqual([{ fundId: "f-live", pct: 100 }]);
+    expect(tripSplitFor([ended], "2026-03-11", "2026-03-20")).toEqual([{ fundId: "f-ended", pct: 100 }]);
+    expect(tripSplitFor([ended], "2026-03-13", "2026-03-20")).toBeUndefined();
+  });
+
+  it("does not backdate a pre-trip receipt, future date, malformed date, or system fund", () => {
+    const general = fund({ id: "f-general", name: GENERAL_FUND_NAME, trips: [t("tr-general", "2026-03-10")] });
+    expect(tripSplitFor([live], "2026-03-09", "2026-03-12")).toBeUndefined();
+    expect(tripSplitFor([live], "2026-03-13", "2026-03-12")).toBeUndefined();
+    expect(tripSplitFor([live], "2026-02-30", "2026-03-12")).toBeUndefined();
+    expect(tripSplitFor([general], "2026-03-11", "2026-03-12")).toBeUndefined();
+  });
+});
+
 describe("tripSummary — كم كلّفتني", () => {
   it("يجمع ما حُمِّل على المظروف وحده، بحصصه لا بمبالغه الخام", () => {
     const s = tripSummary(trip, txs, "2026-03-20");
@@ -87,6 +107,21 @@ describe("tripSummary — كم كلّفتني", () => {
     const s = tripSummary(trip, txs, "2026-03-20");
     expect(s.byCategory[0]).toEqual({ category: "cat-lux", total: 2600 });
     expect(s.byCategory.map((c) => c.category)).toEqual(["cat-lux", "cat-basic", "cat-gift"]);
+  });
+
+  it("يرجع الاسترداد المرتبط إلى مظروف الرحلة حتى بعد انتهائها", () => {
+    const original = { ...tx("trip-purchase", "2026-03-11", 200, "cat-trip"), accountId: "card-1" };
+    const refund: Transaction = {
+      id: "trip-refund", date: "2026-03-18", amount: 50, category: "cat-trip", note: "refund",
+      kind: "refund", direction: "in", refundDestination: "merchant_card",
+      linkedTransactionId: original.id, reserveSplits: original.reserveSplits,
+    };
+    const fundWithDeposit = { ...trip, deposits: [{ id: "d1", date: "2026-03-01", amount: 500 }] };
+    expect(reserveShare(refund, "f-trip")).toBe(-50);
+    expect(reserveBalance(fundWithDeposit, [original, refund])).toBe(350);
+    const summary = tripSummary(fundWithDeposit, [original, refund], "2026-03-20", MARCH);
+    expect(summary).toMatchObject({ total: 150, count: 2 });
+    expect(summary.biggest?.id).toBe(original.id);
   });
 
   it("مظروفٌ بلا سفرٍ ولا معاملات: أصفارٌ بلا انهيار", () => {

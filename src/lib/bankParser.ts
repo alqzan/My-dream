@@ -103,6 +103,7 @@ export interface SmsParseOptions {
   sourceInboxId?: string;
   sourceId?: string;
   sourceIndex?: number;
+  ownerWallets?: readonly string[];
 }
 export interface SmsParseResult {
   amount: number;
@@ -150,7 +151,7 @@ const ATM = /سحب\s+(?:نقدي|من\s+الصراف|صراف(?:\s+آلي)?|ن�
 const BILL = /سداد\s+فاتورة|مفوتر\s*[:：]|فاتورة\s+(?:كهرباء|ماء|اتصالات)|utility\s+bill/i;
 const BILL_NOTICE = /صدور\s+فاتورة|فاتورة\s+جديدة|لم\s+يتم\s+سدادها|فاتورة\s+شاملة|invoice\s+(?:generated|due)|new\s+bill/i;
 const CARD_SETTLE = /سداد|تسديد|تم\s+سداد|card\s+payment|credit\s+card\s+payment/i;
-const CARD_EVIDENCE = /بطاقة\s*(?:ائتمانية|ائتماني|فيزا|visa|ماستر|mastercard)|credit\s+card|\bvisa\b|\bmastercard\b/i;
+const CARD_EVIDENCE = /(?:البطاقة|بطاقة)\s*(?:ال)?(?:ائتمانية|ائتماني|فيزا|visa|ماستر|mastercard)|credit\s+card|\bvisa\b|\bmastercard\b/i;
 const BNPL = /تمارا|تابي|اشتر\s*الان\s*ادفع\s*لاحقا|tamara|tabby|buy\s*now\s*pay\s*later/i;
 const INVESTMENT_PROVIDER_NOTICE = /سداد\s+مبكر|منصة\s+الدين|معرف\s+(?:الفرصة|الاستثمار)|investment\s+opportunity|early\s+repayment/i;
 const INCOMING = /حوالة\s+(?:واردة|داخلية\s+واردة|محلية\s+واردة)|استرداد\s+نقدي\s+إلى\s+المحفظة|استرداد\s+نقدي\s+للمحفظة|إيداع|ايداع|تم\s+إضافة|تم\s+اضافة|أضيف|اضيف|إضافة\s+أموال|اضافة\s+اموال|استلام\s+(?:قطة|مبلغ|حوالة)|تحويل\s+وارد|money\s+added|cash\s+deposit|credited\s+to/i;
@@ -158,18 +159,82 @@ const OUTGOING_TRANSFER = /حوالة\s+(?:داخلية|محلية)?\s*صادر�
 const ADD_FUNDS = /money\s*added|add(?:ed)?\s*funds|إضافة\s+(?:أموال|اموال)|اضافة\s+(?:أموال|اموال)|اضافة\s+باستخدام|top\s*up/i;
 const SELF_TRANSFER = /حوالة\s+بين\s+(?:حساباتك|حساباتي)|تحويل\s+بين\s+(?:حساباتك|حساباتي)|تحويل\s+(?:الى|إلى)\s+(?:حسابك|حساب\s+(?:جاري|دراهم)|دراهم|المحفظة\s+الادخارية|حساباتك|حساباتي)|transfer\s+between\s+your\s+accounts|debit\s+transfer\s+internal/i;
 const INSTALLMENT = /قسط\s+تمويل|خصم\s*:\s*قسط|المبلغ\s+المتبقي/i;
-const MARKETING = /عزيزي\s+العميل|عميلنا\s+العزيز|صباح\s+الخير|هلا\s+|لحمايتك،?\s+حاولنا|تمت\s+اضافة\s+المستفيد|تم\s+تنشيط\s+المستفيد|تم\s+تسجيل\s+الدخول|apple\s+wallet|مبروك|نقاط\s+قطاف|نقاط\s+عضوية|رصيد\s+قطاف|rewards|برنامج\s+اكثر|تحديث\s+رسوم\s+التعرفة|تم\s+منحكم\s+الخصم|خصم\s+خاص|بدون\s+عمولة|discount|commission|سم\s+نفسك\s+تاجر|ملتقى\s+ريادة|اليوم\s+الأخير/i;
+const MARKETING = /عزيزي\s+العميل|عميلنا\s+العزيز|صباح\s+الخير|هلا\s+|لحمايتك،?\s+حاولنا|تمت\s+اضافة\s+المستفيد|تم\s+تنشيط\s+المستفيد|تم\s+تسجيل\s+الدخول|تم\s+تسجيلك\s+بنجاح|اشعار\s*[:：]?\s*تم\s+تسجيل\s+جهاز\s+جديد|apple\s+wallet|مبروك|نقاط\s+قطاف|نقاط\s+عضوية|رصيد\s+قطاف|rewards|برنامج\s+اكثر|تحديث\s+رسوم\s+التعرفة|تم\s+منحكم\s+الخصم|خصم\s+خاص|بدون\s+عمولة|discount|commission|سم\s+نفسك\s+تاجر|ملتقى\s+ريادة|اليوم\s+الأخير/i;
 const PROTECTION_INFO = /لحمايتك،?\s+حاولنا\s+التواصل|للتحقق\s+من\s+عملية|يرجى\s+مراجعة\s+التفاصيل\s+في\s+التطبيق/i;
 const OUTGOING = /دفع(?:ة)?\s+(?:مبلغ|قطة|دفعة)|حوالة\s+(?:صادرة|خارجة)|تحويل\s+صادر|تحويل\s+الى\s*[:：]?/i;
-const KNOWN_BANKS: Array<[string, RegExp]> = [["rajhi", /الراجحي|al\s*rajhi|مصرف\s+الراجحي/i], ["bsf", /الفرنسي|البنك\s+السعودي\s+الفرنسي|bsf|fransi/i], ["snb", /الاهلي|الأهلي|السعودي\s+الاهلي|snb/i], ["inma", /الإنماء|الانماء|inma/i], ["barq", /برق|barq/i], ["stcbank", /stc\s*bank|stc\s*با?نك/i], ["tamara", /تمارا|tamara/i], ["tabby", /تابي|tabby/i]];
+const KNOWN_BANKS: Array<[string, RegExp]> = [
+  ["rajhi", /الراجحي|مصرف\s+الراجحي|بنك\s+الراجحي|al\s*rajhi/i],
+  ["bsf", /الفرنسي|البنك\s+السعودي\s+الفرنسي|السعودي\s+الفرنسي|bsf|fransi/i],
+  ["snb", /الاهلي|الأهلي|السعودي\s+الاهلي|البنك\s+الأهلي|snb/i],
+  ["inma", /الإنماء|الانماء|inma/i],
+  ["sab", /\bsab\b|\bsaab\b|ساب|البنك\s+السعودي\s+البريطاني/i],
+  ["barq", /برق|barq/i],
+  ["stcbank", /stc\s*bank|stc\s*با?نك|بنك\s+stc|اس\s*تي\s*سي\s+بنك/i],
+  ["riyad", /بنك\s+الرياض|riyad\s*bank/i],
+];
+const KNOWN_SENDERS: Array<[string, RegExp]> = [
+  ...KNOWN_BANKS,
+  ["tamara", /تمارا|tamara/i],
+  ["tabby", /تابي|tabby/i],
+  ["drahim", /دراهم|drahim/i],
+  ["tiqmo", /tiqmo|تيقمو/i],
+  ["d360", /d360|دي\s*360/i],
+  ["tweeq", /tweeq|تويك/i],
+];
+
+const KNOWN_WALLET_ALIASES: Array<[string, string[]]> = [
+  ["barq", ["barq", "برق"]],
+  ["drahim", ["drahim", "دراهم"]],
+  ["stcbank", ["stc bank", "stcbank", "stc بنك", "بنك stc"]],
+  ["tiqmo", ["tiqmo", "تيقمو"]],
+  ["d360", ["d360", "دي 360", "دي360"]],
+  ["tweeq", ["tweeq", "تويك"]],
+  ["urpay", ["urpay", "يورباي", "يو ار باي"]],
+];
+
+function walletKey(value: string | undefined): string {
+  return normalizeSmsText(value ?? "").replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function knownWalletId(value: string | undefined): string | undefined {
+  const actual = walletKey(value);
+  if (actual.length < 3) return undefined;
+  return KNOWN_WALLET_ALIASES.find(([, aliases]) => aliases.some((alias) => {
+    const key = walletKey(alias);
+    return key && (actual === key || actual.includes(key));
+  }))?.[0];
+}
+
+function ownerWalletMatch(value: string | undefined, ownerWallets: readonly string[] | undefined): string | undefined {
+  const actual = walletKey(value);
+  if (actual.length < 3) return undefined;
+  const known = knownWalletId(value);
+  for (const wallet of ownerWallets ?? []) {
+    const configured = walletKey(wallet);
+    if (!configured || configured.length < 3) continue;
+    if (actual === configured || actual.includes(configured) || configured.includes(actual)) return wallet;
+    if (known && knownWalletId(wallet) === known) return wallet;
+  }
+  return undefined;
+}
+
+function senderEvidenceText(text: string): string {
+  // Merchant/counterparty fields are not sender evidence. In particular,
+  // `من Tamara` and `لدى: Tamara` must not turn a bank purchase into a BNPL
+  // provider notice when the transport omitted its `from` value.
+  return text
+    .replace(/(?:^|[\s،,;؛])(?:لدى|مفوتر|لـ|من|at|merchant)\s*[:：]?\s*(?!مصرف|بنك|البنك|bank\b)[^\n\r،,;؛]+/giu, " ");
+}
 
 function inferBank(text: string, sender?: string): { bank?: string; confidence: SmsConfidence } {
   // The sender field is authoritative evidence for the institution. Search it
   // before message text so a merchant called Tamara, BSF, or Al Rajhi cannot
   // overwrite the actual SMS sender.
-  const senderKnown = sender?.trim() ? KNOWN_BANKS.find(([, re]) => re.test(sender)) : undefined;
-  if (sender?.trim()) return { bank: senderKnown?.[0] ?? sender.trim().slice(0, 40), confidence: senderKnown ? "template" : "inferred" };
-  const known = KNOWN_BANKS.find(([, re]) => re.test(text));
+  const senderKnown = sender?.trim() ? KNOWN_SENDERS.find(([, re]) => re.test(sender)) : undefined;
+  if (senderKnown) return { bank: senderKnown[0], confidence: "template" };
+  // An unrecognized contact label or numeric sender is not evidence of the
+  // bank and must not raise confidence. Fall back to safe body fields only.
+  const known = KNOWN_BANKS.find(([, re]) => re.test(senderEvidenceText(text)));
   return known ? { bank: known[0], confidence: "inferred" } : { confidence: "generic" };
 }
 export function normalizeSourceText(text: string): string { return normalizeDigits(text || "").trim().replace(/\s+/g, " "); }
@@ -270,24 +335,78 @@ function firstFieldAmount(text: string, labels: RegExp[]): number | undefined {
       if (/(?:الإجمالي|اجمالي|المستحق|الحد\s+الأدنى|الرصيد|المتبقي|due|balance)/i.test(line) && !/(?:المتبقي|remaining)/i.test(label.source)) continue;
       const sarParen = line.match(/\(([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR|SR|ر\.?\s?س)\)/i);
       if (sarParen) return numberValue(sarParen[1]);
+      const currencyAmount = firstCurrencyAmount(line);
+      if (currencyAmount !== undefined) return currencyAmount;
       for (const raw of line.match(/[\d٠-٩][\d٠-٩,٬]*(?:[٫.]\d+)?/g) ?? []) { const n = numberValue(raw); if (n !== undefined && n > 0) return n; }
     }
   }
   return undefined;
 }
-function extractAmount(text: string, kind: TxnKind): number {
+
+function firstCurrencyAmount(text: string): number | undefined {
+  const re = new RegExp(`(?:${CUR})\\s*([\\d,]+(?:\\.\\d+)?)|([\\d,]+(?:\\.\\d+)?)\\s*(?:${CUR})`, "gi");
+  for (const match of text.matchAll(re)) {
+    const at = match.index ?? 0;
+    const lineStart = text.lastIndexOf("\n", at - 1) + 1;
+    const lineEnd = text.indexOf("\n", at);
+    const line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+    if (/(?:الرصيد|رصيد|الإجمالي\s+المستحق|المبلغ\s+المستحق|المتبقي|minimum\s+due|balance)/i.test(line)) continue;
+    // Currency next to a card/account suffix does not turn that identifier
+    // into a purchase amount.
+    if (/(?:بطاقة|حساب|عبر|من|الى|إلى|لـ|card\s*(?:number|ending)?|account)\s*[:：]?[^\n\r]*$/i.test(line.slice(0, at - lineStart))) continue;
+    const value = numberValue(match[1] ?? match[2] ?? "");
+    if (value !== undefined && value > 0) return value;
+  }
+  return undefined;
+}
+
+interface ExtractedAmount {
+  value: number;
+  source: "field" | "currency" | "operation" | "none";
+}
+
+function extractAmount(text: string, kind: TxnKind): ExtractedAmount {
   const normalized = normalizeDigits(text);
+  // A credit-card status SMS can label an available credit figure as
+  // `سداد بـ...` and then separately report `رصيد:`. Without a completed
+  // payment verb, that is card state, not money that left the bank account.
+  if (kind === "card_settle"
+    && /(?:^|[\n\r;،])\s*(?:الرصيد|رصيد)\s*[:：]/i.test(normalized)
+    && !/(?:تم|جرى|اكتمل)\s+(?:سداد|تسديد|خصم|دفع)|عملية\s+سداد|(?:payment|paid)\s+(?:of|amount)/i.test(normalized)) {
+    return { value: 0, source: "none" };
+  }
   const fields: Record<string, RegExp[]> = {
-    purchase: [/مبلغ\s*[:：]?/i, /بـ?\s*(?:SR|SAR|ريال)?/i, /purchase[^\d]{0,30}/i],
+    purchase: [
+      /مبلغ\s*[:：]?/i,
+      /amount\s*[:：]?/i,
+      /(?:^|[\s\u061c])بـ?\s*(?:SR|SAR|ريال)?\s*(?=[\d٠-٩])/i,
+      /\bFor\s*[:：]?\s*/i,
+    ],
     installment: [/القسط\s*[:：]?/i, /خصم\s*[:：]?/i], card_settle: [/سداد(?:\s+بـ?)?\s*/i, /تسديد(?:\s+بـ?)?\s*/i, /payment[^\d]{0,20}/i],
     bnpl_settle: [/دفعة\s*(?:قادمة)?[^\d]{0,20}/i, /payment[^\d]{0,20}/i], cashback: [/إضافة|اضافة|مبلغ\s*[:：]?/i], refund: [/مبلغ\s*[:：]?/i, /استلام\s+قطة[^\d]{0,20}/i],
     deposit: [/مبلغ\s*[:：]?/i, /إيداع|ايداع[^\d]{0,20}/i], transfer_in: [/مبلغ\s*[:：]?/i, /حوالة[^\d]{0,20}/i], salary: [/مبلغ\s*[:：]?/i, /حوالة[^\d]{0,20}/i], atm: [/مبلغ\s*[:：]?/i, /سحب[^\d]{0,20}/i], bill: [/مبلغ\s*[:：]?/i, /سداد[^\d]{0,20}/i], fee: [/رسوم(?:\s+وضريبة)?\s*[:：]?/i], unknown: [/مبلغ\s*[:：]?/i],
   };
-  const field = firstFieldAmount(normalized, fields[kind] ?? fields.unknown); if (field !== undefined) return field;
-  const currency = normalized.match(new RegExp(`(?:${CUR})\\s*([\\d,]+(?:\\.\\d+)?)|([\\d,]+(?:\\.\\d+)?)\\s*(?:${CUR})`, "i"));
-  if (currency) return numberValue(currency[1] ?? currency[2] ?? "") ?? 0;
+  const field = firstFieldAmount(normalized, fields[kind] ?? fields.unknown);
+  if (field !== undefined) return { value: field, source: "field" };
+  // Credit-card payment/statement messages often show one or more credit
+  // balances without an actual payment amount. Never turn an unlabeled
+  // currency value into a settlement; only an amount attached to the payment
+  // field above is eligible.
+  if (kind === "card_settle") return { value: 0, source: "none" };
+  const currency = firstCurrencyAmount(normalized);
+  if (currency !== undefined) return { value: currency, source: "currency" };
   const operation = normalized.match(/(?:شراء|خصم|سحب|دفع|حوالة|تحويل|إضافة|اضافة|deposit|purchase)\D{0,30}([\d,]+(?:\.\d+)?)/i);
-  return operation ? numberValue(operation[1]) ?? 0 : 0;
+  return operation
+    ? { value: numberValue(operation[1]) ?? 0, source: "operation" }
+    : { value: 0, source: "none" };
+}
+function matchesInstrumentSuffix(text: string, amount: number): boolean {
+  if (!Number.isInteger(amount) || amount < 1000 || amount > 9999) return false;
+  const labels = /(?:^|[\s;،])(?:عبر|من|بطاقة|حساب|الى|إلى|لـ|card(?:\s*(?:number|ending))?|account)\s*[:：]?\s*\*{0,4}(\d{4})(?=\s*(?:;|,|،|؛|$|[\p{L}]))/gimu;
+  for (const match of text.matchAll(labels)) {
+    if (Number(match[1]) === amount) return true;
+  }
+  return false;
 }
 function extractFee(text: string): number | undefined { return firstFieldAmount(normalizeDigits(text), [/(?:ال)?رسوم\s*وضريبة\s*[:：]?/i, /(?:ال)?رسوم\s*[:：]?/i, /رسوم\s*العملية\s*[:：]?/i]); }
 function extractBalance(text: string): number | undefined { const m = normalizeDigits(text).match(/(?:الرصيد\s*(?:المتوفر|المتاح|الحالي)?|رصيد)\s*[:：]?\s*(?:SAR|SR|ريال|ر\.?\s?س)?\s*([\d,]+(?:\.\d+)?)/i); return m ? numberValue(m[1]) : undefined; }
@@ -411,13 +530,49 @@ function hasEventAmount(kind: TxnKind): boolean { return !["otp", "declined", "s
 function templateFor(kind: TxnKind, text: string): string | undefined { const t = normalizeSmsText(text); if (kind === "purchase" && /شراء\s+(?:انترنت|دولي)/i.test(t) && /مبلغ/.test(t) && /لدي/.test(t)) return "rajhi.internet_purchase"; if (kind === "purchase" && /شراء\s+عبر\s+نقاط\s+البيع/i.test(t)) return "bsf.pos_purchase"; if (kind === "card_settle") return "card.settlement"; if (kind === "statement") return "card.statement"; if (kind === "installment") return "loan.installment"; if (kind === "cashback") return "cashback.wallet"; if (kind === "self_transfer") return "self.transfer"; return undefined; }
 
 export function parseBankSmsEvent(smsText: string, referenceDate: string, options: SmsParseOptions = {}): SmsParseEventResult | null {
-  const rawText = (smsText || "").trim(); if (!rawText) return null;
-  const text = normalizeDigits(rawText); const sender = inferBank(text, options.sender); const kind = inferKind(text, sender.bank); const dt = extractDateTime(text, referenceDate); const date = dt.date ?? validDateOrNull(referenceDate) ?? referenceDate;
-  const extractedAmount = extractAmount(text, kind); const amount = hasEventAmount(kind) ? extractedAmount : 0;
+  const rawText = (smsText || "").trim();
+  if (!rawText) return null;
+  const text = normalizeDigits(rawText);
+  const sender = inferBank(text, options.sender);
+  let kind = inferKind(text, sender.bank);
+  const dt = extractDateTime(text, referenceDate);
+  const date = dt.date ?? validDateOrNull(referenceDate) ?? referenceDate;
+  const merchant = extractMerchant(text);
+  const counterparty = extractCounterparty(text) ?? (merchant || undefined);
+  const endpoint = counterparty ?? merchant;
+  const knownWallet = knownWalletId(endpoint);
+  const configuredWallet = ownerWalletMatch(endpoint, options.ownerWallets);
+  const textNormalized = normalizeSmsText(text);
+  const hasInternalTransferSource = /حواله\s+داخليه/i.test(textNormalized) && /من\s*[:：]?\s*[^\n\r]+/i.test(text);
+  if (kind === "unknown" && hasInternalTransferSource && (knownWallet || configuredWallet)) kind = "transfer_in";
+
+  let direction = directionFor(kind);
+  let walletReviewReason: string | undefined;
+  const walletForReview = configuredWallet ?? (knownWallet ? endpoint : undefined);
+  if ((kind === "purchase" || kind === "transfer_in") && walletForReview) {
+    const flow = direction;
+    kind = "self_transfer";
+    direction = flow === "in" ? "in" : "out";
+    walletReviewReason = `تحويل محتمل عبر «${walletForReview}» — راجع الساق الأخرى قبل الاعتماد.`;
+  } else if (kind === "purchase" && knownWallet) {
+    // A known wallet in the merchant field is never a safe automatic expense
+    // until the owner confirms whether it is their own wallet.
+    walletReviewReason = `هل «${endpoint}» محفظتك؟ راجع التحويل قبل اعتماد المصروف.`;
+  }
+
+  const extracted = extractAmount(text, kind);
+  // A bare operation-following number is not an amount field. It may be the
+  // card/account suffix that appears before the actual `بـ`/`مبلغ` value.
+  const amountMatchesInstrument = matchesInstrumentSuffix(text, extracted.value);
+  const amountUnverified = extracted.source === "operation" || amountMatchesInstrument;
+  const extractedAmount = amountUnverified ? 0 : extracted.value;
+  const amount = hasEventAmount(kind) ? extractedAmount : 0;
   const feeBearing = new Set<TxnKind>(["purchase", "atm", "bill", "installment", "fee", "transfer_out", "self_transfer", "card_settle"]);
   const fee = feeBearing.has(kind) ? (extractFee(text) ?? 0) : 0;
-  const account = extractAccount(text, kind); const merchant = extractMerchant(text); const counterparty = extractCounterparty(text) ?? (merchant || undefined); const balanceAfter = extractBalance(text);
-  const isCreditCard = /بطاقة\s*(?:ائتمانية|ائتماني)|credit\s*card|available\s+credit|الرصيد\s+الائتماني|الحد\s+الائتماني/i.test(text) || (kind === "card_settle" && /بطاقة\s*(?:فيزا|ماستر)|visa\s+card|mastercard/i.test(text)); const balanceKind: BalanceKind = balanceAfter === undefined ? "unknown" : isCreditCard ? "credit_available" : "unknown";
+  const account = extractAccount(text, kind);
+  const balanceAfter = extractBalance(text);
+  const isCreditCard = /(?:البطاقة|بطاقة)\s*(?:ال)?(?:ائتمانية|ائتماني)|credit\s*card|available\s+credit|الرصيد\s+الائتماني|الحد\s+الائتماني/i.test(text) || (kind === "card_settle" && /(?:البطاقة|بطاقة)\s*(?:ال)?(?:فيزا|ماستر)|visa\s+card|mastercard/i.test(text));
+  const balanceKind: BalanceKind = balanceAfter === undefined ? "unknown" : isCreditCard ? "credit_available" : "unknown";
   const template = templateFor(kind, text);
   const obligationHint = obligationHintFor(text, date, sender.bank, extractedAmount);
   // An inbox receipt timestamp is reliable event-date evidence when the SMS
@@ -425,7 +580,9 @@ export function parseBankSmsEvent(smsText: string, referenceDate: string, option
   // every otherwise identifiable notification into manual review merely
   // because its date came from the transport metadata.
   const receivedDateEvidence = Boolean(options.receivedAt?.match(/\d{4}-\d{2}-\d{2}/));
-  const confidence: SmsConfidence = (dt.date || receivedDateEvidence)
+  const confidence: SmsConfidence = amountUnverified || walletReviewReason
+    ? "generic"
+    : (dt.date || receivedDateEvidence)
     ? (template ? sender.confidence : sender.confidence === "generic" ? "generic" : "inferred")
     : "generic";
   const sourceId = options.sourceId ?? options.sourceInboxId; const eventId = sourceId && options.sourceIndex !== undefined ? eventIdFor(sourceId, options.sourceIndex) : undefined;
@@ -435,7 +592,41 @@ export function parseBankSmsEvent(smsText: string, referenceDate: string, option
     : kind === "refund" && /حساب|محفظة|نقد|bank|cash/i.test(text)
       ? "person_bank"
       : undefined;
-  return { rawText, amount, expenseAmount: isExpenseKind(kind) ? amount + (fee || 0) : 0, fee: fee || undefined, kind, direction: directionFor(kind), category: keywordCategory(`${text} ${merchant}`), note: merchant || obligationHint?.merchant || rawText.replace(/\s+/g, " ").slice(0, 100), date, time: dt.time, bank: sender.bank, account, cardLast4: identityKind === "card" ? account : undefined, accountId: sender.bank && account ? `${sender.bank}:${identityKind}:${account}` : undefined, balanceAfter, balanceKind, counterparty: counterparty || obligationHint?.merchant, debtRemaining: kind === "installment" ? firstFieldAmount(text, [/المبلغ\s+المتبقي\s*[:：]?/i]) : undefined, obligationHint, refundDestination, template, confidence, eventId, sourceKey: sourceKeyFor(rawText), sourceInboxId: options.sourceInboxId, sourceReceivedAt: options.receivedAt, reviewReason: kind === "unknown" ? "قالب غير معروف — يحتاج مراجعة" : undefined };
+  const reviewReasons = [
+    walletReviewReason,
+    kind === "unknown" ? "قالب غير معروف — يحتاج مراجعة" : undefined,
+    amountUnverified ? "لم يظهر مبلغ موثوق بعد حقل المبلغ — يلزم التحقق يدوياً" : undefined,
+  ].filter((reason): reason is string => Boolean(reason));
+  const reviewReason = reviewReasons.length ? reviewReasons.join(" · ") : undefined;
+  return {
+    rawText,
+    amount,
+    expenseAmount: isExpenseKind(kind) ? amount + (fee || 0) : 0,
+    fee: fee || undefined,
+    kind,
+    direction,
+    category: keywordCategory(`${text} ${merchant}`),
+    note: merchant || obligationHint?.merchant || rawText.replace(/\s+/g, " ").slice(0, 100),
+    date,
+    time: dt.time,
+    bank: sender.bank,
+    account,
+    cardLast4: identityKind === "card" ? account : undefined,
+    accountId: sender.bank && account ? `${sender.bank}:${identityKind}:${account}` : undefined,
+    balanceAfter,
+    balanceKind,
+    counterparty: counterparty || obligationHint?.merchant,
+    debtRemaining: kind === "installment" ? firstFieldAmount(text, [/المبلغ\s+المتبقي\s*[:：]?/i]) : undefined,
+    obligationHint,
+    refundDestination,
+    template,
+    confidence,
+    eventId,
+    sourceKey: sourceKeyFor(rawText),
+    sourceInboxId: options.sourceInboxId,
+    sourceReceivedAt: options.receivedAt,
+    reviewReason,
+  };
 }
 
 // Legacy expense-only API. New inbox/import code should use `events` below so

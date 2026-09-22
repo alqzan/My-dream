@@ -6,7 +6,11 @@ import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState,
 import { EMPTY_HIFZ } from "./types";
 import { isOffsetDepositId } from "./budgetFlow";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
-import { normalizeReserveFunds, normalizeTransactionReserveSplits } from "./reserveFunds";
+import {
+  canonicalizeReserveFunds,
+  normalizeReserveFunds,
+  normalizeTransactionReserveSplitsForFunds,
+} from "./reserveFunds";
 
 // Which journal shard a given entry belongs to: one document per YYYY-MM of the
 // entry's own date (stable across devices, naturally bounded). Malformed/absent
@@ -342,6 +346,11 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   const localNewer = (local.lastUpdated ?? "") >= (cloud.lastUpdated ?? "");
   const primary = localNewer ? local : cloud;
   const secondary = localNewer ? cloud : local;
+  // Apply the legacy name migration per device before unioning. This keeps a
+  // same-device duplicate name marked custom, while two devices each holding
+  // one legacy system fund can still be recognized as the same role below.
+  const primaryReserves = normalizeReserveFunds(primary.reserves ?? []);
+  const secondaryReserves = normalizeReserveFunds(secondary.reserves ?? []);
 
   // Union both tombstone maps (newest deletedAt per id), then prune old ones.
   const deleted: Record<string, number> = { ...(cloud.deleted ?? {}) };
@@ -417,12 +426,13 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     return { ...h, logs };
   });
 
-  // Reserve funds: union by id, and union each fund's deposits by deposit id —
-  // dropping any deposit the user deleted (tombstoned deposit:<id>), so removing
-  // a deposit on one device isn't resurrected from the other's copy.
-  const reserves = normalizeReserveFunds(byIdNewer(primary.reserves, secondary.reserves).map((f) => {
-    const pDep = primary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
-    const sDep = secondary.reserves.find((x) => x.id === f.id)?.deposits ?? [];
+  // Reserve funds: union by id, union each fund's deposits by deposit id, then
+  // collapse duplicate system roles — dropping any deposit the user deleted
+  // (tombstoned deposit:<id>) so removing a deposit on one device isn't
+  // resurrected from the other's copy.
+  const reserveMerge = canonicalizeReserveFunds(byIdNewer(primaryReserves, secondaryReserves).map((f) => {
+    const pDep = primaryReserves.find((x) => x.id === f.id)?.deposits ?? [];
+    const sDep = secondaryReserves.find((x) => x.id === f.id)?.deposits ?? [];
     // إيداعُ المقاصة التلقائية معرّفُه مشتقٌّ من (المظروف · اليوم)، فنسخةُ
     // الجهازين تحمل المعرّفَ نفسَه — والاتّحادُ بالمعرّف يُبقي واحدةً فينتهي
     // الخصمُ المزدوج. ويبقى سؤالٌ: أيُّ النسختين؟ **الأكبر**: كلُّ جهازٍ يكبّر
@@ -441,9 +451,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // اثنتين، ورحلةٌ أُنهيت على أحدهما تصل بنهايتها. وعلى الرحلة المشتركة
     // **المنتهيةُ تغلب الجارية**: إنهاءُ رحلةٍ فعلٌ صريحٌ من المالك، وبقاؤها
     // «جارية» على الجهاز الآخر مجرّدُ غيابِ خبر.
-    const sTripsById = new Map((secondary.reserves.find((x) => x.id === f.id)?.trips ?? []).map((t) => [t.id, t]));
-    const pTrips = primary.reserves.find((x) => x.id === f.id)?.trips ?? [];
-    const sTrips = secondary.reserves.find((x) => x.id === f.id)?.trips ?? [];
+    const sTripsById = new Map((secondaryReserves.find((x) => x.id === f.id)?.trips ?? []).map((t) => [t.id, t]));
+    const pTrips = primaryReserves.find((x) => x.id === f.id)?.trips ?? [];
+    const sTrips = secondaryReserves.find((x) => x.id === f.id)?.trips ?? [];
     const trips = unionOrdered(pTrips, sTrips, (t) => t.id).map((t) => {
       const other = sTripsById.get(t.id);
       if (!other || other === t) return t;
@@ -459,6 +469,18 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
 
     return { ...f, deposits, ...(trips.length ? { trips } : {}) };
   }));
+  const reserves = reserveMerge.reserves;
+  const liveFundIds = new Set(reserves.map((fund) => fund.id));
+  // Apply role aliases before the split cap/duplicate normalization. A fund
+  // deleted on one device can still be referenced by a stale transaction on
+  // another; dropping only the missing leg returns that share to the daily
+  // budget instead of charging a fund that no longer exists.
+  const transactions = byIdNewer(primary.transactions, secondary.transactions)
+    .map((transaction) => normalizeTransactionReserveSplitsForFunds(
+      transaction,
+      reserveMerge.aliases,
+      liveFundIds,
+    ));
 
   // Prayer logs: union by date, and on a shared date resolve **each prayer on
   // its own stamp** — the day is five independent values, so a prayer logged
@@ -613,7 +635,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   }
 
   return {
-    transactions: byIdNewer(primary.transactions, secondary.transactions).map(normalizeTransactionReserveSplits),
+    transactions,
     // الكتب وجلسات القراءة: تعديلُ عنصرٍ قائم (رقم الصفحة، الحالة، التقييم) يفوز
     // بطابعه هو — كان يخسر لأنّ ختم مستند الجهاز الآخر أحدث إجمالاً فيرجع التقدّم.
     books: byIdNewer(primary.books, secondary.books),
@@ -694,7 +716,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     salaryPayers: pickSingleton("salaryPayers", primary.salaryPayers ?? secondary.salaryPayers ?? []),
     payerAliases: pickSingleton("payerAliases", primary.payerAliases ?? secondary.payerAliases ?? {}),
     cashbackEnabled: pickSingleton("cashbackEnabled", primary.cashbackEnabled ?? secondary.cashbackEnabled ?? false),
-    cashbackEnvelopeId: pickSingleton("cashbackEnvelopeId", primary.cashbackEnvelopeId ?? secondary.cashbackEnvelopeId),
+    cashbackEnvelopeId: (() => {
+      const selected = pickSingleton("cashbackEnvelopeId", primary.cashbackEnvelopeId ?? secondary.cashbackEnvelopeId);
+      if (!selected) return selected;
+      const canonical = reserveMerge.aliases[selected] ?? selected;
+      return liveFundIds.has(canonical) ? canonical : undefined;
+    })(),
     deleted,
     deletedMedia,
     fieldUpdatedAt,

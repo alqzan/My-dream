@@ -225,6 +225,22 @@ describe("هجرة هوية المظاريف وتقسيماتها", () => {
     expect(reserves.map((f) => [f.id, f.role])).toEqual([["g", "general"], ["s", "surplus"]]);
     expect(transactions[0].reserveSplits).toEqual([{ fundId: "x", pct: 50 }, { fundId: "y", pct: 10 }]);
   });
+
+  it("توحّد نسختي الدور الصريحتين في النسخة نفسها وتعيد توجيه المراجع", () => {
+    const out = migratePersisted({
+      reserves: [
+        { id: "legacy-general", name: "عام", role: "general", icon: "🏠", color: "#000", deposits: [{ id: "d1", date: "2026-01-01", amount: 100 }], createdAt: "2026-01-01" },
+        { id: "fund-general", name: "عام", role: "general", icon: "🏠", color: "#000", deposits: [{ id: "d2", date: "2026-01-02", amount: 200 }], createdAt: "2026-01-01" },
+      ],
+      transactions: [{ id: "t", date: "2026-01-01", amount: 100, category: "c", note: "", reserveSplits: [{ fundId: "legacy-general", pct: 100 }] }],
+    }, 18);
+    const reserves = rows(out, "reserves")!;
+    const transactions = rows(out, "transactions")!;
+    expect(reserves.filter((f) => f.role === "general")).toHaveLength(1);
+    expect(reserves[0].id).toBe("fund-general");
+    expect(reserves[0].deposits.map((d) => d.id).sort()).toEqual(["d1", "d2"]);
+    expect(transactions[0].reserveSplits).toEqual([{ fundId: "fund-general", pct: 100 }]);
+  });
 });
 
 describe("السلسلةُ كاملةً من v1: لا فقدَ غيرَ المقصود، وناتجٌ صالح", () => {
