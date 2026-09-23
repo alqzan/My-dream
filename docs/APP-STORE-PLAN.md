@@ -41,6 +41,7 @@
 | `idbStorage.ts` واجهة `StateStorage` | نقطة تبديل واحدة، لا نثرٌ في الصفحات. المتجر يستعمل `persistedIdbStorage` — الغلافُ المؤجَّل حولها (`persistScheduler.ts`) — فالتبديل يطال `idbStorage` وحدها ويبقى التأجيل فوقها كما هو. |
 | `mediaCache.ts` واجهة قراءة الوسائط | بايتات الصور/الصوت **لا تعيش في لقطة المتجر** بل مفتاحاً لكل هاش في IndexedDB (`madar-media:<hash>`)، وتُقرأ عند العرض بسقف ذاكرةٍ صارم (LRU، 32 ميغابايت). نقطة تبديل واحدة: `idbGet` هنا وحدها هي ما يُستبدل بمخزن الملفات الأصليّ، وباقي المنطق (`mediaSources.ts` نقيّ) يعبر بصفر تعديل. الجالب الاحتياطي من R2 مُحقَنٌ من `SyncProvider` لا مستورَداً — فلا Firebase في هذه الطبقة. |
 | `platform/idbConnection.ts` مخزن `idb-keyval` واحد | كلُّ `get`/`set`/`del` يمرّ بـ`keyvalStore`: اتّصالٌ يُعاد فتحُه عند `InvalidStateError`/`UnknownError` (Safari/WKWebView يغلقه في الخلفية بلا `onclose`)، ويُسقَط عند العودة من الخلفية (`document` `visibilitychange`). عند النقل يُستبدل هنا وحده. |
+| `mediaSplit.ts` الوسائط خارج الكتلة | صورُ المذكرات وصوتُها تُكتب في مفاتيح `madar-media:<بصمة>` بجوار `my-dream-store`، والكتلةُ تحمل مراجعَها. نقيّ (التخزينُ يُمرَّر)، فينتقل مع `idbStorage.ts` بلا تعديل. |
 | `persistScheduler.ts` نقيّ | `setTimeout` وحده: لا DOM ولا IndexedDB ولا متجر. يعبر بصفر تعديل، ومختبَرٌ بمؤقّتاتٍ وهمية. |
 | Firestore بـ`long-polling` قسريّ (`firebase.ts`) | WKWebView يخنق WebChannel — هذه محلولة مسبقاً. |
 | الخطوط محلية في `public/fonts` | لا CDN → لا شاشة بيضاء بلا شبكة. |

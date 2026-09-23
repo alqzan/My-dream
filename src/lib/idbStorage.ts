@@ -3,6 +3,7 @@ import { keyvalStore } from "./platform/idbConnection";
 import type { StateStorage, PersistStorage, StorageValue } from "zustand/middleware";
 import { createDeferredStorage, createDeferredWriter } from "./persistScheduler";
 import { beginBoot, markBootPhase, recordStoreBytes, storeKeyFor } from "./platform/bootGuard";
+import { createMediaSplitter } from "./mediaSplit";
 
 // Safari/iOS can temporarily reject an IndexedDB transaction (private mode,
 // storage pressure, or a connection being evicted) even though the origin's
@@ -92,8 +93,26 @@ export const persistedIdbStorage = createDeferredStorage(idbStorage);
 // كاتبٌ **واحد** يحمل الكائن ويُسلسله داخل الإفراغ. يُقرأ بنوعٍ مخصّص لكلّ
 // متصل عبر `persistJSONStorage<S>()` — و`idbStorage.ts` لا يستطيع استيراد
 // `AppStore` (دَوْرٌ في الاستيراد: المتجر يستورد هذا الملف).
-const jsonWriter = createDeferredWriter<StorageValue<unknown>>(idbStorage, {
-  serialize: (v) => JSON.stringify(v),
+//
+// **والوسائطُ خارج الكتلة (٠٫١٫٤٤٦)**: صورُ المذكرات وصوتُها تُكتب في مفاتيح
+// مستقلّة مرّةً واحدة، والكتلةُ تحمل مراجعَها — السبب في `mediaSplit.ts`.
+// الترتيبُ داخل `setItem` هو الضمان: الوسائطُ أوّلاً ثمّ الكتلةُ التي تشير إليها،
+// فلا تُكتب كتلةٌ بمرجعٍ لم يُكتب.
+const media = createMediaSplitter({
+  get: (key) => get<string>(key, keyvalStore),
+  set: (key, value) => set(key, value, keyvalStore),
+});
+const mediaAwareStorage: StateStorage = {
+  getItem: (name) => idbStorage.getItem(name),
+  setItem: async (name, value) => {
+    await media.writePending();
+    await idbStorage.setItem(name, value);
+  },
+  removeItem: (name) => idbStorage.removeItem(name),
+};
+
+const jsonWriter = createDeferredWriter<StorageValue<unknown>>(mediaAwareStorage, {
+  serialize: (v) => media.serialize(v),
   deserialize: (raw) => {
     // الحجمُ قبل التحليل: إن قتل النظامُ الصفحةَ هنا فهو الدليل الباقي.
     recordStoreBytes(raw.length);
@@ -112,6 +131,7 @@ const jsonStorage: PersistStorage<unknown> = {
     let value: StorageValue<unknown> | null;
     try {
       value = await jsonWriter.getItem(name);
+      if (value) value = await media.restore(value);
     } catch {
       // كتلةٌ لا تُحلَّل: `persist` يعامل `null` معاملةَ أوّلِ إقلاع، وهو أسلمُ
       // من رميةٍ تُسقط الترطيب كلَّه.
