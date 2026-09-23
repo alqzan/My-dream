@@ -2287,7 +2287,7 @@ export const useAppStore = create<AppStore>()(
           // chronology and malformed credit records are blocked at this store
           // boundary too, so a disabled button cannot be bypassed by calling
           // the action directly.
-          const blocked = creditLedger.excessSettlement > 0 || creditLedger.issues.length > 0;
+          const blocked = creditLedger.excessSettlement > 0 || creditLedger.blockingIssues.length > 0;
           if (blocked) return {};
           const result = reconcileDelta(expected, actual as number);
           record = {

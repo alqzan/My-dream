@@ -118,3 +118,40 @@ describe("الفرق", () => {
     expect(Number.isFinite(reconcileDelta(100, Number.NaN).delta)).toBe(true);
   });
 });
+
+describe("ما يوقف المطابقة", () => {
+  const view = (over: object = {}) => ({ unpaid: 0, excess: 0, prepaid: 0, ...over });
+  const warning = { code: "ambiguous_chronology" as const, message: "", severity: "warning" as const, cardId: "c" };
+  const error = { code: "refund_overallocated" as const, message: "", severity: "error" as const, cardId: "c" };
+
+  it("التنبيهُ يُخبر ولا يُغلق", () => {
+    const h = holdings({ reserves: [], transactions: [], dailyBudget: null, creditLedger: view({ issues: [warning] }) });
+    expect(h.blockedByExcess).toBe(false);
+    expect(h.blockingIssues).toEqual([]);
+  });
+
+  it("خطأٌ على بطاقةٍ ائتمانية ثابتة يُغلق ويُذكر سببُه", () => {
+    const h = holdings({
+      reserves: [], transactions: [], dailyBudget: null,
+      creditLedger: view({ issues: [warning, error], blockingIssues: [error] }),
+    });
+    expect(h.blockedByExcess).toBe(true);
+    expect(h.blockingIssues).toEqual([error]);
+  });
+
+  it("السطورُ تُجمع إلى المجموع: كلُّ حدٍّ خفيّ له سطرُه", () => {
+    const h = holdings({
+      reserves: [fund({ deposits: [{ id: "d", date: "2026-09-01", amount: 1000 }] })],
+      transactions: [tx({ id: "debt", kind: "opening_debt", direction: "out", amount: 200 })],
+      dailyBudget: null,
+      creditLedger: view({ unpaid: 300, prepaid: 50 }),
+    });
+    expect(h.adjustments).toEqual([
+      { key: "creditUnpaid", amount: 300 },
+      { key: "prepaidCredit", amount: -50 },
+      { key: "explicitLedgerDebits", amount: -200 },
+    ]);
+    expect(h.envelopesTotal + h.cycleBalance + h.adjustments.reduce((s, r) => s + r.amount, 0)).toBe(h.expected);
+    expect(h.expected).toBe(1050);
+  });
+});

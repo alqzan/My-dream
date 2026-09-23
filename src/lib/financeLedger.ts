@@ -133,17 +133,18 @@ export function creditLedgerForState(state: Pick<AppData, "transactions" | "sett
   const accounts = state.accounts ?? [];
   const cards = creditCards(accounts);
   const knownAccountsById = new Map(accounts.map((account) => [account.id, account]));
+  // Known cash/debit instruments are ordinary cash movements and stay out of
+  // the credit liability. Unknown card funding is retained so the engine can
+  // report it for review (as a non-blocking warning: it is not proven credit).
+  const onKnownCashInstrument = (transaction: Transaction): boolean => {
+    const canonical = canonicalCardId(transaction, accounts);
+    const known = (transaction.accountId ? knownAccountsById.get(transaction.accountId) : undefined)
+      ?? (canonical ? knownAccountsById.get(canonical) : undefined);
+    return Boolean(known && (known.kind !== "card" || known.fundingKind === "debit"));
+  };
   const charges = (state.transactions ?? [])
     .filter((transaction) => transaction.direction === "out" && CREDIT_CHARGE_KINDS.has(transaction.kind) && transaction.kind !== "transfer_out")
-    .filter((transaction) => {
-      const canonical = canonicalCardId(transaction, accounts);
-      const known = (transaction.accountId ? knownAccountsById.get(transaction.accountId) : undefined)
-        ?? (canonical ? knownAccountsById.get(canonical) : undefined);
-      // Known cash/debit instruments are ordinary spending and stay out of
-      // the credit liability. Unknown card funding is retained for an engine
-      // issue so reconciliation cannot silently close around it.
-      return !(known && (known.kind !== "card" || known.fundingKind === "debit"));
-    })
+    .filter((transaction) => !onKnownCashInstrument(transaction))
     .map((transaction) => toCharge(transaction, accounts))
     .filter((charge): charge is NonNullable<typeof charge> => Boolean(charge));
   const settlements = (state.settlements ?? [])
@@ -155,7 +156,12 @@ export function creditLedgerForState(state: Pick<AppData, "transactions" | "sett
   const cardRefunds = (state.transactions ?? [])
     .filter((transaction) => transaction.direction === "in"
       && (transaction.kind === "refund" || transaction.kind === "reversal" || transaction.kind === "cashback")
-      && transaction.refundDestination !== "person_bank")
+      && transaction.refundDestination !== "person_bank"
+      // Wallet cashback carries no destination (the import sets "unknown" for
+      // an unclassified receipt): it never touched a card, and the cashback
+      // envelope already holds it.
+      && !(transaction.kind === "cashback" && transaction.refundDestination === undefined)
+      && !onKnownCashInstrument(transaction))
     .map((transaction) => toCardRefund(transaction, accounts, state.transactions ?? []))
     .filter((refund): refund is NonNullable<typeof refund> => Boolean(refund));
   // An empty catalogue is not proof that every imported card is credit. A

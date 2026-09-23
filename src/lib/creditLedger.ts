@@ -184,15 +184,6 @@ export interface CreditLedgerIssue {
   amountCents?: number;
 }
 
-/**
- * The store's small reconciliation view historically typed `issues` as
- * `string[]`, while the ledger needs structured validation details.  The
- * runtime values are structured `CreditLedgerIssue` objects; this intersection
- * preserves assignability at that old boundary and `validationIssues` remains
- * the canonical typed alias for new callers.
- */
-export type CreditLedgerIssueList = CreditLedgerIssue[] & string[];
-
 export type CreditLedgerAllocationKind =
   | "charge_settlement"
   | "opening_debt"
@@ -248,9 +239,17 @@ export interface CreditLedgerResult {
   prepaidCreditCents: number;
   byCard: Record<string, CreditLedgerCardSummary>;
   allocations: CreditLedgerAllocation[];
-  issues: CreditLedgerIssueList;
+  issues: CreditLedgerIssue[];
   /** Alias kept for callers that name this collection explicitly. */
   validationIssues: CreditLedgerIssue[];
+  /** The subset of `issues` that must stop a reconciliation: errors on a card
+   * in the supplied credit catalogue (or on any card when no catalogue was
+   * given). Warnings, and records the catalogue excluded as non-credit, only
+   * inform — they never lock the owner out of reconciling. */
+  blockingIssues: CreditLedgerIssue[];
+  /** Card refunds the ledger rejected with a blocking issue. They reduced no
+   * liability, so they must not be counted as restored cash either. */
+  rejectedCardRefundIds: string[];
 }
 
 interface Chronology {
@@ -477,12 +476,14 @@ function cardRef(record: object, context: NormalizationContext, issues: CreditLe
 function cardIsAllowed(record: object, cardId: string, context: NormalizationContext, issues: CreditLedgerIssue[], issueContext: Partial<CreditLedgerIssue>): boolean {
   const declaredFunding = firstText(record, ["fundingKind"]);
   if (declaredFunding && declaredFunding !== "credit") {
-    addIssue(issues, "non_credit_card", "Only proven CREDIT funding enters this ledger.", issueContext);
+    warnIssue(issues, "non_credit_card", "Only proven CREDIT funding enters this ledger.", issueContext);
     return false;
   }
   if (!context.hasCards) return true;
   if (!context.cardsById.has(cardId)) {
-    addIssue(issues, "unknown_card", "Card is not present in the supplied card catalogue.", { ...issueContext, cardId });
+    // Outside the proven credit catalogue: excluded from the liability, so it
+    // is information for review, not an error in the credit ledger itself.
+    warnIssue(issues, "unknown_card", "Card is not present in the supplied card catalogue.", { ...issueContext, cardId });
     return false;
   }
   return true;
@@ -513,7 +514,7 @@ function normalizeCards(input: readonly CreditLedgerCardInput[] | undefined, iss
     const funding = firstText(record, ["fundingKind"]);
     const explicitCredit = recordValue(record, "isCredit") === true || funding === "credit";
     if (!explicitCredit) {
-      addIssue(issues, "non_credit_card", "Card is not explicitly marked CREDIT; it is excluded.", { recordType: "card", recordId: id });
+      warnIssue(issues, "non_credit_card", "Card is not explicitly marked CREDIT; it is excluded.", { recordType: "card", recordId: id });
       continue;
     }
     cardsById.set(id, id);
@@ -547,7 +548,7 @@ function normalizeBase(
   if (!cardId || !cardIsAllowed(record, cardId, context, issues, issueContext)) return null;
   const amountCents = readAmount(record, issues, { ...issueContext, cardId });
   if (amountCents === null) return null;
-  const chronology = dateAndTime(record, issues, issueContext);
+  const chronology = dateAndTime(record, issues, { ...issueContext, cardId });
   return { id, cardId, amountCents, ...chronology, order: index };
 }
 
@@ -630,7 +631,7 @@ function normalizeResolutions(
       }
       effectiveAmountCents = parsed;
     }
-    const baseDateTime = dateAndTime(record, issues, issueContext);
+    const baseDateTime = dateAndTime(record, issues, { ...issueContext, cardId });
     const settlementIds = resolutionIds(record, ["settlementId", "allocatedSettlementId"], ["settlementIds", "allocatedSettlementIds"]);
     const chargeIds = resolutionIds(record, ["chargeId", "targetChargeId", "appliedToEventId"], ["chargeIds", "targetChargeIds", "appliedToEventIds"]);
     let valid = true;
@@ -748,7 +749,7 @@ function normalizeRefunds(
     if (amountCents === null) continue;
     const destination = normalizeRefundDestination(record, issues, { ...issueContext, cardId });
     if (!destination) continue;
-    const chronology = dateAndTime(record, issues, issueContext);
+    const chronology = dateAndTime(record, issues, { ...issueContext, cardId });
     const chargeId = firstText(record, ["chargeId", "originalChargeId"]);
     result.push({ id, cardId, amountCents, ...chronology, order: index, type: "refund", destination, chargeId });
   }
@@ -923,9 +924,6 @@ export function calculateCreditLedger(input: CreditLedgerInput = {}): CreditLedg
         && !strictlyBefore(state.record, event)
         && state.record.amountCents > state.refundedCents + state.settledCents + state.creditAppliedCents,
       );
-      if (uncertainSameDay) {
-        warnIssue(issues, "ambiguous_chronology", "Same-day charge and settlement lack a provable order; the settlement remains excess until clarified.", { recordType: "settlement", recordId: event.id, cardId: event.cardId });
-      }
       const candidates = chargeStates
         .filter((state) => state.record.cardId === event.cardId && strictlyBefore(state.record, event))
         .sort((a, b) => compareChronology(a.record, b.record));
@@ -938,6 +936,12 @@ export function calculateCreditLedger(input: CreditLedgerInput = {}): CreditLedg
         event.usedCents += amountCents;
         remaining -= amountCents;
         addAllocation(allocations, byCard, allocation("charge_settlement", event.cardId, amountCents, { settlementId: event.id, chargeId: state.record.id }, event.date));
+      }
+      // Only a settlement left with excess is ambiguous in effect: once
+      // earlier charges explain it in full, the same-day charge's order no
+      // longer changes any number and a lingering warning would be noise.
+      if (uncertainSameDay && remaining > 0) {
+        warnIssue(issues, "ambiguous_chronology", "Same-day charge and settlement lack a provable order; the settlement remains excess until clarified.", { recordType: "settlement", recordId: event.id, cardId: event.cardId });
       }
       continue;
     }
@@ -1021,6 +1025,12 @@ export function calculateCreditLedger(input: CreditLedgerInput = {}): CreditLedg
   const unsettledRecordedChargesCents = Object.values(byCard).reduce((sum, card) => sum + card.unsettledRecordedChargesCents, 0);
   const excessSettlementCents = Object.values(byCard).reduce((sum, card) => sum + card.excessSettlementCents, 0);
   const prepaidCreditCents = Object.values(byCard).reduce((sum, card) => sum + card.prepaidCreditCents, 0);
+  const blockingIssues = issues.filter((issue) => issue.severity === "error"
+    && issue.cardId !== undefined
+    && (!context.hasCards || context.cardsById.has(issue.cardId)));
+  const rejectedCardRefundIds = [...new Set(blockingIssues
+    .filter((issue) => issue.recordType === "refund" && issue.recordId)
+    .map((issue) => issue.recordId!))];
   return {
     unpaid: asAmount(unsettledRecordedChargesCents),
     excess: asAmount(excessSettlementCents),
@@ -1033,7 +1043,9 @@ export function calculateCreditLedger(input: CreditLedgerInput = {}): CreditLedg
     prepaidCreditCents,
     byCard,
     allocations,
-    issues: issues as CreditLedgerIssueList,
+    issues,
     validationIssues: issues,
+    blockingIssues,
+    rejectedCardRefundIds,
   };
 }

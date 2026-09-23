@@ -92,15 +92,19 @@ describe("credit ledger integration", () => {
     expect(ledger.excessSettlement).toBe(500);
   });
 
-  it("keeps an unowned settlement as a blocking review issue", () => {
+  it("keeps a settlement on a card not proven credit as a non-blocking review warning", () => {
+    // Outside the proven credit catalogue the ledger owns nothing: the
+    // payment is ordinary cash out, and the typed number absorbs it. It stays
+    // visible as a warning; it must not lock the reconciliation.
     useAppStore.setState({ reserves: [reserve(10000)] });
     useAppStore.getState().addCardSettlement({
       id: "unowned-settlement", cardId: "other-bank:card:7777", amount: 500, date: "2026-01-02",
     });
     const ledger = creditLedgerForState(useAppStore.getState());
-    expect(ledger.issues.some((issue) => issue.code === "unknown_card")).toBe(true);
-    expect(holdings({ ...useAppStore.getState(), dailyBudget: null, creditLedger: ledger }).blockedByExcess).toBe(true);
-    expect(useAppStore.getState().recordReconcile(10000)).toBeNull();
+    expect(ledger.issues.find((issue) => issue.code === "unknown_card")?.severity).toBe("warning");
+    expect(ledger.blockingIssues).toEqual([]);
+    expect(holdings({ ...useAppStore.getState(), dailyBudget: null, creditLedger: ledger }).blockedByExcess).toBe(false);
+    expect(useAppStore.getState().recordReconcile(9500)?.delta).toBe(-500);
   });
 
   it("rejects an overallocated resolution before writing its debit", () => {
@@ -127,7 +131,7 @@ describe("credit ledger integration", () => {
     expect(creditLedgerForState(state).unsettledRecordedCharges).toBe(0);
   });
 
-  it("deposits an opted-in cashback source once and keeps bank cash unchanged", () => {
+  it("deposits an opted-in wallet cashback once and counts it once (wallets are in the typed number)", () => {
     useAppStore.setState({
       reserves: [reserve(10000)],
       cashbackEnabled: true,
@@ -144,7 +148,15 @@ describe("credit ledger integration", () => {
     const state = useAppStore.getState();
     expect(state.reserves[0].deposits.filter((deposit) => deposit.id === "cashback-event:cashback")).toHaveLength(1);
     const ledger = creditLedgerForState(state);
-    expect(holdings({ ...state, dailyBudget: null, creditLedger: ledger, cashbackEnabled: true, cashbackEnvelopeId: "surplus" }).expected).toBe(10000);
+    const view = holdings({ ...state, dailyBudget: null, creditLedger: ledger, cashbackEnabled: true, cashbackEnvelopeId: "surplus" });
+    // Bank 10000 + wallet 100: the envelope already holds the 100, and the
+    // screen asks for wallets in the number — subtracting it again was a
+    // second count. A wallet cashback never touched a card either, so it
+    // raises no ledger issue at all.
+    expect(view.expected).toBe(10100);
+    expect(ledger.issues).toEqual([]);
+    expect(view.blockedByExcess).toBe(false);
+    expect(useAppStore.getState().recordReconcile(10100)?.delta).toBe(0);
   });
 
   it("keeps a person-bank reimbursement in current holdings without settling card debt", () => {
@@ -206,5 +218,141 @@ describe("credit ledger integration", () => {
     expect(ledger.issues.some((issue) => issue.code === "refund_destination_required" || issue.code === "refund_destination_unknown")).toBe(true);
     expect(holdings({ ...state, dailyBudget: null, creditLedger: ledger }).blockedByExcess).toBe(true);
     expect(state.recordReconcile(10000)).toBeNull();
+  });
+
+  it("counts a refund routed back to its envelope once: 1000 → 1000 → 1000", () => {
+    // Envelope 1000; a 300 card purchase routed 100% to it; a linked 300
+    // merchant-card refund carrying the same split. `reserveShare` already
+    // returns the refund to the envelope — adding it again read 1300.
+    useAppStore.setState({ reserves: [reserve(1000)] });
+    const view = () => {
+      const state = useAppStore.getState();
+      return holdings({ ...state, dailyBudget: null, creditLedger: creditLedgerForState(state) });
+    };
+    expect(view().expected).toBe(1000);
+
+    useAppStore.setState({ transactions: [purchase(300)] });
+    expect(view().envelopesTotal).toBe(700);
+    expect(view().creditUnpaid).toBe(300);
+    expect(view().expected).toBe(1000);
+
+    const refund: Transaction = {
+      id: "routed-refund", eventId: "routed-refund", date: "2026-01-03", amount: 300,
+      category: "cat-essentials", note: "استرجاع", kind: "refund", direction: "in",
+      accountId: card.id, refundDestination: "merchant_card", linkedTransactionId: "charge-1",
+      reserveSplits: [{ fundId: "surplus", pct: 100 }],
+    };
+    useAppStore.setState({ transactions: [refund, ...useAppStore.getState().transactions] });
+    const after = view();
+    expect(after.envelopesTotal).toBe(1000);
+    expect(after.creditUnpaid).toBe(0);
+    expect(after.merchantCardRefunds).toBe(0);
+    expect(after.expected).toBe(1000);
+    expect(after.blockedByExcess).toBe(false);
+    expect(useAppStore.getState().recordReconcile(1000)?.delta).toBe(0);
+  });
+
+  it("does not count a merchant-card refund the ledger rejected", () => {
+    // A refund dated before its charge reduced no liability: counting it as
+    // restored cash would invent money. It blocks, and shows why.
+    const refund: Transaction = {
+      id: "early-refund", eventId: "early-refund", date: "2025-12-31", amount: 300,
+      category: "cat-essentials", note: "استرجاع", kind: "refund", direction: "in",
+      accountId: card.id, refundDestination: "merchant_card", linkedTransactionId: "charge-1",
+    };
+    useAppStore.setState({ transactions: [refund, purchase(1000)], reserves: [reserve(10000)] });
+    const state = useAppStore.getState();
+    const ledger = creditLedgerForState(state);
+    const view = holdings({ ...state, dailyBudget: null, creditLedger: ledger });
+    expect(ledger.rejectedCardRefundIds).toEqual(["early-refund"]);
+    expect(ledger.unsettledRecordedCharges).toBe(1000);
+    expect(view.merchantCardRefunds).toBe(0);
+    expect(view.expected).toBe(10000);
+    expect(view.blockingIssues.map((issue) => issue.code)).toEqual(["refund_before_charge"]);
+    expect(view.blockedByExcess).toBe(true);
+  });
+
+  it("counts a refund to a debit card as cash without a ledger issue", () => {
+    const debit: Account = { ...card, id: "bank:card:5555", last4: "5555", fundingKind: "debit" };
+    const refund: Transaction = {
+      id: "debit-refund", eventId: "debit-refund", date: "2026-01-03", amount: 50,
+      category: "cat-essentials", note: "استرجاع", kind: "refund", direction: "in",
+      accountId: debit.id, refundDestination: "merchant_card",
+    };
+    useAppStore.setState({ accounts: [card, debit], transactions: [refund], reserves: [reserve(10000)] });
+    const state = useAppStore.getState();
+    const ledger = creditLedgerForState(state);
+    const view = holdings({ ...state, dailyBudget: null, creditLedger: ledger });
+    expect(ledger.issues).toEqual([]);
+    expect(view.merchantCardRefunds).toBe(50);
+    expect(view.expected).toBe(10050);
+    expect(view.blockedByExcess).toBe(false);
+  });
+
+  it("does not stay locked by a same-day order once both charges are fully paid", () => {
+    // Charge A (Jan 1) and charge B on the settlement's own day with no time.
+    // The Jan 2 payment covers A exactly; B is paid on Jan 3. Nothing is
+    // unexplained, so no warning survives and nothing blocks.
+    const chargeA = { ...purchase(500, "2026-01-01"), id: "charge-a", eventId: "charge-a" };
+    const chargeB = { ...purchase(300, "2026-01-02"), id: "charge-b", eventId: "charge-b" };
+    useAppStore.setState({ transactions: [chargeA, chargeB], reserves: [reserve(10000)] });
+    useAppStore.getState().addCardSettlement(payment(500, "2026-01-02"));
+    useAppStore.getState().addCardSettlement(payment(300, "2026-01-03"));
+    const state = useAppStore.getState();
+    const ledger = creditLedgerForState(state);
+    expect(ledger.unsettledRecordedCharges).toBe(0);
+    expect(ledger.excessSettlement).toBe(0);
+    expect(ledger.issues.some((issue) => issue.code === "ambiguous_chronology")).toBe(false);
+    expect(holdings({ ...state, dailyBudget: null, creditLedger: ledger }).blockedByExcess).toBe(false);
+    expect(useAppStore.getState().recordReconcile(9200)?.delta).toBe(0);
+  });
+
+  it("never blocks on purchases outside the proven credit catalogue", () => {
+    // An auto-discovered card whose funding is still unknown, and a purchase
+    // with no card digits at all: both are reviewable warnings, not errors.
+    const unknownFunding: Account = { ...card, id: "bank:card:8888", last4: "8888", fundingKind: "unknown" };
+    const onUnknownCard: Transaction = {
+      id: "unknown-card-buy", eventId: "unknown-card-buy", date: "2026-01-02", amount: 120,
+      category: "cat-essentials", note: "شراء", kind: "purchase", direction: "out", accountId: unknownFunding.id,
+    };
+    const noCard: Transaction = {
+      id: "no-card-buy", eventId: "no-card-buy", date: "2026-01-02", amount: 80,
+      category: "cat-essentials", note: "شراء", kind: "purchase", direction: "out",
+    };
+    useAppStore.setState({ accounts: [card, unknownFunding], transactions: [onUnknownCard, noCard], reserves: [reserve(10000)] });
+    const state = useAppStore.getState();
+    const ledger = creditLedgerForState(state);
+    expect(ledger.issues.length).toBeGreaterThan(0);
+    expect(ledger.issues.every((issue) => issue.severity === "warning")).toBe(true);
+    expect(ledger.blockingIssues).toEqual([]);
+    expect(holdings({ ...state, dailyBudget: null, creditLedger: ledger }).blockedByExcess).toBe(false);
+    expect(useAppStore.getState().recordReconcile(10000)).not.toBeNull();
+  });
+
+  it("shows every term of the total as its own row, so the rows add up", () => {
+    const personRefund: Transaction = {
+      id: "person-refund", eventId: "person-refund", date: "2026-01-03", amount: 40,
+      category: "cat-essentials", note: "تعويض", kind: "refund", direction: "in",
+      accountId: "bank:account:9999", refundDestination: "person_bank",
+    };
+    const cardRefund: Transaction = {
+      id: "card-refund", eventId: "card-refund", date: "2026-01-04", amount: 300,
+      category: "cat-essentials", note: "استرجاع", kind: "refund", direction: "in",
+      accountId: card.id, refundDestination: "merchant_card", linkedTransactionId: "charge-1",
+    };
+    // charge-1 is paid in full before its refund, so the refund becomes card
+    // credit; charge-2 predates that credit and stays unpaid.
+    const unrouted = { ...purchase(1000), reserveSplits: undefined };
+    const later = { ...purchase(200, "2026-01-03"), id: "charge-2", eventId: "charge-2", reserveSplits: undefined };
+    useAppStore.setState({ transactions: [personRefund, cardRefund, unrouted, later], reserves: [reserve(10000)] });
+    useAppStore.getState().addCardSettlement(payment(1000, "2026-01-02"));
+    const state = useAppStore.getState();
+    const view = holdings({ ...state, dailyBudget: null, creditLedger: creditLedgerForState(state) });
+    expect(view.adjustments.map((row) => row.key).sort()).toEqual(
+      ["bankReimbursements", "creditUnpaid", "merchantCardRefunds", "prepaidCredit"].sort(),
+    );
+    const rows = view.envelopesTotal + view.cycleBalance + view.adjustments.reduce((sum, row) => sum + row.amount, 0);
+    expect(rows).toBeCloseTo(view.expected, 2);
+    expect(view.adjustments.every((row) => row.amount !== 0)).toBe(true);
   });
 });

@@ -195,4 +195,36 @@ describe("calculateCreditLedger — independent numerical contract", () => {
     expect(result.unsettledRecordedChargesCents).toBe(4000);
     expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(["duplicate_id", "refund_overallocated"]));
   });
+
+  it("warns of a same-day order only while the settlement is left with excess", () => {
+    const explained = calculateCreditLedger({
+      charges: [charge("c1", 500, "2026-01-01"), charge("c2", 300, "2026-01-02")],
+      settlements: [settlement("s1", 500, "2026-01-02")],
+    });
+    expect(explained.excessSettlementCents).toBe(0);
+    expect(explained.issues.some((issue) => issue.code === "ambiguous_chronology")).toBe(false);
+
+    const unexplained = calculateCreditLedger({
+      charges: [charge("c1", 500, "2026-01-01"), charge("c2", 300, "2026-01-02")],
+      settlements: [settlement("s1", 800, "2026-01-02")],
+    });
+    expect(unexplained.excessSettlementCents).toBe(30000);
+    const warning = unexplained.issues.find((issue) => issue.code === "ambiguous_chronology");
+    expect(warning?.severity).toBe("warning");
+    expect(unexplained.blockingIssues).toEqual([]);
+  });
+
+  it("blocks only on errors of catalogue credit cards; exclusions are warnings", () => {
+    const result = calculateCreditLedger({
+      cards: [{ id: CARD_A, fundingKind: "credit" }],
+      charges: [charge("c1", 100, "2026-01-01"), charge("c-other", 50, "2026-01-01", CARD_B)],
+      cardRefunds: [
+        { id: "r-bad", cardId: CARD_A, amount: 500, date: "2026-01-02", destination: "merchant_card", chargeId: "c1" },
+        { id: "r-other", cardId: CARD_B, amount: 5, date: "2026-01-02", destination: "merchant_card" },
+      ],
+    });
+    expect(result.issues.filter((issue) => issue.code === "unknown_card").every((issue) => issue.severity === "warning")).toBe(true);
+    expect(result.blockingIssues.map((issue) => [issue.code, issue.recordId])).toEqual([["refund_overallocated", "r-bad"]]);
+    expect(result.rejectedCardRefundIds).toEqual(["r-bad"]);
+  });
 });
