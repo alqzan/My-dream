@@ -17,6 +17,7 @@
 // طبقة منصّة (IndexedDB) خلف واجهةٍ قابلة للاستبدال — راجع docs/APP-STORE-PLAN.md.
 
 import { get as idbGet } from "idb-keyval";
+import { keyvalStore } from "./platform/idbConnection";
 import type { MediaKindTag } from "./mediaSources";
 
 /** المصدر الوحيد لبادئة مفاتيح الوسائط — يستوردها `sync.ts` أيضاً فلا تتفرّق. */
@@ -80,7 +81,7 @@ export function requestMedia(hash: string, kind: MediaKindTag): void {
   inflight.add(hash);
   void (async () => {
     try {
-      let value = await idbGet(MEDIA_CACHE_PREFIX + hash);
+      let value = await idbGet(MEDIA_CACHE_PREFIX + hash, keyvalStore);
       // ليست على الجهاز → جرّب R2 مرّةً. الجالب يكتبها في المخزن بنفسه، فلا
       // تتكرّر الرحلة أبداً بعد أول نجاح.
       if (typeof value !== "string" || !value) {

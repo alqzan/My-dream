@@ -1,4 +1,5 @@
 import { get, set, del } from "idb-keyval";
+import { keyvalStore } from "./platform/idbConnection";
 import type { StateStorage, PersistStorage, StorageValue } from "zustand/middleware";
 import { createDeferredStorage, createDeferredWriter } from "./persistScheduler";
 import { beginBoot, markBootPhase, recordStoreBytes, storeKeyFor } from "./platform/bootGuard";
@@ -34,14 +35,14 @@ export const idbStorage: StateStorage = {
     const name = keyOf(rawName);
     const fallback = localFallbackGet(name);
     if (fallback != null) return fallback;
-    const value = await get<string>(name);
+    const value = await get<string>(name, keyvalStore);
     if (value != null) return value;
     // One-time migration: if nothing in IDB yet, pull any legacy value that
     // was previously saved in localStorage so existing data isn't lost.
     if (typeof window !== "undefined") {
       const legacy = window.localStorage.getItem(name);
       if (legacy != null) {
-        await set(name, legacy);
+        await set(name, legacy, keyvalStore);
         try { window.localStorage.removeItem(name); } catch { /* ignore */ }
         return legacy;
       }
@@ -51,7 +52,7 @@ export const idbStorage: StateStorage = {
   setItem: async (rawName, value) => {
     const name = keyOf(rawName);
     try {
-      await set(name, value);
+      await set(name, value, keyvalStore);
       localFallbackRemove(name);
     } catch (error) {
       // Keep the full serialized snapshot when the browser can still provide
@@ -63,7 +64,7 @@ export const idbStorage: StateStorage = {
   },
   removeItem: async (rawName) => {
     const name = keyOf(rawName);
-    await del(name);
+    await del(name, keyvalStore);
     localFallbackRemove(name);
   },
 };

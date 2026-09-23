@@ -2,6 +2,7 @@ import {
   doc, getDoc, setDoc, getDocs, collection, onSnapshot, deleteDoc, runTransaction,
 } from "firebase/firestore";
 import { get as idbGet, set as idbSet } from "idb-keyval";
+import { keyvalStore } from "./platform/idbConnection";
 import { db, getSyncSpace } from "./firebase";
 import type { AppData, JournalAttachment, JournalEntry, Transaction } from "./types";
 import {
@@ -31,7 +32,7 @@ import { showToast } from "@/components/ui/UndoToast";
 // تُعرض أبداً بلا خطأٍ ظاهر).
 async function localMediaGet(hash: string): Promise<string | null> {
   try {
-    const v = await idbGet(MEDIA_CACHE_PREFIX + hash);
+    const v = await idbGet(MEDIA_CACHE_PREFIX + hash, keyvalStore);
     return typeof v === "string" ? v : null;
   } catch {
     return null;
@@ -51,7 +52,7 @@ async function localMediaPut(hash: string, dataUrl: string): Promise<void> {
   // transient remote URL), so a later render can rely on it offline.
   if (!dataUrl.startsWith("data:")) return;
   try {
-    await idbSet(MEDIA_CACHE_PREFIX + hash, dataUrl);
+    await idbSet(MEDIA_CACHE_PREFIX + hash, dataUrl, keyvalStore);
   } catch { /* quota/availability — rendering still works from the live fetch */ }
 }
 function blobToDataUrl(blob: Blob): Promise<string> {
