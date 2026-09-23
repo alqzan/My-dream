@@ -475,7 +475,11 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     try {
       await flushPersistedStrict();
     } catch (error) {
-      const detail = error instanceof Error && error.name ? ` (${error.name})` : "";
+      // مؤقّتاً للتشخيص على iPhone: الاسمُ وحده («UnknownError») لا يفرّق بين
+      // اتّصالٍ مات وحصّةٍ امتلأت وقرصٍ رفض.
+      const e = error as { name?: unknown; message?: unknown } | null;
+      const parts = [e?.name, e?.message].filter((part): part is string => typeof part === "string" && part.length > 0);
+      const detail = parts.length ? ` (${parts.join(": ")})` : "";
       showToast(`حُفظت المراجعة محلياً مؤقتاً — أبقيت رسالة البنك لإعادة المحاولة.${detail}`, "warning");
       return false;
     }

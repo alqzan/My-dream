@@ -9,6 +9,8 @@ import { today } from "@/lib/utils";
 import { usePending } from "@/lib/pending";
 import { useAppStore } from "@/lib/store";
 import { isSafeMode, markBootPhase } from "@/lib/platform/bootGuard";
+import { settledInboxItemIds } from "@/lib/inboxSettled";
+import { flushPersistedStrict } from "@/lib/idbStorage";
 
 // App-wide watcher: it keeps a LIVE listener on the automatic bank-SMS inbox,
 // so a message the iOS Automation delivers surfaces the review sheet at once —
@@ -71,7 +73,27 @@ export function PendingInboxWatcher() {
       const readable: InboxItem[] = [];
       const unreadable: InboxItem[] = [];
       let count = 0;
+      // مراجعةٌ اعتُمدت وحُفظت ثمّ لم تُحذف وثيقتُها (فشل IndexedDB لحظتَها):
+      // أكمِل حذفَها بدل عرضها مرّةً ثانية. لا يُحذف شيءٌ قبل أن يثبت الحفظ على
+      // القرص — وإلّا فتبقى الوثيقةُ مخفيّةً هذه المرّة ويعيد الإقلاعُ التالي تقييمها.
+      const cloudParsed = cloudInbox.map((it) => ({
+        id: it.id,
+        // الخيارات نفسُها التي تحلّل بها المراجعةُ الوثيقة، فتتطابق `eventId`.
+        events: parseBankSmsBulk(it.text, today(), {
+          sender: it.from,
+          receivedAt: it.ts,
+          sourceInboxId: it.sourceInboxId ?? it.id,
+          sourceId: it.sourceEventId?.replace(/:\d+$/, ""),
+        }).events,
+      }));
+      const settled = settledInboxItemIds(cloudParsed, inboxDecisions);
+      if (settled.size) {
+        void flushPersistedStrict()
+          .then(() => Promise.all([...settled].map((id) => deleteInboxItem(id).catch(() => {}))))
+          .catch(() => { /* still unsaved — keep the source documents */ });
+      }
       for (const it of inbox) {
+        if (settled.has(it.id)) continue;
         const parsed = parseBankSmsBulk(it.text, today(), {
           sender: it.from,
           receivedAt: it.ts,

@@ -7,6 +7,7 @@ import { createResilientStore } from "./idbConnection";
 const data = new Map<IDBValidKey, unknown>();
 let opens = 0;
 let alive: { dead: boolean }[] = [];
+let unknownOnce = false;
 
 function request<T>(result: () => T) {
   const req: Record<string, unknown> = {};
@@ -26,6 +27,10 @@ function fakeIndexedDB() {
       const db = {
         close: () => { state.dead = true; },
         transaction: () => {
+          if (unknownOnce) {
+            unknownOnce = false;
+            throw Object.assign(new Error("Connection to Indexed Database server lost. Refresh the page to try again"), { name: "UnknownError" });
+          }
           if (state.dead) {
             throw Object.assign(new Error("The database connection is closing."), { name: "InvalidStateError" });
           }
@@ -55,6 +60,7 @@ beforeEach(() => {
   data.clear();
   opens = 0;
   alive = [];
+  unknownOnce = false;
   vi.stubGlobal("indexedDB", fakeIndexedDB());
 });
 
@@ -72,6 +78,23 @@ describe("createResilientStore", () => {
     kill();
     await set("a", "saved", store);
     expect(await get("a", store)).toBe("saved");
+    expect(opens).toBe(2);
+  });
+
+  it("reopens after WebKit loses the IndexedDB server (UnknownError)", async () => {
+    const store = createResilientStore();
+    expect(await get("a", store)).toBeUndefined();
+    unknownOnce = true;
+    await set("a", "saved", store);
+    expect(await get("a", store)).toBe("saved");
+    expect(opens).toBe(2);
+  });
+
+  it("resetConnection makes the next operation open a fresh connection", async () => {
+    const store = createResilientStore();
+    await set("a", 1, store);
+    store.resetConnection();
+    expect(await get("a", store)).toBe(1);
     expect(opens).toBe(2);
   });
 

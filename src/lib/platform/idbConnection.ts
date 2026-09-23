@@ -12,6 +12,12 @@ import type { UseStore } from "idb-keyval";
 // والعلاج: عند هذا الخطأ تحديداً أسقِط الاتّصال المحفوظ، وافتح غيرَه، وأعِد
 // العمليةَ **مرّةً واحدة**. الاسمان هما افتراضيُّ `idb-keyval` نفسُه، فالبياناتُ
 // هي هي بلا هجرة.
+//
+// **و`UnknownError` مثلُه (٠٫١٫٤٤٥)**: بعد تعليق iOS للتطبيق قد يموت اتّصالُ
+// WebKit بخادم IndexedDB فيرمي «Connection to Indexed Database server lost» باسم
+// `UnknownError` لا `InvalidStateError` — فظهر للمالك «(UnknownError)» والعلاجُ
+// الأوّل لا يلمسه. ولا ننتظر الخطأ أصلاً: عند العودة من الخلفية نُسقط الاتّصال
+// المحفوظ فتفتح الكتابةُ التالية غيرَه.
 
 const DB_NAME = "keyval-store";
 const STORE_NAME = "keyval";
@@ -25,13 +31,20 @@ function promisifyRequest<T>(request: IDBRequest<T> | IDBTransaction): Promise<T
   });
 }
 
+const STALE_ERROR_NAMES = new Set(["InvalidStateError", "UnknownError"]);
+
 /** اتّصالٌ ميت لا يُصلحه إلّا فتحُ غيره. */
 export function isStaleConnectionError(error: unknown): boolean {
   return typeof error === "object" && error !== null
-    && (error as { name?: unknown }).name === "InvalidStateError";
+    && STALE_ERROR_NAMES.has((error as { name?: unknown }).name as string);
 }
 
-export function createResilientStore(dbName = DB_NAME, storeName = STORE_NAME): UseStore {
+export type ResilientStore = UseStore & {
+  /** أسقِط الاتّصالَ المحفوظ؛ العمليةُ التالية تفتح غيرَه. */
+  resetConnection: () => void;
+};
+
+export function createResilientStore(dbName = DB_NAME, storeName = STORE_NAME): ResilientStore {
   let dbp: Promise<IDBDatabase> | undefined;
 
   const getDB = (): Promise<IDBDatabase> => {
@@ -66,16 +79,26 @@ export function createResilientStore(dbName = DB_NAME, storeName = STORE_NAME): 
     }
   };
 
-  return (txMode, callback) => run(txMode, callback).catch((error) => {
+  const store: UseStore = (txMode, callback) => run(txMode, callback).catch((error) => {
     if (!isStaleConnectionError(error)) throw error;
     return run(txMode, callback);
   });
+  return Object.assign(store, { resetConnection: () => { if (dbp) void reset(dbp); } });
 }
 
 /** المخزنُ الوحيد لكلّ استعمالات `idb-keyval` في التطبيق — مرِّره وسيطاً ثانياً
  *  لـ`get`/`set`/`del` بدل المخزن الافتراضيّ الذي لا يشفى. */
-let shared: UseStore | undefined;
+let shared: ResilientStore | undefined;
 export const keyvalStore: UseStore = (txMode, callback) => {
   shared ??= createResilientStore();
   return shared(txMode, callback);
 };
+
+// العودةُ من الخلفية هي اللحظةُ التي يكون فيها الاتّصالُ المحفوظ أرجحَ موتاً على
+// iOS. إسقاطُه هنا رخيص (فتحٌ واحد) ويوفّر رميةَ الكتابة الأولى ومحاولتَها الثانية.
+// لا نُسقطه عند `hidden`: إفراغُ المتجر (`idbStorage.ts`) يكتب في تلك اللحظة نفسِها.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") shared?.resetConnection();
+  });
+}
