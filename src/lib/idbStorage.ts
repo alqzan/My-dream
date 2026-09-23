@@ -102,11 +102,32 @@ const media = createMediaSplitter({
   get: (key) => get<string>(key, keyvalStore),
   set: (key, value) => set(key, value, keyvalStore),
 });
+// تشخيصٌ مؤقّت لآخر كتابةٍ فشلت: أين فشلت وبأيّ حجم — رسالةُ «UnknownError»
+// وحدها على iPhone لا تفرّق بين وسيطٍ لم يُكتب وكتلةٍ رُفضت وحصّةٍ امتلأت.
+export interface PersistFailureInfo { phase: "media" | "store"; storeChars: number; mediaPending: number }
+let lastFailure: PersistFailureInfo | null = null;
+export function lastPersistFailure(): PersistFailureInfo | null { return lastFailure; }
+
 const mediaAwareStorage: StateStorage = {
   getItem: (name) => idbStorage.getItem(name),
   setItem: async (name, value) => {
-    await media.writePending();
-    await idbStorage.setItem(name, value);
+    let raw = value;
+    let phase: PersistFailureInfo["phase"] = "store";
+    try {
+      await media.writePending();
+    } catch {
+      // الوسائطُ لم تُكتب: لا تُكتب كتلةٌ تشير إليها. تُضمَّن فيها بدلاً من ذلك —
+      // وهو شكلُ ما قبل ٠٫١٫٤٤٦ نفسُه — وتُعاد محاولةُ فصلها في الحفظ التالي.
+      phase = "media";
+      raw = media.inlinePending(value);
+    }
+    try {
+      await idbStorage.setItem(name, raw);
+      lastFailure = null;
+    } catch (error) {
+      lastFailure = { phase, storeChars: raw.length, mediaPending: media.pendingCount() };
+      throw error;
+    }
   },
   removeItem: (name) => idbStorage.removeItem(name),
 };

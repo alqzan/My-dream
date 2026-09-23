@@ -71,6 +71,17 @@ export function createMediaSplitter(kv: MediaKV) {
       }
     },
 
+    /** عدد الوسائط التي تنتظر الكتابة (للتشخيص). */
+    pendingCount(): number { return pending.size; },
+
+    /** الكتلةُ نفسُها وقد أُعيدت فيها الوسائطُ التي لم تُكتب — لمسار الفشل وحده:
+     *  كتلةٌ بمرجعٍ لم يُكتب تُضيّع الوسيط، وكتلةٌ تحمله مضمّناً لا تُضيّع شيئاً. */
+    inlinePending(raw: string): string {
+      let out = raw;
+      for (const [key, v] of pending) out = out.split(JSON.stringify(MEDIA_PLACEHOLDER + key)).join(JSON.stringify(v));
+      return out;
+    },
+
     /** أعِد المراجعَ نصوصاً. لا يرمي: مرجعٌ لم يُقرأ يبقى كما هو فيُكتب كما هو —
      *  لا يُمحى وسيطٌ من الحالة لأنّ قراءةً واحدة فشلت. */
     async restore<T>(value: T): Promise<T> {

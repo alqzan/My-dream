@@ -75,6 +75,16 @@ describe("createMediaSplitter", () => {
     expect(mem.data.size).toBe(3);
   });
 
+  it("inlines unwritten media when their own write failed", async () => {
+    const mem = memoryKV();
+    const s = createMediaSplitter(mem.kv);
+    mem.failWrites = true;
+    const json = s.serialize(state());
+    await expect(s.writePending()).rejects.toThrow("boom");
+    expect(s.pendingCount()).toBe(3);
+    expect(JSON.parse(s.inlinePending(json))).toEqual(state());
+  });
+
   it("keeps an unreadable reference instead of erasing the medium", async () => {
     const mem = memoryKV();
     const s = createMediaSplitter(mem.kv);

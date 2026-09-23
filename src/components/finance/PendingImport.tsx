@@ -11,7 +11,8 @@ import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { Sparkles, BrainCircuit, Check, Copy, Plus, X, Plane } from "lucide-react";
 import type { FinanceCategoryDef, InboxEventRecord, InboxExpenseRoute, ReserveSplit, TxnKind } from "@/lib/types";
-import { flushPersistedStrict } from "@/lib/idbStorage";
+import { flushPersistedStrict, lastPersistFailure } from "@/lib/idbStorage";
+import { APP_VERSION } from "@/lib/version";
 import { effectiveDailyRate } from "@/lib/fundPlan";
 import { BigExpenseRouter, applyExpenseIntent, expenseFundIdForEvent, type ExpenseIntent } from "@/components/finance/BigExpenseRouter";
 import { tripSplitFor } from "@/lib/trip";
@@ -479,7 +480,11 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
       // اتّصالٍ مات وحصّةٍ امتلأت وقرصٍ رفض.
       const e = error as { name?: unknown; message?: unknown } | null;
       const parts = [e?.name, e?.message].filter((part): part is string => typeof part === "string" && part.length > 0);
-      const detail = parts.length ? ` (${parts.join(": ")})` : "";
+      const info = lastPersistFailure();
+      const where = info
+        ? `${info.phase === "media" ? "وسائط" : "كتلة"} ${toIndicDigits(String(Math.round(info.storeChars / 1024)))}ك.ب${info.mediaPending ? ` · ${toIndicDigits(String(info.mediaPending))} وسيطاً معلّقاً` : ""}`
+        : "";
+      const detail = ` (${[APP_VERSION, parts.join(": ") || "بلا نصّ", where].filter(Boolean).join(" · ")})`;
       showToast(`حُفظت المراجعة محلياً مؤقتاً — أبقيت رسالة البنك لإعادة المحاولة.${detail}`, "warning");
       return false;
     }
