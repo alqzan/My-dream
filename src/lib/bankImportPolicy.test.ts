@@ -10,8 +10,14 @@ const purchase = {
 };
 
 describe("bank import automatic acceptance", () => {
-  it("accepts a parsed outgoing expense with a real amount", () => {
-    expect(isAutoApprovableBankEvent(purchase)).toBe(true);
+  it("accepts a parsed outgoing expense with a real amount well under the daily rate", () => {
+    expect(isAutoApprovableBankEvent(purchase, false, { dailyRate: 100 })).toBe(true);
+  });
+
+  it("fails closed with no daily rate to size against — a trip does not supply one either", () => {
+    expect(isAutoApprovableBankEvent(purchase)).toBe(false);
+    expect(isAutoApprovableBankEvent(purchase, false, { onTrip: true })).toBe(false);
+    expect(isAutoApprovableBankEvent(purchase, false, { dailyRate: 0, onTrip: true })).toBe(false);
   });
 
   it.each([
@@ -21,15 +27,17 @@ describe("bank import automatic acceptance", () => {
     ["notice", { ...purchase, kind: "info" as const, amount: 0, expenseAmount: 0 }],
     ["obligation", { ...purchase, obligationHint: { amount: 20, merchant: "shop", dueDate: "2026-09-25" } }],
   ] as const)("keeps %s in review", (_label, event, duplicate = false) => {
-    expect(isAutoApprovableBankEvent(event, duplicate)).toBe(false);
+    expect(isAutoApprovableBankEvent(event, duplicate, { dailyRate: 100 })).toBe(false);
   });
 
-  it("never auto-approves installments or a receipt at the event-size boundary", () => {
+  it("never auto-approves installments or a receipt at the event-size boundary, even on a trip", () => {
     const installment = { ...purchase, kind: "installment" as const, amount: 250, expenseAmount: 250 };
-    expect(isAutoApprovableBankEvent(installment)).toBe(false);
+    expect(isAutoApprovableBankEvent(installment, false, { dailyRate: 100 })).toBe(false);
     expect(isAutoApprovableBankEvent({ ...purchase, amount: 299, expenseAmount: 299 }, false, { dailyRate: 100 })).toBe(true);
     expect(isAutoApprovableBankEvent({ ...purchase, amount: 300, expenseAmount: 300 }, false, { dailyRate: 100 })).toBe(false);
-    expect(isAutoApprovableBankEvent({ ...purchase, amount: 300, expenseAmount: 300 }, false, { dailyRate: 100, onTrip: true })).toBe(true);
+    // A trip window no longer bypasses the size ceiling — it only widens what
+    // routing option is offered, not what is silently auto-imported.
+    expect(isAutoApprovableBankEvent({ ...purchase, amount: 300, expenseAmount: 300 }, false, { dailyRate: 100, onTrip: true })).toBe(false);
   });
 
   it("defaults ordinary generic expenses to selected while attaching a reason to each risky row", () => {

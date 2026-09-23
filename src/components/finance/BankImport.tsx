@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { createSmsSourceId, parseBankSmsBulk, learnedCategory, type SmsParseEventResult } from "@/lib/bankParser";
-import { today, getCategoryInfo, formatAmount } from "@/lib/utils";
+import { today, getCategoryInfo, formatAmount, formatDate, toIndicDigits } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
 
@@ -76,10 +76,16 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
   }
 
   function handleConfirm() {
-    // Let the store route generic/unknown rows into its durable review queue.
-    // Confirming this preview must not silently discard a zero-amount event or
-    // claim that every parsed row became a spending transaction.
-    const result = importInboxEvents(preview);
+    // Let the store route every row into its durable review queue — the
+    // button says "save N items for review", so a manually pasted expense
+    // must never skip that review just because the parser was confident
+    // about its template. Only a *generic*-confidence expense is routed to
+    // review by the store when unconfirmed, so downgrade the rest here
+    // instead of asking the store to save them straight to the ledger.
+    const forReview = preview.map((tx) => (EXPENSE_KINDS.has(tx.kind) && tx.confidence !== "generic"
+      ? { ...tx, confidence: "generic" as const }
+      : tx));
+    const result = importInboxEvents(forReview, { confirmed: false });
     setImportResult(result);
     setDone(true);
   }
@@ -92,9 +98,9 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
     return (
       <div className="text-center py-8 space-y-3">
         <CheckCircle size={40} className="mx-auto text-finance" />
-        <p className="font-bold text-gray-800">حُفظ {importResult?.saved ?? 0} مصروفاً{importResult?.settlements ? ` و${importResult.settlements} سداد` : ""}</p>
-        {!!importResult?.reviewed && <p className="text-sm text-amber-700">وبقيت {importResult.reviewed} رسالة للمراجعة — لم تُسجّل كصرف حتى تختار نوعها.</p>}
-        {!!importResult?.duplicates && <p className="text-sm text-gray-500">وتم إبقاء {importResult.duplicates} نسخة مشتبه بها للمراجعة.</p>}
+        <p className="font-bold text-gray-800">حُفظ {toIndicDigits(String(importResult?.saved ?? 0))} مصروفاً{importResult?.settlements ? ` و${toIndicDigits(String(importResult.settlements))} سداد` : ""}</p>
+        {!!importResult?.reviewed && <p className="text-sm text-amber-700">وبقيت {toIndicDigits(String(importResult.reviewed))} رسالة للمراجعة — لم تُسجّل كصرف حتى تختار نوعها.</p>}
+        {!!importResult?.duplicates && <p className="text-sm text-gray-500">وتم إبقاء {toIndicDigits(String(importResult.duplicates))} نسخة مشتبه بها للمراجعة.</p>}
         <Button onClick={onClose}>رائع ✓</Button>
       </div>
     );
@@ -153,17 +159,17 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">
-              معاينة ({preview.length} عنصر)
+              معاينة ({toIndicDigits(String(preview.length))} عنصر)
             </p>
             <button type="button" onClick={() => setPreview([])} className="text-xs text-gray-400 hover:text-red-400">مسح</button>
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500" aria-live="polite">
-            <span>{preview.filter(isExpensePreview).length} مصروف قابل للتصنيف</span>
+            <span>{toIndicDigits(String(preview.filter(isExpensePreview).length))} مصروف قابل للتصنيف</span>
             {preview.filter((tx) => tx.direction === "in").length > 0 && (
-              <span className="text-finance">{preview.filter((tx) => tx.direction === "in").length} وارد لا يُحسب صرفاً</span>
+              <span className="text-finance">{toIndicDigits(String(preview.filter((tx) => tx.direction === "in").length))} وارد لا يُحسب صرفاً</span>
             )}
             {preview.filter((tx) => !isExpensePreview(tx) && tx.direction !== "in").length > 0 && (
-              <span className="text-amber-700">{preview.filter((tx) => !isExpensePreview(tx) && tx.direction !== "in").length} للمراجعة</span>
+              <span className="text-amber-700">{toIndicDigits(String(preview.filter((tx) => !isExpensePreview(tx) && tx.direction !== "in").length))} للمراجعة</span>
             )}
           </div>
           <div className="max-h-52 overflow-y-auto space-y-2">
@@ -182,7 +188,7 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
                   <span className="text-lg">{info.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-gray-700 truncate">{tx.note || info.label}</div>
-                    <div className="text-[10px] text-gray-400">{tx.date} · {stateLabel} · {info.label}</div>
+                    <div className="text-[10px] text-gray-400">{formatDate(tx.date)} · {stateLabel} · {info.label}</div>
                   </div>
                   <span className={`text-sm font-bold shrink-0 ${expense ? "text-red-500" : incoming ? "text-finance" : "text-amber-700"}`}>
                     {amountLabel}
@@ -196,7 +202,7 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
           </div>
           <div className="flex gap-2">
             <Button onClick={handleConfirm} className="flex-1 bg-finance hover:bg-finance/90">
-              حفظ {preview.length} عنصر للمراجعة ✓
+              حفظ {toIndicDigits(String(preview.length))} عنصر للمراجعة ✓
             </Button>
             <Button variant="secondary" onClick={onClose}>إلغاء</Button>
           </div>

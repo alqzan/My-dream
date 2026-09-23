@@ -137,10 +137,16 @@ export interface SmsParseResult {
 export interface SmsParseEventResult extends SmsParseResult { rawText: string; }
 
 const CUR = "SR|SAR|ر\\.?\\s?س|ريال";
+// Any figure quoted in one of these is not riyals, even when it sits right
+// after a «مبلغ:» label. A receipt that never resolves a SAR figure elsewhere
+// (e.g. a labelled «المبلغ بالريال») must not have its foreign figure read as
+// the expense amount.
+const FOREIGN_CUR = /\b(?:USD|EUR|GBP|AED|KWD|BHD|QAR|OMR|EGP|TRY|JPY|CNY|INR)\b|[$€£]|دولار|يورو|درهم/i;
 function normalizeDigits(s: string): string { return s.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/٫/g, ".").replace(/٬/g, ","); }
 const OTP = /رمز\s*(?:التحقق|مؤقت|التفعيل|التوثيق|شراء\s*(?:اونلاين|أونلاين)|الشراء)|رمز\s*[:：]|الرمز\s*السري|كلمة\s+(?:المرور|السر)|كلمة\s+مرور\s+ل(?:مرة|مره)\s+واحدة|(?:ننصح\s+بعدم\s+مشاركة|لا\s+تشارك(?:وا)?)\s+الرمز|one\s*time\s+password|do\s+not\s+share\s+this\s+otp|\bOTP\b|verification\s+code/i;
 const DECLINED = /مرفوض|تم\s+رفض|رفضت|فشل|لم\s+تتم|غير\s+ناجح|رصيد\s+غير\s+كاف|غير\s+كافي|declined|failed|insufficient/i;
-const HOLD = /just\s+a\s+hold|hold\s+on\s+your\s+card|حجز\s+مؤقت|حجز\s+على\s+بطاقتك/i;
+const HOLD = /just\s+a\s+hold|hold\s+on\s+your\s+card|حجز\s+مؤقت|حجز\s+على\s+بطاقتك|معلقة|قيد\s+الانتظار|pending\b|pre[\s-]?authoriz/i;
+const CANCELLED_OR_REVERSED = /تم\s+إلغاء|إلغاء\s+(?:عملية|الشراء)|ملغا(?:ة|ه)|cancelled|canceled|reversed/i;
 const STATEMENT = /(?:المبلغ\s+(?:ال[إا]جمالي\s+)?المستحق|[إا]جمالي\s+المستحق|مبلغ\s+مستحق|الحد\s+الأدنى\s+(?:للسداد|المستحق)|minimum\s+(?:amount\s+)?due|تاريخ\s+الاستحقاق|due\s+date|كشف\s+(?:ال)?حساب|إصدار\s+كشف|اصدار\s+كشف|تذكير\s+سداد\s+البطاقة)/i;
 // A payment-network name is evidence about the instrument, not evidence that
 // money left the account.  Keep purchase detection tied to an operation
@@ -328,11 +334,22 @@ function firstFieldAmount(text: string, labels: RegExp[]): number | undefined {
   for (const label of labels) {
     const re = new RegExp(`${label.source}[^\\n\\r]*`, `${label.flags.includes("i") ? "i" : ""}g`);
     for (const match of text.matchAll(re)) {
-      const line = match[0];
+      let line = match[0];
       // The same SMS often contains the purchase amount, total due, balance,
-      // and minimum payment. A broad `مبلغ` label must never select one of the
-      // latter fields merely because it appears first in the message.
-      if (/(?:الإجمالي|اجمالي|المستحق|الحد\s+الأدنى|الرصيد|المتبقي|due|balance)/i.test(line) && !/(?:المتبقي|remaining)/i.test(label.source)) continue;
+      // and minimum payment — sometimes sharing one line in a compact,
+      // single-line message. A broad `مبلغ` label must never select one of
+      // the latter fields, so cut the line at the first such word instead of
+      // discarding it outright: a real amount named earlier on that same
+      // line is still read.
+      if (!/(?:المتبقي|remaining)/i.test(label.source)) {
+        const cut = line.search(/(?:الإجمالي|اجمالي|المستحق|الحد\s+الأدنى|الرصيد|المتبقي|due|balance|limit)/i);
+        if (cut === 0) continue;
+        if (cut > 0) line = line.slice(0, cut);
+      }
+      // A foreign-currency figure next to the label is not a reliable riyal
+      // amount; keep looking (e.g. a later labelled «المبلغ بالريال») instead
+      // of reading it as SAR.
+      if (FOREIGN_CUR.test(line) && !new RegExp(CUR, "i").test(line)) continue;
       const sarParen = line.match(/\(([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR|SR|ر\.?\s?س)\)/i);
       if (sarParen) return numberValue(sarParen[1]);
       const currencyAmount = firstCurrencyAmount(line);
@@ -350,10 +367,16 @@ function firstCurrencyAmount(text: string): number | undefined {
     const lineStart = text.lastIndexOf("\n", at - 1) + 1;
     const lineEnd = text.indexOf("\n", at);
     const line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
-    if (/(?:الرصيد|رصيد|الإجمالي\s+المستحق|المبلغ\s+المستحق|المتبقي|minimum\s+due|balance)/i.test(line)) continue;
+    const offset = at - lineStart;
+    // A balance/total/minimum-due/limit figure often shares one line with the
+    // real amount in a compact, single-line SMS. Only reject a match that
+    // sits at or after that word — one named earlier on the same line (the
+    // actual purchase amount) is still valid.
+    const cutAt = line.search(/(?:الرصيد|رصيد|الإجمالي\s+المستحق|المبلغ\s+المستحق|المتبقي|minimum\s+due|balance|limit)/i);
+    if (cutAt >= 0 && offset >= cutAt) continue;
     // Currency next to a card/account suffix does not turn that identifier
     // into a purchase amount.
-    if (/(?:بطاقة|حساب|عبر|من|الى|إلى|لـ|card\s*(?:number|ending)?|account)\s*[:：]?[^\n\r]*$/i.test(line.slice(0, at - lineStart))) continue;
+    if (/(?:بطاقة|حساب|عبر|من|الى|إلى|لـ|card\s*(?:number|ending)?|account)\s*[:：]?[^\n\r]*$/i.test(line.slice(0, offset))) continue;
     const value = numberValue(match[1] ?? match[2] ?? "");
     if (value !== undefined && value > 0) return value;
   }
@@ -492,7 +515,9 @@ function inferKind(text: string, bank?: string): TxnKind {
   if (has(/استرداد\s+نقدي\s+(?:إلى|الى|ل)\s+(?:ال)?بطاقة|cashback\s+(?:to|on)\s+(?:the\s+)?card/i)) return "cashback";
   if (has(SELF_TRANSFER)) return "self_transfer";
   if (has(BILL_NOTICE)) return "info";
-  if (has(/عملية\s+(?:عكسية|استرجاع)|عكس\s+عملية|استرجاع\s+عملية|استرداد\s+عملية|reversal|refund/i)) return has(/عكس|reversal/i) ? "reversal" : "refund";
+  if (has(/عملية\s+(?:عكسية|استرجاع)|عكس\s+عملية|استرجاع\s+عملية|استرداد\s+عملية|reversal|refund/i) || has(CANCELLED_OR_REVERSED)) {
+    return has(/عكس|reversal/i) || has(CANCELLED_OR_REVERSED) ? "reversal" : "refund";
+  }
   if (has(ADD_FUNDS)) return "deposit";
   if (has(OUTGOING_TRANSFER)) return "transfer_out";
   if (has(ATM)) return "atm";
@@ -575,12 +600,19 @@ export function parseBankSmsEvent(smsText: string, referenceDate: string, option
   const balanceKind: BalanceKind = balanceAfter === undefined ? "unknown" : isCreditCard ? "credit_available" : "unknown";
   const template = templateFor(kind, text);
   const obligationHint = obligationHintFor(text, date, sender.bank, extractedAmount);
+  // A foreign-currency amount that never resolves to a labelled SAR figure
+  // anywhere in the message cannot be trusted as the riyal amount, even when
+  // `extractAmount` did find *some* number. Force this one into review rather
+  // than let a foreign figure quietly become a riyal expense.
+  const foreignCurrencyNote = hasEventAmount(kind) && FOREIGN_CUR.test(text) && !new RegExp(CUR, "i").test(text)
+    ? "عملة أجنبية — تحقّق من المبلغ بالريال"
+    : undefined;
   // An inbox receipt timestamp is reliable event-date evidence when the SMS
   // body omits its own date. Keep an unknown sender generic, but do not force
   // every otherwise identifiable notification into manual review merely
   // because its date came from the transport metadata.
   const receivedDateEvidence = Boolean(options.receivedAt?.match(/\d{4}-\d{2}-\d{2}/));
-  const confidence: SmsConfidence = amountUnverified || walletReviewReason
+  const confidence: SmsConfidence = amountUnverified || walletReviewReason || foreignCurrencyNote
     ? "generic"
     : (dt.date || receivedDateEvidence)
     ? (template ? sender.confidence : sender.confidence === "generic" ? "generic" : "inferred")
@@ -596,6 +628,7 @@ export function parseBankSmsEvent(smsText: string, referenceDate: string, option
     walletReviewReason,
     kind === "unknown" ? "قالب غير معروف — يحتاج مراجعة" : undefined,
     amountUnverified ? "لم يظهر مبلغ موثوق بعد حقل المبلغ — يلزم التحقق يدوياً" : undefined,
+    foreignCurrencyNote,
   ].filter((reason): reason is string => Boolean(reason));
   const reviewReason = reviewReasons.length ? reviewReasons.join(" · ") : undefined;
   return {

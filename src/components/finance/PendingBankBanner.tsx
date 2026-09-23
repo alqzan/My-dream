@@ -1,5 +1,6 @@
 "use client";
 import { usePending } from "@/lib/pending";
+import { toIndicDigits } from "@/lib/utils";
 import { Landmark, ChevronLeft } from "lucide-react";
 
 // Home-screen call-to-action: shows how many bank messages arrived
@@ -17,9 +18,9 @@ export function PendingBankBanner() {
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-bold text-gray-800 dark:text-white">
-          {count} معاملة بنك جديدة
+          {toIndicDigits(String(count))} معاملة بنك جديدة
         </div>
-        <div className="text-[11px] text-gray-500">الواضح يُضاف تلقائياً — راجع الحالات الخاصة</div>
+        <div className="text-[11px] text-gray-500">تُضاف تلقائياً حين تكون كل معاملات الدفعة واضحة — وإلا فراجعها</div>
       </div>
       <ChevronLeft size={18} className="text-finance shrink-0" />
     </button>

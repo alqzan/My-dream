@@ -13,12 +13,14 @@ import { describe, it, expect } from "vitest";
 import {
   parseBankSms,
   parseBankSmsBulk,
+  parseBankSmsEvent,
   isNoiseMessage,
   isLikelyDuplicate,
   normalizeMerchant,
   learnedCategory,
   suggestCategory,
 } from "./bankParser";
+import { isAutoApprovableBankEvent } from "./bankImportPolicy";
 import type { FinanceCategoryDef } from "./types";
 
 const D = "2026-08-01";
@@ -271,5 +273,58 @@ describe("parseBankSmsBulk", () => {
   it("نصٌّ فارغ لا يرمي", () => {
     expect(parseBankSmsBulk("", D)).toEqual({ transactions: [], events: [], skippedIncome: 0 });
     expect(parseBankSmsBulk("   \n  ", D).transactions).toHaveLength(0);
+  });
+});
+
+describe("parseBankSmsEvent — عملة أجنبية لا تُقرأ ريالاً", () => {
+  it("يقرأ المبلغ بالريال المُسمّى لا رقم العملة الأجنبية المجاورة للحقل", () => {
+    const sms = [
+      "شراء عبر الإنترنت",
+      "بطاقة: مدى 1234",
+      "مبلغ:USD 25.99",
+      "لدى: AMAZON",
+      "المبلغ بالريال: SAR 97.46",
+    ].join("\n");
+    const r = parseBankSmsEvent(sms, "2026-09-20", { sender: "AlRajhiBank", receivedAt: "2026-09-20T10:00:00" });
+    expect(r?.amount).toBe(97.46);
+    expect(r?.reviewReason ?? "").not.toMatch(/عملة أجنبية/);
+  });
+
+  it("لا يقرأ رقم العملة الأجنبية ريالاً حين لا يوجد مبلغٌ بالريال في الرسالة أصلاً", () => {
+    const sms = "شراء\nمبلغ:EUR 40\nلدى: HOTEL PARIS";
+    const r = parseBankSmsEvent(sms, "2026-09-20", { sender: "AlRajhiBank", receivedAt: "2026-09-20T10:00:00" });
+    expect(r?.confidence).toBe("generic");
+    expect(r?.reviewReason).toMatch(/عملة أجنبية/);
+    expect(r && isAutoApprovableBankEvent(r, false, { dailyRate: 100 })).toBe(false);
+  });
+});
+
+describe("parseBankSmsEvent — إلغاءٌ وعكسٌ وتعليقٌ ليست مشترياتٍ تُعتمد تلقائياً", () => {
+  it.each([
+    ["تم إلغاء عملية شراء\nمبلغ: SAR 200\nلدى: جرير", "reversal"],
+    ["Purchase reversed\nAmount: SAR 200\nAt: JARIR", "reversal"],
+    ["عملية شراء معلقة\nمبلغ: SAR 150\nلدى: متجر", "hold"],
+    ["Pre-authorization\nPurchase amount: SAR 150", "hold"],
+  ] as const)("%s ← %s", (sms, expectedKind) => {
+    const r = parseBankSmsEvent(sms, "2026-09-20", { sender: "AlRajhiBank", receivedAt: "2026-09-20T10:00:00" });
+    expect(r?.kind, sms).toBe(expectedKind);
+    expect(r && isAutoApprovableBankEvent(r, false, { dailyRate: 100 }), sms).toBe(false);
+  });
+});
+
+describe("parseBankSmsEvent — الرصيد على نفس سطر المبلغ لا يبتلعه", () => {
+  it("يقرأ المبلغ قبل «الرصيد» على السطر نفسه (عربي)", () => {
+    const r = parseBankSmsEvent("شراء عبر نقاط البيع مبلغ: SAR 20 لدى: كافيه الرصيد: SAR 1,500.00", "2026-09-20");
+    expect(r?.amount).toBe(20);
+  });
+
+  it("يقرأ المبلغ قبل «Balance» على السطر نفسه (إنجليزي)", () => {
+    const r = parseBankSmsEvent("Purchase of SAR 45.00 at CAFE Balance: SAR 900.00", "2026-09-20");
+    expect(r?.amount).toBe(45);
+  });
+
+  it("سطرُ رصيدٍ مجرّد — بلا مبلغٍ قبله — لا يصير مبلغاً", () => {
+    const r = parseBankSmsEvent("شراء\nالرصيد: SAR 1,500.00", "2026-09-20");
+    expect(r?.amount).toBe(0);
   });
 });

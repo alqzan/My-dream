@@ -2,10 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { spendWindow } from "@/lib/budgetCycle";
-import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate, type SmsParseEventResult } from "@/lib/bankParser";
+import { parseBankSmsBulk, suggestCategory, learnedCategory, isLikelyDuplicate, normalizeMerchant, type SmsParseEventResult } from "@/lib/bankParser";
 import { bankImportRouteReason, defaultIncluded, isAutoApprovableBankEvent } from "@/lib/bankImportPolicy";
 import { deleteInboxItem, type InboxItem } from "@/lib/sync";
-import { today, formatAmount, getCategoryInfo, cn, toLatinDigits, firstGrapheme, uid } from "@/lib/utils";
+import { today, formatAmount, formatDate, getCategoryInfo, cn, toLatinDigits, toIndicDigits, arabicCount, firstGrapheme, uid } from "@/lib/utils";
 import { budgetWarningFor } from "@/lib/budgetStatus";
 import { showToast } from "@/components/ui/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +26,7 @@ interface Pending {
   dup: boolean;       // looks already-recorded
   included: boolean;  // will be added on confirm
   ignored: boolean;
+  catEdited?: boolean; // the owner explicitly chose/changed the category — not the auto-guess
   manual?: boolean;   // parser couldn't read it — user types the amount
   kind: SmsParseEventResult["kind"];
   event: SmsParseEventResult;
@@ -46,12 +47,6 @@ function rawNote(text: string): string {
 
 function sourceDocumentKey(event: Pick<SmsParseEventResult, "eventId" | "sourceInboxId">): string {
   return event.eventId?.replace(/:\d+$/, "") ?? event.sourceInboxId ?? "";
-}
-
-function closeSourceTimes(a: SmsParseEventResult, b: SmsParseEventResult): boolean {
-  const aAt = a.sourceReceivedAt ? Date.parse(a.sourceReceivedAt) : NaN;
-  const bAt = b.sourceReceivedAt ? Date.parse(b.sourceReceivedAt) : NaN;
-  return Number.isFinite(aAt) && Number.isFinite(bAt) && Math.abs(aAt - bAt) <= 15 * 60 * 1000;
 }
 
 function categoryForParsedEvent(
@@ -243,16 +238,26 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
         });
       });
     }
-    // The store repeats this check at the persistence boundary, but the review
-    // sheet must also leave both same-time copies unchecked. Otherwise the
-    // first click on "approve all" would turn a resend candidate into a saved
-    // expense before the second document is inspected.
+    // The store repeats a similar check at the persistence boundary, but the
+    // review sheet must also leave duplicate rows in one batch unchecked
+    // *before* that — otherwise the first tap on "approve all" would save a
+    // resend as a second real expense before the copy is even inspected. Two
+    // rows from different source documents that share the same message
+    // (sourceKey), or the same amount + date + merchant, are flagged
+    // regardless of how far apart their timestamps are: a resend can arrive
+    // hours later, not just within a short retry window.
     for (let i = 0; i < out.length; i += 1) {
       for (let j = i + 1; j < out.length; j += 1) {
         const left = out[i]; const right = out[j];
-        if (!left.event.sourceKey || left.event.sourceKey !== right.event.sourceKey) continue;
         if (sourceDocumentKey(left.event) === sourceDocumentKey(right.event)) continue;
-        if (!closeSourceTimes(left.event, right.event)) continue;
+        const sameSourceKey = Boolean(left.event.sourceKey) && left.event.sourceKey === right.event.sourceKey;
+        const leftMerchant = normalizeMerchant(left.note);
+        const sameContent = !sameSourceKey
+          && leftMerchant.length > 0
+          && leftMerchant === normalizeMerchant(right.note)
+          && left.date === right.date
+          && Math.abs(left.amount - right.amount) < 0.01;
+        if (!sameSourceKey && !sameContent) continue;
         left.dup = true; left.included = false;
         right.dup = true; right.included = false;
         left.preselectReason = "مكرّر";
@@ -271,7 +276,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   }
 
   function setCat(key: string, catId: string) {
-    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, catId, event: { ...r.event, category: catId } } : r)));
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, catId, catEdited: true, event: { ...r.event, category: catId } } : r)));
   }
 
   function toggleInclude(key: string) {
@@ -392,7 +397,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
       && isAutoApprovableBankEvent(row.event, row.dup, { dailyRate, onTrip: row.useTrip })
   );
 
-  async function handleAdd() {
+  async function handleAdd(): Promise<boolean> {
     const approved = new Set(chosen.map((r) => r.key));
     const explicitlyIgnored = rows.filter((r) => r.ignored);
     for (const r of chosen) {
@@ -437,7 +442,11 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
       useAppStore.getState().importInboxEvents([reviewEvent]);
       decideInboxEvent({ id: eventId, eventId, decision: "ignored", reason: "استُبعدت صراحةً من مراجعة الوارد" });
     }
-    for (const r of chosen) if (r.note.trim() && r.event.direction === "out") rememberMerchant(r.note, r.catId);
+    // Only a category the owner actually picked or changed teaches the
+    // merchant rule — an auto-approved row still carries the parser's own
+    // keyword guess, and learning from that would just reinforce whatever it
+    // already assumed instead of the owner's correction.
+    for (const r of chosen) if (r.catEdited && r.note.trim() && r.event.direction === "out") rememberMerchant(r.note, r.catId);
     // Live budget alert for any category these expenses pushed to its limit.
     const st = useAppStore.getState();
     const fresh = st.transactions;
@@ -468,16 +477,24 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
     } catch (error) {
       const detail = error instanceof Error && error.name ? ` (${error.name})` : "";
       showToast(`حُفظت المراجعة محلياً مؤقتاً — أبقيت رسالة البنك لإعادة المحاولة.${detail}`, "warning");
-      return;
+      return false;
     }
     await clearInbox(resolved);
     onClose();
+    return true;
   }
 
   useEffect(() => {
     if (!autoApprovable || !autoKey || autoAttemptedRef.current === autoKey) return;
     autoAttemptedRef.current = autoKey;
-    void handleAdd();
+    const count = chosen.length;
+    void handleAdd().then((ok) => {
+      if (!ok) return;
+      showToast(
+        `${arabicCount(count, { one: "مصروف واحد", two: "مصروفان", few: "مصاريف", many: "مصروفاً" })} أُضيف تلقائياً`,
+        "success"
+      );
+    });
     // `handleAdd` reads the current rows snapshot; the key/guard above prevents
     // reruns when the store publishes the resulting transaction.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -515,14 +532,14 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 bg-finance/10 text-finance rounded-xl px-3 py-2 text-xs font-semibold">
-        <Sparkles size={15} /> المعاملات الواضحة تُضاف تلقائياً — هذه الرسائل تحتاج مراجعة.
+        <Sparkles size={15} /> تُضاف الدفعة تلقائياً إن كانت كل رسائلها واضحة — وإلا فهي هنا للمراجعة.
       </div>
 
       {unreadableCount > 0 && (
         <div className="flex items-start gap-2 bg-amber-50 text-amber-700 rounded-xl px-3 py-2 text-[11px] leading-relaxed">
           <span className="shrink-0">📩</span>
           <span>
-            {unreadableCount} رسالة غير معروفة — اختر نوعها واكتب المبلغ إذا كانت مصروفاً،
+            {toIndicDigits(String(unreadableCount))} رسالة غير معروفة — اختر نوعها واكتب المبلغ إذا كانت مصروفاً،
             أو اتركها معلّقة حتى تراجعها لاحقاً.
           </span>
         </div>
@@ -532,9 +549,9 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
         <button
           type="button"
           onClick={() => setShowNonExpenses((value) => !value)}
-          className="w-full text-right text-[11px] font-semibold text-slate-600 bg-slate-50 rounded-xl px-3 py-2"
+          className="w-full text-right text-[11px] font-semibold text-gray-600 bg-gray-50 rounded-xl px-3 py-2"
         >
-          {showNonExpenses ? "إخفاء الرسائل غير المصروفة" : `عرض ${nonExpenseRows.length} رسالة غير مصروفة`}
+          {showNonExpenses ? "إخفاء الرسائل غير المصروفة" : `عرض ${toIndicDigits(String(nonExpenseRows.length))} رسالة غير مصروفة`}
         </button>
       )}
 
@@ -545,7 +562,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
           className="w-full flex items-center justify-center gap-2 rounded-xl border border-finance/25 bg-finance/5 px-3 py-2 text-[11px] font-bold text-finance"
         >
           <Plane size={14} />
-          {allTripRowsOn ? "لا شيء على الرحلة" : `احسب ${tripRows.length} مصروف على الرحلة`}
+          {allTripRowsOn ? "لا شيء على الرحلة" : `احسب ${toIndicDigits(String(tripRows.length))} مصروف على الرحلة`}
         </button>
       )}
 
@@ -593,12 +610,12 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
                       </span>
                     )}
                     {r.kind !== "purchase" && (
-                      <span className="text-[9px] font-bold text-slate-600 bg-slate-100 rounded-full px-1.5 py-0.5 shrink-0">
+                      <span className="text-[9px] font-bold text-gray-600 bg-gray-100 rounded-full px-1.5 py-0.5 shrink-0">
                         {kindLabel(r.kind)}
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-gray-400">{r.date}</div>
+                  <div className="text-[10px] text-gray-400">{formatDate(r.date)}</div>
                 </div>
                 {r.manual ? (
                   <input
@@ -717,7 +734,7 @@ export function PendingImport({ items, onClose }: { items: InboxItem[]; onClose:
 
       <div className="flex gap-2 pt-1">
         <Button onClick={handleAdd} disabled={!chosen.length && !rows.some((r) => r.ignored)} className="flex-1 bg-finance hover:bg-finance/90 disabled:opacity-40">
-          {chosen.length ? `اعتمد ${chosen.length} رسالة ✓` : rows.some((r) => r.ignored) ? "احفظ التجاهل ✓" : "لا شيء محدّد"}
+          {chosen.length ? `اعتمد ${toIndicDigits(String(chosen.length))} رسالة ✓` : rows.some((r) => r.ignored) ? "احفظ التجاهل ✓" : "لا شيء محدّد"}
         </Button>
         <Button variant="secondary" onClick={handleDiscard}>تجاهل الكل</Button>
       </div>

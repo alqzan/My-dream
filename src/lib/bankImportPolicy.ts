@@ -1,5 +1,6 @@
 import type { SmsParseEventResult } from "./bankParser";
 import { EVENT_DAYS } from "./budgetFlow";
+import { toIndicDigits } from "./utils";
 
 // These are the receipt kinds whose amount is a real outgoing expense. The
 // policy deliberately excludes transfers, settlements, refunds and notices:
@@ -25,6 +26,11 @@ export function isAutoApprovableBankEvent(
 ): boolean {
   const amount = event.expenseAmount ?? event.amount;
   const dailyRate = Number.isFinite(context.dailyRate) && (context.dailyRate ?? 0) > 0 ? context.dailyRate! : 0;
+  // The daily rate is what proves an amount is small relative to what the
+  // owner actually spends. Without one there is no ceiling to test against,
+  // so silent auto-import must fail closed rather than accept every size —
+  // being on a trip does not by itself bound how large a single receipt can
+  // be, so it no longer bypasses this gate either.
   return !duplicate
     && event.direction === "out"
     && AUTO_EXPENSE_KINDS.has(event.kind)
@@ -33,7 +39,8 @@ export function isAutoApprovableBankEvent(
     && !event.obligationHint
     && Number.isFinite(amount)
     && amount > 0
-    && (context.onTrip === true || !(dailyRate > 0 && amount >= dailyRate * EVENT_DAYS));
+    && dailyRate > 0
+    && amount < dailyRate * EVENT_DAYS;
 }
 
 /** Human-readable reason an otherwise-expense receipt must wait for routing. */
@@ -46,7 +53,7 @@ export function bankImportRouteReason(
   if (onTrip) return undefined;
   const amount = event.expenseAmount ?? event.amount;
   if (dailyRate > 0 && Number.isFinite(amount) && amount >= dailyRate * EVENT_DAYS) {
-    return `مصروف كبير (يعادل ${EVENT_DAYS} أيام أو أكثر) — وجّهه إلى مظروف أو اختر المصروف اليومي قبل الاعتماد.`;
+    return `مصروف كبير (يعادل ${toIndicDigits(String(EVENT_DAYS))} أيام أو أكثر) — وجّهه إلى مظروف أو اختر المصروف اليومي قبل الاعتماد.`;
   }
   return undefined;
 }
