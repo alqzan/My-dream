@@ -48,15 +48,21 @@
     <button class="primary" id="rescue">فعّل الإنقاذ وافتح التطبيق</button>
   </div>
 
+  <div class="card" id="exitCard" hidden>
+    <p><b>٣) اخرج من وضع الإنقاذ</b></p>
+    <p class="mute">التطبيق كان في وضع الإنقاذ. جرّب بياناتك الأصلية مرة أخرى — بياناتك القديمة لم تُحذف.</p>
+    <button id="exitRescue">جرّب بياناتي الأصلية مرة أخرى</button>
+  </div>
+
   <div class="card">
-    <p><b>٣) إن لم ينفع: نظّف ملفات التطبيق المؤقتة</b></p>
+    <p><b>٤) إن لم ينفع: نظّف ملفات التطبيق المؤقتة</b></p>
     <p class="mute">يمسح نسخ ملفات التطبيق المخزّنة فقط (لتنزل أحدث نسخة)، لا بياناتك.</p>
     <button id="clean">نظّف الملفات المؤقتة</button>
     <pre id="cleanOut" hidden></pre>
   </div>
 
   <div class="card">
-    <p><b>٤) فحص قاعدة البيانات</b></p>
+    <p><b>٥) فحص قاعدة البيانات</b></p>
     <p class="mute">يقرأ أسماء المحفوظات فقط. إن أغلق Safari الصفحة عند هذه الخطوة فأخبرني — هذا هو مكان العطل.</p>
     <button id="idb">افحص</button>
     <pre id="idbOut" hidden></pre>
@@ -71,6 +77,7 @@
     "madar-safe-mode", "madar-store-rescue", "madar-boot-store-bytes"];
   function ls(k) { try { return localStorage.getItem(k); } catch (e) { return "ERR " + e.name; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function lsRemove(k) { try { localStorage.removeItem(k); return true; } catch (e) { return false; } }
   function mb(n) { return (n / 1048576).toFixed(1) + " MB"; }
   function $(id) { return document.getElementById(id); }
 
@@ -79,6 +86,7 @@
   lines.push("sync key set = " + (ls("madar-sync-space") ? "yes" : "no"));
   lines.push("standalone = " + (window.navigator.standalone === true));
   $("info").textContent = lines.join("\n");
+  if (ls("madar-store-rescue") === "1") $("exitCard").hidden = false;
 
   var extra = [];
   function flush() { $("info").textContent = lines.concat(extra).join("\n"); }
@@ -102,6 +110,15 @@
     var ok = lsSet("madar-store-rescue", "1") && lsSet("madar-boot-attempts", "0");
     lsSet("madar-boot-crash-phase", "manual-rescue");
     if (!ok) { alert("تعذّر الحفظ في هذا المتصفح (وضع التصفح الخاص؟)."); return; }
+    location.href = "./";
+  };
+
+  $("exitRescue").onclick = function () {
+    // يطابق `exitRescueMode` في `bootGuard.ts`: لا يحذف بياناتك الأصلية —
+    // يمسح مفتاح الإنقاذ فقط فيعود الإقلاعُ التالي يقرأ الكتلة الأصلية.
+    lsRemove("madar-store-rescue");
+    lsRemove("madar-boot-crash-phase");
+    lsSet("madar-boot-attempts", "0");
     location.href = "./";
   };
 

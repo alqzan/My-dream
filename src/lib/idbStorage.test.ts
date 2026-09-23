@@ -43,4 +43,11 @@ describe("idbStorage recovery", () => {
     expect(await idbStorage.getItem("my-dream-store")).toBe("new");
     expect(idb.get("my-dream-store")).toBe("new");
   });
+
+  it("skips the local fallback when the snapshot is too large, and rethrows the original error", async () => {
+    failWrites = true;
+    const huge = "x".repeat(2_000_001);
+    await expect(idbStorage.setItem("my-dream-store", huge)).rejects.toThrow("IndexedDB unavailable");
+    expect(await idbStorage.getItem("my-dream-store")).toBeNull();
+  });
 });

@@ -92,9 +92,9 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
   }, [note, initial, touchedCat, categories, merchantRules]);
 
   useEffect(() => {
-    if (initial || splitTouched.current) return;
+    if (initial || splitTouched.current || intent) return;
     setSplits(tripSplitFor(reserves, date) ?? []);
-  }, [reserves, date, initial]);
+  }, [reserves, date, initial, intent]);
 
   const selectedMain = categories.find((c) => c.id === mainCat);
   const subs = getSubCategories(categories, mainCat);
@@ -394,13 +394,14 @@ export function TransactionForm({ onClose, initial, prefill, onSaved }: Transact
         splits={splits}
         offBudget={offBudget}
         intent={intent}
-        onDaily={() => { setIntent(null); setSplits([]); setOffBudget(false); }}
+        onDaily={() => { splitTouched.current = true; setIntent(null); setSplits([]); setOffBudget(false); }}
         onPlan={(next) => {
+          splitTouched.current = true;
           setIntent(next);
           setSplits([{ fundId: next.fundId, pct: next.pct }]);
           setOffBudget(false);
         }}
-        onOffBudget={() => { setIntent(null); setSplits([]); setOffBudget(true); }}
+        onOffBudget={() => { splitTouched.current = true; setIntent(null); setSplits([]); setOffBudget(true); }}
       />}
 
       {/* «تجاهله من الميزانيات» — للمصروف الاستثنائيّ الذي لا يتكرّر (رسوم اختبار،

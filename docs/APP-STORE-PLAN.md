@@ -95,6 +95,7 @@
 | `src/lib/backupFile.ts` (`madar-last-backup`) | تاريخُ آخر نسخة — يُظهر تذكيرَ نسخٍ لا داعي له |
 | `src/lib/theme.ts` (`madar-theme-preferences`) · `navPrefs.ts` (`madar-nav-prefs`) · `financePreferences.ts` (`madar-finance-display`/`madar-finance-sections`) · `nudgePrefs.ts` (`madar-nudges`) | تفضيلاتُ عرضٍ لكلّ جهاز |
 | `src/lib/platform/bootGuard.ts` (`madar-boot-attempts` · `madar-boot-phase` · `madar-boot-crash-phase` · `madar-safe-mode` · `madar-boot-store-bytes` · `madar-store-rescue`) | حارسُ حلقة الانهيار — مسحُها يعيد العدّ من صفر (انهياران آخران قبل الوضع الآمن). متزامنةٌ عمداً: تُكتب قبل أن يقتل النظامُ العمليّة، فالغلافُ الأصليّ يجب أن يُبقيها متزامنةَ الكتابة |
+| `src/lib/idbStorage.ts` (`my-dream-idb-fallback:my-dream-store`) | نسخةٌ احتياطية متزامنة من كتلة المتجر كاملةً، تُكتب فقط حين ترفض IndexedDB معاملةً (Safari/iOS). **مسقوفةٌ بـ٢ م.حرف** (`LOCAL_FALLBACK_MAX_CHARS`، ٠٫١٫٤٣١) — فوقه تُترك ولا تُكتب، لأنّ `localStorage` كلّه محدودٌ بنحو ٥ م.ب ويشاركه مفتاحُ المزامنة وحارسُ الإقلاع أعلاه؛ كتلةٌ ضخمة هنا قد تملأ الحصّة وتُسقطهما بخطإ حصّةٍ صامت |
 | البقية (`madar-geo` · `madar-unlocked` · `madar-oldbuild` · `madar-auto-recover` · `madar-celebrated-*` · `madar-reading-start` · `madar-ai-export`) | مزعج لا كارثيّ |
 
 الحلّ: غلافٌ واحد `prefs.get/set/remove` (متزامن الواجهة، غير متزامن التنفيذ)

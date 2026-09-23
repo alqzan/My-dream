@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, Landmark, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { useAppStore } from "@/lib/store";
+import { toIndicDigits } from "@/lib/utils";
 import type { Account } from "@/lib/types";
 
 /**
@@ -26,13 +27,13 @@ export function AccountRegistryCard() {
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="w-full flex items-center gap-2 text-right min-h-[44px]"
+        className="w-full flex items-center gap-2 text-start min-h-[44px]"
       >
         <Landmark size={16} className="text-finance shrink-0" aria-hidden />
         <span className="flex-1 min-w-0">
           <span className="block text-sm font-semibold text-gray-700">سجل ملكية الحسابات</span>
           <span className="block text-[11px] text-gray-400 mt-0.5">
-            {accounts.length ? `${accounts.length} حساب/بطاقة مكتشفة` : "لم تُكتشف حسابات بعد"}
+            {accounts.length ? `${toIndicDigits(String(accounts.length))} حساب/بطاقة مكتشفة` : "لم تُكتشف حسابات بعد"}
           </span>
         </span>
         <ChevronDown size={17} className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />

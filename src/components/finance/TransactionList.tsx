@@ -42,6 +42,7 @@ export function TransactionList({ transactions, categories, onDelete, onEdit, li
             aria-label={onEdit ? `تعديل ${tx.note || info.label}` : undefined}
             onClick={() => onEdit?.(tx)}
             onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
               if (!onEdit || (event.key !== "Enter" && event.key !== " ")) return;
               event.preventDefault();
               onEdit(tx);

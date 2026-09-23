@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   today,
@@ -86,6 +86,26 @@ const inRange = (t: Transaction, start: string, end: string) => t.date >= start 
 
 export default function SpendInsightsPage() {
   const { enabled: syncEnabled, status: syncStatus } = useSync();
+  // ننتظر **أوّل** اكتمالٍ للمزامنة فقط — لا كلَّ مرّة يدخل الحالة "syncing"
+  // (وهي تدخلها مع كل تعديلٍ محلّي أيضاً)، وإلا فالصفحة تفرغ من تحليلها في كل
+  // مرّة يكتب المالك معاملة. ومهلةُ خمس ثوانٍ تمنع بقاء الصفحة فارغةً إلى
+  // الأبد إن تعطّلت المزامنة قبل أوّل اكتمال.
+  const [firstSyncSettled, setFirstSyncSettled] = useState(!syncEnabled || syncStatus !== "syncing");
+  const settledRef = useRef(firstSyncSettled);
+  useEffect(() => {
+    if (settledRef.current) return;
+    if (syncStatus !== "syncing") {
+      settledRef.current = true;
+      setFirstSyncSettled(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (settledRef.current) return;
+      settledRef.current = true;
+      setFirstSyncSettled(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [syncStatus]);
   const transactions = useAppStore((s) => s.transactions);
   const categories = useAppStore((s) => s.categories);
   const reserves = useAppStore((s) => s.reserves);
@@ -263,7 +283,7 @@ export default function SpendInsightsPage() {
   // Do not present a mixture of the local snapshot and an incoming cloud
   // snapshot as a finished analysis. The finance page remains available, but
   // this derived report waits for one coherent source of truth.
-  if (syncEnabled && syncStatus === "syncing") {
+  if (syncEnabled && syncStatus === "syncing" && !firstSyncSettled) {
     return (
       <div className="page-shell" aria-busy="true">
         <div className="animate-fade-up">

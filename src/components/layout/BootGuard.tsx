@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   STABLE_AFTER_MS,
   bootReport,
+  exitRescueMode,
   exitSafeMode,
   isSafeMode,
   isStoreRescue,
@@ -44,6 +45,16 @@ export function BootGuard() {
           (<b>لم تُحذف</b>) وحمّلنا بياناتك من المزامنة. ما سجّلته ولم يتزامن قبل العطل
           باقٍ في تلك النسخة ويمكن استرجاعه لاحقاً.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            exitRescueMode();
+            location.reload();
+          }}
+          className="w-full rounded-xl border border-amber-400 font-bold text-xs py-2"
+        >
+          جرّب بياناتي الأصلية مرة أخرى
+        </button>
       </div>
     );
   }

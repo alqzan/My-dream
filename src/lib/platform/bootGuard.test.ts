@@ -4,6 +4,7 @@ import {
   __resetBootGuardForTests,
   beginBoot,
   bootReport,
+  exitRescueMode,
   exitSafeMode,
   isSafeMode,
   isStoreRescue,
@@ -111,6 +112,28 @@ describe("الإنقاذ: الانهيارُ داخل قراءة المتجر", 
     relaunch(); markBootPhase("sync:merge");
     relaunch(); markBootPhase("sync:merge");
     relaunch();
+    expect(isStoreRescue()).toBe(false);
+    expect(storeKeyFor("my-dream-store")).toBe("my-dream-store");
+  });
+
+  it("انهيارٌ في الرسم بعد `store-ready` لا يُصنَّف `store:*` ولا يعزل المتجر", () => {
+    // طورُ نجاح القراءة عمداً بلا بادئة `store:` — انهيارٌ بعده وقع في الرسم
+    // (`idbStorage.ts`)، فلا يُحال إلى الإنقاذ.
+    relaunch(); markBootPhase("store-ready");
+    relaunch(); markBootPhase("store-ready");
+    relaunch();
+    expect(isStoreRescue()).toBe(false);
+    expect(isSafeMode()).toBe(true);
+    expect(bootReport().crashPhase).toBe("store-ready");
+  });
+
+  it("exitRescueMode يخرج من الإنقاذ ويبدأ العدّ من صفر بلا مسّ بياناتٍ", () => {
+    relaunch(); markBootPhase("store:parse");
+    relaunch(); markBootPhase("store:parse");
+    relaunch();
+    expect(isStoreRescue()).toBe(true);
+    exitRescueMode();
+    expect(relaunch()).toBe(false);
     expect(isStoreRescue()).toBe(false);
     expect(storeKeyFor("my-dream-store")).toBe("my-dream-store");
   });

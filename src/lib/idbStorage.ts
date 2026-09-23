@@ -9,6 +9,11 @@ import { beginBoot, markBootPhase, recordStoreBytes, storeKeyFor } from "./platf
 // small localStorage area is still writable. Keep a compact recovery copy only
 // for that failure path; normal reads and writes remain IndexedDB-backed.
 const LOCAL_FALLBACK_PREFIX = "my-dream-idb-fallback:";
+// سقفٌ لحجم النسخة الاحتياطية — `localStorage` كلّه محدودٌ بنحو ٥ م.ب لكلّ
+// الأصل (يشاركها `madar-sync-space` وحارسُ الإقلاع `bootGuard.ts`)، فكتلةُ
+// متجرٍ كاملة هنا قد تملأ الحصّة وتُسقط مفاتيح أهمّ منها بخطإ حصّةٍ صامت.
+// فوق السقف نتخلّى عن النسخة الاحتياطية ونترك IndexedDB يرمي خطأه الأصليّ.
+const LOCAL_FALLBACK_MAX_CHARS = 2_000_000;
 function fallbackKey(name: string): string { return `${LOCAL_FALLBACK_PREFIX}${name}`; }
 function localFallbackGet(name: string): string | null {
   if (typeof window === "undefined") return null;
@@ -16,6 +21,7 @@ function localFallbackGet(name: string): string | null {
 }
 function localFallbackSet(name: string, value: string): boolean {
   if (typeof window === "undefined") return false;
+  if (value.length > LOCAL_FALLBACK_MAX_CHARS) return false;
   try { window.localStorage.setItem(fallbackKey(name), value); return true; } catch { return false; }
 }
 function localFallbackRemove(name: string): void {
@@ -103,13 +109,20 @@ const jsonStorage: PersistStorage<unknown> = {
     // أوّلُ ما يقع في الإقلاع — قبل أيّ بايتٍ من المتجر (`platform/bootGuard.ts`).
     beginBoot();
     markBootPhase("store:read");
+    let value: StorageValue<unknown> | null;
     try {
-      return await jsonWriter.getItem(name);
+      value = await jsonWriter.getItem(name);
     } catch {
       // كتلةٌ لا تُحلَّل: `persist` يعامل `null` معاملةَ أوّلِ إقلاع، وهو أسلمُ
       // من رميةٍ تُسقط الترطيب كلَّه.
-      return null;
+      value = null;
     }
+    // انتهى تحميلُ المتجر وتحليلُه سالماً — الطورُ التالي عمداً **بلا** بادئة
+    // `store:` (راجع `beginBoot` في `platform/bootGuard.ts`): انهيارٌ بعد هذه
+    // النقطة وقع في الرسم لا في قراءة الكتلة، فلا يُحال إلى الإنقاذ الخاصّ
+    // بانهيارٍ يتكرّر عند القراءة نفسِها — تصنيفُه كذلك يعزل كتلةً سليمة بلا داعٍ.
+    markBootPhase("store-ready");
+    return value;
   },
   setItem: (name, value) => jsonWriter.setItem(name, value),
   removeItem: (name) => jsonWriter.removeItem(name),

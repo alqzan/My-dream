@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/UndoToast";
 import { useAppStore } from "@/lib/store";
+import { toIndicDigits } from "@/lib/utils";
 import { parseFinanceSettingsProfile } from "@/lib/financeSettings";
 import type { FinanceSettingsProfile } from "@/lib/types";
 import { Landmark, Upload, Check } from "lucide-react";
@@ -17,8 +18,16 @@ export function FinanceOwnershipCard() {
   const [error, setError] = useState<string | null>(null);
 
   async function readProfile(file: File) {
+    let raw: unknown;
     try {
-      const parsed = parseFinanceSettingsProfile(JSON.parse(await file.text()));
+      raw = JSON.parse(await file.text());
+    } catch {
+      setProfile(null);
+      setError("الملف ليس JSON صالحاً");
+      return;
+    }
+    try {
+      const parsed = parseFinanceSettingsProfile(raw);
       setProfile(parsed);
       setError(null);
     } catch (cause) {
@@ -30,7 +39,7 @@ export function FinanceOwnershipCard() {
   function apply() {
     if (!profile) return;
     applyProfile(profile);
-    showToast("تم تطبيق إعدادات ملكية الحسابات على هذا الجهاز", "success");
+    showToast("تم تطبيق إعدادات ملكية الحسابات — تُحفظ في بياناتك وتُزامَن مع أجهزتك", "success");
     setProfile(null);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -61,7 +70,7 @@ export function FinanceOwnershipCard() {
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
         {profile && (
           <div className="space-y-2 bg-finance/5 rounded-xl px-3 py-2 text-xs text-gray-600">
-            <p>تم التحقق: {profile.ownerAccounts.length} حساب، {profile.ownerWallets.length} محفظة، {profile.salaryPayers.length} جهة راتب.</p>
+            <p>تم التحقق: {toIndicDigits(String(profile.ownerAccounts.length))} حساب، {toIndicDigits(String(profile.ownerWallets.length))} محفظة، {toIndicDigits(String(profile.salaryPayers.length))} جهة راتب.</p>
             <Button onClick={apply} className="w-full flex items-center justify-center gap-2 bg-finance hover:bg-finance/90">
               <Check size={15} /> تطبيق الإعدادات على هذا الجهاز
             </Button>

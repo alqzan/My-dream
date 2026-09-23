@@ -107,6 +107,17 @@ export function exitSafeMode(): void {
   prefSet(ATTEMPTS_KEY, "0");
 }
 
+/** خروجٌ صريح من وضع الإنقاذ — «جرّب بياناتي الأصلية مرة أخرى». الإقلاعُ
+ *  التالي يقرأ المفتاحَ الأصليّ (`storeKeyFor` بلا `:rescue`) لا المفتاحَ
+ *  المجاور، ويبدأ عدّ الانهيارات من صفر. **لا يحذف شيئاً**: الكتلةُ الأصلية
+ *  بقيت في IndexedDB طوال الإنقاذ ولم تُقرأ ولا كُتب فوقها (راجع `beginBoot`)،
+ *  فلو انهار الإقلاعُ التالي أيضاً يعود المالك إلى الإنقاذ ولم يفقد شيئاً. */
+export function exitRescueMode(): void {
+  prefRemove(RESCUE_KEY);
+  prefRemove(CRASH_PHASE_KEY);
+  prefSet(ATTEMPTS_KEY, "0");
+}
+
 /** للاختبارات وحدها. */
 export function __resetBootGuardForTests(): void {
   started = false;

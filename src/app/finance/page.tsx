@@ -282,8 +282,11 @@ export default function FinancePage() {
 
   function handleFinanceTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
     let next: "cycle" | "now" | null = null;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = "now";
-    if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = "cycle";
+    // RTL: «الدورة» على اليمين و«الآن» على اليسار (راجع ImageLightbox.tsx).
+    if (event.key === "ArrowRight") next = "cycle";
+    if (event.key === "ArrowLeft") next = "now";
+    if (event.key === "ArrowDown") next = "now";
+    if (event.key === "ArrowUp") next = "cycle";
     if (event.key === "Home") next = "cycle";
     if (event.key === "End") next = "now";
     if (!next) return;

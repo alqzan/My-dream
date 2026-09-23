@@ -5,12 +5,11 @@ import { ChevronDown, CircleAlert, RefreshCw, Repeat, Wallet } from "lucide-reac
 import { useAppStore } from "@/lib/store";
 import { usePending } from "@/lib/pending";
 import {
-  detectRecurringMerchants,
   financeSignals,
   findSelfTransferCandidates,
   proposeSalary,
 } from "@/lib/bankIntelligence";
-import { formatAmount, today } from "@/lib/utils";
+import { formatAmount, formatDate, today, toIndicDigits } from "@/lib/utils";
 
 /**
  * Read-only finance signals. The section starts collapsed because these are
@@ -40,7 +39,6 @@ export function FinanceSignalsCard({ cycleStart }: { cycleStart: string }) {
     cycleStart,
     today: todayStr,
   }), [transactions, inboxEvents, observedBalances, accounts, cycleStart, todayStr]);
-  const recurring = useMemo(() => detectRecurringMerchants(transactions), [transactions]);
   const salaryProposals = useMemo(() => proposeSalary({
     events: [
       ...transactions.map((transaction) => ({
@@ -109,9 +107,9 @@ export function FinanceSignalsCard({ cycleStart }: { cycleStart: string }) {
   const pendingSalary = salaryProposals.filter((proposal) => proposal.status === "needs_choice");
   const reviewCount = pendingSalary.length + transferReview.unmatched.length + transferReview.ambiguous.length;
   const summary = signals.declinedCount > 0
-    ? `${signals.declinedCount} عملية مرفوضة تحتاج انتباهاً`
+    ? `${toIndicDigits(String(signals.declinedCount))} عملية مرفوضة تحتاج انتباهاً`
     : reviewCount > 0
-      ? `${reviewCount} إشارة تحتاج مراجعة`
+      ? `${toIndicDigits(String(reviewCount))} إشارة تحتاج مراجعة`
       : signals.receiptFresh ? "الإيصالات حديثة" : "لا توجد إشارة حديثة";
 
   return (
@@ -119,7 +117,7 @@ export function FinanceSignalsCard({ cycleStart }: { cycleStart: string }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-right press"
+        className="w-full flex items-center gap-3 px-4 py-3 text-start press"
         aria-expanded={open}
       >
         <span className="w-8 h-8 rounded-xl bg-finance/10 text-finance flex items-center justify-center shrink-0">
@@ -137,7 +135,7 @@ export function FinanceSignalsCard({ cycleStart }: { cycleStart: string }) {
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-gray-50 dark:bg-white/5 px-3 py-2">
               <span className="block text-[10px] text-gray-400">الإيصال الأخير</span>
-              <strong>{signals.lastReceiptDate ?? "لا يوجد"}</strong>
+              <strong>{signals.lastReceiptDate ? formatDate(signals.lastReceiptDate) : "لا يوجد"}</strong>
               <span className="block text-[10px] text-gray-400">{signals.receiptFresh ? "حديث" : "أقدم من الإعداد"}</span>
             </div>
             <div className="rounded-xl bg-gray-50 dark:bg-white/5 px-3 py-2">
@@ -150,7 +148,7 @@ export function FinanceSignalsCard({ cycleStart }: { cycleStart: string }) {
           {signals.declinedCount > 0 && (
             <div className="flex items-start gap-2 rounded-xl bg-amber-50 text-amber-800 px-3 py-2">
               <CircleAlert size={15} className="shrink-0 mt-0.5" />
-              <span>{signals.declinedCount} عملية مرفوضة محفوظة كمعلومة ولا تُحسب صرفاً.</span>
+              <span>{toIndicDigits(String(signals.declinedCount))} عملية مرفوضة محفوظة كمعلومة ولا تُحسب صرفاً.</span>
             </div>
           )}
 
@@ -174,21 +172,9 @@ export function FinanceSignalsCard({ cycleStart }: { cycleStart: string }) {
             </div>
           )}
 
-          {recurring.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="font-semibold text-gray-700 dark:text-gray-200">مصروفات متكررة محتملة</p>
-              {recurring.slice(0, 4).map((row) => (
-                <div key={row.merchant} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 dark:bg-white/5 px-2.5 py-1.5">
-                  <span className="truncate">{row.merchant}</span>
-                  <span className="shrink-0">{formatAmount(row.avgAmount)} ر.س · كل {Math.round(row.everyDays)} يوم</span>
-                </div>
-              ))}
-            </div>
-          )}
-
           {signals.merchantFrequency.length > 0 && (
             <div className="flex items-center gap-2 text-[11px] text-gray-400">
-              <Wallet size={13} /> أكثر تكرار: {signals.merchantFrequency[0].merchant} ({signals.merchantFrequency[0].count} مرات)
+              <Wallet size={13} /> أكثر تكرار: {signals.merchantFrequency[0].merchant} ({toIndicDigits(String(signals.merchantFrequency[0].count))} مرات)
             </div>
           )}
         </div>

@@ -431,13 +431,13 @@ function FundDetail({ fund, onClose }: { fund: ReserveFund; onClose: () => void 
         />
         <button
           onClick={() => move(1)}
-          className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[11px] font-bold text-finance bg-finance/10 rounded-lg px-2 press shrink-0"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[11px] font-bold text-finance bg-finance/10 rounded-lg px-2 press"
         >
           <ArrowDownToLine size={12} /> تعبئة
         </button>
         <button
           onClick={() => move(-1)}
-          className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-500/20 rounded-lg px-2 press shrink-0"
+          className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-500/20 rounded-lg px-2 press"
         >
           <ArrowUpFromLine size={12} /> سحب
         </button>
