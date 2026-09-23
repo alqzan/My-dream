@@ -134,7 +134,8 @@ export function ReconcileCard() {
       cardId: resolutionCard,
       kind: resolutionKind,
       amount,
-      date: todayStr,
+      // القرارُ يفسّر سداداً وقع في يومه، فتاريخُه تاريخُ السداد لا يومُ الضغط.
+      date: resolutionSettlement.settlement.date || todayStr,
       note: resolutionNote.trim() || undefined,
       settlementIds: [resolutionSettlementId],
       appliedToEventIds: resolutionKind === "missed_expense" && resolutionChargeId ? [resolutionChargeId] : undefined,

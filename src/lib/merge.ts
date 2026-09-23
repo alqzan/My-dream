@@ -690,7 +690,19 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     reconciles: byIdNewer(primary.reconciles ?? [], secondary.reconciles ?? []),
     obligations: byIdNewer(primary.obligations ?? [], secondary.obligations ?? []),
     observedBalances: byIdNewer(primary.observedBalances ?? [], secondary.observedBalances ?? []),
-    accounts: byIdNewer(primary.accounts ?? [], secondary.accounts ?? []),
+    // الحسابات: حقولُ المالك بطابع العنصر، والآليّةُ (متى رُئي أوّلاً وآخراً،
+    // والشبكة) لا تحمل طابعاً (`UNSTAMPED_FIELDS` في store.ts) فتُجمع من
+    // النسختين: أقدمُ ظهورٍ وأحدثُه، فلا تُرجِعها نسخةٌ غلبت بتسمية المالك.
+    accounts: byIdNewer(primary.accounts ?? [], secondary.accounts ?? []).map((a) => {
+      const copies = [...(primary.accounts ?? []), ...(secondary.accounts ?? [])].filter((x) => x.id === a.id);
+      if (copies.length < 2) return a;
+      const firstSeen = copies.map((x) => x.firstSeen).filter(Boolean).sort()[0] ?? a.firstSeen;
+      const lastSeen = copies.map((x) => x.lastSeen).filter(Boolean).sort().at(-1) ?? a.lastSeen;
+      const network = a.network ?? copies.find((x) => x.network)?.network;
+      return firstSeen === a.firstSeen && lastSeen === a.lastSeen && network === a.network
+        ? a
+        : { ...a, firstSeen, lastSeen, ...(network ? { network } : {}) };
+    }),
     settlementResolutions: byIdNewer(primary.settlementResolutions ?? [], secondary.settlementResolutions ?? []),
     settlements: byIdNewer(primary.settlements ?? [], secondary.settlements ?? []),
     inboxDecisions: byIdNewer(primary.inboxDecisions ?? [], secondary.inboxDecisions ?? []),

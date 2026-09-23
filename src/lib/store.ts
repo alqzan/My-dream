@@ -88,6 +88,11 @@ const UNSTAMPED_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], rea
     "photo", "photos", "audio", "audios", "videoRefs", "photoRefs", "audioRefs",
     "attachmentRefs", "audioMetadataRefs", "photoEdits",
   ],
+  // حقولُ الحساب التي يكتبها الاستيرادُ وحده مع كلّ رسالة (متى رُئي أوّلاً
+  // وآخراً، وشبكةُ البطاقة). لو رفعت طابعَ الحساب لصارت كلُّ رسالةٍ بنكية
+  // «تعديلاً» يغلب — عند الدمج — تسميةَ المالك للحساب أو إقرارَه بملكيته أو
+  // تصحيحَه لطبيعة تمويله على الجهاز الآخر. ودمجُها المستقلّ في `merge.ts`.
+  accounts: ["firstSeen", "lastSeen", "network"],
 };
 
 // Did this item actually change? Identity first (the common case: an action
@@ -716,7 +721,32 @@ export const useAppStore = create<AppStore>()(
       // `deleted` (id → ts). Without this, the cloud union-merge resurrects a
       // deleted entry from any device that still holds a copy — so a delete
       // "came back" after reopening once a second device re-seeded it.
+      //
+      // **والمعرّفُ الذي انتقل بين مجموعتين لم يُحذف**: رسالةُ البنك المعلّقة
+      // تُحفظ في `inboxEvents` بمعرّف الحدث، واعتمادُها يُزيلها من هناك ويُنشئ
+      // المعاملةَ (أو السداد) بالمعرّف نفسِه. والشاهدُ مفتاحُه المعرّفُ وحده عبر
+      // المجموعات كلِّها، وطابعُ العنصر الجديد من المللي‌ثانية نفسِها، فكان الدمجُ
+      // (`updatedAt > deleted[id]`) يُسقط المعاملةَ المعتمَدة. فلا شاهدَ لمعرّفٍ
+      // **كُتب في التغيير نفسِه** في مجموعةٍ أخرى (أُضيف أو عُدّل). أمّا حذفُ
+      // معاملةٍ مستوردة فيبقى حذفاً: قرارُ الاستيراد الذي يحمل معرّفها موجودٌ
+      // لكنّه لم يُكتب الآن، فيُختم الشاهد كما كان ولا تُبعث المعاملة.
       let removed: Record<string, number> | undefined;
+      let writtenIds: Set<string> | undefined;
+      const writtenNow = (id: string): boolean => {
+        if (!writtenIds) {
+          writtenIds = new Set();
+          for (const k of ID_COLLECTIONS) {
+            if (!(k in next)) continue;
+            const after = (next as Record<string, unknown>)[k] as StampedItem[] | undefined;
+            if (!Array.isArray(after)) continue;
+            const was = new Map(((prev[k] ?? []) as StampedItem[]).map((x) => [x?.id, x]));
+            for (const x of after) {
+              if (x && changedItem(was.get(x.id), x, UNSTAMPED_FIELDS[k])) writtenIds.add(x.id);
+            }
+          }
+        }
+        return writtenIds.has(id);
+      };
       for (const key of ID_COLLECTIONS) {
         if (!(key in next)) continue;
         const before = prev[key] as { id: string }[] | undefined;
@@ -724,7 +754,7 @@ export const useAppStore = create<AppStore>()(
         if (!Array.isArray(before) || !Array.isArray(after)) continue;
         const afterIds = new Set(after.map((x) => x.id));
         for (const item of before) {
-          if (item && !afterIds.has(item.id)) (removed ??= {})[item.id] = Date.now();
+          if (item && !afterIds.has(item.id) && !writtenNow(item.id)) (removed ??= {})[item.id] = Date.now();
         }
       }
 
@@ -1238,7 +1268,6 @@ export const useAppStore = create<AppStore>()(
           const inboxEvents = [...(s.inboxEvents ?? [])];
           const accounts = [...(s.accounts ?? [])];
           const balances = [...(s.observedBalances ?? [])];
-          const obligations = [...(s.obligations ?? [])];
           // A review is not a terminal import decision.  Keeping review/unknown
           // ids out of this set allows a corrected parse with the same stable
           // source identity to be routed later, while a saved settlement or
@@ -1413,12 +1442,17 @@ export const useAppStore = create<AppStore>()(
             const id = event.accountId;
             const existing = accounts.find((a) => a.id === id);
             const newer = !existing || eventStamp(event) >= eventStamp({ date: existing.lastSeen, sourceReceivedAt: undefined });
+            // طبيعةُ التمويل التي ضبطها المالك (أو اكتُشفت قبلُ) لا يكتب فوقها
+            // استيراد: الدليلُ الآليّ يملأ المجهول وحدَه.
+            const knownFunding = existing?.fundingKind && existing.fundingKind !== "unknown"
+              ? existing.fundingKind
+              : undefined;
             const next: Account = {
               id,
               bank: event.bank,
               last4: event.account,
               kind,
-              fundingKind: event.balanceKind === "credit_available" ? "credit" : existing?.fundingKind ?? "unknown",
+              fundingKind: knownFunding ?? (event.balanceKind === "credit_available" ? "credit" : "unknown"),
               network: kind === "card" && /(?:\bmada\b|مدى)/i.test(event.rawText)
                 ? "mada" : existing?.network,
               label: existing?.label,
@@ -1427,7 +1461,9 @@ export const useAppStore = create<AppStore>()(
               isOwn: existing?.isOwn ?? false,
               firstSeen: existing ? (event.date < existing.firstSeen ? event.date : existing.firstSeen) : event.date,
               lastSeen: existing && !newer ? existing.lastSeen : event.date,
-              updatedAt: now,
+              // لا طابعَ يدويّ: غلافُ `set` يختم الجديدَ وما تغيّر فيه حقلٌ غيرُ
+              // آليّ (راجع `UNSTAMPED_FIELDS.accounts`)، ويُبقي طابعَ ما سواه.
+              updatedAt: existing?.updatedAt,
             };
             const ix = accounts.findIndex((a) => a.id === id);
             if (ix >= 0) accounts[ix] = { ...accounts[ix], ...next };
@@ -1597,23 +1633,9 @@ export const useAppStore = create<AppStore>()(
               seenEventIds.add(eventId);
               result.saved++;
               addDecision(eventId, "saved", tx.reviewReason);
-              if (event.kind === "installment") {
-                const obligationId = `${event.bank ?? "unknown"}:${event.accountId ?? event.account ?? "loan"}:loan`;
-                const ix = obligations.findIndex((o) => o.id === obligationId);
-                const obligation: Obligation = {
-                  id: obligationId,
-                  kind: "loan",
-                  source: event.bank ?? "unknown",
-                  ref: event.account,
-                  label: event.counterparty || "قسط تمويل",
-                  outstanding: event.debtRemaining ?? 0,
-                  perPeriod: event.amount,
-                  observedAt: event.date,
-                  updatedAt: now,
-                };
-                if (ix >= 0) obligations[ix] = { ...obligations[ix], ...obligation };
-                else obligations.unshift(obligation);
-              }
+              // لا يُنشأ «التزامٌ» من رسالة قسط: خططُ الأقساط والالتزاماتُ المتكرّرة
+              // أبوابٌ حذفها المالك (٠٫١٫٣٨٧) ولم يطلب عودتها. القسطُ يُسجَّل
+              // مصروفاً كما هو، ويبقى حقلُ `obligations` وبياناتُه القديمة كما هي.
               continue;
             }
             if (event.kind === "card_settle") {
@@ -1749,7 +1771,7 @@ export const useAppStore = create<AppStore>()(
             removeRawEvent(eventId);
             seenEventIds.add(eventId);
           }
-          return { transactions, reserves, settlements, inboxDecisions: decisions, inboxEvents, accounts, observedBalances: balances, obligations };
+          return { transactions, reserves, settlements, inboxDecisions: decisions, inboxEvents, accounts, observedBalances: balances };
         });
         return result;
       },
@@ -1809,12 +1831,13 @@ export const useAppStore = create<AppStore>()(
           // cross-device merges idempotent instead of posting a second debit.
           if (!resolution.id || !resolution.cardId || !/^\d{4}-\d{2}-\d{2}$/.test(resolution.date)
             || !Number.isFinite(resolution.amount) || resolution.amount <= 0) return {};
+          // قرارٌ سُجّل بمعرّفه لا يُعاد: نقرةٌ ثانية أو جهازٌ ثانٍ لا يُضيفان
+          // خصماً ولا يكتبان فوق القرار الأوّل.
+          if ((s.settlementResolutions ?? []).some((r) => r.id === resolution.id)) return {};
           const now = Date.now();
           const next = [...(s.settlementResolutions ?? [])];
-          const ix = next.findIndex((r) => r.id === resolution.id);
           const stored = { ...resolution, amount: round2(resolution.amount), updatedAt: now };
-          if (ix >= 0) next[ix] = { ...next[ix], ...stored };
-          else next.unshift(stored);
+          next.unshift(stored);
           const txId = resolutionTransactionId(resolution.id);
           const linkedChargeIds = resolution.appliedToEventIds ?? [];
           const linkedRecordedCharge = resolution.kind === "missed_expense"
@@ -2174,9 +2197,13 @@ export const useAppStore = create<AppStore>()(
           const fromSalary = plan.fromSalary;
           const deposits = new Map<string, ReserveDeposit[]>();
           const clearPlan = new Set<string>();
-          const addDeposit = (fundId: string, amount: number, note: string, source: string) => {
+          // `forFundId` هو المظروفُ الذي يخصّه الإيداع، ويختلف عن `fundId` في
+          // سحب «الفوائض» وحدَه: سحبٌ واحدٌ لكلّ مظروفٍ ممَوَّل، على صندوقٍ واحد.
+          // كان المعرّف يُبنى من الصندوق المسحوب منه فتتطابق السحوباتُ كلُّها،
+          // فيُسقط حارسُ التكرار كلَّ سحبٍ بعد الأوّل — ويخرج مالٌ من لا شيء.
+          const addDeposit = (fundId: string, amount: number, note: string, source: string, forFundId = fundId) => {
             const list = deposits.get(fundId) ?? [];
-            const id = `salary:${todayStr}:funding:${source}:${fundId}`;
+            const id = `salary:${todayStr}:funding:${source}:${forFundId}`;
             if (list.some((item) => item.id === id) || reserves.some((fund) => fund.id === fundId && fund.deposits.some((item) => item.id === id))) return;
             list.unshift({ id, date: todayStr, amount, note });
             deposits.set(fundId, list);
@@ -2187,7 +2214,7 @@ export const useAppStore = create<AppStore>()(
             if (!fund) continue;
             if (move.amount > 0) {
               if (move.source === "surplus" && surplusId) {
-                addDeposit(surplusId, -move.amount, `تمويل «${fund.name}»`, "surplus-out");
+                addDeposit(surplusId, -move.amount, `تمويل «${fund.name}»`, "surplus-out", fund.id);
               }
               addDeposit(fund.id, move.amount, fund.funding?.stop === "zero" ? "سداد الدورة" : "تمويل الدورة", move.source);
             }
@@ -2235,6 +2262,17 @@ export const useAppStore = create<AppStore>()(
         let record: Reconcile | null = null;
         set((s) => {
           const todayStr = today();
+          // **مطابقةٌ واحدةٌ في اليوم** بمعرّفٍ ثابت (`reconcile:<اليوم>`) للقيد
+          // والتسوية معاً: نقرةٌ ثانية، أو جهازان طابقا في اليوم نفسِه، لا
+          // يُسجّلان فرقاً مرّتين. والثانيةُ لا تستبدل الأولى: التسويةُ الأولى
+          // دخلت «المتوقّع» فمقابلتُه برقمٍ ثانٍ تُعدّل على تعديل. تصحيحُ رقمٍ
+          // خاطئ مكانُه مطابقةُ الغد، وتقابل ما صار عليه الحال.
+          const recordId = `reconcile:${todayStr}`;
+          const already = (s.reconciles ?? []).find((r) => r.id === recordId);
+          if (already) {
+            record = already;
+            return {};
+          }
           const creditLedger = creditLedgerForState(s);
           const { expected } = holdings({
             reserves: s.reserves,
@@ -2253,7 +2291,7 @@ export const useAppStore = create<AppStore>()(
           if (blocked) return {};
           const result = reconcileDelta(expected, actual as number);
           record = {
-            id: uid(),
+            id: recordId,
             date: todayStr,
             expected: result.expected,
             actual: result.actual,
@@ -2286,13 +2324,15 @@ export const useAppStore = create<AppStore>()(
             reserves = [...reserves, fund];
           }
           const deposit: ReserveDeposit = {
-            id: uid(),
+            id: recordId,
             date: todayStr,
             amount: result.delta, // سالبٌ حين يكون الواقعُ أقلّ — وهو خبرٌ صحيح
             note: RECONCILE_NOTE,
           };
           reserves = reserves.map((f) =>
-            f.id === fund!.id ? { ...f, deposits: [deposit, ...f.deposits] } : f
+            f.id === fund!.id && !f.deposits.some((item) => item.id === deposit.id)
+              ? { ...f, deposits: [deposit, ...f.deposits] }
+              : f
           );
           return { reserves: normalizeReserveFunds(reserves), reconciles };
         });
@@ -2403,7 +2443,7 @@ export const useAppStore = create<AppStore>()(
           // الحسابان العام والفوائض أوعيةٌ محمية: طلب بدء السفر عليهما
           // لا يغيّر أي مظروف، ولا يغلق رحلةً جارية في مظروفٍ مخصّص آخر.
           const target = s.reserves.find((f) => f.id === fundId);
-          if (!target || !isTripEligibleFund(target)) return s;
+          if (!target || !isTripEligibleFund(target)) return {};
 
           const todayStr = today();
           const closeOngoing = (f: ReserveFund): ReserveFund => {
