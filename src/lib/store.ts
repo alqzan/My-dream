@@ -2283,10 +2283,11 @@ export const useAppStore = create<AppStore>()(
             cashbackEnvelopeId: s.cashbackEnvelopeId,
           });
           // A settlement without a provable earlier charge is an unresolved
-          // excess, not permission to move the surplus envelope. Ambiguous
-          // chronology and malformed credit records are blocked at this store
+          // excess, not permission to move the surplus envelope. Errors on a
+          // proven credit card (`blockingIssues`) are blocked at this store
           // boundary too, so a disabled button cannot be bypassed by calling
-          // the action directly.
+          // the action directly. Warnings never block: they are shown, not
+          // enforced, or one unexplained same-day order locks the quarter.
           const blocked = creditLedger.excessSettlement > 0 || creditLedger.blockingIssues.length > 0;
           if (blocked) return {};
           const result = reconcileDelta(expected, actual as number);
