@@ -64,6 +64,8 @@ export default function JournalPage() {
   const [editEntry, setEditEntry] = useState<JournalEntry | undefined>();
   // يومٌ صامتٌ لُمس في السماء: يُفتح المحرّر على **ذلك اليوم** لا على اليوم الحاضر.
   const [writeDate, setWriteDate] = useState<string | undefined>();
+  // «أضِف إلى مذكرة اليوم» يفتح مذكرةَ اليوم نفسَها والمؤشّرُ في آخرها.
+  const [focusEnd, setFocusEnd] = useState(false);
   // فُتح المحرّرُ من بطاقة السؤال؟ عندها يبدأ مجيباً فيُسجَّل الجوابُ جواباً.
   const [answerMode, setAnswerMode] = useState(false);
   // «سطر سريع» — التقاطُ خاطرةٍ في سطرٍ واحد دون فتح المحرّر الكامل.
@@ -182,6 +184,36 @@ export default function JournalPage() {
   const answeredToday = journalEntries.some((e) => e.date === todayStr && e.question === question);
   /** كتبتَ اليومَ شيئاً — أعمُّ من «أجبتَ عن السؤال»، ولزرِّ الكتابة وحده. */
   const wroteToday = journalEntries.some((e) => e.date === todayStr);
+
+  /**
+   * **منطقُ الأيام — يومٌ واحد، بابٌ واحد** (٠٫١٫٤٦٥). كلُّ ضغطةٍ على يومٍ تمرّ
+   * من هنا: الشهرُ والأيامُ الماضية والسماء وزرُّ الكتابة. كانت ثلاثةٌ منها
+   * تفتح محرّراً فارغاً على **اليوم الحاضر** أيّاً كان اليومُ المضغوط، وزرُّ
+   * «أضِف إلى مذكرة اليوم» يُنشئ مذكرةً ثانيةً بدل أن يضيف — فتتكدّس أيامٌ
+   * مكرّرة يُدعى المالكُ بعدها لدمجها.
+   *   • يومٌ فيه مذكرةٌ واحدة ← تُقرأ. أكثرُ من واحدة ← عرضُ اليوم كلِّه.
+   *   • يومٌ صامتٌ مضى ← المحرّرُ على **ذلك اليوم**.
+   *   • يومٌ لم يأتِ ← لا شيء (مكانُه «الرسائل»).
+   */
+  function openDay(date: string) {
+    if (date > todayStr) return;
+    const dayEntries = journalEntries.filter((e) => e.date === date);
+    if (dayEntries.length === 1) openViewer(dayEntries[0]);
+    else if (dayEntries.length > 1) setSelectedDay(date);
+    else { setEditEntry(undefined); setAnswerMode(false); setWriteDate(date); setShowForm(true); }
+  }
+
+  /** زرُّ الكتابة: يُكمِل مذكرةَ اليوم إن وُجدت (آخرَها كتابةً)، ويبدأها إن لم توجد. */
+  function writeToday() {
+    const latest = journalEntries
+      .filter((e) => e.date === todayStr)
+      .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""))
+      .at(-1);
+    setAnswerMode(false);
+    setWriteDate(undefined);
+    if (latest) { setFocusEnd(true); setEditEntry(latest); }
+    else { setEditEntry(undefined); setShowForm(true); }
+  }
 
   // «في مثل هذا اليوم» — مذكرات نفس اليوم والشهر من سنوات سابقة
   const memories = useMemo(() => {
@@ -356,7 +388,7 @@ export default function JournalPage() {
 
         <button
           type="button"
-          onClick={() => setShowForm(true)}
+          onClick={writeToday}
           className="mdr-journal-primary-write"
           style={{
             display: "block", width: "100%", minHeight: 50, margin: "14px 0 0",
@@ -444,14 +476,14 @@ export default function JournalPage() {
               entries={filtered}
               memories={memories}
               onOpen={openViewer}
-              onPickDate={(date) => { setEditEntry(undefined); setWriteDate(date); setShowForm(true); }}
+              onPickDate={openDay}
               todayStr={todayStr}
             />
             <PastDays
               entries={journalEntries}
               todayStr={todayStr}
               onOpen={openViewer}
-              onWrite={() => setShowForm(true)}
+              onWrite={openDay}
             />
           </>
         )}
@@ -466,7 +498,7 @@ export default function JournalPage() {
               year={calYear}
               month={calMonth}
               onNavigate={(y, m) => { setCalYear(y); setCalMonth(m); }}
-              onDayClick={setSelectedDay}
+              onDayClick={openDay}
             />
             {monthSummary.count > 0 && (
               <div style={{ margin: "18px 0 0" }}>
@@ -652,10 +684,11 @@ export default function JournalPage() {
       {/* محرّر المذكرة بملء الشاشة (يدير رقعته الكاملة بنفسه، لا نافذة) */}
       {(showForm || editEntry) && (
         <JournalForm
-          onClose={() => { setShowForm(false); setEditEntry(undefined); setWriteDate(undefined); setAnswerMode(false); }}
+          onClose={() => { setShowForm(false); setEditEntry(undefined); setWriteDate(undefined); setAnswerMode(false); setFocusEnd(false); }}
           initial={editEntry}
           initialDate={writeDate}
           startAnswering={answerMode}
+          focusEnd={focusEnd}
         />
       )}
 
@@ -766,7 +799,7 @@ export default function JournalPage() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setEditEntry(viewEntry); closeViewer(); }}
+                onClick={() => { setFocusEnd(false); setEditEntry(viewEntry); closeViewer(); }}
                 className="flex-1"
               >
                 تعديل
@@ -793,9 +826,9 @@ export default function JournalPage() {
 
       {/* زر عائم لكتابة مذكرة سريعة — مثل زر المصروف السريع في الرئيسية */}
       <button
-        onClick={() => setShowForm(true)}
+        onClick={writeToday}
         className="fab p-4 rounded-full bg-[var(--ink)] text-[var(--paper)] shadow-lg press"
-        aria-label="اكتب مذكرة جديدة"
+        aria-label={wroteToday ? "أضِف إلى مذكرة اليوم" : "اكتب مذكرة اليوم"}
       >
         <Plus size={22} />
       </button>

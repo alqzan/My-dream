@@ -119,15 +119,50 @@ export function dialGeometry(frac: number, win: { rise: number; set: number } = 
 
 export type DueArc = "salah" | "quran" | "mal";
 
+type PrayerKey = "الفجر" | "الظهر" | "العصر" | "المغرب" | "العشاء";
+const PRAYER_ORDER: PrayerKey[] = ["الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
+
+export interface SalahNow {
+  /** فروضٌ **دخل وقتُها** ولم تُسجَّل بعد — بترتيب اليوم. */
+  pending: PrayerKey[];
+  /** الفرضُ القادم ووقتُه — `null` بعد العشاء. */
+  next: { name: PrayerKey; at: Date } | null;
+}
+
 /**
- * أيُّ الأقواس الثلاثة يستحقُّ انتباهك الآن — **واحدٌ لا ثلاثة**: شاشةٌ
- * تصرخ بثلاثة نداءاتٍ لا تُقرأ. الترتيبُ ثابت: ما فات وقتُه أوّلاً (الصلاة)،
- * ثمّ ما له موعدٌ اليوم (المراجعة)، ثمّ ما يحتمل التأجيل (المال).
+ * حالُ الصلاة **الآن** لا حالُ اليوم كلِّه (٠٫١٫٤٦٥). كان القوسُ يُطوَّق ما دام
+ * المسجَّلُ أقلَّ من خمس، فيبقى ذهبيّاً من الفجر إلى العشاء — الساعةَ السابعة
+ * صباحاً والفجرُ مسجَّل يُقال لك «الصلاةُ مستحقّة» والظهرُ لم يؤذَّن بعد.
+ * والتطويقُ الذي لا ينطفئ لا يُنبّه. المستحقُّ الآن: ما دخل وقتُه ولم يُسجَّل.
+ *
+ * `status` ما في سجلّ اليوم؛ الغائبُ و`"لم"` سواء (لم يُسجَّل). وبلا مواقيت
+ * (إحداثيّاتٌ قطبيّة) يُعدّ كلُّ غير المسجَّل مستحقّاً — السلوكُ القديم الآمن.
  */
-export function dueArc(prayed: number, hifzDue: number): DueArc {
-  if (prayed < 5) return "salah";
-  if (hifzDue > 0) return "quran";
-  return "mal";
+export function salahNow(
+  now: Date,
+  times: Record<PrayerKey, Date> | null,
+  status: Partial<Record<PrayerKey, string>>,
+): SalahNow {
+  const unlogged = (p: PrayerKey) => !status[p] || status[p] === "لم";
+  if (!times) return { pending: PRAYER_ORDER.filter(unlogged), next: null };
+  const pending = PRAYER_ORDER.filter((p) => times[p].getTime() <= now.getTime() && unlogged(p));
+  const upcoming = PRAYER_ORDER.find((p) => times[p].getTime() > now.getTime());
+  return { pending, next: upcoming ? { name: upcoming, at: times[upcoming] } : null };
+}
+
+/**
+ * أيُّ الأقواس الثلاثة يستحقُّ انتباهك الآن — **واحدٌ أو لا شيء**: شاشةٌ تصرخ
+ * بثلاثة نداءاتٍ لا تُقرأ، وتطويقٌ دائمٌ لا يُقرأ كذلك. الترتيبُ ثابت:
+ *   ١. فرضٌ دخل وقتُه ولم يُسجَّل (له وقتٌ يخرج).
+ *   ٢. قرآنُ اليوم لم يُفتح بعد.
+ *   ٣. مصروفٌ تجاوز حدَّه.
+ * وإن لم يكن شيءٌ من ذلك فلا تطويق — يومُك في حاله، وذلك خبرٌ أيضاً.
+ */
+export function dueArc(s: { salahPending: number; quranDone: boolean; overspent: boolean }): DueArc | null {
+  if (s.salahPending > 0) return "salah";
+  if (!s.quranDone) return "quran";
+  if (s.overspent) return "mal";
+  return null;
 }
 
 export const DUE_ARC_LABEL: Record<DueArc, string> = {

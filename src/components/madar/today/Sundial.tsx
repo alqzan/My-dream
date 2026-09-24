@@ -6,29 +6,28 @@
  * بمواقيت جهازك: النهارُ من الفجر إلى العشاء، وموضعُ الشمس نسبةُ ما مضى منه.
  * فهي تقول أين أنت من يومك، لا أين أنت من رسمة.
  */
-import { useMemo } from "react";
 import {
-  dayFraction, dialGeometry, dueArc, sunWindow, DUE_ARC_LABEL, DIAL_W, DIAL_H,
+  dayFraction, dialGeometry, sunWindow, DUE_ARC_LABEL, DIAL_W, DIAL_H, type DueArc, type SalahNow,
 } from "@/lib/sundial";
-import { computePrayerTimes, getCachedCoords, formatClock, parseDate } from "@/lib/utils";
+import { formatClock } from "@/lib/utils";
+import type { PrayerName } from "@/lib/types";
 import { arNum, arClock, arPct } from "@/lib/madar/format";
 
+// المواقيتُ والقوسُ المستحقّ يأتيان من البهو: هو يحسبهما مرّةً للمزولة والأقواس
+// معاً، فلا يختلف ما تقوله المزولةُ عمّا يطوِّقه القوس.
 export function Sundial({
-  todayStr,
   now,
+  times,
   prayed,
-  hifzDue,
+  due,
+  next,
 }: {
-  todayStr: string;
   now: Date;
+  times: Record<PrayerName, Date> | null;
   prayed: number;
-  hifzDue: number;
+  due: DueArc | null;
+  next: SalahNow["next"];
 }) {
-  const times = useMemo(() => {
-    const c = getCachedCoords();
-    return computePrayerTimes(parseDate(todayStr), c.lat, c.lng);
-  }, [todayStr]);
-
   // بلا مواقيتَ محسوبة (إحداثيّاتٌ قطبيّة أو شاذّة) لا نرسم مزولةً كاذبة.
   if (!times) return null;
 
@@ -37,7 +36,6 @@ export function Sundial({
   const sunrise = new Date(2 * times.الظهر.getTime() - times.المغرب.getTime());
   const frac = dayFraction(now, times.الفجر, times.العشاء);
   const g = dialGeometry(frac, sunWindow(times.الفجر, times.العشاء, sunrise, times.المغرب));
-  const due = dueArc(prayed, hifzDue);
 
   return (
     <div
@@ -73,7 +71,11 @@ export function Sundial({
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, paddingTop: 9, borderTop: "1px solid var(--line)" }}>
         <span className="mdr-star" style={{ width: 9, height: 9 }} />
         <span style={{ flex: 1, fontSize: 10.5, fontWeight: 700, color: "var(--ink72)" }}>
-          القوسُ المستحقُّ الآن: {DUE_ARC_LABEL[due]}
+          {due
+            ? `القوسُ المستحقُّ الآن: ${DUE_ARC_LABEL[due]}`
+            : next
+              ? `لا شيءَ مستحقٌّ الآن · ${next.name} ${arClock(next.at, formatClock)}`
+              : "يومُك في حاله"}
         </span>
         <span style={{ fontSize: 9.5, color: "var(--ink34)" }}>{arNum(prayed)} من {arNum(5)}</span>
       </div>

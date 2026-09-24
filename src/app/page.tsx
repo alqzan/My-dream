@@ -9,8 +9,12 @@ import { prefGet, prefSet, prefRemove, prefKeys } from "@/lib/platform/prefs";
 import { completedDayDates } from "@/lib/dayAggregator";
 import {
   computeDailyBudgetStatus,
+  computePrayerTimes,
   countDayPrayers,
   formatAmount,
+  formatClock,
+  getCachedCoords,
+  parseDate,
   formatDate,
   getPrayerLog,
   hijriDate,
@@ -18,9 +22,10 @@ import {
   today,
   toDateStr,
 } from "@/lib/utils";
-import { arNum } from "@/lib/madar/format";
+import { arNum, arClock } from "@/lib/madar/format";
+import { buildTodayPlan } from "@/lib/quran/session";
 import { GOLD_LIGHT } from "@/lib/palette";
-import { dueArc } from "@/lib/sundial";
+import { dueArc, salahNow } from "@/lib/sundial";
 import { Sundial } from "@/components/madar/today/Sundial";
 import { ThreeArcs, type ArcSpec } from "@/components/madar/today/ThreeArcs";
 import { PendingBankBanner } from "@/components/finance/PendingBankBanner";
@@ -94,22 +99,46 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const prayedToday = countDayPrayers(getPrayerLog(prayerLogs, todayStr)).prayed;
-  const hifzDueCount = useMemo(
-    () => (quranHifz?.mistakes ?? []).filter((mistake) => !mistake.resolved && mistake.lastDrill !== todayStr).length,
+  // **دورُ الأقواس (٠٫١٫٤٦٥)**: كلُّ قوسٍ يجيب سؤالاً واحداً عن **الآن** لا
+  // عن اليوم كلِّه — ماذا عليّ في الصلاة الآن؟ كم تأخذ جلسةُ القرآن اليوم؟ كم
+  // يبقى لي أصرفه؟ — والتطويقُ الذهبيّ على ما يستحقّ فعلاً، أو على لا شيء.
+  const prayerTimes = useMemo(() => {
+    const c = getCachedCoords();
+    return computePrayerTimes(parseDate(todayStr), c.lat, c.lng);
+  }, [todayStr]);
+  const todayPrayers = getPrayerLog(prayerLogs, todayStr);
+  const prayedToday = countDayPrayers(todayPrayers).prayed;
+  const salah = salahNow(nowTick, prayerTimes, todayPrayers?.prayers ?? {});
+  const quranDone = quranDates.has(todayStr);
+  // جلسةُ اليوم من الجدول نفسِه الذي تعرضه صفحة القرآن — لا عدَّ أخطاءٍ موازٍ
+  // (كان القوسُ يعدّ مواضعَ الأخطاء ويسمّيها «للمراجعة»، والمراجعةُ شيءٌ آخر).
+  const hifzPlan = useMemo(
+    () => (quranHifz?.plan ? buildTodayPlan(quranHifz, todayStr) : null),
     [quranHifz, todayStr]
   );
   const dailyStatus = useMemo(
     () => (dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null),
     [dailyBudget, transactions]
   );
+  const due = dueArc({
+    salahPending: salah.pending.length,
+    quranDone,
+    overspent: !!dailyStatus && dailyStatus.balance < 0,
+  });
+  const sessionMinutes = hifzPlan && hifzPlan.steps.length ? hifzPlan.estMinutes : 0;
   const arcSpecs: ArcSpec[] = [
     {
       key: "salah",
       label: "الصلاة",
       big: arNum(prayedToday),
       unit: `من ${arNum(5)}`,
-      sub: prayedToday === 5 ? "يومٌ كامل" : `بقيت ${arNum(5 - prayedToday)}`,
+      sub: salah.pending.length === 1
+        ? `حان ${salah.pending[0]}`
+        : salah.pending.length > 1
+          ? `${arNum(salah.pending.length)} تنتظر تسجيلك`
+          : salah.next
+            ? `${salah.next.name} ${arClock(salah.next.at, formatClock)}`
+            : prayedToday === 5 ? "يومٌ كامل" : "سُجِّل يومُك",
       ratio: prayedToday / 5,
       color: "var(--clay)",
       wash: "var(--clayw)",
@@ -118,14 +147,20 @@ export default function Dashboard() {
     {
       key: "quran",
       label: "القرآن",
-      big: quranDates.has(todayStr) ? "تمَّ" : hifzDueCount ? arNum(hifzDueCount) : "—",
-      unit: quranDates.has(todayStr) ? "وِردك اليوم" : hifzDueCount ? "للمراجعة" : "وِرد اليوم",
-      sub: quranDates.has(todayStr) ? "وردك مقروء" : "ما قريت وردك",
-      ratio: quranDates.has(todayStr)
-        ? 1
-        : hifzDueCount
-        ? Math.max(0.12, 1 - hifzDueCount / 12)
-        : 0,
+      big: quranDone ? "تمَّ" : sessionMinutes ? arNum(sessionMinutes) : "—",
+      unit: quranDone
+        ? "وِردك اليوم"
+        : sessionMinutes
+          ? (sessionMinutes >= 3 && sessionMinutes <= 10 ? "دقائق" : "دقيقة")
+          : "وِرد اليوم",
+      sub: quranDone
+        ? "وردك مقروء"
+        : hifzPlan?.newPortion
+          ? "حفظٌ جديد ومراجعة"
+          : sessionMinutes
+            ? "مراجعةُ اليوم"
+            : "وِردُك ينتظرك",
+      ratio: quranDone ? 1 : 0,
       color: "var(--green)",
       wash: "var(--greenw)",
       onClick: () => navigate("/quran"),
@@ -188,8 +223,8 @@ export default function Dashboard() {
 
       <div className="mdr-home-primary animate-fade-up">
         <section className="mdr-home-legacy-visuals" aria-label="إيقاع اليوم">
-          <Sundial todayStr={todayStr} now={nowTick} prayed={prayedToday} hifzDue={hifzDueCount} />
-          <ThreeArcs due={dueArc(prayedToday, hifzDueCount)} arcs={arcSpecs} />
+          <Sundial now={nowTick} times={prayerTimes} prayed={prayedToday} due={due} next={salah.next} />
+          <ThreeArcs due={due} arcs={arcSpecs} />
         </section>
         {/* التذكيرُ اللطيف قبل قائمة الطقوس لا بعدها: القائمةُ تقول **ما هو**،
             والتذكيرُ يقول **أين وقفت وكم صار لك** — والثاني هو ما يُعيد من

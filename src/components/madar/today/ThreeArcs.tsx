@@ -2,8 +2,9 @@
 /**
  * **الأقواسُ الثلاثة** — الصلاةُ والقرآنُ والمال في صفٍّ واحد.
  *
- * كلُّ قوسٍ محرابٌ يمتلئ بقدر حاله، **وواحدٌ منها فقط يُطوَّق بالذهب**: القوسُ
- * المستحقُّ الآن. شاشةٌ تصرخ بثلاثة نداءاتٍ لا تُقرأ، فالتطويقُ اختيارٌ لا زينة.
+ * كلُّ قوسٍ محرابٌ يمتلئ بقدر حاله، **وواحدٌ منها على الأكثر يُطوَّق بالذهب**:
+ * القوسُ المستحقُّ الآن (`dueArc`). شاشةٌ تصرخ بثلاثة نداءاتٍ لا تُقرأ،
+ * وتطويقٌ لا ينطفئ لا يُقرأ كذلك — فحين لا يستحقّ شيءٌ لا يُطوَّق شيء.
  */
 import { bigFitSize, fillY, type DueArc } from "@/lib/sundial";
 
@@ -23,7 +24,7 @@ export interface ArcSpec {
   onClick: () => void;
 }
 
-export function ThreeArcs({ arcs, due }: { arcs: ArcSpec[]; due: DueArc }) {
+export function ThreeArcs({ arcs, due }: { arcs: ArcSpec[]; due: DueArc | null }) {
   return (
     <div className="mdr-three-arcs" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, margin: "14px 0 0" }}>
       {arcs.map((a) => (
@@ -32,6 +33,7 @@ export function ThreeArcs({ arcs, due }: { arcs: ArcSpec[]; due: DueArc }) {
           type="button"
           onClick={a.onClick}
           className="mdr-three-arc-button"
+          aria-label={`${a.label}: ${a.big} ${a.unit} — ${a.sub}${due === a.key ? " (مستحقٌّ الآن)" : ""}`}
           style={{
             flex: 1, position: "relative", border: "none", background: "transparent",
             padding: 0, color: "var(--ink)", borderRadius: 18, cursor: "pointer",

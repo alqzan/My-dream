@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  dayFraction, phaseOf, dialGeometry, dueArc, bigFitSize, fillY, sunWindow,
+  dayFraction, phaseOf, dialGeometry, dueArc, salahNow, bigFitSize, fillY, sunWindow,
   DIAL_TICKS, DUE_ARC_LABEL,
 } from "./sundial";
 
@@ -78,18 +78,53 @@ describe("هندسةُ المزولة", () => {
 });
 
 describe("القوسُ المستحقُّ الآن", () => {
-  it("الصلاةُ أوّلاً ما لم تكتمل", () => {
-    expect(dueArc(3, 4)).toBe("salah");
-    expect(dueArc(0, 0)).toBe("salah");
+  const base = { salahPending: 0, quranDone: true, overspent: false };
+
+  it("فرضٌ دخل وقتُه ولم يُسجَّل يتقدّم كلَّ شيء", () => {
+    expect(dueArc({ salahPending: 1, quranDone: false, overspent: true })).toBe("salah");
   });
 
-  it("ثمّ القرآنُ إن كان له موعدٌ اليوم", () => {
-    expect(dueArc(5, 4)).toBe("quran");
+  it("ثمّ القرآنُ إن لم يُفتح اليوم", () => {
+    expect(dueArc({ ...base, quranDone: false, overspent: true })).toBe("quran");
   });
 
-  it("ثمّ المال", () => {
-    expect(dueArc(5, 0)).toBe("mal");
-    expect(DUE_ARC_LABEL[dueArc(5, 0)]).toBe("المال");
+  it("ثمّ المالُ إن تجاوزتَ", () => {
+    expect(dueArc({ ...base, overspent: true })).toBe("mal");
+    expect(DUE_ARC_LABEL.mal).toBe("المال");
+  });
+
+  it("وإلّا فلا تطويق — التطويقُ الدائم لا يُنبّه", () => {
+    expect(dueArc(base)).toBeNull();
+  });
+});
+
+describe("حالُ الصلاة الآن", () => {
+  const times = {
+    الفجر: at(4, 30), الظهر: at(12, 0), العصر: at(15, 20), المغرب: at(18, 10), العشاء: at(19, 40),
+  };
+
+  it("السابعةُ صباحاً والفجرُ مسجَّل: لا مستحقّ، والقادمُ الظهر", () => {
+    const s = salahNow(at(7), times, { الفجر: "جماعة" });
+    expect(s.pending).toEqual([]);
+    expect(s.next?.name).toBe("الظهر");
+  });
+
+  it("ما دخل وقتُه ولم يُسجَّل مستحقٌّ — و«لم» كالغائب", () => {
+    const s = salahNow(at(15, 30), times, { الفجر: "منفردة", الظهر: "لم" });
+    expect(s.pending).toEqual(["الظهر", "العصر"]);
+    expect(s.next?.name).toBe("المغرب");
+  });
+
+  it("الفائتةُ مسجَّلةٌ لا مستحقّة — التسجيلُ هو الجواب", () => {
+    expect(salahNow(at(12, 30), times, { الفجر: "فائتة", الظهر: "جماعة" }).pending).toEqual([]);
+  });
+
+  it("بعد العشاء لا قادمَ في اليوم", () => {
+    expect(salahNow(at(22), times, {}).next).toBeNull();
+  });
+
+  it("بلا مواقيت: كلُّ غير المسجَّل مستحقّ", () => {
+    expect(salahNow(at(7), null, { الفجر: "جماعة" }).pending).toHaveLength(4);
   });
 });
 

@@ -24,6 +24,8 @@ import { compressImageSmart } from "@/lib/imageUtils";
 import { chooseNativePhotos, takeNativePhoto } from "@/lib/platform/camera";
 import { photoHash } from "@/lib/mediaHash";
 import { dailyQuestion } from "@/lib/questions";
+import { stripMarkdown } from "@/lib/markdown";
+import { markdownPieces } from "@/lib/markdownHighlight";
 import { AudioRecorder, MAX_AUDIO_NOTES } from "./AudioRecorder";
 import { JournalPhotoEditor } from "./JournalPhotoEditor";
 import { entryPhotoSources } from "@/lib/mediaSources";
@@ -63,6 +65,8 @@ interface JournalFormProps {
   // السؤال يفتح محرّراً عادياً، فيُكتب الجوابُ ولا يُسجَّل أنّه جواب — فتبقى
   // البطاقة تقول «لم تُجب عنه بعد» بعد أن أجبت.
   startAnswering?: boolean;
+  // «أضِف إلى مذكرة اليوم»: يُفتح التعديل والمؤشّرُ في آخر النصّ جاهزاً للإكمال.
+  focusEnd?: boolean;
 }
 
 import { createJournalDraftWriter, type JournalDraftWriter } from "@/lib/journalDraft";
@@ -89,7 +93,8 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
   const suggestions: string[] = [];
 
   // من أول سطر مكتوب
-  const firstLine = content.split("\n").find((l) => l.trim().length > 3)?.trim();
+  // من النصّ المجرَّد لا الخام: كان أوّلُ سطرٍ منسَّق يقترح عنواناً بنجومه («- **كلمة**»).
+  const firstLine = stripMarkdown(content).split("\n").find((l) => l.trim().length > 3)?.trim().replace(/^•\s*/u, "");
   if (firstLine) {
     const words = firstLine.split(/\s+/).slice(0, 5).join(" ");
     suggestions.push(words.length < firstLine.length ? `${words}…` : words);
@@ -110,7 +115,7 @@ function suggestTitles(content: string, dateStr: string, question?: string): str
 
 const DRAFT_KEY = "madar-journal-draft";
 
-export function JournalForm({ onClose, initial, initialDate, startAnswering }: JournalFormProps) {
+export function JournalForm({ onClose, initial, initialDate, startAnswering, focusEnd }: JournalFormProps) {
   const addJournalEntry = useAppStore((state) => state.addJournalEntry);
   const updateJournalEntry = useAppStore((state) => state.updateJournalEntry);
   const deleteJournalEntry = useAppStore((state) => state.deleteJournalEntry);
@@ -192,6 +197,13 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     document.body.style.overflow = "hidden";
     const prevFocused = document.activeElement as HTMLElement | null;
     if (!initial) requestAnimationFrame(() => contentRef.current?.focus());
+    else if (focusEnd) requestAnimationFrame(() => {
+      const ta = contentRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      ta.scrollTop = ta.scrollHeight;
+    });
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") { e.preventDefault(); handleDoneRef.current(); }
     }
@@ -240,11 +252,13 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
       writer = createJournalDraftWriter({ setItem: prefSet, removeItem: prefRemove }, DRAFT_KEY);
       draftWriterRef.current = writer;
       const raw = prefGet(DRAFT_KEY);
-      if (raw) {
-        const d = JSON.parse(raw);
+      const d = raw ? JSON.parse(raw) : null;
+      // **المسودةُ لا تخطف اليوم** (٠٫١٫٤٦٥): كانت تُسترجع أيّاً كان اليومُ
+      // المطلوب، فتكتب تاريخَها فوقه — ضغطتَ يوماً قديماً فانفتح اليومُ الحاضر
+      // ونصُّ مسودته. تُسترجع الآن لليوم نفسِه وحده.
+      if (d && (!d.date || d.date === seedDate)) {
         if (d.title) setTitle(d.title);
         if (d.content) setContent(d.content);
-        if (d.date) setDate(d.date);
         if (d.question) setQuestion(d.question);
         if (typeof d.answering === "boolean") setAnswering(d.answering);
       }
@@ -299,7 +313,8 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     const d = parseDate(date);
     d.setDate(d.getDate() + days);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    setDate(iso);
+    // المذكرةُ عن يومٍ عشتَه — والغدُ مكانُه «الرسائل».
+    setDate(iso > today() ? today() : iso);
   }
 
   // Persist the current state — create the entry on first save, update it
@@ -441,11 +456,11 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   function applyEdit(edit: MarkdownEdit) {
     const ta = contentRef.current;
     if (!ta) return;
+    // التركيزُ **داخل الضغطة نفسها** لا في إطارٍ لاحق: iOS لا يُظهر لوحةَ
+    // المفاتيح لتركيزٍ خارج فعل المستخدم، فكانت اللوحةُ تنطوي مع كلّ زرّ تنسيق.
+    ta.focus();
     setContent(edit.text);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(edit.start, edit.end);
-    });
+    requestAnimationFrame(() => ta.setSelectionRange(edit.start, edit.end));
   }
   function emphasize(token: string) {
     const ta = contentRef.current;
@@ -462,6 +477,13 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     if (!ta) return;
     applyEdit(stripFormatting(content, ta.selectionStart, ta.selectionEnd));
   }
+
+  const pieces = useMemo(() => markdownPieces(content), [content]);
+  const mirrorRef = useRef<HTMLDivElement>(null);
+  // النصُّ الجديد قد يُمرِّر الحقلَ بلا حدث تمرير (لصقٌ، زرُّ تنسيق) — فتُلحَق المرآة.
+  useEffect(() => {
+    if (mirrorRef.current && contentRef.current) mirrorRef.current.scrollTop = contentRef.current.scrollTop;
+  }, [content]);
 
   const titleIdeas = useMemo(
     () => suggestTitles(content, date, answering ? question : undefined),
@@ -697,7 +719,8 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 <input
                   type="date"
                   value={date}
-                  onChange={(e) => setDate(e.target.value)}
+                  max={today()}
+                  onChange={(e) => { if (e.target.value) setDate(e.target.value > today() ? today() : e.target.value); }}
                   aria-label="اختر تاريخ المذكرة"
                   lang="ar"
                   dir="rtl"
@@ -705,7 +728,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 <div className="mdr-journal-date-actions">
                   <button type="button" onClick={() => setDate(today())} className={date === today() ? "is-active" : ""}>اليوم</button>
                   <button type="button" onClick={() => shiftDate(-1)}>اليوم السابق</button>
-                  <button type="button" onClick={() => shiftDate(1)}>اليوم التالي</button>
+                  <button type="button" onClick={() => shiftDate(1)} disabled={date >= today()}>اليوم التالي</button>
                 </div>
               </div>
             </details>
@@ -751,19 +774,46 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
                 { icon: Quote, label: "اقتباس", action: () => blockPrefix("> ") },
                 { icon: RemoveFormatting, label: "عادي", action: clearFormatting },
               ].map((tool) => (
-                <button key={tool.label} type="button" onClick={tool.action} aria-label={tool.label} title={tool.label} className="press">
+                <button
+                  key={tool.label}
+                  type="button"
+                  // لا يسرق الزرُّ التركيزَ من الورقة: يبقى التحديدُ واللوحةُ كما هما.
+                  onPointerDown={(e) => e.preventDefault()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={tool.action}
+                  aria-label={tool.label}
+                  title={tool.label}
+                  className="press"
+                >
                   <tool.icon size={15} aria-hidden="true" />
                   <span>{tool.label}</span>
                 </button>
               ))}
             </div>
+            {/* الورقةُ طبقتان: الحقلُ الحقيقيّ بحبرٍ شفّاف (المؤشّرُ والتحديدُ
+                ولوحةُ المفاتيح له)، وفوقه مرآةٌ بالنصّ نفسِه منسَّقاً — فيظهر
+                العريضُ عريضاً وأنت تكتب بدل نجمتين حول الكلمة. */}
+            <div className="mdr-journal-writing-wrap">
+            {/* `data-digits="latin"`: مُحوِّلُ الأرقام العامّ (`IndicDigits`) يتخطّى
+                الحقلَ ويحوّل ما سواه، فكان «10» في الحقل يصير «١٠» في المرآة —
+                عرضٌ آخر يُزيح السطرَ كلَّه عن المؤشّر. المرآةُ تعرض ما في الحقل حرفاً. */}
+            <div ref={mirrorRef} className="mdr-journal-writing-field mdr-journal-writing-mirror" aria-hidden="true" dir="rtl" data-digits="latin">
+              {pieces.map((piece, i) =>
+                piece.kinds.length
+                  ? <span key={i} className={piece.kinds.map((k) => `md-${k}`).join(" ")}>{piece.text}</span>
+                  : piece.text
+              )}
+              {/* سطرٌ أخير فارغ يحتاج حرفاً ليُحسب ارتفاعُه كما يحسبه الحقل. */}
+              {"\u200b"}
+            </div>
             <textarea
               ref={contentRef}
               value={content}
+              onScroll={(e) => { if (mirrorRef.current) mirrorRef.current.scrollTop = e.currentTarget.scrollTop; }}
               onChange={(e) => setContent(expandTimeCommand(e.target.value))}
               placeholder="اكتب كما تتكلّم… هذه ورقتك."
               aria-label="نص المذكرة"
-              className="mdr-journal-writing-field"
+              className="mdr-journal-writing-field is-mirrored"
               lang="ar"
               dir="rtl"
               inputMode="text"
@@ -773,6 +823,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
               autoComplete="off"
               enterKeyHint="enter"
             />
+            </div>
             {/* العدّاد في الترويسة وحدها — كان مكرّراً هنا وفي أعلى الشاشة معاً. */}
             <div className="mdr-journal-writing-hint">
               <span>اكتب <bdi dir="ltr">/الوقت</bdi> لإدراج الساعة</span>

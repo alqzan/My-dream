@@ -16,3 +16,40 @@
   line-break: auto;
   background-attachment: local;
 }
+
+/* ===== مرآةُ التنسيق (٠٫١٫٤٦٥) — راجع `src/lib/markdownHighlight.ts` =====
+   الحقلُ يبقى هو الحقيقيّ (المؤشّر والتحديد ولوحة المفاتيح) بحبرٍ شفّاف، والمرآةُ
+   فوقه ترسم النصَّ نفسَه منسَّقاً. **كلُّ تنسيقٍ هنا لا يغيّر عرضَ حرف**: لا وزنَ
+   آخر (Black أعرضُ من Regular فيزيح ما بعده عن المؤشّر) بل حدٌّ يُسمِّك الحرف
+   في مكانه، ولا تكبيرَ للعناوين. */
+.mdr-journal-composer .mdr-journal-writing-wrap {
+  position: relative;
+  min-width: 0;
+  margin-top: 0.75rem;
+}
+.mdr-journal-composer .mdr-journal-writing-wrap .mdr-journal-writing-field { margin-top: 0; }
+.mdr-journal-composer .mdr-journal-editor textarea.is-mirrored {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.mdr-journal-composer .mdr-journal-writing-mirror {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  background: none;
+  color: var(--ink);
+  pointer-events: none;
+  user-select: none;
+}
+.mdr-journal-writing-mirror .md-mark { color: var(--ink34); }
+.mdr-journal-writing-mirror .md-bullet { color: var(--gold); }
+.mdr-journal-writing-mirror .md-bold,
+.mdr-journal-writing-mirror .md-head {
+  -webkit-text-stroke: 0.045em currentColor;
+  paint-order: stroke fill;
+}
+.mdr-journal-writing-mirror .md-head { color: var(--gold); }
+.mdr-journal-writing-mirror .md-em { font-style: italic; color: var(--ink72); }
+.mdr-journal-writing-mirror .md-quote { color: var(--ink72); }
+.mdr-journal-writing-mirror .md-strike { text-decoration: line-through; color: var(--ink52); }
