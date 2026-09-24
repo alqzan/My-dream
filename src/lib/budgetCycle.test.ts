@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lastSalaryDate, budgetCycleStart, nextSalaryDate, cycleDays, inSpendWindow,
-  spendWindow,
+  spendWindow, salaryPrompt,
 } from "./budgetCycle";
 import { budgetAlerts, projectedCycleSurplus } from "./financeOverview";
 import type { Budget, FinanceCategoryDef, Transaction } from "./types";
@@ -95,5 +95,26 @@ describe("spendWindow (اختيار المالك)", () => {
   it("يرجع بداية دورة الراتب افتراضياً وعند «salary»", () => {
     expect(spendWindow("salary", "2026-07-27", 27, "2026-07-29")).toBe("2026-07-27");
     expect(spendWindow(undefined, null, 27, "2026-07-29")).toBe("2026-07-27");
+  });
+});
+
+describe("salaryPrompt", () => {
+  it("asks once the salary day has passed without a confirmation", () => {
+    expect(salaryPrompt(27, "2026-08-27", "2026-09-27")).toBe("due");
+    expect(salaryPrompt(27, null, "2026-09-10")).toBe("due");
+  });
+  it("offers an early confirmation in the week before the salary day", () => {
+    expect(salaryPrompt(27, "2026-08-27", "2026-09-24")).toBe("early");
+    expect(salaryPrompt(27, "2026-08-27", "2026-09-19")).toBeNull();
+  });
+  it("counts an early confirmation for the coming salary — no second prompt on the day", () => {
+    expect(salaryPrompt(27, "2026-09-24", "2026-09-24")).toBeNull();
+    expect(salaryPrompt(27, "2026-09-24", "2026-09-27")).toBeNull();
+    expect(salaryPrompt(27, "2026-09-24", "2026-10-15")).toBeNull();
+    expect(salaryPrompt(27, "2026-09-24", "2026-10-27")).toBe("due");
+  });
+  it("keeps the old behaviour for an on-time confirmation", () => {
+    expect(salaryPrompt(27, "2026-09-27", "2026-09-29")).toBeNull();
+    expect(salaryPrompt(27, "2026-09-28", "2026-10-21")).toBe("early");
   });
 });

@@ -295,3 +295,23 @@ describe.skipIf(!existsSync(privateCorpusPath))("private bank-SMS corpus accepta
     expect(selectionPercent).toBeGreaterThanOrEqual(0.9);
   });
 });
+
+describe("incoming local transfer with a bank-code payer prefix", () => {
+  // صيغةُ حوالةٍ واردة كما تصل (بقيمٍ مغيّرة): «من<رمز البنك>;<الجهة>» بلا مسافة.
+  const sms = "حوالة محلية واردة بـSR 12345.67\nلـ9999\nمن0023;ACME FINANCIAL CO\n26/9/24 09:31";
+
+  it("reads the payer name after the bank code", () => {
+    const event = parseBankSmsBulk(sms, "2026-09-24").events[0];
+    expect(event?.kind).toBe("transfer_in");
+    expect(event?.amount).toBe(12345.67);
+    expect(event?.counterparty).toBe("ACME FINANCIAL CO");
+  });
+
+  it.each([
+    "إيداع رواتب\nمبلغ: 12000 SAR\nالى: 1234",
+    "Salary deposit SAR 12000 credited to account 1234",
+    "Payroll SAR 12,000.00 credited to your account",
+  ])("classifies plural and English salary wording as salary: %s", (text) => {
+    expect(parseBankSmsBulk(text, "2026-09-24").events[0]?.kind).toBe("salary");
+  });
+});

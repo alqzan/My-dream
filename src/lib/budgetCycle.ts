@@ -80,3 +80,34 @@ export function cycleLength(salaryDay: number, todayStr: string): number {
   const to = parseDate(nextSalaryDate(salaryDay, todayStr)).getTime();
   return Math.max(1, Math.round((to - from) / 86400000));
 }
+
+// ===================== متى يُسأل «نزل الراتب؟» =====================
+// كان السؤال لا يظهر إلا من يوم الراتب المحفوظ، فراتبٌ نزل قبله (قبل إجازةٍ
+// رسمية مثلاً) لا يملك المالكُ طريقاً لتأكيده — ولو أكّده لعاد السؤالُ يوم
+// الراتب فيُرحَّل الفائضُ مرّتين. فالتأكيدُ صار يُحسب لراتبٍ إن وقع قبله بأسبوعٍ
+// على الأكثر، وفي ذلك الأسبوع يُعرض عرضاً هادئاً («early») لا البانرَ كاملاً.
+export const EARLY_SALARY_DAYS = 7;
+
+function daysBefore(date: string, days: number): string {
+  const d = parseDate(date);
+  d.setDate(d.getDate() - days);
+  return toDateStr(d);
+}
+
+/**
+ * «due»: مرّ يوم الراتب ولم يُؤكَّد · «early»: الراتب خلال أسبوع ولم يُؤكَّد
+ * بعد (يُعرض خيارُ التأكيد المبكر) · `null`: لا سؤال.
+ */
+export function salaryPrompt(
+  salaryDay: number,
+  lastConfirm: string | null | undefined,
+  todayStr: string
+): "due" | "early" | null {
+  const valid = lastConfirm && /^\d{4}-\d{2}-\d{2}$/.test(lastConfirm) ? lastConfirm : null;
+  const confirmedFor = (salaryDate: string) =>
+    valid !== null && valid >= daysBefore(salaryDate, EARLY_SALARY_DAYS);
+  if (!confirmedFor(lastSalaryDate(salaryDay, todayStr))) return "due";
+  const next = nextSalaryDate(salaryDay, todayStr);
+  if (todayStr >= daysBefore(next, EARLY_SALARY_DAYS) && !confirmedFor(next)) return "early";
+  return null;
+}

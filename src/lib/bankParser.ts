@@ -451,7 +451,9 @@ function extractAccount(text: string, kind: TxnKind): string | undefined {
   return masked?.[1] ?? masked?.[2];
 }
 function extractMerchant(text: string): string { const body = normalizeDigits(text); let merchant = ""; let from = ""; const strip = (v: string) => v.replace(new RegExp(`\\b(?:${CUR})\\b.*$`, "i"), "").trim(); for (const m of body.matchAll(/(مفوتر|لدى|لـ|من|الى|إلى|at|@)\s*[:：]?\s*([^\n\r,،.؛;]+)/gi)) { const v = strip(m[2]); if (!/\p{L}/u.test(v)) continue; if (/^من$/i.test(m[1])) { if (!from) from = v; } else if (!merchant) merchant = v; } return merchant || from; }
-function extractCounterparty(text: string): string | undefined { const m = normalizeDigits(text).match(/(?:من|الى|إلى)\s*[:：]?\s*([^\n\r,،;]+)/i); return m && /\p{L}/u.test(m[1]) ? m[1].trim() : undefined; }
+// «من0023;SOKOK FINANCIAL CO»: رمزُ البنك المرسِل قبل الفاصلة المنقوطة ثمّ الاسم.
+// بلا تخطّيه كان الالتقاطُ يقف عند «0023» فلا اسمَ للجهة، فلا تُطابَق جهةُ الراتب.
+function extractCounterparty(text: string): string | undefined { const m = normalizeDigits(text).match(/(?:من|الى|إلى)\s*[:：]?\s*(?:\d{1,6}\s*;\s*)?([^\n\r,،;]+)/i); return m && /\p{L}/u.test(m[1]) ? m[1].trim() : undefined; }
 
 function addDays(date: string, days: number): string | undefined {
   if (!isValidDateKey(date)) return undefined;
@@ -532,7 +534,8 @@ function inferKind(text: string, bank?: string): TxnKind {
   if (has(MARKETING) && has(/عزيزي\s+العميل|عميلنا\s+العزيز/i) && !hasFinancialOperation && !has(INCOMING)) return "marketing";
   if (has(MARKETING) && !hasFinancialOperation && !has(INCOMING)) return "marketing";
   if (has(/استلام\s+(?:قطة|مبلغ|حوالة)|استرداد\s+(?:مبلغ|عملية)|(?:حوالة|تحويل)\s+من\s*[:：]?\s*\p{L}[^\n\r]*(?:مبلغ|SAR|ريال)/iu)) return "refund";
-  if (has(/راتب/i)) return "salary";
+  // «رواتب» لا تحوي «راتب» متّصلةً، والبنوك تكتب الجمعَ والإنجليزية أيضاً.
+  if (has(/راتب|رواتب|\bsalary\b|\bpayroll\b/i)) return "salary";
   if (has(/حوالة\s+(?:واردة|داخلية\s+واردة|محلية\s+واردة)|تحويل\s+وارد/i)) return "transfer_in";
   if (has(INCOMING)) return has(/إيداع|ايداع/i) ? "deposit" : "transfer_in";
   // A bare "خصم" is only a purchase when it carries an account/card debit

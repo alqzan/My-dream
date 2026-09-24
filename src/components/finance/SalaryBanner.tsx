@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, reserveBalance, round2, today } from "@/lib/utils";
 import { SURPLUS_FUND_NAME } from "@/lib/types";
-import { cycleLength } from "@/lib/budgetCycle";
+import { cycleLength, salaryPrompt } from "@/lib/budgetCycle";
 import { findReserveByRole } from "@/lib/reserveFunds";
 import { cycleOpening, type CycleOpening as Opening } from "@/lib/cycleOpening";
 import { CycleOpening } from "@/components/finance/CycleOpening";
@@ -11,20 +11,6 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Confetti } from "@/components/ui/Confetti";
 import { PartyPopper } from "lucide-react";
-
-// هل حان سؤال «نزل الراتب؟» — من يوم الراتب وحتى يؤكد المستخدم.
-function salaryDue(salaryDay: number, lastConfirm: string | null, todayStr: string): boolean {
-  const [y, m, d] = todayStr.split("-").map(Number);
-  // أحدث تاريخ راتب في/قبل اليوم
-  let saly = y, salm = m;
-  if (d < salaryDay) {
-    salm = m === 1 ? 12 : m - 1;
-    saly = m === 1 ? y - 1 : y;
-  }
-  const lastDayOfMonth = new Date(saly, salm, 0).getDate();
-  const salaryDate = `${saly}-${String(salm).padStart(2, "0")}-${String(Math.min(salaryDay, lastDayOfMonth)).padStart(2, "0")}`;
-  return !lastConfirm || lastConfirm < salaryDate;
-}
 
 // بانر «نزل الراتب؟ 🎉»: عند التأكيد يتحول باقي الميزانية اليومية
 // المتراكمة إلى مظروف «الفوائض» وتتصفّر كل العدادات.
@@ -47,6 +33,8 @@ export function SalaryBanner() {
   // بعد التأكيد تكون الخطط قد نُفّذت ورُفع ما بلغ غايته، فإعادةُ حسابه حينئذٍ
   // تُري دورةً أخرى لا الدورةَ التي بدأت للتوّ. وهو نفسُه ما وقع (`planCycleFunding`).
   const [openedWith, setOpenedWith] = useState<Opening | null>(null);
+  // راتبٌ نزل قبل موعده: يفتح المالكُ البانرَ نفسه بضغطة (`salaryPrompt` = «early»).
+  const [earlyOpen, setEarlyOpen] = useState(false);
 
   const todayStr = today();
   const surplus = findReserveByRole(reserves, "surplus");
@@ -64,7 +52,8 @@ export function SalaryBanner() {
     [monthlyIncome, dailyBudget, reserves, transactions, salaryDay, todayStr, surplus]
   );
   if (!dailyBudget) return null;
-  const due = salaryDue(salaryDay ?? 27, lastSalaryConfirm ?? null, todayStr);
+  const prompt = salaryPrompt(salaryDay ?? 27, lastSalaryConfirm ?? null, todayStr);
+  const due = prompt === "due" || (prompt === "early" && earlyOpen);
 
   const balance = computeDailyBudgetStatus(dailyBudget, transactions).balance;
   const leftover = Math.max(0, balance);
@@ -80,10 +69,20 @@ export function SalaryBanner() {
     setOpenedWith(opening);
     setCelebration(confirmSalary(carryOverride));
     setCarryEdit(null);
+    setEarlyOpen(false);
   }
 
   return (
     <>
+      {prompt === "early" && !earlyOpen && (
+        <button
+          type="button"
+          onClick={() => setEarlyOpen(true)}
+          className="w-full rounded-2xl border border-[#d99e33]/40 bg-amber-50 px-4 py-2.5 text-start text-sm text-amber-800 dark:text-amber-300 press"
+        >
+          نزل راتبك قبل موعده؟ <b className="underline underline-offset-4">أكّده الآن</b>
+        </button>
+      )}
       {due && (
         <div className="rounded-2xl p-4 text-white bg-gradient-to-l from-[#8a5a18] via-[#b07d20] to-[#d99e33] card-shadow shine animate-fade-up">
           <div className="flex items-center gap-3">
