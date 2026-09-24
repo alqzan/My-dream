@@ -2,6 +2,12 @@
 node_modules/
 next-env.d.ts
 out/
+out-native/
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+ios/**/xcuserdata/
+ios/App/App/capacitor.config.json
 .env.local
 .env*.local
 .firebase/
