@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activeTrip, activeTripOf, isTripEligibleFund, lastEndedTrip, tripSplitFor, tripSummary, pastTrips } from "./trip";
+import { activeTrip, activeTripOf, isTripEligibleFund, lastEndedTrip, tripSplitFor, tripSummary, pastTrips, settleRunningTrips } from "./trip";
 import { GENERAL_FUND_NAME, SURPLUS_FUND_NAME, type ReserveFund, type Transaction, type Trip } from "./types";
 import { reserveBalance, reserveShare } from "./utils";
 
@@ -179,5 +179,28 @@ describe("pastTrips — سجلّ الرحلات", () => {
     const live = fund({ id: "f-live", trips: [t("tr-l", "2026-03-10")] });
     const rows = pastTrips([older, trip, live, fund({ id: "f-plain" })]);
     expect(rows.map((r) => r.trip.id)).toEqual(["tr-1", "tr-o"]);
+  });
+});
+
+// ٠٫١٫٤٧١: جهازان بدأ كلٌّ منهما رحلةً وهو بلا اتصال.
+describe("settleRunningTrips — واحدةٌ جاريةٌ بعد الدمج", () => {
+  const fund = (id: string, trips: Trip[]): ReserveFund =>
+    ({ id, name: id, icon: "", color: "", createdAt: "2026-01-01", deposits: [], trips }) as ReserveFund;
+
+  it("تبقى الأحدثُ بدءاً وتُنهى الأخرى يومَ بدئها — عبر المظاريف وداخل المظروف", () => {
+    const out = settleRunningTrips([
+      fund("X", [{ id: "a", startedAt: "2026-09-10" }, { id: "b", startedAt: "2026-09-12" }]),
+      fund("Z", [{ id: "c", startedAt: "2026-09-11" }]),
+    ]);
+    expect(activeTrip(out)?.trip.id).toBe("b");
+    const all = out.flatMap((f) => f.trips ?? []);
+    expect(all.filter((t) => !t.endedAt).map((t) => t.id)).toEqual(["b"]);
+    expect(all.find((t) => t.id === "a")?.endedAt).toBe("2026-09-12");
+    expect(all.find((t) => t.id === "c")?.endedAt).toBe("2026-09-12");
+  });
+
+  it("لا تعارض ⇒ المصفوفةُ نفسُها", () => {
+    const input = [fund("X", [{ id: "a", startedAt: "2026-09-10" }])];
+    expect(settleRunningTrips(input)).toBe(input);
   });
 });

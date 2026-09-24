@@ -54,7 +54,7 @@ const ID_COLLECTIONS = [
 // and mergeAppData). Stamping lets the merge pick the value from whichever
 // device set it last — so clearing one to null propagates instead of losing to
 // the other device's stale non-null copy.
-const SINGLETON_FIELDS = [
+export const SINGLETON_FIELDS = [
   "dailyBudget", "monthlyIncome", "readingGoal", "salaryDay",
   "lastSalaryConfirm", "frozenHabits", "budgetWindow", "autoOffset", "qadaBacklog", "quranKhatma",
   "ownerAliases", "ownerWallets", "ownerAccounts", "salaryPayers", "payerAliases", "cashbackEnabled", "cashbackEnvelopeId",

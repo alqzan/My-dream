@@ -1,9 +1,9 @@
 "use client";
 import { useRef, useState } from "react";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, SINGLETON_FIELDS } from "@/lib/store";
 import { today, toIndicDigits } from "@/lib/utils";
 import { fetchInlineMedia, getLocalInlineMedia, mergeAppData } from "@/lib/sync";
-import { replaceTombstones } from "@/lib/merge";
+import { replaceTombstones, restampForReplace } from "@/lib/merge";
 import { saveFile } from "@/lib/platform/files";
 import { prefSet } from "@/lib/platform/prefs";
 import { getMediaAuthKey, getSyncSpace } from "@/lib/firebase";
@@ -463,12 +463,22 @@ export function BackupCard() {
     // (والدمجُ لا شواهدَ له: هو إبقاءُ الطرفين عمداً.)
     const next = mode === "merge"
       ? mergeAppData(before, pending)
-      : { ...pending, deleted: { ...(pending.deleted ?? {}), ...replaceTombstones(before, pending) } };
+      : (() => {
+          // الاستبدالُ تعديلٌ جديد لا استرجاعُ أختامٍ قديمة (`restampForReplace`).
+          const stamped = restampForReplace(pending, SINGLETON_FIELDS);
+          return { ...stamped, deleted: { ...(stamped.deleted ?? {}), ...replaceTombstones(before, pending) } };
+        })();
     hydrate(next);
     setPending(null);
     setPendingMeta(null);
     // والتراجعُ يرفعها معه: استعادةُ لقطةِ ما قبل الاستبدال تُعيد `deleted` كما كانت.
-    showUndo(mode === "merge" ? "دمجت النسخة الاحتياطية" : "استعدت النسخة الاحتياطية", () => hydrate(before));
+    // وتراجعُ الاستبدال يُختم مثلَه: لو عادت اللقطةُ بأختامها القديمة لأسقطتها
+    // شواهدُ الاستبدال التي وصلت السحابةَ قبل الضغط على «تراجع».
+    showUndo(mode === "merge" ? "دمجت النسخة الاحتياطية" : "استعدت النسخة الاحتياطية", () =>
+      hydrate(mode === "merge" ? before : (() => {
+        const back = restampForReplace(before, SINGLETON_FIELDS);
+        return { ...back, deleted: { ...(back.deleted ?? {}), ...replaceTombstones(next, before) } };
+      })()));
   }
 
   return (

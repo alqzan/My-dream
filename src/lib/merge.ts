@@ -7,6 +7,7 @@ import { EMPTY_HIFZ } from "./types";
 import { isOffsetDepositId } from "./budgetFlow";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
 import { mergeQuickLines } from "./journalQuickLine";
+import { settleRunningTrips } from "./trip";
 import {
   canonicalizeReserveFunds,
   normalizeReserveFunds,
@@ -106,6 +107,43 @@ export function replaceTombstones(
   for (const d of before.quranWird ?? []) if (!keptWird.has(d)) gone(wirdTombKey(d));
 
   return out;
+}
+
+/** يختم نسخةً مُستعادةً بالاستبدال **كتعديلٍ جديد** (٠٫١٫٤٧١).
+ *
+ *  `hydrate` لا يختم (`rawSet`)، فكانت العناصرُ المستعادة تحمل أختامَ النسخة
+ *  القديمة: عنصرٌ حُذف خطأً فاستُعيد من نسخة الأسبوع الماضي يسقط ثانيةً في أوّل
+ *  دمج لأنّ شاهدَ حذفه على الجهاز الآخر أحدثُ من طابعه، وكلُّ ما عدّله الجهازُ
+ *  الآخر بعد تاريخ النسخة يغلب القيمةَ المستعادة. فتبدو الاستعادةُ ناجحةً ثمّ
+ *  تنتقض بصمت. و«استبدل» معناه أنّ هذه النسخةَ هي الحقيقة الآن — على الأجهزة كلِّها.
+ *
+ *  فيُختم كلُّ عنصرٍ مفتاحُه `id` بـ`now`، وكلُّ إعدادٍ مفرد (`singletonFields`
+ *  + ما في `fieldUpdatedAt`)، وتُرفع شواهدُ الحذف عن المعرّفات الحاضرة.
+ *  **حدٌّ معروف:** المجموعاتُ الداخلية (إيداعات · سجلّات العادات · الوِرد)
+ *  شواهدُها تغلب بلا طابع، فما حُذف منها على جهازٍ آخر يبقى محذوفاً. */
+export function restampForReplace<T extends Partial<AppData>>(
+  data: T,
+  singletonFields: readonly string[],
+  now = Date.now()
+): T {
+  const out: Record<string, unknown> = { ...data };
+  const present = new Set<string>();
+  for (const coll of ID_KEYED) {
+    const list = data[coll];
+    if (!Array.isArray(list)) continue;
+    out[coll] = (list as { id: string }[]).map((x) => {
+      if (!x?.id) return x;
+      present.add(x.id);
+      return { ...x, updatedAt: now };
+    });
+  }
+  const deleted = { ...(data.deleted ?? {}) };
+  for (const id of present) delete deleted[id];
+  out.deleted = deleted;
+  const stamps: Record<string, number> = {};
+  for (const k of [...singletonFields, ...Object.keys(data.fieldUpdatedAt ?? {})]) stamps[k] = now;
+  out.fieldUpdatedAt = stamps;
+  return out as T;
 }
 
 // Per-key edit stamps that live in `fieldUpdatedAt` next to the singleton
@@ -470,7 +508,8 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
 
     return { ...f, deposits, ...(trips.length ? { trips } : {}) };
   }));
-  const reserves = reserveMerge.reserves;
+  // جهازان بدأ كلٌّ منهما رحلةً بلا اتصال ⇒ واحدةٌ جاريةٌ فقط بعد الدمج.
+  const reserves = settleRunningTrips(reserveMerge.reserves);
   const liveFundIds = new Set(reserves.map((fund) => fund.id));
   // Apply role aliases before the split cap/duplicate normalization. A fund
   // deleted on one device can still be referenced by a stale transaction on

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  replaceTombstones, mergeAppData, applyTombstones,
+  replaceTombstones, mergeAppData, applyTombstones, restampForReplace,
   budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey,
 } from "./merge";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
@@ -113,3 +113,38 @@ describe("الأثرُ الحقيقيّ: الجهازُ الآخر لا يُعي
     expect(Object.keys(before.deleted)).toEqual([]); // العودةُ إليها تُسقط الشواهد
   });
 });
+
+// ٠٫١٫٤٧١: الاستعادةُ من نسخةٍ احتياطية كانت تنتقض على جهازٍ ثانٍ — العناصرُ
+// المستعادة تحمل أختامَ النسخة، فيُسقطها شاهدُ حذفٍ أحدث ويغلبها تعديلٌ أحدث.
+describe("restampForReplace — الاستبدالُ يثبت على الأجهزة كلّها", () => {
+  const now = 5_000_000;
+
+  it("ما حُذف خطأً ثمّ استُعيد لا يُسقطه شاهدُ الجهاز الآخر", () => {
+    const restoredBackup = base({ transactions: [{ ...tx("X"), updatedAt: 100 }], deleted: {} });
+    const local = restampForReplace(restoredBackup, ["salaryDay"], now);
+    const ipad = base({ transactions: [], deleted: { X: 1_000 }, lastUpdated: "2026-09-02T00:00:00.000Z" });
+    const merged = mergeAppData(local, ipad);
+    expect(merged.transactions.map((t) => t.id)).toEqual(["X"]);
+  });
+
+  it("القيمةُ المستعادة تغلب تعديلاً أقدمَ منها على الجهاز الآخر، والإعداداتُ كذلك", () => {
+    const local = restampForReplace(
+      base({ transactions: [{ ...tx("T"), note: "من النسخة", updatedAt: 100 }], salaryDay: 25, fieldUpdatedAt: { salaryDay: 100 } }),
+      ["salaryDay"],
+      now,
+    );
+    const ipad = base({
+      transactions: [{ ...tx("T"), note: "تعديلٌ لاحق", updatedAt: 2_000 }],
+      salaryDay: 28, fieldUpdatedAt: { salaryDay: 2_000 }, lastUpdated: "2026-09-02T00:00:00.000Z",
+    });
+    const merged = mergeAppData(ipad, local);
+    expect(merged.transactions[0].note).toBe("من النسخة");
+    expect(merged.salaryDay).toBe(25);
+  });
+
+  it("يرفع الشاهدَ عن المعرّف الحاضر ويُبقي شواهدَ الغائب", () => {
+    const out = restampForReplace(base({ transactions: [tx("A")], deleted: { A: 1, B: 1 } }), [], now);
+    expect(out.deleted).toEqual({ B: 1 });
+  });
+});
+

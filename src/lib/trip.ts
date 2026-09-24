@@ -32,6 +32,37 @@ export function activeTripOf(fund: ReserveFund): Trip | null {
   return fund.trips?.find((t) => t.startedAt && !t.endedAt) ?? null;
 }
 
+/**
+ * «واحدةٌ جاريةٌ في كلّ وقت» بعد الدمج (٠٫١٫٤٧١). `startTrip` يُنهي الجارية على
+ * الجهاز نفسِه، لكنّ جهازين بدأ كلٌّ منهما رحلةً وهو بلا اتصال يتّحدان برحلتين
+ * جاريتين: يُحمَّل الصرفُ على أوّلهما في المصفوفة، وتبقى الأخرى «جاريةً» ونافذةُ
+ * تقريرها تكبر كلَّ يوم. الأحدثُ بدءاً تبقى (هي آخرُ ما قصده المالك)، والباقيات
+ * تُنهى يومَ بدئها — كما كان سيفعل `startTrip` لو رأى الجهازُ الأخرى.
+ * يُرجع المصفوفةَ نفسَها حين لا تعارض.
+ */
+export function settleRunningTrips(reserves: ReserveFund[]): ReserveFund[] {
+  let winner: { fundId: string; trip: Trip } | null = null;
+  let running = 0;
+  for (const fund of reserves) {
+    if (!isTripEligibleFund(fund)) continue;
+    // لا `activeTripOf`: قد يحمل المظروفُ الواحدُ جاريتين من جهازين.
+    for (const trip of fund.trips ?? []) {
+      if (!trip.startedAt || trip.endedAt) continue;
+      running++;
+      if (!winner || trip.startedAt > winner.trip.startedAt) winner = { fundId: fund.id, trip };
+    }
+  }
+  if (!winner || running < 2) return reserves;
+  const keep = winner;
+  return reserves.map((fund) => {
+    if (!isTripEligibleFund(fund) || !fund.trips?.some((t) => t.startedAt && !t.endedAt && t !== keep.trip)) return fund;
+    return {
+      ...fund,
+      trips: fund.trips.map((t) => (t.startedAt && !t.endedAt && t !== keep.trip ? { ...t, endedAt: keep.trip.startedAt } : t)),
+    };
+  });
+}
+
 /** الرحلةُ الجارية في المظاريف كلِّها — واحدةٌ فقط في كلّ وقت. */
 export function activeTrip(reserves: ReserveFund[]): { fund: ReserveFund; trip: Trip } | null {
   for (const fund of reserves) {
