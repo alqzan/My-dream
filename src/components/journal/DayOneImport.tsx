@@ -87,8 +87,16 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
   // مباشرةً، وتُفرَّغ الحافظة تلقائياً بعد قليل.
   async function handleCopyConnection() {
     if (!syncSpace) return;
+    const mediaKey = getMediaAuthKey() ?? syncSpace;
+    // **في v1 مفتاحُ الوسائط هو مفتاحُ المزامنة نفسُه** (`docs/KEY-SEPARATION.md`):
+    // ما يُنسخ هنا يفتح المذكراتِ والمالَ كلَّها، لا الصورَ وحدها، وحافظةُ Apple
+    // تتزامن إلى أجهزتك الأخرى. فلا يُنسخ بلا علمٍ صريح (٠٫١٫٤٦٩).
+    if (
+      mediaKey === syncSpace &&
+      !window.confirm("سيُنسخ مفتاحُ المزامنة الكامل — يفتح كلَّ مذكراتك ومالك، لا الصورَ وحدها. الصقه في مستورد الذكريات فوراً ولا تشاركه. أتابع؟")
+    ) return;
     setConnectCopying(true);
-    const payload = buildMemoryImporterConnection(getR2WorkerUrl(), getMediaAuthKey() ?? syncSpace);
+    const payload = buildMemoryImporterConnection(getR2WorkerUrl(), mediaKey);
     const text = JSON.stringify(payload);
     try {
       await writeClipboardText(text);

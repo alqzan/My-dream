@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { today } from "@/lib/utils";
+import { today, toIndicDigits } from "@/lib/utils";
 import { fetchInlineMedia, getLocalInlineMedia, mergeAppData } from "@/lib/sync";
 import { replaceTombstones } from "@/lib/merge";
 import { saveFile } from "@/lib/platform/files";
@@ -118,6 +118,7 @@ export async function embedAllMedia(
 // 2 = metadata/counts/checksum; 1/absent = legacy flat AppData). All remain
 // restorable because the payload itself is still the same flat AppData shape.
 const BACKUP_VERSION = 3;
+const MIN_EXPORT_PASSWORD = 6;
 const SCHEMA_VERSION = 1;
 
 interface BackupMeta {
@@ -303,6 +304,15 @@ export function BackupCard() {
   const [importPassword, setImportPassword] = useState("");
 
   async function exportJson() {
+    // **«مشفّرة» لا تصير صريحةً بصمت** (٠٫١٫٤٦٩): كلمةُ مرورٍ فارغةٌ كانت تُسقط
+    // التشفير وتُخرج كلَّ المذكرات والمال نصّاً صريحاً إلى iCloud أو المشاركة،
+    // وعلامتُها الوحيدة اسمُ ملفٍّ بلا «-مشفّر». وأقلُّ من ستّة أحرفٍ يُكسر من الملف
+    // دون جهاز المالك، فلا يستحقّ اسمَ التشفير.
+    if (encrypt && exportPassword.trim().length < MIN_EXPORT_PASSWORD) {
+      setError(`كلمة مرور التشفير ${toIndicDigits(String(MIN_EXPORT_PASSWORD))} أحرفٍ على الأقل — أو ألغِ التشفير صراحةً`);
+      return;
+    }
+    setError("");
     const raw = snapshot();
     setExporting({ done: 0, total: raw.journalEntries.length });
     const space = getSyncSpace();
@@ -333,7 +343,7 @@ export function BackupCard() {
       checksum: hashString(JSON.stringify(data)),
     };
     const withMeta = { __meta: meta, ...data };
-    const useEnc = encrypt && exportPassword.trim().length > 0;
+    const useEnc = encrypt;
     // التشفيرُ يحتفظ بالنسخة أربعَ مرّاتٍ في الذاكرة معاً (نصٌّ · بايتات ·
     // مشفَّر · base64 يتضخّم ٣٣٪)، ونسخةٌ فيها صورُ سنواتٍ قد تبلغ مئاتِ
     // الميغابايت — فينفد ذاكرةُ Safari على الجوّال ويسقط الزرُّ صامتاً بلا

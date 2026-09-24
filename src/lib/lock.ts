@@ -23,10 +23,11 @@
 // **وأوّلُ حارسٍ لهذا الملفّ (٠٫١٫٤٢٨).** كان الوحيد في `src/lib` الذي يلمس
 // `localStorage`/`sessionStorage` **بلا `typeof window`** — يتّكل على `try/catch`
 // وحده لابتلاع `ReferenceError`. صار خلف واجهة المنصّة كبقيّة التفضيلات.
-import { prefGet, prefGetJSON, prefRemove, prefSetJSON, sessionGet, sessionSet } from "./platform/prefs";
+import { prefGet, prefGetJSON, prefRemove, prefSetJSON, sessionGet, sessionRemove, sessionSet } from "./platform/prefs";
 
 const PIN_KEY = "madar-lock-pin";
 const UNLOCK_KEY = "madar-unlocked";
+const HIDDEN_AT_KEY = "madar-hidden-at";
 const THROTTLE_KEY = "madar-lock-attempts";
 
 export const PIN_LENGTH = 4;
@@ -202,4 +203,34 @@ export function isUnlocked(): boolean {
 
 export function markUnlocked(): void {
   sessionSet(UNLOCK_KEY, "1");
+  sessionRemove(HIDDEN_AT_KEY);
+}
+
+// ===================== القفلُ يعود بعد الغياب (٠٫١٫٤٦٩) =====================
+// الفتحُ محفوظٌ في `sessionStorage`، وهي على iOS تعيش ما عاشت عمليّةُ
+// WKWebView — ساعاتٍ والتطبيقُ في الخلفية. فمن فتحه صباحاً ثمّ ترك الجوّال
+// كان يُسلِّم مذكراته وماله لأوّل من يعود إليه، وهو بالضبط «من يمسك جوّالك
+// لحظةً» الذي وُجد القفلُ له. الآن: غيابٌ أطولُ من المهلة يُعيد القفل.
+// والمهلةُ لا صفر: الكاميرا ومنتقي الملفّات وورقةُ المشاركة تُخفي الصفحةَ لحظاتٍ،
+// وقفلٌ يقطع إرفاقَ صورةٍ أسوأُ من دقيقةٍ بلا قفل.
+export const RELOCK_AFTER_MS = 60_000;
+
+/** تُنادى حين تختفي الصفحة: يُسجَّل وقتُ الغياب. */
+export function markHidden(now = Date.now()): void {
+  if (!hasPin() || !isUnlocked()) return;
+  sessionSet(HIDDEN_AT_KEY, String(now));
+}
+
+/**
+ * تُنادى حين تعود الصفحة: `true` إن طال الغيابُ فأُعيد القفل (ويُمحى الفتح).
+ * غيابٌ قصيرٌ يُنسى فلا يتراكم مع غيابٍ لاحق.
+ */
+export function relockIfAway(now = Date.now()): boolean {
+  const raw = sessionGet(HIDDEN_AT_KEY);
+  sessionRemove(HIDDEN_AT_KEY);
+  if (!raw || !hasPin()) return false;
+  const hiddenAt = Number(raw);
+  if (!Number.isFinite(hiddenAt) || now - hiddenAt < RELOCK_AFTER_MS) return false;
+  sessionRemove(UNLOCK_KEY);
+  return true;
 }

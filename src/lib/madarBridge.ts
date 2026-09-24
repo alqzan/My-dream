@@ -563,7 +563,9 @@ export function chunkEntries<T>(items: T[], size = MADAR_IMPORT_BATCH_SIZE): T[]
 // syncSpace ولا formatVersion). لا سرّية في عنوان الـWorker (عام أصلاً)، لكن
 // مفتاح الوسائط سرّي: هذه الوحدة لا تطبعه ولا تُظهره بأي شكل — فقط تُعيده
 // كحقلٍ في كائن يتولّى المستدعي نسخه للحافظة مباشرة (لا console.log، ولا
-// عرضٍ في أي عنصر نصّي بالواجهة).
+// عرضٍ في أي عنصر نصّي بالواجهة). **وتنبيه:** ما دامت الأجهزةُ على v1
+// (`docs/KEY-SEPARATION.md`) فـ«مفتاح الوسائط» هو مفتاحُ المزامنة الكامل نفسُه
+// ويفتح Firestore كلَّه — لذا يطلب الزرُّ تأكيداً صريحاً قبل النسخ.
 export const MADAR_CONNECTION_VERSION = 1;
 
 export interface MemoryImporterConnection {

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-import { hasPin, isUnlocked, verifyPin, markUnlocked, lockedForMs, LockThrottledError, PIN_LENGTH } from "@/lib/lock";
+import { hasPin, isUnlocked, verifyPin, markUnlocked, markHidden, relockIfAway, lockedForMs, LockThrottledError, PIN_LENGTH } from "@/lib/lock";
 import { authenticateBiometricUnlock, canUnlockWithBiometrics } from "@/lib/platform/biometric";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { Delete, Lock } from "lucide-react";
@@ -26,6 +26,27 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
   // ثوانٍ باقيةٌ من التأخير المتصاعد بعد محاولاتٍ خاطئة. تُعرض ولا تُخفى:
   // لوحةٌ لا تستجيب بلا سبب أسوأُ من انتظارٍ معلوم.
   const [waitSec, setWaitSec] = useState(() => Math.ceil(lockedForMs() / 1000));
+
+  // أُعيد القفلُ بعد غياب ⇒ الأبناءُ مُركَّبون أصلاً فيبقون (خاملين تحت شاشة
+  // القفل) — مذكرةٌ تُكتب أو صورةٌ تُرفق لا تضيع بإعادة التركيب. والقفلُ عند
+  // الإقلاع يبقى كما كان: لا يُرسم شيءٌ من البيانات قبل الفتح.
+  const [hasBeenOpen, setHasBeenOpen] = useState(() => !locked);
+  useEffect(() => {
+    if (!locked) setHasBeenOpen(true);
+  }, [locked]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") markHidden();
+      else if (relockIfAway()) {
+        setDigits("");
+        setError(false);
+        setLocked(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   useEffect(() => {
     if (waitSec <= 0) return;
@@ -93,7 +114,9 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
     return () => { active = false; };
   }, [digits]);
 
-  if (!locked) return <>{children}</>;
+  // شكلُ الشجرة ثابتٌ بعد أوّل فتح (غلافٌ `contents` لا يمسّ التخطيط) كي لا
+  // يُعاد تركيبُ التطبيق كلِّه حين يُقفل ثمّ يُفتح.
+  if (!locked) return <><div style={{ display: "contents" }}>{children}</div>{null}</>;
 
   const press = (n: string) => {
     if (waitSec > 0) { buzz(40); return; }
@@ -102,7 +125,7 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
   };
   const back = () => setDigits((d) => d.slice(0, -1));
 
-  return (
+  const screen = (
     <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-[#f3ecdd] dark:bg-[#161009] px-8">
       <BrandMark size={44} />
       <div className="mt-4 flex items-center gap-2 text-gray-500">
@@ -185,5 +208,14 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
         </p>
       )}
     </div>
+  );
+
+  if (!hasBeenOpen) return screen;
+  return (
+    <>
+      {/* `inert` نصّاً: React 18 لا يعرف الخاصية فيُسقط القيمة المنطقية */}
+      <div style={{ display: "contents" }} aria-hidden {...({ inert: "" } as object)}>{children}</div>
+      {screen}
+    </>
   );
 }
