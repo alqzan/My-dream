@@ -4,7 +4,7 @@
 // (local, cloud) → merged AppData; touches no I/O.
 import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState, KhushuLevel, PrayerName } from "./types";
 import { EMPTY_HIFZ } from "./types";
-import { isOffsetDepositId } from "./budgetFlow";
+import { isOffsetDepositId, reconcileOffsetCredit } from "./budgetFlow";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
 import { mergeQuickLines } from "./journalQuickLine";
 import { settleRunningTrips } from "./trip";
@@ -510,6 +510,12 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
   }));
   // جهازان بدأ كلٌّ منهما رحلةً بلا اتصال ⇒ واحدةٌ جاريةٌ فقط بعد الدمج.
   const reserves = settleRunningTrips(reserveMerge.reserves);
+  const pickedBudget = pickSingleton("dailyBudget", primary.dailyBudget ?? secondary.dailyBudget);
+  const dailyBudget = reconcileOffsetCredit(
+    pickedBudget,
+    pickedBudget === primary.dailyBudget ? primaryReserves : secondaryReserves,
+    reserves,
+  ) ?? null;
   const liveFundIds = new Set(reserves.map((fund) => fund.id));
   // Apply role aliases before the split cap/duplicate normalization. A fund
   // deleted on one device can still be referenced by a stale transaction on
@@ -721,7 +727,8 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     // الإعدادات المفردة: يفوز آخر جهازٍ ضبطها (عبر fieldUpdatedAt)، فيسري المسح
     // إلى null بدل أن يطغى عليه قيمةٌ قديمة من الجهاز الآخر. عند غياب الطوابع
     // (بيانات قديمة) نرجع للسلوك السابق (non-null) فلا يتراجع شيء.
-    dailyBudget: pickSingleton("dailyBudget", primary.dailyBudget ?? secondary.dailyBudget),
+    // ورصيدُ اليومية يُطابَق مع إيداعات المقاصة المدموجة (`reconcileOffsetCredit`).
+    dailyBudget,
     monthlyIncome: pickSingleton("monthlyIncome", primary.monthlyIncome ?? secondary.monthlyIncome),
     // الرسائل المستقبلية: فتحُ رسالةٍ (opened/openedDate) تعديلٌ على عنصرٍ قائم
     // — يفوز بطابعه فلا تعود «مغلقة» من نسخةٍ قديمة على الجهاز الآخر.

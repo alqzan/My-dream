@@ -92,3 +92,31 @@ describe("جهازان يقاصّان العجزَ نفسَه ⇒ خصمٌ وا�
     expect(manuals).toHaveLength(2); // سحبان يدويّان في يومٍ واحد حدثان
   });
 });
+
+// ٠٫١٫٤٧٢: الإيداعُ يُحسم بالأكبر و`carryAdjust` بآخر ضابط — فكانا يفترقان.
+describe("اليوميةُ تطابق إيداعَ المقاصة المدموج", () => {
+  const budget = (carryAdjust: number) => ({ amount: 100, startDate: "2026-09-01", carryAdjust });
+  const phone = () => base({
+    reserves: [fund([withdrawal(50)])], dailyBudget: budget(-50),
+    fieldUpdatedAt: { dailyBudget: 1_000 }, lastUpdated: "2026-09-14T10:00:00.000Z",
+  });
+  const ipad = () => base({
+    reserves: [fund([withdrawal(30)])], dailyBudget: budget(-30),
+    fieldUpdatedAt: { dailyBudget: 2_000 }, lastUpdated: "2026-09-14T09:00:00.000Z",
+  });
+
+  it("الجوّال سحب ٥٠ والآيباد ٣٠ (ضبطُه أحدث) ⇒ الإيداعُ ٥٠ واليوميةُ −٥٠", () => {
+    for (const merged of [mergeAppData(phone(), ipad()), mergeAppData(ipad(), phone())]) {
+      const w = merged.reserves[0].deposits.find((d) => isOffsetDepositId(d.id))!;
+      expect(w.amount).toBe(-50);
+      expect(merged.dailyBudget?.carryAdjust).toBe(-50);
+    }
+  });
+
+  it("الدمجُ المتكرّر لا يُراكم التصحيح", () => {
+    const once = mergeAppData(phone(), ipad());
+    const twice = mergeAppData(once, ipad());
+    expect(twice.dailyBudget?.carryAdjust).toBe(-50);
+    expect(mergeAppData(twice, once).dailyBudget?.carryAdjust).toBe(-50);
+  });
+});

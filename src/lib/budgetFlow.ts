@@ -43,6 +43,45 @@ export function isOffsetDepositId(id: string): boolean {
   return id.startsWith("offset:");
 }
 
+/** مجموعُ ما غطّته المقاصةُ التلقائية في اليومية منذ `startDate` — كما تقوله
+ *  إيداعاتُ «الفوائض» نفسُها (قيمةٌ موجبة). */
+function offsetCreditOf(reserves: readonly { deposits?: readonly { id: string; date: string; amount: number }[] }[], startDate: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const f of reserves) {
+    for (const d of f.deposits ?? []) {
+      if (isOffsetDepositId(d.id) && d.date >= startDate) out.set(d.id, Math.abs(d.amount));
+    }
+  }
+  return out;
+}
+
+/**
+ * **الإيداعُ واليوميةُ يُحسمان معاً بعد الدمج** (٠٫١٫٤٧٢). سحبُ المقاصة يكتب
+ * شيئين: إيداعاً سالباً على «الفوائض» (يُحسم بالأكبر) وخفضاً في `carryAdjust`
+ * (إعدادٌ مفرد يُحسم بآخر ضابط). جوّالٌ رأى عجزاً ٥٠ وآيبادٌ رأى ٣٠ ⇒ الإيداعُ
+ * ٥٠ من الجوّال والرصيدُ من الآيباد (٣٠): تعود اليوميةُ −٢٠ فيسحب المراقبُ ٢٠
+ * أخرى — ٧٠ من «الفوائض» لعجزٍ حقيقيّه ٥٠، وهو انحرافٌ لا يراه أحد.
+ *
+ * `carryAdjust` الفائزة صادقةٌ على جهازها، فيكفي تصحيحُها بالفرق بين إيداعات
+ * المقاصة **على جهازها** وإيداعاتها **بعد الدمج** — ما زاد سُحب فيُضاف لليومية.
+ * يُرجع الميزانيةَ نفسَها حين لا فرق.
+ */
+export function reconcileOffsetCredit<B extends { startDate: string; carryAdjust?: number }>(
+  dailyBudget: B | null | undefined,
+  winnerReserves: readonly { deposits?: readonly { id: string; date: string; amount: number }[] }[],
+  mergedReserves: readonly { deposits?: readonly { id: string; date: string; amount: number }[] }[],
+): B | null | undefined {
+  if (!dailyBudget) return dailyBudget;
+  const before = offsetCreditOf(winnerReserves, dailyBudget.startDate);
+  const after = offsetCreditOf(mergedReserves, dailyBudget.startDate);
+  let delta = 0;
+  for (const id of new Set([...before.keys(), ...after.keys()])) delta += (after.get(id) ?? 0) - (before.get(id) ?? 0);
+  delta = round2(delta);
+  if (delta === 0) return dailyBudget;
+  const carry = Number.isFinite(dailyBudget.carryAdjust) ? dailyBudget.carryAdjust! : 0;
+  return { ...dailyBudget, carryAdjust: round2(carry - delta) };
+}
+
 /* ===================== ١) وتيرة بقيّة الدورة ===================== */
 
 // «كم أصرف يومياً حتى أصل ليوم الراتب على الصفر؟» — هذا هو الرقمُ الذي يحتاجه

@@ -108,6 +108,24 @@ export function salaryConfirmedFor(lastConfirm: string | null | undefined, salar
  * فعلاً، فالقادمُ هو الذي بعده. بدون هذا صارت دورةُ تأكيدٍ يوم ٢٤ (والراتب ٢٧)
  * ثلاثةَ أيام: منحنى يضغط شهراً فيها، و«إلى الراتب ٣ يوم».
  */
+/**
+ * يومُ الراتب الذي يخصّه تأكيدٌ في `todayStr` — **هويّةُ الدورة** (٠٫١٫٤٧٢).
+ * تأكيدٌ مبكّر (حتى `EARLY_SALARY_DAYS` قبله) يخصّ الراتبَ القادم، وغيرُه يخصّ
+ * آخرَ راتبٍ مرّ. تُبنى منه معرّفاتُ إيداعات التأكيد: كانت بيوم الضغط، فجوّالٌ
+ * أكّد ٢٣:٥٥ يوم ٢٧ وآيبادٌ أكّد ٠٠:١٠ يوم ٢٨ قبل أن يتزامن ⇒ معرّفان مختلفان
+ * يتّحدان فيُرحَّل الفائضُ ويُموَّل كلُّ مظروفٍ **مرّتين**.
+ */
+export function salaryCycleKey(salaryDay: number, todayStr: string): string {
+  const next = nextSalaryDate(salaryDay, todayStr);
+  return next <= daysAfter(todayStr, EARLY_SALARY_DAYS) ? next : lastSalaryDate(salaryDay, todayStr);
+}
+
+function daysAfter(date: string, days: number): string {
+  const d = parseDate(date);
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+
 export function upcomingSalaryDate(
   salaryDay: number,
   lastConfirm: string | null | undefined,

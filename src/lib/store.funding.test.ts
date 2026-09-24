@@ -9,7 +9,7 @@ vi.mock("idb-keyval", () => ({
 
 import { useAppStore } from "./store";
 import { today, reserveBalance, computeDailyBudgetStatus } from "./utils";
-import { cycleLength } from "./budgetCycle";
+import { cycleLength, salaryCycleKey } from "./budgetCycle";
 import { fundingPerDay } from "./fundPlan";
 import { SURPLUS_FUND_NAME } from "./types";
 import type { ReserveFund } from "./types";
@@ -34,14 +34,14 @@ const balanceOf = (id: string) => {
 // next salary cycle in a unit test, advance the persisted cycle marker.
 const confirmNextCycle = () => {
   const current = useAppStore.getState();
-  // The production key includes the local salary date. Keep the test clock
+  // The production key is the salary date of the cycle (salaryCycleKey). Keep the test clock
   // fixed and move prior synthetic-cycle ids out of the current date instead.
   useAppStore.setState({
     lastSalaryConfirm: null,
     reserves: current.reserves.map((fund) => ({
       ...fund,
       deposits: fund.deposits.map((deposit, index) =>
-        deposit.id.startsWith(`salary:${T}:`) ? { ...deposit, id: `historical:${index}:${deposit.id}` } : deposit
+        deposit.id.startsWith(`salary:${salaryCycleKey(SALARY_DAY, T)}:`) ? { ...deposit, id: `historical:${index}:${deposit.id}` } : deposit
       ),
     })),
   });
@@ -178,5 +178,52 @@ describe("تمويل المظاريف عند «نزل الراتب»", () => {
     state().confirmSalary();
     expect(state().dailyBudget!.fundingPerDay).toBeUndefined();
     expect(balanceOf("f-surplus")).toBe(500);
+  });
+});
+
+// ٠٫١٫٤٧٢: جوّالٌ أكّد ٢٣:٥٥ يوم الراتب، وآيبادٌ أكّد ٠٠:١٠ من الغد قبل أن يتزامن —
+// كانا حدثين بمعرّفين فيُرحَّل الفائضُ مرّتين. الآن الدورةُ هي المعرّف.
+describe("تأكيدُ الراتب مرّةً واحدة للدورة", () => {
+  it("تأكيدٌ ثانٍ للدورة نفسِها في اليوم التالي لا يرحّل ولا يموّل ثانيةً", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(2026, 8, 27, 23, 55));
+      useAppStore.setState({
+        salaryDay: 27, lastSalaryConfirm: "2026-08-27",
+        dailyBudget: { amount: 100, startDate: "2026-09-20", carryAdjust: 0 },
+        reserves: [fund({ id: "f-rent", name: "إيجار", funding: { perCycle: 500, source: "salary" } })],
+      });
+      state().confirmSalary();
+      const once = state().reserves.flatMap((f) => f.deposits.map((d) => d.id)).sort();
+      expect(once.some((id) => id.startsWith("salary:2026-09-27:"))).toBe(true);
+
+      vi.setSystemTime(new Date(2026, 8, 28, 0, 10));
+      state().confirmSalary();
+      const twice = state().reserves.flatMap((f) => f.deposits.map((d) => d.id)).sort();
+      expect(twice).toEqual(once);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+
+describe("سحبُ المقاصة: حذفُه يرجع من اليومية، وإعادتُه لا يُسقطها شاهدٌ قديم", () => {
+  it("٠٫١٫٤٧٢", async () => {
+    const { offsetDepositId } = await import("./budgetFlow");
+    const { depositTombKey } = await import("./merge");
+    useAppStore.setState({ reserves: [surplus(500)], dailyBudget: { amount: 100, startDate: T, carryAdjust: 0 } });
+    const id = offsetDepositId("f-surplus", T);
+    state().pullFromReserve("f-surplus", 40, "مقاصة", id);
+    expect(state().dailyBudget!.carryAdjust).toBe(-40);
+
+    state().deleteReserveDeposit("f-surplus", id);
+    expect(state().dailyBudget!.carryAdjust).toBe(0);
+    expect(balanceOf("f-surplus")).toBe(500);
+
+    state().pullFromReserve("f-surplus", 25, "مقاصة", id);
+    expect(state().deleted?.[depositTombKey(id)]).toBeUndefined();
+    expect(state().dailyBudget!.carryAdjust).toBe(-25);
+    expect(balanceOf("f-surplus")).toBe(475);
   });
 });

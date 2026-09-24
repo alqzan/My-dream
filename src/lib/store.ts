@@ -20,9 +20,9 @@ import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
 import { budgetTombKey, depositTombKey, habitLogTombKey, wirdTombKey, legacyHifzGen, merchantStampKey, CATEGORY_ORDER_FIELD, KHATMA_GOAL_FIELD } from "./merge";
 import { cashbackEffectId, normalizeMerchant } from "./bankParser";
-import { offsetPlan, OFFSET_NOTE, offsetDepositId } from "./budgetFlow";
+import { offsetPlan, OFFSET_NOTE, offsetDepositId, isOffsetDepositId } from "./budgetFlow";
 import { fundingPerDay, effectiveDailyRate, planCycleFunding } from "./fundPlan";
-import { cycleLength } from "./budgetCycle";
+import { cycleLength, salaryCycleKey } from "./budgetCycle";
 import { holdings, reconcileDelta, RECONCILE_NOTE } from "./reconcile";
 import { creditLedgerForState } from "./financeLedger";
 import { isTripEligibleFund, tripSplitFor } from "./trip";
@@ -2093,17 +2093,26 @@ export const useAppStore = create<AppStore>()(
         })),
 
       deleteReserveDeposit: (fundId, depositId) =>
-        set((s) => ({
-          reserves: s.reserves.map((f) =>
-            f.id === fundId
-              ? { ...f, deposits: f.deposits.filter((d) => d.id !== depositId) }
-              : f
-          ),
-          // Deposits are nested inside a fund, so the auto-tombstoner (which only
-          // watches top-level ids) doesn't see this delete — record it explicitly
-          // so the deposit union in mergeAppData can't pull it back.
-          deleted: { ...s.deleted, [depositTombKey(depositId)]: Date.now() },
-        })),
+        set((s) => {
+          // حذفُ سحب مقاصةٍ من هذه الدورة يُرجع المالَ إلى «الفوائض» — فيُسحب
+          // معه ما أضافه لليومية، وإلا بقي في اليومية مالٌ لم يخرج من مكان
+          // (٠٫١٫٤٧٢). الإيداعُ واليوميةُ يتحرّكان معاً دائماً (`reconcileOffsetCredit`).
+          const removed = s.reserves.find((f) => f.id === fundId)?.deposits.find((d) => d.id === depositId);
+          const reverseOffset = !!removed && !!s.dailyBudget && isOffsetDepositId(depositId) && removed.date >= s.dailyBudget.startDate;
+          const carry = s.dailyBudget && Number.isFinite(s.dailyBudget.carryAdjust) ? s.dailyBudget.carryAdjust! : 0;
+          return {
+            reserves: s.reserves.map((f) =>
+              f.id === fundId
+                ? { ...f, deposits: f.deposits.filter((d) => d.id !== depositId) }
+                : f
+            ),
+            ...(reverseOffset ? { dailyBudget: { ...s.dailyBudget!, carryAdjust: round2(carry + Math.abs(removed!.amount)) } } : {}),
+            // Deposits are nested inside a fund, so the auto-tombstoner (which only
+            // watches top-level ids) doesn't see this delete — record it explicitly
+            // so the deposit union in mergeAppData can't pull it back.
+            deleted: { ...s.deleted, [depositTombKey(depositId)]: Date.now() },
+          };
+        }),
 
       setDailyBudget: (amount, source) =>
         // Changing the daily amount restarts the cumulative tally from today
@@ -2144,6 +2153,12 @@ export const useAppStore = create<AppStore>()(
           // deterministic deposit ids below make the same event merge-safe
           // when two devices confirm while offline.
           if (s.lastSalaryConfirm === todayStr) return {};
+          // وهويّةُ الحدث **الدورةُ لا يومُ الضغط** (٠٫١٫٤٧٢): تأكيدان للراتب نفسِه
+          // في يومين (قبل منتصف الليل وبعده، على جهازين) كانا حدثين بمعرّفين
+          // فيُرحَّل الفائضُ ويُموَّل كلُّ مظروفٍ مرّتين. الآن المعرّفُ يومُ الراتب
+          // (`salaryCycleKey`)، وتأكيدٌ ثانٍ للدورة نفسِها على الجهاز نفسِه لا يفعل شيئاً.
+          const cycleKey = salaryCycleKey(s.salaryDay ?? 27, todayStr);
+          if (s.lastSalaryConfirm && salaryCycleKey(s.salaryDay ?? 27, s.lastSalaryConfirm) === cycleKey) return {};
           const balance = s.dailyBudget
             ? computeDailyBudgetStatus(s.dailyBudget, s.transactions).balance
             : 0;
@@ -2171,7 +2186,7 @@ export const useAppStore = create<AppStore>()(
               reserves = [...reserves, fund];
             }
             const deposit: ReserveDeposit = {
-              id: `salary:${todayStr}:surplus-rollover`,
+              id: `salary:${cycleKey}:surplus-rollover`,
               date: todayStr,
               amount: moved,
               note: "فوائض دورة الراتب",
@@ -2209,7 +2224,7 @@ export const useAppStore = create<AppStore>()(
           // فيُسقط حارسُ التكرار كلَّ سحبٍ بعد الأوّل — ويخرج مالٌ من لا شيء.
           const addDeposit = (fundId: string, amount: number, note: string, source: string, forFundId = fundId) => {
             const list = deposits.get(fundId) ?? [];
-            const id = `salary:${todayStr}:funding:${source}:${forFundId}`;
+            const id = `salary:${cycleKey}:funding:${source}:${forFundId}`;
             if (list.some((item) => item.id === id) || reserves.some((fund) => fund.id === fundId && fund.deposits.some((item) => item.id === id))) return;
             list.unshift({ id, date: todayStr, amount, note });
             deposits.set(fundId, list);
@@ -2427,6 +2442,11 @@ export const useAppStore = create<AppStore>()(
                 : f
             ),
             dailyBudget: { ...s.dailyBudget, carryAdjust: round2(carryAdjust - added) },
+            // وسحبُ المقاصة يُعيد معرّفَ اليوم نفسَه: لو حُذف سحبُ اليوم قبلاً لبقي
+            // شاهدُه فيُسقط الدمجُ السحبَ الجديد — والمالُ قد دخل اليوميةَ فعلاً.
+            ...(depositId && s.deleted && depositTombKey(depositId) in s.deleted
+              ? { deleted: Object.fromEntries(Object.entries(s.deleted).filter(([k]) => k !== depositTombKey(depositId))) }
+              : {}),
           };
         });
         return added;

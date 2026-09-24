@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lastSalaryDate, budgetCycleStart, nextSalaryDate, cycleDays, inSpendWindow,
-  spendWindow, salaryPrompt, upcomingSalaryDate,
+  spendWindow, salaryPrompt, upcomingSalaryDate, salaryCycleKey,
 } from "./budgetCycle";
 import { budgetAlerts, projectedCycleSurplus, daysUntilSalary } from "./financeOverview";
 import type { Budget, FinanceCategoryDef, Transaction } from "./types";
@@ -133,3 +133,18 @@ describe("upcomingSalaryDate / daysUntilSalary after an early confirmation", () 
     expect(upcomingSalaryDate(27, "2026-09-27", "2026-09-29")).toBe("2026-10-27");
   });
 });
+
+// ٠٫١٫٤٧٢: هويّةُ تأكيد الراتب هي دورتُه، لا يومُ الضغط.
+describe("salaryCycleKey", () => {
+  it("قبل منتصف الليل وبعده، ومبكّراً بأيام — الراتبُ نفسُه", () => {
+    expect(salaryCycleKey(27, "2026-09-27")).toBe("2026-09-27");
+    expect(salaryCycleKey(27, "2026-09-28")).toBe("2026-09-27");
+    expect(salaryCycleKey(27, "2026-09-22")).toBe("2026-09-27");
+  });
+  it("منتصفُ الدورة يخصّ آخرَ راتبٍ مرّ، ونهايةُ السنة تعبر", () => {
+    expect(salaryCycleKey(27, "2026-10-10")).toBe("2026-09-27");
+    expect(salaryCycleKey(27, "2026-12-30")).toBe("2026-12-27");
+    expect(salaryCycleKey(2, "2026-12-30")).toBe("2027-01-02");
+  });
+});
+
