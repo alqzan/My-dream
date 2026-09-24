@@ -27,7 +27,7 @@ const MonthlyBars = dynamic(
   () => import("@/components/stats/MonthlyBars").then((m) => m.MonthlyBars),
   { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-gray-100 rounded-xl" /> }
 );
-import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck } from "lucide-react";
+import { Flame, Trophy, BookOpen, Wallet, BookMarked, BookCheck, CalendarCheck, ChevronDown } from "lucide-react";
 import { SECTION } from "@/lib/palette";
 import { windowStats, yearPetals, yearAverage, yearInventory, pctOf } from "@/lib/hasila";
 import { arNum, arPct } from "@/lib/madar/format";
@@ -44,6 +44,10 @@ export default function StatsPage() {
   const books = useAppStore((s) => s.books);
   const prayerLogs = useAppStore((s) => s.prayerLogs);
   const readingGoal = useAppStore((s) => s.readingGoal);
+  // «التفصيلُ الأعمق» مطويٌّ حتى يُطلب (٠٫١٫٤٦٢): كانت الصفحةُ لوحتين متتاليتين
+  // (~٤٠٠٠px) تكرّر الثانيةُ أرقامَ الأولى — «صفحات قرأت» ثلاثَ مرّات، وسنةُ
+  // الالتزام مرّتين. الحصيلةُ تُقرأ، والتفصيلُ أداةُ تنقيبٍ تُفتح.
+  const [deepOpen, setDeepOpen] = useState(false);
   const frozenHabits = useAppStore((s) => s.frozenHabits);
   const quranWird = useAppStore((s) => s.quranWird);
   const quranHifz = useAppStore((s) => s.quranHifz);
@@ -282,8 +286,23 @@ export default function StatsPage() {
         <YearInventory rows={inventory} year={Number(year)} />
 
         <SectionHead title="تفصيلٌ أعمق" marginTop={30} marginBottom={0} />
+        <button
+          type="button"
+          className="mdr-stats-deep-toggle press"
+          aria-expanded={deepOpen}
+          aria-controls="stats-deep"
+          onClick={() => setDeepOpen((v) => !v)}
+        >
+          <span>
+            <strong>{deepOpen ? "أخفِ التفصيل" : "اعرض التفصيل"}</strong>
+            <small>الحفظ · الأرقام القياسية · المصاريف والقراءة شهرًا بشهر</small>
+          </span>
+          <ChevronDown size={18} aria-hidden="true" style={{ transform: deepOpen ? "rotate(180deg)" : undefined }} />
+        </button>
       </div>
 
+      {deepOpen && (
+      <div id="stats-deep" className="space-y-5">
       <div className="animate-fade-up">
         <div className="flex items-center gap-2.5">
           <SectionSignet href="/stats" />
@@ -401,6 +420,8 @@ export default function StatsPage() {
             />
           </div>
         </Card>
+      )}
+      </div>
       )}
     </div>
   );

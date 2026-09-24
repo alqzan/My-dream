@@ -19,7 +19,7 @@
 // منطقٌ نقيّ بلا حالة ولا DOM ولا `window` (يعبر إلى الغلاف الأصليّ كما هو)،
 // مختبَرٌ في `nudges.test.ts`. لا تكتب صياغةً من صياغاته داخل مكوّن.
 import type { AppData } from "./types";
-import { arabicCount, daysCount, parseDate, quranActivityDates } from "./utils";
+import { arabicCount, daysCount, parseDate, quranActivityDates, toIndicDigits } from "./utils";
 import { idToSurahAyah, SURAHS } from "./quran/meta";
 
 /** الساعةُ التي يصير بعدها التذكيرُ **حصاداً** لا افتتاحاً.
@@ -123,7 +123,7 @@ export function distanceOf(state: RitualState): Distance {
 
 export type NudgeInput = Pick<
   AppData,
-  | "journalEntries" | "readingLogs" | "habits" | "frozenHabits"
+  | "journalEntries" | "readingLogs" | "books" | "habits" | "frozenHabits"
   | "quranWird" | "quranHifz" | "quranReflections" | "quranKhatma"
 >;
 
@@ -159,6 +159,24 @@ export function quranPlace(input: Pick<NudgeInput, "quranKhatma" | "quranHifz">)
     if (name) parts.push(`الحفظ عند ${name} ${ayah}`);
   }
   return parts.join(" · ");
+}
+
+/** موضعُك في الكتاب: الكتابُ الجاري وصفحتُه. «الجاري» آخرُ كتابٍ سجّلتَ فيه قراءةً
+ *  وما زال «أقرأ»، وإلّا أوّلُ كتابٍ «أقرأ». وبلا كتابٍ مفتوح لا يُخترع موضع.
+ *  كان سطرُ القراءة بلا موضع (٠٫١٫٤٦٢) — فيقرأ «ما قرأتَ اليوم بعد» تحت سطر
+ *  القرآن «لم تقرأ اليوم بعد» ولا يدري المالك أيُّهما أيّ. */
+export function readingPlace(input: Pick<NudgeInput, "books" | "readingLogs">): string {
+  const reading = (input.books ?? []).filter((b) => b.status === "أقرأ");
+  if (!reading.length) return "";
+  const byId = new Map(reading.map((b) => [b.id, b]));
+  const lastLog = [...(input.readingLogs ?? [])]
+    .filter((l) => byId.has(l.bookId))
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const book = (lastLog && byId.get(lastLog.bookId)) || reading[0];
+  const page = book.currentPage > 0
+    ? ` · صفحة ${toIndicDigits(String(book.currentPage))}${book.totalPages > 0 ? ` من ${toIndicDigits(String(book.totalPages))}` : ""}`
+    : "";
+  return `«${book.title}»${page}`;
 }
 
 export function readRituals(input: NudgeInput, todayStr: string): RitualState[] {
@@ -209,7 +227,7 @@ export function readRituals(input: NudgeInput, todayStr: string): RitualState[] 
       "reading",
       readingLast,
       input.readingLogs.some((l) => l.date === todayStr),
-      "",
+      readingPlace(input),
       frozen.has("core:reading")
     ),
     make("habits", habitsLast, habitsDone, "", activeHabits.length === 0),
@@ -270,16 +288,16 @@ const MORNING: Record<RitualKey, PhrasePools> = {
     near: [
       "وِردك اليوم ما زال بانتظارك.",
       "بقي وِردُك — وأنت قريبٌ منه.",
-      "لم تقرأ اليوم بعد.",
+      "لم تفتح المصحف اليوم بعد.",
     ],
     away: [
       "آخرُ وِردٍ لك {مدة}. تُكمل من موضعك لا من الأوّل.",
       "{مدة} بلا وِرد — والصفحةُ التي وقفتَ عندها كما تركتها.",
-      "مرّت {مدة}. موضعُك محفوظ.",
+      "مرّت {مدة} على وِردك. موضعُك محفوظ.",
     ],
     far: [
-      "{مدة} — وموضعُك ما زال كما هو ينتظرك.",
-      "انقطعتَ {مدة}. لا شيءَ ضاع: تبدأ من حيث وقفت.",
+      "{مدة} على وِردك — وموضعُك ما زال كما هو ينتظرك.",
+      "انقطع وِردُك {مدة}. لا شيءَ ضاع: تبدأ من حيث وقفت.",
       "{مدة} والمصحفُ على الصفحة نفسها. صفحةٌ اليوم تكفي لتعود.",
     ],
   },
@@ -307,8 +325,8 @@ const MORNING: Record<RitualKey, PhrasePools> = {
   },
   reading: {
     fresh: ["ما سجّلتَ قراءةً بعد — عشر صفحاتٍ بداية."],
-    near: ["ما قرأتَ اليوم بعد."],
-    away: ["آخرُ قراءةٍ سجّلتها {مدة}."],
+    near: ["ما فتحتَ كتابك اليوم بعد."],
+    away: ["آخرُ قراءةٍ في كتابك سجّلتها {مدة}."],
     far: ["كتابُك متوقّفٌ {مدة}. صفحاتٌ قليلة تُعيد الخيط."],
   },
   habits: {
@@ -320,10 +338,10 @@ const MORNING: Record<RitualKey, PhrasePools> = {
 
 const EVENING: Record<RitualKey, PhrasePools> = {
   quran: {
-    today: ["وِردُك اليوم تمّ.", "قرأتَ اليوم — وهذا يُكتب.", "المصحفُ فُتح اليوم."],
-    near: ["اليومُ مرّ بلا وِرد.", "ما قرأتَ اليوم.", "الوِردُ لم يقع اليوم."],
-    away: ["الوِردُ ساكنٌ منذ {مدة}.", "آخرُ قراءةٍ لك {مدة}."],
-    far: ["{مدة} — وموضعُك محفوظ متى عُدت.", "ما زال المصحفُ عند موضعك منذ {مدة}."],
+    today: ["وِردُك اليوم تمّ.", "قرأتَ وِردك اليوم — وهذا يُكتب.", "المصحفُ فُتح اليوم."],
+    near: ["اليومُ مرّ بلا وِرد.", "ما فُتح المصحفُ اليوم.", "الوِردُ لم يقع اليوم."],
+    away: ["الوِردُ ساكنٌ منذ {مدة}.", "آخرُ وِردٍ لك {مدة}."],
+    far: ["{مدة} على وِردك — وموضعُك محفوظ متى عُدت.", "ما زال المصحفُ عند موضعك منذ {مدة}."],
     fresh: ["القرآنُ ينتظر أوّل صفحة، متى ما جاءك الوقت."],
   },
   journal: {
@@ -334,9 +352,9 @@ const EVENING: Record<RitualKey, PhrasePools> = {
     fresh: ["الدفترُ ما زال بلا أوّل سطر."],
   },
   reading: {
-    today: ["قرأتَ اليوم.", "سجّلتَ قراءةَ اليوم."],
-    near: ["لم تُسجّل قراءةً اليوم."],
-    away: ["آخرُ قراءةٍ {مدة}."],
+    today: ["قرأتَ في كتابك اليوم.", "سجّلتَ قراءةَ اليوم."],
+    near: ["لم تُسجّل قراءةً في كتابك اليوم."],
+    away: ["آخرُ قراءةٍ في كتابك {مدة}."],
     far: ["الكتابُ متوقّفٌ {مدة}."],
     fresh: ["لا كتابَ مفتوحاً بعد."],
   },

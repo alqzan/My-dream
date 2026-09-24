@@ -23,6 +23,7 @@ import { countDayPrayers, getPrayerLog, today } from "@/lib/utils";
 export function NudgeCard() {
   const journalEntries = useAppStore((s) => s.journalEntries);
   const readingLogs = useAppStore((s) => s.readingLogs);
+  const books = useAppStore((s) => s.books);
   const habits = useAppStore((s) => s.habits);
   const frozenHabits = useAppStore((s) => s.frozenHabits);
   const quranWird = useAppStore((s) => s.quranWird);
@@ -63,10 +64,10 @@ export function NudgeCard() {
   const nudge: Nudge | null = useMemo(() => {
     if (!clock) return null;
     return buildNudge(
-      { journalEntries, readingLogs, habits, frozenHabits, quranWird, quranHifz, quranReflections, quranKhatma },
+      { journalEntries, readingLogs, books, habits, frozenHabits, quranWird, quranHifz, quranReflections, quranKhatma },
       { todayStr: clock.todayStr, hour: clock.hour, extras: { prayed } }
     );
-  }, [clock, journalEntries, readingLogs, habits, frozenHabits, quranWird, quranHifz, quranReflections, quranKhatma, prayed]);
+  }, [clock, journalEntries, readingLogs, books, habits, frozenHabits, quranWird, quranHifz, quranReflections, quranKhatma, prayed]);
 
   const token = clock && nudge ? nudgeToken(clock.todayStr, nudge.moment) : null;
 

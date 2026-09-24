@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildNudge, distanceOf, momentOf, pick, quranPlace, readRituals, seedOf, spanLabel,
+  buildNudge, distanceOf, momentOf, pick, quranPlace, readingPlace, readRituals, seedOf, spanLabel,
   EVENING_HOUR, MAX_OPEN_LINES, type NudgeInput,
 } from "./nudges";
 import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
@@ -8,6 +8,7 @@ import { EMPTY_HIFZ, EMPTY_KHATMA } from "./types";
 const base: NudgeInput = {
   journalEntries: [],
   readingLogs: [],
+  books: [],
   habits: [],
   frozenHabits: [],
   quranWird: [],
@@ -164,6 +165,44 @@ describe("افتتاحُ اليوم", () => {
     const nudge = buildNudge(input, { todayStr: TODAY, hour: 7 })!;
     const quran = nudge.lines.find((l) => l.key === "quran")!;
     expect(quran.place).toContain("141");
+  });
+
+  // كان سطرا القرآن والقراءة يقولان «لم تقرأ» و«ما قرأتَ» تحت بعض (٠٫١٫٤٦٢).
+  it("سطرا القرآن والكتاب لا يلتبسان: كلٌّ يسمّي بابه، والكتابُ بموضعه", () => {
+    const input: NudgeInput = {
+      ...base,
+      quranWird: ["2026-09-15"],
+      books: [{ id: "b1", title: "الموافقات", author: "", totalPages: 300, currentPage: 120, status: "أقرأ" }],
+      readingLogs: [{ id: "l1", bookId: "b1", date: "2026-09-15", pagesRead: 10 }],
+    };
+    for (let day = 1; day <= 28; day++) {
+      const todayStr = `2026-10-${String(day).padStart(2, "0")}`;
+      for (const hour of [7, 20]) {
+        const nudge = buildNudge(input, { todayStr, hour })!;
+        const quran = nudge.lines.find((l) => l.key === "quran");
+        const reading = nudge.lines.find((l) => l.key === "reading");
+        if (quran) expect(quran.text).toMatch(/وِرد|المصحف|القرآن|آية|صفحة/);
+        if (reading) {
+          expect(reading.text).toMatch(/كتاب|قراءة/);
+          expect(reading.place).toBe("«الموافقات» · صفحة ١٢٠ من ٣٠٠");
+        }
+      }
+    }
+  });
+
+  it("موضعُ الكتاب: آخرُ كتابٍ قُرئ وهو «أقرأ»، وبلا كتابٍ مفتوح لا موضع", () => {
+    const books = [
+      { id: "a", title: "أ", author: "", totalPages: 0, currentPage: 0, status: "أقرأ" as const },
+      { id: "b", title: "ب", author: "", totalPages: 200, currentPage: 50, status: "أقرأ" as const },
+      { id: "c", title: "ج", author: "", totalPages: 100, currentPage: 100, status: "أنهيت" as const },
+    ];
+    const logs = [
+      { id: "1", bookId: "c", date: "2026-09-10", pagesRead: 5 },
+      { id: "2", bookId: "b", date: "2026-09-08", pagesRead: 5 },
+    ];
+    expect(readingPlace({ books, readingLogs: logs })).toBe("«ب» · صفحة ٥٠ من ٢٠٠");
+    expect(readingPlace({ books, readingLogs: [] })).toBe("«أ»");
+    expect(readingPlace({ books: [books[2]], readingLogs: logs })).toBe("");
   });
 
   it("حين لا يبقى بابٌ مفتوح لا يُخترع عتب", () => {
