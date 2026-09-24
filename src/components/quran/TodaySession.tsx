@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
 import { describeRange } from "@/lib/quran/meta";
@@ -7,8 +7,8 @@ import { today } from "@/lib/utils";
 import { countPages, type Portion, type RatedPart } from "@/lib/quran/hifz";
 import { leadOnPage } from "@/lib/quran/portionPage";
 import {
-  buildTodayPlan, loadSession, saveSession, clearSession, drillOverflow,
-  STEP_LABEL, type SessionStep, type SessionTally,
+  buildTodayPlan, loadSession, saveSession, clearSession, drillOverflow, reviewRunPages,
+  STEP_LABEL, type SessionStep, type SessionTally, type ReviewRun,
 } from "@/lib/quran/session";
 import { HifzCoach } from "@/components/quran/HifzCoach";
 import { MushafSheet } from "@/components/quran/MushafSheet";
@@ -107,22 +107,60 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
     return saved ? saved.steps : buildTodayPlan(h, todayStr).steps;
   });
   const [idx, setIdx] = useState(() => (resume ? loadSession(todayStr)?.idx ?? 0 : 0));
+  // ما أُنجز من مقاطع خطوة المراجعة الجارية.
+  const [sub, setSub] = useState(() => (resume ? loadSession(todayStr)?.sub ?? 0 : 0));
   const [tally, setTally] = useState<SessionTally>(
     () => (resume ? loadSession(todayStr)?.tally : null) ?? { memorized: 0, reviewed: 0, mistakesClosed: 0 },
   );
+  // المقاطع تتسلسل داخل ردّ نداء المُدرّب — فالحالةُ هناك لقطةُ رسمٍ مضى. المرجعان
+  // يحملان الأحدث فلا يضيع عدٌّ ولا يُحفظ تقدّمٌ قديم.
+  const tallyRef = useRef(tally);
+  const idxRef = useRef(idx);
   const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; title?: string; onDone: (parts: RatedPart[]) => void } | null>(null);
 
   const total = steps.length;
   const done = idx >= total;
 
+  function persist(nextIdx: number, nextSub: number, t: SessionTally) {
+    if (nextIdx >= total) clearSession();
+    else saveSession({ date: todayStr, steps, idx: nextIdx, sub: nextSub, tally: t });
+  }
+
   // كلّ تقدّمٍ يُثبَّت فوراً: إغلاق الشاشة أو الخروج من التطبيق لا يُضيّع الجلسة.
   function advance(nextTally?: SessionTally) {
-    const t = nextTally ?? tally;
-    const next = idx + 1;
-    if (nextTally) setTally(nextTally);
+    const t = nextTally ?? tallyRef.current;
+    const next = idxRef.current + 1;
+    tallyRef.current = t;
+    idxRef.current = next;
+    setTally(t);
     setIdx(next);
-    if (next >= total) clearSession();
-    else saveSession({ date: todayStr, steps, idx: next, tally: t });
+    setSub(0);
+    persist(next, 0, t);
+  }
+
+  // مراجعة اليوم مقاطعُ في خطوةٍ واحدة: يُسجَّل كلُّ مقطعٍ بحكمه ثمّ يُفتح تاليه
+  // مباشرةً — لا رجوعَ إلى شاشة الخطوة بين وجهٍ ووجه.
+  function startRun(runs: ReviewRun[], i: number) {
+    const run = runs[i];
+    const many = runs.length > 1;
+    setCoach({
+      portion: run.portion,
+      mode: "recall",
+      title: `${run.test ? "اختبار من القديم" : "سمّع مراجعتك"}${many ? ` — ${arNum(i + 1)} من ${arNum(runs.length)}` : ""}`,
+      onDone: (parts) => {
+        recordGraded(run.test ? "test" : "review", parts);
+        const t = { ...tallyRef.current, reviewed: tallyRef.current.reviewed + 1 };
+        if (i + 1 < runs.length) {
+          tallyRef.current = t;
+          setTally(t);
+          setSub(i + 1);
+          persist(idxRef.current, i + 1, t);
+          startRun(runs, i + 1);
+        } else {
+          advance(t);
+        }
+      },
+    });
   }
 
   function finish() {
@@ -149,31 +187,38 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
         </div>
       )}
 
-      <div className="hifz-session-body flex-1 overflow-y-auto px-4 py-5">
+      {/* المفتاح يبدأ كلَّ خطوةٍ من رأسها — كانت ترث تمرير سابقتها فتُفتح من وسطها. */}
+      <div key={idx} className="hifz-session-body flex-1 overflow-y-auto px-4 py-5">
         {done ? (
           <ResultScreen tally={tally} onClose={finish} />
         ) : (
           <StepView
+            key={idx}
             step={steps[idx]}
             text={text}
+            sub={sub}
+            onStartRun={startRun}
             onSkip={() => advance()}
             onGuided={(portion, mode, title, onDoneRating) => setCoach({ portion, mode, title, onDone: onDoneRating })}
-            onMemorize={(parts) => { recordGraded("memorize", parts); advance({ ...tally, memorized: tally.memorized + 1 }); }}
-            onReview={(parts) => { recordGraded("review", parts); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
-            onTest={(parts) => { recordGraded("test", parts); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
-            onDrill={(closed) => advance({ ...tally, mistakesClosed: tally.mistakesClosed + (closed ? 1 : 0) })}
+            onMemorize={(parts) => { recordGraded("memorize", parts); advance({ ...tallyRef.current, memorized: tallyRef.current.memorized + 1 }); }}
+            onReview={(parts) => { recordGraded("review", parts); advance({ ...tallyRef.current, reviewed: tallyRef.current.reviewed + 1 }); }}
+            onTest={(parts) => { recordGraded("test", parts); advance({ ...tallyRef.current, reviewed: tallyRef.current.reviewed + 1 }); }}
+            onDrill={(closed) => advance({ ...tallyRef.current, mistakesClosed: tallyRef.current.mistakesClosed + (closed ? 1 : 0) })}
           />
         )}
       </div>
 
       {coach && (
         <HifzCoach
+          // مفتاحٌ لكلّ مقطع: تسلسلُ المقاطع يبدّل المقطع والمُدرّبُ مفتوح، فيُبدأ
+          // كلٌّ من أوّله لا من كشفِ سابقه وحكمه.
+          key={`${coach.portion.fromId}-${coach.portion.toId}`}
           portion={coach.portion}
           text={text}
           mode={coach.mode}
           recallTitle={coach.title}
           onClose={() => setCoach(null)}
-          onDone={(parts) => { coach.onDone(parts); setCoach(null); }}
+          onDone={(parts) => { const c = coach; setCoach(null); c.onDone(parts); }}
         />
       )}
     </div>
@@ -199,10 +244,12 @@ const RECALL_META: Record<"recent" | "due" | "test", { title: string; hint: stri
 };
 
 function StepView({
-  step, text, onSkip, onGuided, onMemorize, onReview, onTest, onDrill,
+  step, text, sub, onStartRun, onSkip, onGuided, onMemorize, onReview, onTest, onDrill,
 }: {
   step: SessionStep;
   text: string[];
+  sub: number;
+  onStartRun: (runs: ReviewRun[], i: number) => void;
   onSkip: () => void;
   onGuided: (portion: Portion, mode: "memorize" | "recall", title: string | undefined, onDone: (parts: RatedPart[]) => void) => void;
   onMemorize: (parts: RatedPart[]) => void;
@@ -222,6 +269,10 @@ function StepView({
         onDone={(_ok, closed) => onDrill(closed)}
       />
     );
+  }
+
+  if (step.kind === "review") {
+    return <ReviewStepView runs={step.runs} text={text} sub={sub} onStart={(i) => onStartRun(step.runs, i)} onSkip={onSkip} />;
   }
 
   const { portion } = step;
@@ -307,6 +358,97 @@ function StepView({
         تخطَّ هذه الخطوة <ChevronLeft size={14} />
       </button>
     </div>
+  );
+}
+
+// ===================== مراجعة اليوم — خطوةٌ واحدة =====================
+// كلُّ ما يُسمَّع اليوم في شاشةٍ واحدة: المقاطعُ بترتيب المصحف، ولكلٍّ سببُه بوسمٍ
+// صغير، وزرٌّ واحد يمشي بها كلِّها متتاليةً. ما أُنجز منها مطفأٌ بعلامته، فإن
+// أُغلقت الجلسة في منتصفها عدتَ إلى المقطع التالي لا إلى أوّلها.
+function ReviewStepView({
+  runs, text, sub, onStart, onSkip,
+}: {
+  runs: ReviewRun[]; text: string[]; sub: number; onStart: (i: number) => void; onSkip: () => void;
+}) {
+  const from = Math.min(sub, runs.length - 1);
+  const current = runs[from];
+  const pages = reviewRunPages(runs);
+  return (
+    <div className="hifz-step-card hifz-immersive-card space-y-4">
+      <div className="hifz-step-heading flex items-center gap-2 flex-wrap">
+        <RefreshCw size={16} className="text-quran" />
+        <span className="text-base font-bold text-gray-800 dark:text-gray-100">مراجعة اليوم</span>
+        <span className="text-[11px] text-quran font-semibold">
+          {countPages(pages)}{runs.length > 1 ? ` في ${arNum(runs.length)} مقاطع` : ""}
+        </span>
+      </div>
+      <p className="hifz-step-hint text-xs text-gray-500 leading-relaxed">
+        {runs.length > 1
+          ? "سمّعها كلَّها متتاليةً — ينتقل بك من مقطعٍ إلى تاليه، وكلُّ وجهٍ يُقيَّم وحده."
+          : "سمّع المقطع كاملاً، ثمّ اكشف ووسِم ما تعثّرت فيه — كلُّ وجهٍ يُقيَّم وحده."}
+      </p>
+
+      <ol className="space-y-1.5">
+        {runs.map((r, i) => (
+          <li
+            key={`${r.portion.fromId}-${r.portion.toId}`}
+            className={`flex items-center gap-2 flex-wrap rounded-xl px-3 py-2 text-xs border ${
+              i < sub
+                ? "border-quran/10 opacity-50"
+                : i === from
+                ? "border-quran/40 bg-quran/[0.06]"
+                : "border-gray-200/70 dark:border-[#3a2e1e]"
+            }`}
+          >
+            {i < sub ? <Check size={13} className="text-quran" /> : <span className="w-[13px] text-center text-[10px] font-bold text-gray-400">{arNum(i + 1)}</span>}
+            <span className="font-semibold text-gray-700 dark:text-gray-200">{describeRange(r.portion.fromId, r.portion.toId)}</span>
+            <RunTags run={r} />
+          </li>
+        ))}
+      </ol>
+
+      <MushafSheet
+        text={text}
+        fromId={current.portion.fromId}
+        toId={current.portion.toId}
+        context="shape"
+        leadId={leadOnPage(current.portion.fromId)}
+        hidden={() => true}
+        className="hifz-mushaf-stage" expandable
+      />
+      <MutashabihatAlert portion={current.portion} />
+
+      <button
+        onClick={() => onStart(from)}
+        className="hifz-step-primary w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold press shadow-sm bg-quran text-white"
+      >
+        <Headphones size={16} />
+        {sub > 0 ? `أكمل التسميع (${arNum(from + 1)} من ${arNum(runs.length)})` : "ابدأ التسميع"}
+      </button>
+
+      <button onClick={onSkip} className="hifz-step-skip w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 py-2 press">
+        {sub > 0 ? "اكتفِ بما سمّعت" : "تخطَّ المراجعة"} <ChevronLeft size={14} />
+      </button>
+    </div>
+  );
+}
+
+// لماذا هذا المقطع الآن؟ الطابور يرتّب بالخطر لا بالتأخّر وحده، فيُقال سببُه.
+function RunTags({ run }: { run: ReviewRun }) {
+  const tag = "text-[10px] font-bold rounded-full px-2 py-0.5";
+  return (
+    <>
+      {run.test && <span className={`${tag} text-indigo-600 bg-indigo-500/10`}>اختبار</span>}
+      {run.recent && <span className={`${tag} text-quran bg-quran/10`}>القريبة</span>}
+      {(run.overdueDays ?? 0) > 0 && (
+        <span className={`${tag} text-amber-700 bg-amber-100 dark:bg-amber-900/30`}>متأخّر {arNum(run.overdueDays ?? 0)} يوم</span>
+      )}
+      {(run.never ?? 0) > 0 && <span className={`${tag} text-quran bg-quran/10`}>لم يُراجَع بعد</span>}
+      {(run.lapses ?? 0) > 0 && <span className={`${tag} text-red-600 bg-red-500/10`}>تعثّرت فيه {arNum(run.lapses ?? 0)}×</span>}
+      {(run.mistakes ?? 0) > 0 && (
+        <span className={`${tag} text-amber-700 bg-amber-500/10`}>{arNum(run.mistakes ?? 0)} موضع مفتوح</span>
+      )}
+    </>
   );
 }
 

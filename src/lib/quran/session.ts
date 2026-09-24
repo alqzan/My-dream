@@ -14,6 +14,14 @@
 //     بالمُدرّب ويُسجَّل مراجعةً)، ولا جديد اليوم.
 //   • متأخّراتٌ تفوق ضِعف سقف اليوم ⇒ **نصفُ ورد**.
 //   والتجاوزُ بيدك دائماً: «زِد حفظك» يبقى ظاهراً.
+//
+// **والمراجعةُ خطوةٌ واحدة لا عشر** (٠٫١٫٤٥٩، بطلب المالك): كان كلُّ وجهٍ مستحقٍّ
+// خطوةً مستقلّة بشاشتها وزرّها وحكمها، فعشرةُ أوجهٍ عشرُ وقفات — والمالك يريد أن
+// يسمّعها مرّةً واحدة. فصارت القريبةُ والمستحقُّ واختبارُ القديم **مقاطعَ داخل خطوةٍ
+// واحدة** (`review`)، والأوجهُ المتجاورة تتّصل مقطعاً واحداً بترتيب المصحف، والمُدرّب
+// ينتقل من مقطعٍ إلى تاليه بلا رجوع. **والجدولُ لم يتغيّر**: ما يدخل المراجعة وسقفُها
+// وترتيبُ الخطر كما كان، والتقييمُ ما زال لكلّ وجه (`gradeByPage`) فلا يُنسخ حكمُ
+// وجهٍ على جاره لأنّهما صارا في مقطعٍ واحد.
 
 import type { HifzState } from "../types";
 import type { Portion } from "./hifz";
@@ -33,7 +41,23 @@ export type SessionStep =
   // تحملهما، ورفضُها لأجل وسمٍ تفسيريّ يُضيّع جلسةً في منتصفها.
   | { kind: "due"; portion: Portion; page: number; overdueDays: number; never: boolean; lapses?: number; mistakes?: number }
   | { kind: "drill"; mistakeId: string; ayahId: number; wordIndex: number | null; word?: string }
-  | { kind: "test"; portion: Portion };
+  | { kind: "test"; portion: Portion }
+  | { kind: "review"; runs: ReviewRun[] };
+
+/**
+ * مقطعٌ متّصل من مراجعة اليوم. الوسومُ كلّها اختياريّة: تفسيرٌ للعرض («لماذا هذا
+ * الوجه الآن؟») لا شرطٌ لقبول لقطةٍ محفوظة.
+ */
+export interface ReviewRun {
+  portion: Portion;
+  recent?: boolean; // فيه شيءٌ من المراجعة القريبة
+  test?: boolean; // اختبارٌ من القديم — يُسجَّل اختباراً لا مراجعة
+  due?: number; // أوجهٌ مستحقّة بالجدول فيه
+  never?: number; // منها ما لم يُراجَع قطّ
+  overdueDays?: number; // أشدُّ تأخّرٍ فيه
+  lapses?: number;
+  mistakes?: number;
+}
 
 /** ميزانُ الجديد: كاملٌ · نصفٌ لتراكم المتأخّر · موقوفٌ لتثبيت وردٍ مهزوز. */
 export type NewPace = "full" | "half" | "hold";
@@ -126,23 +150,16 @@ export function buildTodayPlan(s: HifzState, todayStr: string): TodayPlan {
     paceNote = `المتأخّر ${countPages(dueAll.total)} — نصفُ وردٍ اليوم حتى يخفّ`;
   }
 
+  // لقمة اختبارٍ من القديم — تُختَم بها المراجعة حين يحين دورها ويوجد محفوظٌ كافٍ.
+  const test = testDue(s, todayStr) ? smartTestPortion(s, todayStr) : null;
+  const runs = reviewRuns(recentBand, duePagesList, test, consolidate);
+
   const steps: SessionStep[] = [];
   if (consolidate) steps.push({ kind: "consolidate", portion: consolidate });
   if (newPortion) steps.push({ kind: "memorize", portion: newPortion });
-  if (recentBand) steps.push({ kind: "recent", portion: recentBand });
-  for (const d of duePagesList as DuePage[]) {
-    steps.push({
-      kind: "due", portion: d.portion, page: d.page, overdueDays: d.overdueDays,
-      never: d.neverReviewed, lapses: d.lapses, mistakes: d.mistakes,
-    });
-  }
+  if (runs.length) steps.push({ kind: "review", runs });
   for (const m of drills) {
     steps.push({ kind: "drill", mistakeId: m.id, ayahId: m.ayahId, wordIndex: m.wordIndex, word: m.word });
-  }
-  // لقمة اختبارٍ من القديم — تُختَم بها الجلسة حين يحين دورها ويوجد محفوظٌ كافٍ.
-  if (testDue(s, todayStr)) {
-    const t = smartTestPortion(s, todayStr);
-    if (t) steps.push({ kind: "test", portion: t });
   }
 
   // تقدير خشن: ~2 دقيقة لوجه حفظٍ جديد (والتثبيتُ مثله)، ~1 لوجه مراجعة، ~0.5 لموضع خطأ.
@@ -152,7 +169,7 @@ export function buildTodayPlan(s: HifzState, todayStr: string): TodayPlan {
     pagesInPortion(recentBand) +
     duePagesList.length +
     drills.length * 0.5 +
-    (steps.some((x) => x.kind === "test") ? 1 : 0);
+    (runs.some((r) => r.test) ? 1 : 0);
 
   return {
     steps,
@@ -167,6 +184,55 @@ export function buildTodayPlan(s: HifzState, todayStr: string): TodayPlan {
     estMinutes: Math.max(1, Math.round(est)),
     summary: summarize(newPortion, consolidate, recentBand, duePagesList.length, drills.length),
   };
+}
+
+/**
+ * مقاطعُ مراجعة اليوم: القريبةُ والمستحقُّ مرتّبان بترتيب المصحف، وكلُّ متجاورَين
+ * (أو متداخلَين) مقطعٌ واحد — فتسمّع الأوجه ١٢ و١٣ و١٤ دفعةً واحدة لا ثلاثاً.
+ *
+ * والاختبارُ مقطعٌ مستقلٌّ في الآخر لا يُدمج بجاره: يُسجَّل اختباراً لا مراجعة.
+ * فإن تقاطع مع مقطعٍ من المراجعة أو مع ما يُثبَّت اليوم (`busy`) سقط — الوجه
+ * يُسمَّع مرّةً في الجلسة لا مرّتين.
+ */
+export function reviewRuns(
+  recentBand: Portion | null, due: readonly DuePage[], test: Portion | null, busy: Portion | null = null,
+): ReviewRun[] {
+  const items: ReviewRun[] = [];
+  if (recentBand) items.push({ portion: { ...recentBand }, recent: true });
+  for (const d of due) {
+    items.push({
+      portion: { ...d.portion }, due: 1, never: d.neverReviewed ? 1 : 0,
+      overdueDays: d.overdueDays, lapses: d.lapses, mistakes: d.mistakes,
+    });
+  }
+  items.sort((a, b) => a.portion.fromId - b.portion.fromId);
+
+  const runs: ReviewRun[] = [];
+  for (const it of items) {
+    const last = runs[runs.length - 1];
+    if (last && it.portion.fromId <= last.portion.toId + 1) {
+      last.portion.toId = Math.max(last.portion.toId, it.portion.toId);
+      if (it.recent) last.recent = true;
+      last.due = (last.due ?? 0) + (it.due ?? 0);
+      last.never = (last.never ?? 0) + (it.never ?? 0);
+      last.overdueDays = Math.max(last.overdueDays ?? 0, it.overdueDays ?? 0);
+      last.lapses = (last.lapses ?? 0) + (it.lapses ?? 0);
+      last.mistakes = (last.mistakes ?? 0) + (it.mistakes ?? 0);
+    } else {
+      runs.push(it);
+    }
+  }
+
+  const overlaps = (p: Portion) => test != null && test.fromId <= p.toId && test.toId >= p.fromId;
+  if (test && !runs.some((r) => overlaps(r.portion)) && !(busy && overlaps(busy))) {
+    runs.push({ portion: { ...test }, test: true });
+  }
+  return runs;
+}
+
+/** عددُ أوجه المراجعة في مقاطعها (مجموعُ أوجه كلّ مقطع). */
+export function reviewRunPages(runs: readonly ReviewRun[]): number {
+  return runs.reduce((n, r) => n + pagesInPortion(r.portion), 0);
 }
 
 // «ماذا ينتظرني» — سطرٌ واحد بلغةٍ واضحة بدل ثلاث بطاقات أرقام.
@@ -197,6 +263,8 @@ export interface SessionSnapshot {
   date: string;
   steps: SessionStep[];
   idx: number;
+  /** ما أُنجز من مقاطع خطوة المراجعة الجارية — فالإغلاق في منتصفها لا يُعيدها من أوّلها. */
+  sub?: number;
   tally: SessionTally;
 }
 
@@ -222,6 +290,16 @@ function isSessionStep(value: unknown): value is SessionStep {
       isFiniteInteger(step.overdueDays) && typeof step.never === "boolean" &&
       tag(step.lapses) && tag(step.mistakes);
   }
+  if (step.kind === "review") {
+    const tag = (v: unknown) => v === undefined || isFiniteInteger(v);
+    const flag = (v: unknown) => v === undefined || typeof v === "boolean";
+    return Array.isArray(step.runs) && step.runs.length > 0 && step.runs.every((r: unknown) => {
+      if (!r || typeof r !== "object") return false;
+      const run = r as Partial<ReviewRun>;
+      return isPortion(run.portion) && flag(run.recent) && flag(run.test) && tag(run.due) &&
+        tag(run.never) && tag(run.overdueDays) && tag(run.lapses) && tag(run.mistakes);
+    });
+  }
   if (step.kind === "drill") {
     return typeof step.mistakeId === "string" && step.mistakeId.length > 0 &&
       isFiniteInteger(step.ayahId, 1, TOTAL_AYAT) &&
@@ -242,7 +320,7 @@ export function isValidSessionSnapshot(value: unknown, todayStr: string): value 
   const snap = value as Partial<SessionSnapshot>;
   return snap.date === todayStr && Array.isArray(snap.steps) && snap.steps.length > 0 &&
     snap.steps.every(isSessionStep) && isFiniteInteger(snap.idx) && snap.idx < snap.steps.length &&
-    isSessionTally(snap.tally);
+    (snap.sub === undefined || isFiniteInteger(snap.sub)) && isSessionTally(snap.tally);
 }
 
 export function loadSession(todayStr: string): SessionSnapshot | null {
@@ -272,6 +350,7 @@ export const STEP_LABEL: Record<SessionStep["kind"], string> = {
   due: "مستحقّ",
   drill: "خطأ",
   test: "اختبار",
+  review: "المراجعة",
 };
 
 // عدد الأخطاء المفتوحة يفوق ما نختبر عليه اليوم؟ نُخبر المستخدم بذلك صراحةً.
