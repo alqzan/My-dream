@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Play, Square } from "lucide-react";
 import { buzz } from "@/lib/utils";
+import { prefGet, prefSet, prefRemove } from "@/lib/platform/prefs";
 import { SECTION, GOLD_LIGHT } from "@/lib/palette";
 
 const START_KEY = "madar-reading-start";
@@ -22,7 +23,7 @@ export function ReadingTimer({ onFinish }: { onFinish: (minutes: number) => void
   // استعادة جلسة جارية عند فتح الصفحة (المؤقّت يعمل من لحظة بدئه الحقيقية).
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(START_KEY);
+      const raw = prefGet(START_KEY);
       if (raw) {
         const ts = parseInt(raw);
         if (ts > 0 && ts <= Date.now()) setStartedAt(ts);
@@ -43,14 +44,14 @@ export function ReadingTimer({ onFinish }: { onFinish: (minutes: number) => void
 
   function start() {
     const now = Date.now();
-    try { localStorage.setItem(START_KEY, String(now)); } catch { /* ignore */ }
+    prefSet(START_KEY, String(now));
     setStartedAt(now);
     buzz();
   }
 
   function stop() {
     const minutes = Math.max(1, Math.round(elapsed / 60));
-    try { localStorage.removeItem(START_KEY); } catch { /* ignore */ }
+    prefRemove(START_KEY);
     setStartedAt(null);
     buzz(18);
     onFinish(minutes);

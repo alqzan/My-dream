@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Capacitor } from "@capacitor/core";
 import { useAppStore } from "@/lib/store";
+import { prefGet, prefSet, prefRemove } from "@/lib/platform/prefs";
 import type { JournalAttachment, JournalEntry, JournalPhotoEdit } from "@/lib/types";
 import { MOODS } from "@/lib/types";
 import {
@@ -19,6 +21,7 @@ import {
   filesCount,
 } from "@/lib/utils";
 import { compressImageSmart } from "@/lib/imageUtils";
+import { chooseNativePhotos, takeNativePhoto } from "@/lib/platform/camera";
 import { photoHash } from "@/lib/mediaHash";
 import { dailyQuestion } from "@/lib/questions";
 import { AudioRecorder, MAX_AUDIO_NOTES } from "./AudioRecorder";
@@ -129,6 +132,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const [tagInput, setTagInput] = useState("");
   const [mood, setMood] = useState<JournalEntry["mood"]>(initial?.mood);
   const [compressing, setCompressing] = useState(false);
+  const [photoPickerError, setPhotoPickerError] = useState("");
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const [audioBusy, setAudioBusy] = useState(false);
@@ -233,9 +237,9 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     if (initial) return;
     let writer: JournalDraftWriter | null = null;
     try {
-      writer = createJournalDraftWriter(window.localStorage, DRAFT_KEY);
+      writer = createJournalDraftWriter({ setItem: prefSet, removeItem: prefRemove }, DRAFT_KEY);
       draftWriterRef.current = writer;
-      const raw = localStorage.getItem(DRAFT_KEY);
+      const raw = prefGet(DRAFT_KEY);
       if (raw) {
         const d = JSON.parse(raw);
         if (d.title) setTitle(d.title);
@@ -339,7 +343,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     }
     if (draftWriterRef.current) draftWriterRef.current.clear();
     else {
-      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+      prefRemove(DRAFT_KEY);
     }
     setSaveState("saved");
   }
@@ -424,7 +428,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
     }
     if (draftWriterRef.current) draftWriterRef.current.clear();
     else {
-      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+      prefRemove(DRAFT_KEY);
     }
     onClose();
   }
@@ -500,7 +504,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
   const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
   const MAX_AUDIO_FILE_BYTES = 32 * 1024 * 1024;
 
-  async function handlePhotoFiles(files: File[]) {
+  async function handlePhotoFiles(files: Blob[]) {
     setCompressing(true);
     try {
       const compressed: string[] = [];
@@ -517,6 +521,31 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
       setPhotos((prev) => [...prev, ...compressed].slice(0, MAX_PHOTOS));
     } finally {
       setCompressing(false);
+    }
+  }
+
+  async function handleNativeCamera(): Promise<void> {
+    setPhotoPickerError("");
+    try {
+      await handlePhotoFiles([await takeNativePhoto()]);
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+      if (!/CANCEL/i.test(code)) setPhotoPickerError("تعذّر فتح الكاميرا. يمكنك اختيار صورة من الاستديو أو إدخالها لاحقاً.");
+    }
+  }
+
+  async function handleNativeGallery(): Promise<void> {
+    setPhotoPickerError("");
+    try {
+      const files = await chooseNativePhotos(MAX_PHOTOS - photos.length);
+      if (files.length) await handlePhotoFiles(files);
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+      if (!/CANCEL/i.test(code)) setPhotoPickerError("تعذّر اختيار الصور. حاول مرة أخرى.");
     }
   }
 
@@ -937,29 +966,44 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
           </div>
         ) : photoSources.length < MAX_PHOTOS ? (
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
-              <Camera size={20} className="text-gray-400 mb-1" />
-              <span className="text-xs text-gray-400">التقط صورة</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
-              />
-            </label>
-            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
-              <ImageIcon size={20} className="text-gray-400 mb-1" />
-              <span className="text-xs text-gray-400">من الاستديو</span>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
-              />
-            </label>
+            {Capacitor.isNativePlatform() ? (
+              <>
+                <button type="button" onClick={() => void handleNativeCamera()} className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl hover:border-[var(--gline)] transition-colors press">
+                  <Camera size={20} className="text-gray-400 mb-1" />
+                  <span className="text-xs text-gray-400">التقط صورة</span>
+                </button>
+                <button type="button" onClick={() => void handleNativeGallery()} className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl hover:border-[var(--gline)] transition-colors press">
+                  <ImageIcon size={20} className="text-gray-400 mb-1" />
+                  <span className="text-xs text-gray-400">من الاستديو</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
+                  <Camera size={20} className="text-gray-400 mb-1" />
+                  <span className="text-xs text-gray-400">التقط صورة</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
+                  />
+                </label>
+                <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[var(--gline)] transition-colors press">
+                  <ImageIcon size={20} className="text-gray-400 mb-1" />
+                  <span className="text-xs text-gray-400">من الاستديو</span>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => { if (e.target.files?.length) handlePhotoFiles([...e.target.files]); e.target.value = ""; }}
+                  />
+                </label>
+              </>
+            )}
           </div>
         ) : (
           <p className="text-[10px] text-gray-300 text-center">وصلت الحد الأقصى ({MAX_PHOTOS} صور)</p>
@@ -967,6 +1011,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering }: J
         {!compressing && photoSources.length < MAX_PHOTOS && (
           <p className="text-[10px] text-gray-300 mt-1 text-center">أي صورة تُضغط تلقائياً لتوفير المساحة</p>
         )}
+        {photoPickerError && <p className="text-xs text-red-500 mt-1 text-center">{photoPickerError}</p>}
       </div>
 
       {/* ملفات متعددة — تحفظ المذكرة المرجع والبيانات المحلية، وترفعها

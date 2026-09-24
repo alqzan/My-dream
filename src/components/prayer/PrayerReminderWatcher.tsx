@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
+import { prefGet, prefSet } from "@/lib/platform/prefs";
 import type { KhushuLevel, PrayerName, PrayerStatus } from "@/lib/types";
 import { KHUSHU_LEVELS, KHUSHU_META } from "@/lib/types";
 import { arabicCount, computePrayerTimes, getCachedCoords, getPrayerLog, parseDate, today, formatClock } from "@/lib/utils";
@@ -28,7 +29,7 @@ type SnoozeMap = Record<string, number>;
 
 function readSnoozes(): SnoozeMap {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = prefGet(STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -44,7 +45,7 @@ function readSnoozes(): SnoozeMap {
 
 function writeSnoozes(snoozes: SnoozeMap) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snoozes));
+    prefSet(STORAGE_KEY, JSON.stringify(snoozes));
   } catch {
     // Storage can be unavailable in private browsing; the reminder still
     // works for the current render and is re-evaluated on the next tick.

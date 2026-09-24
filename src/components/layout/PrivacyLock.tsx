@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { hasPin, isUnlocked, verifyPin, markUnlocked, lockedForMs, LockThrottledError, PIN_LENGTH } from "@/lib/lock";
+import { authenticateBiometricUnlock, canUnlockWithBiometrics } from "@/lib/platform/biometric";
 import { BrandMark } from "@/components/layout/BrandMark";
 import { Delete, Lock } from "lucide-react";
 import { buzz, secondsCount } from "@/lib/utils";
@@ -18,6 +20,9 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
   const [digits, setDigits] = useState("");
   const [error, setError] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricError, setBiometricError] = useState("");
   // ثوانٍ باقيةٌ من التأخير المتصاعد بعد محاولاتٍ خاطئة. تُعرض ولا تُخفى:
   // لوحةٌ لا تستجيب بلا سبب أسوأُ من انتظارٍ معلوم.
   const [waitSec, setWaitSec] = useState(() => Math.ceil(lockedForMs() / 1000));
@@ -27,6 +32,32 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
     const id = setInterval(() => setWaitSec(Math.ceil(lockedForMs() / 1000)), 250);
     return () => clearInterval(id);
   }, [waitSec]);
+
+  useEffect(() => {
+    if (!locked || !Capacitor.isNativePlatform()) return;
+    let active = true;
+    void canUnlockWithBiometrics().then((available) => {
+      if (active) setBiometricAvailable(available);
+    });
+    return () => { active = false; };
+  }, [locked]);
+
+  async function unlockWithBiometrics(): Promise<void> {
+    setBiometricBusy(true);
+    setBiometricError("");
+    const verified = await authenticateBiometricUnlock();
+    setBiometricBusy(false);
+    if (verified) {
+      markUnlocked();
+      buzz(15);
+      setLocked(false);
+    } else {
+      // Cancel/failure does not touch the app PIN throttle; the PIN keypad
+      // remains available even if system biometrics are unavailable later.
+      setBiometricError("لم تنجح البصمة. يمكنك إدخال رمز القفل للمتابعة.");
+      buzz(40);
+    }
+  }
 
   useEffect(() => {
     if (digits.length !== PIN_LENGTH) return;
@@ -80,6 +111,21 @@ export function PrivacyLock({ children }: { children: React.ReactNode }) {
           {waitSec > 0 ? `محاولاتٌ كثيرة — انتظر ${secondsCount(waitSec)}` : "أدخل رمز الدخول"}
         </p>
       </div>
+
+      {biometricAvailable && (
+        <div className="mt-7 w-full max-w-[15rem]">
+          <button
+            type="button"
+            onClick={() => void unlockWithBiometrics()}
+            disabled={biometricBusy}
+            className="w-full h-12 rounded-xl bg-white/80 dark:bg-white/5 text-sm font-semibold text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-[#5a4a34] disabled:opacity-50"
+          >
+            {biometricBusy ? "جارٍ التحقق..." : "فتح باستخدام بصمة الجهاز"}
+          </button>
+          <p className="mt-2 text-center text-[11px] text-gray-400">أو أدخل رمز القفل</p>
+          {biometricError && <p role="status" className="mt-2 text-center text-xs text-red-500">{biometricError}</p>}
+        </div>
+      )}
 
       {/* نقاط الرمز */}
       <div className={`flex gap-3 mt-7 ${error ? "animate-shake" : ""}`}>

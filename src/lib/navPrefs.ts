@@ -57,9 +57,8 @@ export function resolveNav(items: NavItem[], saved: SavedNavPrefs | string[] | n
   return { visible, hidden };
 }
 
-// ---- localStorage wrapper (component-only) ----
+// ---- تفضيلاتُ جهازٍ خلف واجهة المنصّة ----
 export function loadNavPrefs(): SavedNavPrefs | null {
-  if (typeof window === "undefined") return null;
   try {
     const raw = prefGet(NAV_PREFS_STORAGE_KEY);
     if (!raw) return null;
@@ -84,7 +83,6 @@ export function loadNavPrefs(): SavedNavPrefs | null {
 }
 
 export function saveNavPrefs(hrefs: string[], items: NavItem[]): void {
-  if (typeof window === "undefined") return;
   try {
     const visible = sanitizeNavPrefs(hrefs, items);
     prefSetJSON(NAV_PREFS_STORAGE_KEY, { version: 2, visible });
@@ -94,7 +92,6 @@ export function saveNavPrefs(hrefs: string[], items: NavItem[]): void {
 }
 
 export function clearNavPrefs(): void {
-  if (typeof window === "undefined") return;
   try {
     prefRemove(NAV_PREFS_STORAGE_KEY);
   } catch {

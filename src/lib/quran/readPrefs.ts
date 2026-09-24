@@ -77,7 +77,6 @@ export function readPrefsFrom(raw: unknown): ReadPrefs {
 }
 
 export function loadReadPrefs(): ReadPrefs {
-  if (typeof window === "undefined") return DEFAULT_READ_PREFS;
   try {
     return readPrefsFrom(prefGetJSON<unknown>(READ_PREFS_KEY));
   } catch { /* ignore */ }
@@ -86,7 +85,6 @@ export function loadReadPrefs(): ReadPrefs {
 
 /** حفظُ ما تغيّر وحده — الباقي يبقى كما هو في التخزين لا كما هو في الافتراضيّ. */
 export function saveReadPrefs(p: Partial<ReadPrefs>): void {
-  if (typeof window === "undefined") return;
   try {
     prefSetJSON(READ_PREFS_KEY, { ...loadReadPrefs(), ...p });
   } catch { /* ignore */ }

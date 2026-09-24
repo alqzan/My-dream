@@ -22,8 +22,6 @@ const LIB = fileURLToPath(new URL("..", import.meta.url));
  *  قرارُ معمار لا تصحيحُ اختبار: اسأل أوّلاً لماذا لا يصلح غلافٌ في `platform/`. */
 const PLATFORM_LAYER = [
   "/platform/",        // الواجهات نفسُها (prefs · files · haptics · fullscreen)
-  "/idbStorage.ts",    // تخزينُ المتجر — موضعُ الاستبدال المعلن
-  "/imageUtils.ts",    // canvas وفكُّ HEIC — لا معنى لهما بلا DOM
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -48,14 +46,16 @@ function code(src: string): string {
 describe("src/lib لا يلمس المنصّة إلّا خلف واجهة", () => {
   const files = walk(LIB).filter((f) => !PLATFORM_LAYER.some((ok) => f.includes(ok)));
 
-  it("لا `localStorage` ولا `sessionStorage`", () => {
-    const offenders = files.filter((f) => /\b(localStorage|sessionStorage)\b/.test(code(readFileSync(f, "utf8"))));
+  it("لا window ولا localStorage ولا sessionStorage", () => {
+    const browserStorage = /\b(?:typeof\s+window\b|window\s*(?:\.|\[)|localStorage\b|sessionStorage\b)/;
+    const offenders = files.filter((f) => browserStorage.test(code(readFileSync(f, "utf8"))));
     expect(offenders.map((f) => f.slice(LIB.length - 1)),
-      "استعمل `platform/prefs.ts`").toEqual([]);
+      "استعمل واجهةً في `platform/`").toEqual([]);
   });
 
   it("لا `navigator.*`", () => {
-    const offenders = files.filter((f) => /\bnavigator\s*\./.test(code(readFileSync(f, "utf8"))));
+    const browserNavigator = /\b(?:typeof\s+navigator\b|navigator\s*\.)/;
+    const offenders = files.filter((f) => browserNavigator.test(code(readFileSync(f, "utf8"))));
     expect(offenders.map((f) => f.slice(LIB.length - 1)),
       "استعمل واجهةً في `platform/` (مثل `haptics.ts`)").toEqual([]);
   });
@@ -63,7 +63,7 @@ describe("src/lib لا يلمس المنصّة إلّا خلف واجهة", () =
   it("لا إنشاءَ عناصر DOM ولا `URL.createObjectURL`", () => {
     // `document` المسموحة الوحيدة وسيطٌ محلّيّ من Firestore في `sync.ts` —
     // فنمنع **الاستعمال** (`createElement`/`body`) لا الاسمَ المجرّد.
-    const bad = /document\s*\.\s*(createElement|body|documentElement|addEventListener|querySelector)|URL\s*\.\s*createObjectURL/;
+    const bad = /typeof\s+document\b|document\s*\.\s*(createElement|body|documentElement|addEventListener|querySelector)|URL\s*\.\s*createObjectURL/;
     const offenders = files.filter((f) => bad.test(code(readFileSync(f, "utf8"))));
     expect(offenders.map((f) => f.slice(LIB.length - 1)),
       "استعمل `platform/files.ts` لحفظ الملفّات").toEqual([]);

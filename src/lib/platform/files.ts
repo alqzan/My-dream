@@ -1,17 +1,7 @@
 // ===================== حفظُ ملفٍّ — واجهةُ منصّة =====================
-// **أخطرُ بندٍ في خطّة النقل، لأنّه ينكسر صامتاً.** حفظُ ملفٍّ في المتصفّح
-// ‏`URL.createObjectURL` + `<a download>` + `click()` — وفي WKWebView (الغلافُ
-// الأصليّ) **لا يفعل شيئاً: لا تنزيل ولا خطأ ولا رسالة**. فالمالكُ يضغط «صدّر
-// نسخة احتياطية» ويظنّ أنّه أخذها، ولم يأخذ شيئاً. ويقابله في Capacitor
-// `@capacitor/filesystem` + `@capacitor/share` — وورقةُ المشاركة الأصلية تجربةٌ
-// أفضل من التنزيل أصلاً (راجع `docs/APP-STORE-PLAN.md` §3.1).
-//
-// **وكانت أربعةَ نسخٍ متفرّقة** (النسخة الكاملة · نسخةُ الأمان السريعة · تصديرُ
-// الملخّص · حفظُ رسم الحفظ)، والخطّةُ تذكر واحدةً منها. جُمعت هنا في موضعٍ واحد
-// يُبدَّل مرّةً — وإصلاحُ واحدةٍ لم يعد يترك ثلاثاً صامتة.
+import { Capacitor } from "@capacitor/core";
 
-/** احفظ `blob` باسم `filename`. يرجع `false` إن لم يكن ثمّ بيئةُ متصفّح. */
-export function saveFile(filename: string, blob: Blob): boolean {
+function browserSave(filename: string, blob: Blob): boolean {
   if (typeof document === "undefined" || typeof URL?.createObjectURL !== "function") return false;
   const url = URL.createObjectURL(blob);
   try {
@@ -21,13 +11,57 @@ export function saveFile(filename: string, blob: Blob): boolean {
     a.click();
     return true;
   } finally {
-    // إبطالٌ مؤجَّلٌ بإطار: بعضُ المتصفّحات تبدأ التنزيل بعد انتهاء هذه الدورة،
-    // فإبطالٌ فوريّ يقطعه. (كان أحدُ المواضع يُبطل فوراً والآخر بـ`setTimeout`.)
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 }
 
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function nativeSave(filename: string, blob: Blob): Promise<boolean> {
+  try {
+    const [{ Filesystem, Directory }, { Share }] = await Promise.all([
+      import("@capacitor/filesystem"),
+      import("@capacitor/share"),
+    ]);
+    const data = toBase64(new Uint8Array(await blob.arrayBuffer()));
+    const { uri } = await Filesystem.writeFile({
+      path: filename,
+      data,
+      directory: Directory.Cache,
+      recursive: true,
+    });
+    await Share.share({
+      title: filename,
+      url: uri,
+      dialogTitle: "مشاركة الملف",
+    });
+    // The iOS plugin rejects when the share sheet is canceled; resolution means
+    // the selected activity completed.
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** احفظ الملف؛ false تعني أن الحفظ أو المشاركة لم يكتمل. */
+export async function saveFile(filename: string, blob: Blob): Promise<boolean> {
+  try {
+    return Capacitor.isNativePlatform()
+      ? await nativeSave(filename, blob)
+      : browserSave(filename, blob);
+  } catch {
+    return false;
+  }
+}
+
 /** احفظ نصّاً — الغلافُ الشائع فوق `saveFile`. */
-export function saveTextFile(filename: string, text: string, type = "text/plain"): boolean {
+export function saveTextFile(filename: string, text: string, type = "text/plain"): Promise<boolean> {
   return saveFile(filename, new Blob([text], { type: `${type};charset=utf-8` }));
 }

@@ -1,4 +1,5 @@
 "use client";
+import { Capacitor } from "@capacitor/core";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzUnit } from "@/lib/types";
@@ -10,6 +11,7 @@ import {
 } from "@/lib/quran/hifz";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { downloadPlainBackup } from "@/lib/backupFile";
+import { showToast } from "@/components/ui/UndoToast";
 import {
   MapPin, Gauge, Flame, Pencil, RotateCcw, Headphones, BookOpen, X, CheckCircle2, RefreshCw, TriangleAlert, Sprout, Download,
 } from "lucide-react";
@@ -52,6 +54,7 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
   const [editPlan, setEditPlan] = useState(false);
   const [editPos, setEditPos] = useState(false);
   const [confirmNew, setConfirmNew] = useState(false);
+  const [clearingPlan, setClearingPlan] = useState(false);
 
   const prog = hifzProgress(h);
   const pace = hifzPace(h);
@@ -84,6 +87,42 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
         {mk > 0 && <span className={`absolute top-0 start-0 rounded-full bg-red-500 ${tiny ? "w-1 h-1" : "w-1.5 h-1.5 m-0.5"}`} />}
       </button>
     );
+  }
+
+  async function exportSafetyBackup(): Promise<boolean> {
+    const saved = await downloadPlainBackup(snapshot(), "قبل-خطة-جديدة");
+    if (Capacitor.isNativePlatform()) {
+      showToast(
+        saved ? "حُفظت النسخة الاحتياطية" : "تعذّر حفظ النسخة الاحتياطية أو مشاركتها",
+        saved ? "success" : "warning"
+      );
+    }
+    return saved;
+  }
+
+  async function confirmClearPlan() {
+    if (clearingPlan) return;
+    // On native, the safety copy must be written and the share sheet completed
+    // before deleting the only local copy. The existing web flow stays intact.
+    if (!Capacitor.isNativePlatform()) {
+      clearHifz();
+      setConfirmNew(false);
+      setEditPlan(false);
+      return;
+    }
+    setClearingPlan(true);
+    try {
+      const saved = await exportSafetyBackup();
+      if (!saved) {
+        showToast("لم تُمسح خطة الحفظ", "warning");
+        return;
+      }
+      clearHifz();
+      setConfirmNew(false);
+      setEditPlan(false);
+    } finally {
+      setClearingPlan(false);
+    }
   }
 
   return (
@@ -194,13 +233,13 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
               </p>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
-                  onClick={() => downloadPlainBackup(snapshot(), "قبل-خطة-جديدة")}
+                  onClick={() => void exportSafetyBackup()}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-quran bg-quran/10 hover:bg-quran/20 rounded-lg px-2.5 py-1.5 press"
                 >
                   <Download size={13} /> صدّر نسخة احتياطية
                 </button>
                 <span className="flex-1" />
-                <button onClick={() => { clearHifz(); setConfirmNew(false); setEditPlan(false); }} className="text-[11px] font-bold text-white bg-red-500 rounded-lg px-3 py-1.5 press">تأكيد المسح</button>
+                <button disabled={clearingPlan} onClick={() => void confirmClearPlan()} className="text-[11px] font-bold text-white bg-red-500 rounded-lg px-3 py-1.5 press disabled:opacity-50">{!Capacitor.isNativePlatform() ? "تأكيد المسح" : clearingPlan ? "جارٍ حفظ النسخة…" : "حفظ النسخة ثم المسح"}</button>
                 <button onClick={() => setConfirmNew(false)} className="text-[11px] text-gray-500 rounded-lg px-2.5 py-1.5 press">إلغاء</button>
               </div>
             </div>

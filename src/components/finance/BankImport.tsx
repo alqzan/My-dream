@@ -5,6 +5,7 @@ import { createSmsSourceId, parseBankSmsBulk, learnedCategory, type SmsParseEven
 import { today, getCategoryInfo, formatAmount, formatDate, toIndicDigits } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { CheckCircle, AlertCircle, Trash2, ClipboardPaste } from "lucide-react";
+import { readClipboardText } from "@/lib/platform/clipboard";
 
 const EXPENSE_KINDS = new Set<SmsParseEventResult["kind"]>([
   "purchase", "atm", "bill", "installment", "fee",
@@ -45,7 +46,7 @@ export function BankImport({ onClose, initialSms }: { onClose: () => void; initi
   async function handlePasteClipboard() {
     setError("");
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await readClipboardText();
       if (!text || !text.trim()) {
         setError("الحافظة فاضية — انسخ رسالة البنك أول ثم اضغط هنا.");
         return;

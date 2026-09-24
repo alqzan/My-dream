@@ -1,5 +1,6 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 // Friendly recovery screen — بياناتك في IndexedDB ولا تُمس هنا إطلاقاً.
 // Stale-deploy chunk errors (cached HTML pointing at deleted hashed files)
@@ -11,7 +12,13 @@ export default function ErrorScreen({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [isNative, setIsNative] = useState(false);
+
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      setIsNative(true);
+      return;
+    }
     const isStaleChunk =
       /Loading chunk|ChunkLoadError|Importing a module script failed|Failed to fetch dynamically imported|error loading dynamically imported/i.test(
         `${error?.name ?? ""} ${error?.message ?? ""}`
@@ -29,14 +36,14 @@ export default function ErrorScreen({
       <h1 className="text-xl font-black text-gray-900">صار خطأ مؤقت في التحميل</h1>
       <p className="text-sm text-gray-500 leading-relaxed max-w-xs">
         اطمئن — <b>بياناتك كلها سليمة ومحفوظة على جهازك</b> ولا يمسّها هذا الخطأ.
-        غالباً نسخة قديمة من التطبيق عالقة في الذاكرة المؤقتة.
+        {isNative ? " أعد فتح التطبيق وحاول مرة أخرى." : " غالباً نسخة قديمة من التطبيق عالقة في الذاكرة المؤقتة."}
       </p>
       <div className="flex flex-col gap-2 w-full max-w-xs">
         <button
           onClick={clearHttpCachesAndReload}
           className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm py-3 rounded-xl transition-colors"
         >
-          🔄 تحديث التطبيق للنسخة الجديدة
+          {isNative ? "إعادة تحميل التطبيق" : "🔄 تحديث التطبيق للنسخة الجديدة"}
         </button>
         <button
           onClick={reset}
@@ -56,6 +63,10 @@ export default function ErrorScreen({
 
 // Clears HTTP caches + service workers only — never touches IndexedDB data.
 async function clearHttpCachesAndReload() {
+  if (Capacitor.isNativePlatform()) {
+    window.location.reload();
+    return;
+  }
   try {
     if ("caches" in window) {
       for (const k of await caches.keys()) await caches.delete(k);

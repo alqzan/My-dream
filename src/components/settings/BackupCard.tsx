@@ -5,6 +5,7 @@ import { today } from "@/lib/utils";
 import { fetchInlineMedia, getLocalInlineMedia, mergeAppData } from "@/lib/sync";
 import { replaceTombstones } from "@/lib/merge";
 import { saveFile } from "@/lib/platform/files";
+import { prefSet } from "@/lib/platform/prefs";
 import { getMediaAuthKey, getSyncSpace } from "@/lib/firebase";
 import { DEFAULT_CATEGORIES } from "@/lib/types";
 import type { AppData, JournalEntry } from "@/lib/types";
@@ -354,10 +355,15 @@ export function BackupCard() {
       return;
     }
     setExporting(null);
-    saveFile(
+    const saved = await saveFile(
       `madar-backup-${today()}${useEnc ? "-مشفّر" : ""}.json`,
       new Blob([payload], { type: "application/json" })
     );
+    if (!saved) {
+      setError("تعذّر حفظ النسخة أو مشاركتها؛ لم تُصدّر نسخة احتياطية");
+      showToast("تعذّر حفظ النسخة أو مشاركتها", "warning");
+      return;
+    }
     const missingAttachments = counts.attachments - counts.attachmentFiles;
     if (missingAttachments > 0) {
       showToast(
@@ -370,7 +376,7 @@ export function BackupCard() {
       showToast("صُدّرت النسخة — بعض الصور بقيت روابط (تعذّر تنزيلها، تحقق من الاتصال)", "warning");
     }
     // تغذية تذكير النسخ الدوري في التوصيات الذكية
-    try { localStorage.setItem("madar-last-backup", today()); } catch { /* ignore */ }
+    prefSet("madar-last-backup", today());
   }
 
   async function importJson(file: File) {

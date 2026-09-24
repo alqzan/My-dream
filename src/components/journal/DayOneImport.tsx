@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { isFirebaseEnabled, getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import { reuploadAllMedia, verifyMediaHashesPresent, getR2WorkerUrl } from "@/lib/sync";
 import { showToast } from "@/components/ui/UndoToast";
+import { clearClipboardTextIfMatches, writeClipboardText } from "@/lib/platform/clipboard";
 
 interface ImportStats {
   files: number;
@@ -90,7 +91,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
     const payload = buildMemoryImporterConnection(getR2WorkerUrl(), getMediaAuthKey() ?? syncSpace);
     const text = JSON.stringify(payload);
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       showToast(
         `نُسخت إعدادات الاتصال — الصقها في مستورد الذكريات الآن. ستُمسح من الحافظة تلقائياً خلال ${CONNECTION_CLIPBOARD_CLEAR_MS / 1000} ثانية.`,
         "success"
@@ -98,11 +99,7 @@ export function DayOneImport({ onClose }: { onClose: () => void }) {
       setTimeout(() => {
         // نمسح فقط إن كانت الحافظة ما تزال تحمل ما نسخناه — لا نستبدل شيئاً
         // نسخه المالك بعدنا. القراءة قد تفشل بلا صلاحية؛ نتجاهل بصمت حينها.
-        navigator.clipboard
-          .readText()
-          .then((current) => {
-            if (current === text) return navigator.clipboard.writeText("");
-          })
+        clearClipboardTextIfMatches(text)
           .catch(() => { /* لا صلاحية قراءة الحافظة — تجاهل، لا نُظهر مفتاحاً أبداً */ });
       }, CONNECTION_CLIPBOARD_CLEAR_MS);
     } catch {

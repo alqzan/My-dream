@@ -8,6 +8,7 @@ import { showToast } from "@/components/ui/UndoToast";
 import { TrendingUp, TrendingDown, Copy } from "lucide-react";
 import { arNum } from "@/lib/madar/format";
 import { saveTextFile } from "@/lib/platform/files";
+import { writeClipboardText } from "@/lib/platform/clipboard";
 
 // رسم تقدّم الحفظ عبر الزمن — منحنى تراكمي (بالأوجه) منذ بداية الخطة، مع ملخّص
 // «اليوم/الأسبوع/الشهر». مرسومٌ بـSVG بلغة أدوات التطبيق (تدرّج أخضر، طرفٌ لامع).
@@ -27,11 +28,12 @@ export function HifzChart() {
   async function copyReport() {
     const text = hifzReport(h, todayStr);
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       showToast("نُسخ تقرير الحفظ", "success");
     } catch {
       // تعذّرت الحافظة — نزّل ملفاً نصّياً بدلاً منها.
-      saveTextFile(`تقرير-الحفظ-${todayStr}.txt`, text);
+      const saved = await saveTextFile(`تقرير-الحفظ-${todayStr}.txt`, text);
+      if (!saved) showToast("تعذّر نسخ التقرير وحفظه", "warning");
     }
   }
 

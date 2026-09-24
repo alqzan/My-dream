@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { Capacitor } from "@capacitor/core";
 import type {
   AppData, Transaction, Book, ReadingLog, JournalEntry, Habit,
   Budget, FinanceCategoryDef, PrayerName, PrayerStatus, PrayerLog, QiyamNight, KhushuLevel, DailyBudget,
@@ -3184,6 +3185,10 @@ export const useAppStore = create<AppStore>()(
       // `idbStorage.ts`). `createJSONStorage` كان يُسلسل عند كلّ `set()`.
       storage: persistJSONStorage<AppData>(),
       migrate: migratePersisted,
+      // Native Preferences is asynchronous. ClientOnly preloads it before
+      // starting hydration so bootGuard, the lock and sync key see real values.
+      // The browser keeps Zustand's existing automatic hydration path.
+      skipHydration: Capacitor.isNativePlatform(),
     }
   )
 );

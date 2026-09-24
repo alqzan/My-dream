@@ -158,7 +158,6 @@ export function isThemeMode(value: unknown): value is ThemeMode {
 }
 
 export function readThemePreferences(): ThemePreferences {
-  if (typeof window === "undefined") return {};
   try {
     const raw = prefGetJSON<Record<string, unknown>>(THEME_PREFS_STORAGE_KEY);
     if (!raw || typeof raw !== "object") return {};
@@ -181,7 +180,6 @@ export function readThemePreferences(): ThemePreferences {
 }
 
 export function saveThemePreferences(preferences: ThemePreferences): void {
-  if (typeof window === "undefined") return;
   try {
     prefSetJSON(THEME_PREFS_STORAGE_KEY, preferences);
   } catch {

@@ -16,6 +16,7 @@ import {
 import { today } from "@/lib/utils";
 import type { AppData } from "@/lib/types";
 import { saveTextFile } from "@/lib/platform/files";
+import { writeClipboardText } from "@/lib/platform/clipboard";
 
 const SECTION_LABELS: Record<AiExportSection, string> = {
   journal: "المذكرات",
@@ -31,8 +32,8 @@ const SECTION_HINTS: Record<AiExportSection, string> = {
   quran: "التدبر والوِرد والحفظ والختمة",
 };
 
-function downloadText(text: string, filename: string, type: string) {
-  saveTextFile(filename, text, type);
+async function downloadText(text: string, filename: string, type: string): Promise<boolean> {
+  return saveTextFile(filename, text, type);
 }
 
 export function AiExportCard() {
@@ -78,25 +79,24 @@ export function AiExportCard() {
     }
     const markdown = aiExportMarkdown(payload);
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("clipboard-unavailable");
-      await navigator.clipboard.writeText(markdown);
+      await writeClipboardText(markdown);
       showToast("نُسخت البيانات — الصقها في أداة الذكاء الاصطناعي بنفسك", "success");
     } catch {
-      downloadText(markdown, "madar-ai-" + period.mode + ".md", "text/markdown");
-      showToast("تعذّر الوصول للحافظة؛ نُزّل الملف بدلاً منها", "warning");
+      const saved = await downloadText(markdown, "madar-ai-" + period.mode + ".md", "text/markdown");
+      showToast(saved ? "تعذّر الوصول للحافظة؛ حُفظ الملف بدلاً منها" : "تعذّر الوصول للحافظة وحفظ الملف", "warning");
     }
   }
 
-  function downloadMarkdown() {
+  async function downloadMarkdown() {
     if (disabled) return;
-    downloadText(aiExportMarkdown(payload), "madar-ai-" + period.mode + ".md", "text/markdown");
-    showToast("تم تنزيل نسخة Markdown", "success");
+    const saved = await downloadText(aiExportMarkdown(payload), "madar-ai-" + period.mode + ".md", "text/markdown");
+    showToast(saved ? "تم حفظ نسخة Markdown" : "تعذّر حفظ نسخة Markdown", saved ? "success" : "warning");
   }
 
-  function downloadJson() {
+  async function downloadJson() {
     if (disabled) return;
-    downloadText(aiExportJson(payload), "madar-ai-" + period.mode + ".json", "application/json");
-    showToast("تم تنزيل نسخة JSON", "success");
+    const saved = await downloadText(aiExportJson(payload), "madar-ai-" + period.mode + ".json", "application/json");
+    showToast(saved ? "تم حفظ نسخة JSON" : "تعذّر حفظ نسخة JSON", saved ? "success" : "warning");
   }
 
   return (
@@ -243,4 +243,3 @@ export function AiExportCard() {
     </Card>
   );
 }
-

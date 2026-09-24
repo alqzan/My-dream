@@ -27,7 +27,6 @@ function isFinanceDisplayId(value: string): value is FinanceDisplayId {
 }
 
 export function readFinanceDisplayVisibility(): FinanceDisplayVisibility {
-  if (typeof window === "undefined") return {};
   try {
     const raw = prefGetJSON<Record<string, unknown>>(FINANCE_DISPLAY_STORAGE_KEY);
     if (!raw || typeof raw !== "object") return {};
@@ -40,7 +39,6 @@ export function readFinanceDisplayVisibility(): FinanceDisplayVisibility {
 }
 
 export function saveFinanceDisplayVisibility(visibility: FinanceDisplayVisibility): void {
-  if (typeof window === "undefined") return;
   try {
     prefSetJSON(FINANCE_DISPLAY_STORAGE_KEY, visibility);
   } catch {

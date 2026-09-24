@@ -1,3 +1,6 @@
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
+
 // ===================== الاهتزاز — واجهةُ منصّة =====================
 // نقرةٌ خفيفة عند فعلٍ مُرضٍ (عادةٌ أُنجزت، صلاةٌ سُجّلت). و`navigator.vibrate`
 // **ميتٌ كلياً على iOS**: لا WKWebView يدعمها ولا Safari الجوّال، فالنقرةُ
@@ -8,6 +11,10 @@
 // لا يبقى ممسكاً بـ`navigator`.
 export function buzz(ms = 12): void {
   try {
+    if (Capacitor.isNativePlatform()) {
+      void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+      return;
+    }
     if (typeof navigator === "undefined") return;
     navigator.vibrate?.(ms);
   } catch {

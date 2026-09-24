@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useAppStore } from "@/lib/store";
+import { prefGet, prefSet } from "@/lib/platform/prefs";
 import { DailyBudgetCard } from "@/components/finance/DailyBudgetCard";
 import { TransactionForm } from "@/components/finance/TransactionForm";
 import { TransactionList } from "@/components/finance/TransactionList";
@@ -62,7 +63,7 @@ const SECTIONS_KEY = "madar-finance-sections"; // تفضيل الفتح/الطي
 function readSavedSections(): Partial<Record<PlanSectionId, boolean>> | null {
   if (typeof window === "undefined") return null;
   try {
-    const r = JSON.parse(window.localStorage.getItem(SECTIONS_KEY) || "null");
+    const r = JSON.parse(prefGet(SECTIONS_KEY) || "null");
     return r && typeof r === "object" ? r : null;
   } catch {
     return null;
@@ -260,7 +261,7 @@ export default function FinancePage() {
   function toggleSection(id: PlanSectionId) {
     setOpenSections((prev) => {
       const next = { ...prev, [id]: !prev[id] };
-      try { window.localStorage.setItem(SECTIONS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      prefSet(SECTIONS_KEY, JSON.stringify(next));
       return next;
     });
   }

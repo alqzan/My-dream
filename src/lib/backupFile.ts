@@ -21,7 +21,7 @@ export function hashBackup(s: string): string {
   return (h >>> 0).toString(16);
 }
 
-export function downloadPlainBackup(data: AppData, tag = ""): void {
+export async function downloadPlainBackup(data: AppData, tag = ""): Promise<boolean> {
   const meta = {
     app: "madar",
     createdAt: new Date().toISOString(),
@@ -29,8 +29,9 @@ export function downloadPlainBackup(data: AppData, tag = ""): void {
   };
   const withMeta = { __meta: meta, ...data };
   const blob = new Blob([JSON.stringify(withMeta)], { type: "application/json" });
-  const saved = saveFile(`madar-backup-${today()}${tag ? `-${tag}` : ""}.json`, blob);
+  const saved = await saveFile(`madar-backup-${today()}${tag ? `-${tag}` : ""}.json`, blob);
   // لا يُسجَّل «آخر نسخة» إلّا إن حُفظت فعلاً — وإلّا أسكتنا تذكيرَ النسخ عن
   // نسخةٍ لم تقع.
   if (saved) prefSet(LAST_BACKUP_KEY, today());
+  return saved;
 }

@@ -4,31 +4,15 @@ import type { StateStorage, PersistStorage, StorageValue } from "zustand/middlew
 import { createDeferredStorage, createDeferredWriter } from "./persistScheduler";
 import { beginBoot, markBootPhase, recordStoreBytes, storeKeyFor } from "./platform/bootGuard";
 import { createMediaSplitter } from "./mediaSplit";
-
-// Safari/iOS can temporarily reject an IndexedDB transaction (private mode,
-// storage pressure, or a connection being evicted) even though the origin's
-// small localStorage area is still writable. Keep a compact recovery copy only
-// for that failure path; normal reads and writes remain IndexedDB-backed.
-const LOCAL_FALLBACK_PREFIX = "my-dream-idb-fallback:";
-// سقفٌ لحجم النسخة الاحتياطية — `localStorage` كلّه محدودٌ بنحو ٥ م.ب لكلّ
-// الأصل (يشاركها `madar-sync-space` وحارسُ الإقلاع `bootGuard.ts`)، فكتلةُ
-// متجرٍ كاملة هنا قد تملأ الحصّة وتُسقط مفاتيح أهمّ منها بخطإ حصّةٍ صامت.
-// فوق السقف نتخلّى عن النسخة الاحتياطية ونترك IndexedDB يرمي خطأه الأصليّ.
-const LOCAL_FALLBACK_MAX_CHARS = 2_000_000;
-function fallbackKey(name: string): string { return `${LOCAL_FALLBACK_PREFIX}${name}`; }
-function localFallbackGet(name: string): string | null {
-  if (typeof window === "undefined") return null;
-  try { return window.localStorage.getItem(fallbackKey(name)); } catch { return null; }
-}
-function localFallbackSet(name: string, value: string): boolean {
-  if (typeof window === "undefined") return false;
-  if (value.length > LOCAL_FALLBACK_MAX_CHARS) return false;
-  try { window.localStorage.setItem(fallbackKey(name), value); return true; } catch { return false; }
-}
-function localFallbackRemove(name: string): void {
-  if (typeof window === "undefined") return;
-  try { window.localStorage.removeItem(fallbackKey(name)); } catch { /* ignore */ }
-}
+import { isNativeStoragePlatform, requestNativeStoragePersistence } from "./platform/idbPersistence";
+import {
+  bindPersistenceLifecycle,
+  readLegacyStorageValue,
+  readLocalFallback,
+  removeLegacyStorageValue,
+  removeLocalFallback,
+  writeLocalFallback,
+} from "./platform/idbBrowserStorage";
 
 // IndexedDB-backed storage for the persisted store. localStorage caps at
 // ~5MB and overflows once there are many journal entries + daily photos
@@ -40,19 +24,17 @@ const keyOf = (name: string): string => (name === MAIN_STORE ? storeKeyFor(name)
 export const idbStorage: StateStorage = {
   getItem: async (rawName) => {
     const name = keyOf(rawName);
-    const fallback = localFallbackGet(name);
+    const fallback = readLocalFallback(name);
     if (fallback != null) return fallback;
     const value = await get<string>(name, keyvalStore);
     if (value != null) return value;
     // One-time migration: if nothing in IDB yet, pull any legacy value that
     // was previously saved in localStorage so existing data isn't lost.
-    if (typeof window !== "undefined") {
-      const legacy = window.localStorage.getItem(name);
-      if (legacy != null) {
-        await set(name, legacy, keyvalStore);
-        try { window.localStorage.removeItem(name); } catch { /* ignore */ }
-        return legacy;
-      }
+    const legacy = readLegacyStorageValue(name);
+    if (legacy != null) {
+      await set(name, legacy, keyvalStore);
+      removeLegacyStorageValue(name);
+      return legacy;
     }
     return null;
   },
@@ -60,19 +42,19 @@ export const idbStorage: StateStorage = {
     const name = keyOf(rawName);
     try {
       await set(name, value, keyvalStore);
-      localFallbackRemove(name);
+      removeLocalFallback(name);
     } catch (error) {
       // Keep the full serialized snapshot when the browser can still provide
       // its small synchronous store. The deferred writer will report the
       // original error only if both stores reject, so source inbox documents
       // remain protected in the genuinely unavailable case.
-      if (!localFallbackSet(name, value)) throw error;
+      if (!writeLocalFallback(name, value)) throw error;
     }
   },
   removeItem: async (rawName) => {
     const name = keyOf(rawName);
     await del(name, keyvalStore);
-    localFallbackRemove(name);
+    removeLocalFallback(name);
   },
 };
 
@@ -149,6 +131,11 @@ const jsonStorage: PersistStorage<unknown> = {
     // أوّلُ ما يقع في الإقلاع — قبل أيّ بايتٍ من المتجر (`platform/bootGuard.ts`).
     beginBoot();
     markBootPhase("store:read");
+    // WKWebView uses a persistent-on-disk website data store, but WebKit may
+    // still evict best-effort IndexedDB under storage pressure. iOS 17+ exposes
+    // StorageManager.persist(); ask once on native before reading user data.
+    // A denial or older WebKit leaves the existing IndexedDB path untouched.
+    if (isNativeStoragePlatform()) await requestNativeStoragePersistence();
     let value: StorageValue<unknown> | null;
     try {
       value = await jsonWriter.getItem(name);
@@ -215,12 +202,6 @@ export async function flushPersistedStrict(): Promise<void> {
 // يُوصَل هنا لا في `persistScheduler.ts`: تلك نقيّةٌ بلا DOM لتعبر إلى الغلاف
 // الأصليّ ولتُختبر بمؤقّتاتٍ وهمية. وهذا الملفّ هو واجهةُ التخزين القابلة
 // للاستبدال أصلاً (راجع `docs/APP-STORE-PLAN.md`) — فمكانُ الوصل هنا.
-if (typeof window !== "undefined") {
-  // `flush` keeps a failed batch queued and retries it internally; suppress
-  // the rejected promise here because lifecycle events have no caller waiting.
-  const flush = () => { void flushPersisted(); };
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flush();
-  });
-  window.addEventListener("pagehide", flush);
-}
+// `flush` keeps a failed batch queued and retries it internally; suppress the
+// rejected promise because lifecycle events have no caller waiting.
+bindPersistenceLifecycle(() => { void flushPersisted(); });

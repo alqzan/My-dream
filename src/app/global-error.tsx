@@ -1,4 +1,5 @@
 "use client";
+import { Capacitor } from "@capacitor/core";
 
 // Last-resort boundary (errors in the root layout itself).
 // Must render its own <html>/<body>. Data in IndexedDB is untouched.
@@ -27,6 +28,10 @@ export default function GlobalError({
           </p>
           <button
             onClick={async () => {
+              if (Capacitor.isNativePlatform()) {
+                window.location.reload();
+                return;
+              }
               try {
                 if ("caches" in window) {
                   for (const k of await caches.keys()) await caches.delete(k);

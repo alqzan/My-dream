@@ -6,6 +6,7 @@ import { inventoryMedia, reuploadAllMedia, describeUploadError, type MediaInvent
 import { journalShardId } from "@/lib/merge";
 import { splitTransactionShards } from "@/lib/transactionShards";
 import { getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
+import { prefGet } from "@/lib/platform/prefs";
 import { entryPhotos } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
@@ -165,8 +166,7 @@ export function DataHealthCard() {
     // just photos[0]) — using it avoids counting the first image twice.
     let photos = 0;
     for (const e of journalEntries) photos += entryPhotos(e).length;
-    let lastBackup: string | null = null;
-    try { lastBackup = localStorage.getItem("madar-last-backup"); } catch { /* ignore */ }
+    const lastBackup = prefGet("madar-last-backup");
     setInfo({
       mainBytes,
       shardBytes,

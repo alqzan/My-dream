@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Trash2, Loader2, Pause, Play } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 
 // المدّة القصوى: **ساعة كاملة**. الثلاث دقائق القديمة كانت قيداً على زمنٍ مضى
 // يوم كانت الوسائط تُحفظ داخل مستند Firestore (سقف 1MB للمستند). الصوت اليوم
@@ -11,16 +12,30 @@ const AUDIO_BITS = 24000; // 24 kbps — plenty for a spoken memo
 // عدد المقاطع في المذكرة الواحدة.
 export const MAX_AUDIO_NOTES = 10;
 
-function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
-  return candidates.find((t) => {
+export function selectAudioMimeType(
+  isTypeSupported: (mimeType: string) => boolean,
+  native = false,
+): string | undefined {
+  // WKWebView on iOS records AAC in an MP4 container. Keep the web preference
+  // order byte-for-byte the same so browser recordings remain WebM/Opus first.
+  const candidates = native
+    ? ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
+    : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+  return candidates.find((type) => {
     try {
-      return MediaRecorder.isTypeSupported(t);
+      return isTypeSupported(type);
     } catch {
       return false;
     }
   });
+}
+
+function pickMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  return selectAudioMimeType(
+    (type) => MediaRecorder.isTypeSupported(type),
+    Capacitor.isNativePlatform(),
+  );
 }
 
 function fmt(sec: number): string {

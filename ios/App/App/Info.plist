@@ -34,6 +34,8 @@
 	<string>يتيح مدار تسجيل المقاطع الصوتية وإرفاقها بمذكراتك.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>يتيح مدار اختيار الصور وإرفاقها بمذكراتك.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>يتيح مدار حفظ الصور في مكتبة الصور عند اختيارك ذلك.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

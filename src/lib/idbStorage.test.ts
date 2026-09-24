@@ -50,4 +50,15 @@ describe("idbStorage recovery", () => {
     await expect(idbStorage.setItem("my-dream-store", huge)).rejects.toThrow("IndexedDB unavailable");
     expect(await idbStorage.getItem("my-dream-store")).toBeNull();
   });
+
+  it("moves a legacy localStorage snapshot into IndexedDB and removes its old key", async () => {
+    const local = localStore();
+    local.setItem("my-dream-store", "legacy-snapshot");
+    vi.stubGlobal("window", { localStorage: local });
+
+    await expect(idbStorage.getItem("my-dream-store")).resolves.toBe("legacy-snapshot");
+
+    expect(idb.get("my-dream-store")).toBe("legacy-snapshot");
+    expect(local.getItem("my-dream-store")).toBeNull();
+  });
 });

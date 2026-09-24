@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { sunTimes, getCachedCoords, GEO_KEY } from "@/lib/utils";
+import { getCurrentPosition } from "@/lib/platform/geo";
+import { prefGet, prefSet } from "@/lib/platform/prefs";
 import { sectionFromPath, readThemePreferences, tokensFor } from "@/lib/theme";
 import { Moon, Sun, SunMoon } from "lucide-react";
 
@@ -62,18 +64,16 @@ export function ThemeApplier() {
   useEffect(() => {
     if (theme !== "auto") return;
     try {
-      if (localStorage.getItem(GEO_KEY) || !("geolocation" in navigator)) return;
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          localStorage.setItem(
+      if (prefGet(GEO_KEY)) return;
+      void getCurrentPosition({ maximumAge: 24 * 3600 * 1000, timeout: 8000 })
+        .then((pos) => {
+          prefSet(
             GEO_KEY,
             JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude })
           );
           setTick((t) => t + 1);
-        },
-        () => {},
-        { maximumAge: 24 * 3600 * 1000, timeout: 8000 }
-      );
+        })
+        .catch(() => {});
     } catch {}
   }, [theme]);
 

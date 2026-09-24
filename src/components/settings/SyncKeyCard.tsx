@@ -1,8 +1,11 @@
 "use client";
+import { Capacitor } from "@capacitor/core";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { SYNC_SPACE_STORAGE_KEY } from "@/lib/firebase";
 import { syncSpaceProblem, describeSyncSpaceProblem } from "@/lib/syncSpace";
+import { prefGet, prefSet, prefRemove, flushPrefs } from "@/lib/platform/prefs";
+import { writeClipboardText } from "@/lib/platform/clipboard";
 import { showToast } from "@/components/ui/UndoToast";
 import { KeyRound, Save, Trash2, Eye, EyeOff, Copy, Dices, AlertTriangle } from "lucide-react";
 
@@ -36,22 +39,20 @@ export function SyncKeyCard() {
   const savedProblem = saved ? syncSpaceProblem(saved) : null;
 
   useEffect(() => {
-    try {
-      setSaved(localStorage.getItem(SYNC_SPACE_STORAGE_KEY));
-    } catch { /* ignore */ }
+    setSaved(prefGet(SYNC_SPACE_STORAGE_KEY));
   }, []);
 
   async function copyKey() {
     if (!saved) return;
     try {
-      await navigator.clipboard.writeText(saved);
+      await writeClipboardText(saved);
       showToast("نُسخ المفتاح — احفظه في مكان آمن", "success");
     } catch {
       showToast("تعذّر النسخ — اضغط مطوّلاً على المفتاح لتحديده ونسخه", "warning");
     }
   }
 
-  function save() {
+  async function save() {
     const value = input.trim();
     if (!value) return;
     // مفتاحٌ لا يصلح مقطعَ مسارٍ في Firestore يُرفض **رفضاً** لا تنبيهاً: حفظه
@@ -73,9 +74,11 @@ export function SyncKeyCard() {
     ) {
       return;
     }
-    try {
-      localStorage.setItem(SYNC_SPACE_STORAGE_KEY, value);
-    } catch { /* ignore */ }
+    prefSet(SYNC_SPACE_STORAGE_KEY, value);
+    if (Capacitor.isNativePlatform() && !(await flushPrefs())) {
+      showToast("تعذّر حفظ مفتاح المزامنة على هذا الجهاز؛ لم تُعَد الصفحة", "warning");
+      return;
+    }
     location.reload();
   }
 
@@ -85,10 +88,12 @@ export function SyncKeyCard() {
     showToast("وُلّد مفتاح قوي — انسخه واحفظه، ثم اضغط حفظ", "success");
   }
 
-  function clear() {
-    try {
-      localStorage.removeItem(SYNC_SPACE_STORAGE_KEY);
-    } catch { /* ignore */ }
+  async function clear() {
+    prefRemove(SYNC_SPACE_STORAGE_KEY);
+    if (Capacitor.isNativePlatform() && !(await flushPrefs())) {
+      showToast("تعذّر مسح مفتاح المزامنة من هذا الجهاز", "warning");
+      return;
+    }
     location.reload();
   }
 

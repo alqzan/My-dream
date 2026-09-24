@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
+import { prefGet, prefSet } from "@/lib/platform/prefs";
 import {
   calcStreak,
   getPrayerStreak,
@@ -82,18 +83,18 @@ export function MilestoneWatcher() {
       const storageKey = `madar-ms-${m.key}`;
       let stored: number | null;
       try {
-        const raw = localStorage.getItem(storageKey);
+        const raw = prefGet(storageKey);
         stored = raw === null ? null : parseInt(raw) || 0;
       } catch {
         stored = 0;
       }
       // First time we ever see this metric: record the baseline silently.
       if (stored === null) {
-        try { localStorage.setItem(storageKey, String(reached)); } catch { /* ignore */ }
+        prefSet(storageKey, String(reached));
         continue;
       }
       if (reached > stored) {
-        try { localStorage.setItem(storageKey, String(reached)); } catch { /* ignore */ }
+        prefSet(storageKey, String(reached));
         messages.push(m.message(reached));
       }
     }
@@ -107,11 +108,11 @@ export function MilestoneWatcher() {
       }
       const key = "madar-ms-hifzjuz";
       let stored: number | null;
-      try { const raw = localStorage.getItem(key); stored = raw === null ? null : parseInt(raw) || 0; } catch { stored = 0; }
+      try { const raw = prefGet(key); stored = raw === null ? null : parseInt(raw) || 0; } catch { stored = 0; }
       if (stored === null) {
-        try { localStorage.setItem(key, String(completed)); } catch { /* ignore */ }
+        prefSet(key, String(completed));
       } else if (completed > stored) {
-        try { localStorage.setItem(key, String(completed)); } catch { /* ignore */ }
+        prefSet(key, String(completed));
         messages.push(`🎉 أتممت حفظ الجزء ${top} — تقبّل الله وبارك فيك!`);
       }
     }

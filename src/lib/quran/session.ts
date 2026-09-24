@@ -175,7 +175,6 @@ export function isValidSessionSnapshot(value: unknown, todayStr: string): value 
 }
 
 export function loadSession(todayStr: string): SessionSnapshot | null {
-  if (typeof window === "undefined") return null;
   try {
     const raw = prefGet(RESUME_KEY);
     if (!raw) return null;
@@ -187,12 +186,10 @@ export function loadSession(todayStr: string): SessionSnapshot | null {
 }
 
 export function saveSession(snap: SessionSnapshot) {
-  if (typeof window === "undefined") return;
   prefSetJSON(RESUME_KEY, snap);
 }
 
 export function clearSession() {
-  if (typeof window === "undefined") return;
   prefRemove(RESUME_KEY);
 }
 

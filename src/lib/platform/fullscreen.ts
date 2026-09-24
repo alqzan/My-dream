@@ -1,3 +1,6 @@
+import { Capacitor } from "@capacitor/core";
+import { StatusBar } from "@capacitor/status-bar";
+
 // ===================== ملء الشاشة — واجهةُ منصّة =====================
 // «ملء الشاشة» في المتصفّح شيئان مختلفان: طبقةٌ تغطّي نافذةَ الموقع
 // (`position: fixed; inset: 0`) — وهي ما كان عندنا — و**ملءٌ حقيقيّ** يطوي معه
@@ -13,12 +16,21 @@
 // الطبقةُ الغاطية تعمل على كلّ حال، والملءُ الحقيقيّ زيادةٌ حيث توجد.
 
 export function fullscreenSupported(): boolean {
+  if (Capacitor.isNativePlatform()) return true;
   if (typeof document === "undefined") return false;
   return typeof document.documentElement.requestFullscreen === "function";
 }
 
 /** يُنادى من داخل إيماءة المستخدم (نقرةِ الفتح) وإلا رفضه المتصفّح. */
 export async function enterFullscreen(el?: Element | null): Promise<boolean> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await StatusBar.hide();
+      return true;
+    } catch {
+      return false;
+    }
+  }
   if (!fullscreenSupported()) return false;
   try {
     await (el ?? document.documentElement).requestFullscreen?.({ navigationUI: "hide" });
@@ -27,6 +39,10 @@ export async function enterFullscreen(el?: Element | null): Promise<boolean> {
 }
 
 export async function exitFullscreen(): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try { await StatusBar.show(); } catch { /* ignore */ }
+    return;
+  }
   if (typeof document === "undefined") return;
   try {
     if (document.fullscreenElement) await document.exitFullscreen();

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BookMarked, BookOpen, Plus, Wallet } from "lucide-react";
 import { useSectionNav } from "@/components/layout/useSectionNav";
 import { useAppStore } from "@/lib/store";
+import { prefGet, prefSet, prefRemove, prefKeys } from "@/lib/platform/prefs";
 import { completedDayDates } from "@/lib/dayAggregator";
 import {
   computeDailyBudgetStatus,
@@ -145,20 +146,17 @@ export default function Dashboard() {
   ];
 
   useEffect(() => {
-    try {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 30);
-      const cutoffKey = `madar-celebrated-${toDateStr(cutoff)}`;
-      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith("madar-celebrated-") && key < cutoffKey) localStorage.removeItem(key);
-      }
-    } catch { /* storage unavailable — skip cleanup */ }
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffKey = `madar-celebrated-${toDateStr(cutoff)}`;
+    for (const key of prefKeys("madar-celebrated-")) {
+      if (key < cutoffKey) prefRemove(key);
+    }
 
     if (!allDoneToday) return;
     const key = `madar-celebrated-${todayStr}`;
-    if (localStorage.getItem(key)) return;
-    localStorage.setItem(key, "1");
+    if (prefGet(key)) return;
+    prefSet(key, "1");
     setCelebrate(true);
   }, [allDoneToday, todayStr]);
 
