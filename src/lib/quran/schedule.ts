@@ -29,6 +29,16 @@
 //
 // وسقفُ اليوم صار يتكيّف مع مواظبتك (`adaptiveReviewCap`) بدل رقمٍ ثابت: من
 // انقطع يعود إلى حملٍ ألطف، ومن واظب يُرفع سقفُه فيلحق متأخّراته.
+//
+// **والمراجعةُ قبل موعدها لا تُصعِّد** (٠٫١٫٤٥٧). كان كلُّ «متقن» يرفع الوجه درجةً
+// ولو رُوجع في الغد — و«المراجعة القريبة» تمرّ على آخر الأوجه كلَّ يوم، فوجهٌ
+// حُفظ ثمّ سُمِّع خمسة أيامٍ متتالية كان يخرج بموعدٍ **بعد ثمانين يوماً** وعمرُه
+// أسبوع. الإتقانُ قبل انقضاء `EARLY_FRACTION` من المدة دليلٌ على أنّ الذاكرة لم
+// تُختبَر بعد، لا على رسوخها: يثبّت الوجه على درجته (ومعامله) ولا يرفعه. والتعثّرُ
+// المبكّر يُحتسب كاملاً — الخطأ دليلٌ في أيّ وقتٍ وقع.
+//
+// **وأوّلُ درجةٍ للوجه قصيرة** (`goodDays`) — وكذا بعد التعثّر: لم يُختبَر بعدُ
+// على أيّ مدّة، فلا يُقفز به إلى أسبوع. هكذا يمشي الوجه الجديد: يوميّاً في «القريبة» ← ٣ ← ٧ ← ١٤ ← ٣٠ ← ٦٠.
 
 import type { HifzState, HifzRating } from "../types";
 import type { Portion } from "./hifz";
@@ -97,6 +107,9 @@ export function nextInterval(
   // «متقن»: الدرجة التالية على السلّم — والمدّةُ السابقة تُقسم على المعامل أوّلاً
   // كي تُقاس بمقياس السلّم نفسه (وإلّا ضاعت درجتُها بعد أوّل ضرب).
   const baseline = ease > 0 ? prevDays / ease : prevDays;
+  // وجهٌ لم يُقيَّم قطّ، أو عائدٌ من تعثّر: لم يصمد بعدُ على أيّ مدّة، فيمرّ بدرجة
+  // التثبيت القصيرة (`goodDays`) قبل أوّل السلّم — لا يُقفز به إلى أسبوع.
+  if (!(prevDays > 0) || baseline < p.goodDays * 0.75) return Math.max(1, Math.round(p.goodDays * ease));
   const idx = rungOf(p.ladder, baseline);
   const rung = idx < 0 ? p.ladder[0] : p.ladder[Math.min(idx + 1, p.ladder.length - 1)];
 
@@ -115,28 +128,49 @@ export interface PageMemory {
   lapses: number;
 }
 
+/** الإتقانُ قبل انقضاء هذا الكسر من المدّة المجدولة مراجعةٌ مبكّرة لا تُصعِّد. */
+export const EARLY_FRACTION = 0.8;
+
+/** حالُ الوجه قبل تقييمٍ جديد — ما يلزم لحساب أثره. */
+export interface MemoryCursor {
+  intervalDays: number;
+  ease: number;
+  lastDate: string | null;
+}
+
 /**
- * طيّ سجلّ وجهٍ زمنياً (الأقدم أوّلاً) → مدّتُه ومعاملُه.
+ * أثرُ تقييمٍ واحدٍ في حال الوجه — **القاعدة الوحيدة** يطويها `foldMemory` على
+ * السجلّ ويعرضها `nextDueDays` قبل التسجيل، فلا يختلف المعروضُ عمّا يُسجَّل.
  *
  * المعاملُ يُحدَّث **قبل** حساب المدّة، فتقييمُ اليوم يظهر أثرُه اليوم لا غداً:
  * من تعثّر الآن لا يُمنح مدّةَ الراسخ ثمّ يُعاقَب في الجولة التالية.
  */
+export function applyRating(
+  cur: MemoryCursor, rating: HifzRating, date: string,
+  p: IntensityPreset = INTENSITY[DEFAULT_INTENSITY],
+): { intervalDays: number; ease: number; early: boolean } {
+  const elapsedDays = cur.lastDate ? Math.max(0, daysBetween(cur.lastDate, date)) : 0;
+  const early = rating === 3 && cur.intervalDays > 0 && elapsedDays < cur.intervalDays * EARLY_FRACTION;
+  if (early) return { intervalDays: cur.intervalDays, ease: cur.ease, early };
+  const ease = nextEase(cur.ease, rating);
+  return { intervalDays: nextInterval(cur.intervalDays, rating, p, { ease, elapsedDays }), ease, early };
+}
+
+/** طيّ سجلّ وجهٍ زمنياً (الأقدم أوّلاً) → مدّتُه ومعاملُه. */
 export function foldMemory(
   events: readonly { rating: HifzRating; date: string }[],
   p: IntensityPreset = INTENSITY[DEFAULT_INTENSITY],
 ): PageMemory {
-  let intervalDays = 0;
-  let ease = EASE_START;
+  const cur: MemoryCursor = { intervalDays: 0, ease: EASE_START, lastDate: null };
   let lapses = 0;
-  let prevDate: string | null = null;
   for (const e of events) {
-    const elapsedDays = prevDate ? Math.max(0, daysBetween(prevDate, e.date)) : 0;
-    ease = nextEase(ease, e.rating);
-    intervalDays = nextInterval(intervalDays, e.rating, p, { ease, elapsedDays });
+    const next = applyRating(cur, e.rating, e.date, p);
+    cur.intervalDays = next.intervalDays;
+    cur.ease = next.ease;
+    cur.lastDate = e.date;
     if (e.rating === 1) lapses++;
-    prevDate = e.date;
   }
-  return { intervalDays, ease, lapses };
+  return { intervalDays: cur.intervalDays, ease: cur.ease, lapses };
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -277,9 +311,15 @@ export function pageSchedules(s: HifzState, todayStr: string): PageSchedule[] {
 export function nextDueDays(s: HifzState, portion: Portion, rating: HifzRating, todayStr: string): number {
   const page = idToPage(portion.fromId);
   const cur = pageSchedules(s, todayStr).find((p) => p.page === page);
-  const ease = nextEase(cur?.ease ?? EASE_START, rating);
-  const elapsedDays = cur?.lastReviewed ? Math.max(0, daysBetween(cur.lastReviewed, todayStr)) : 0;
-  return nextInterval(cur?.intervalDays ?? 0, rating, presetOf(s.plan), { ease, elapsedDays });
+  return applyRating(
+    { intervalDays: cur?.intervalDays ?? 0, ease: cur?.ease ?? EASE_START, lastDate: cur?.lastReviewed ?? null },
+    rating, todayStr, presetOf(s.plan),
+  ).intervalDays;
+}
+
+/** الأوجه المستحقّة بالجدول — مصدرُ حالة «يحتاج مراجعة» في خريطة الحفظ. */
+export function duePageSet(s: HifzState, todayStr: string): Set<number> {
+  return new Set(pageSchedules(s, todayStr).filter((p) => p.due).map((p) => p.page));
 }
 
 export interface DuePage {

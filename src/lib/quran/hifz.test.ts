@@ -3,7 +3,9 @@ import {
   weakSpots, latestRatingByPage, portionEnd, hifzProgress, hifzPace,
   gradeFromMistakes, mistakeTolerance, recentReviewBand, drillsToday, smartTestPortion,
   openMistakesInRange, marksTodayInRange, markedToday, hifzUnits, groupPagesByJuz,
+  gradeByPage, worstGrade,
 } from "./hifz";
+import { duePageSet } from "./schedule";
 import { pageRange, idToPage, idToJuz, TOTAL_PAGES, TOTAL_JUZ } from "./meta";
 import type { HifzState, HifzRating } from "../types";
 
@@ -257,7 +259,7 @@ describe("smartTestPortion — يرجّح الأطول عهداً لا العش�
 });
 
 describe("جدارُ الأوجه — سطرٌ لكلِّ جزء", () => {
-  const cells = hifzUnits(hz({ frontierId: 400 }), "2026-08-19", "page");
+  const cells = hifzUnits(hz({ frontierId: 400 }), "2026-08-19", "page", new Set());
 
   it("ثلاثون سطراً، ولا وجهَ يسقط ولا يُعدُّ مرّتين", () => {
     const rows = groupPagesByJuz(cells);
@@ -289,5 +291,80 @@ describe("جدارُ الأوجه — سطرٌ لكلِّ جزء", () => {
 
   it("قائمةٌ فارغة تُعطي صفراً من السطور لا تنهار", () => {
     expect(groupPagesByJuz([])).toEqual([]);
+  });
+});
+
+describe("gradeByPage — كلُّ وجهٍ يُقيَّم بمواضعه هو", () => {
+  const T = "2026-03-01";
+  const spot = (id: string, ayahId: number) =>
+    ({ id, ayahId, wordIndex: 0, hits: [T], resolved: false, updatedAt: T });
+
+  it("ستّةُ مواضع في وجهٍ واحد لا تذوب في حدّ تسامح خمسة أوجه", () => {
+    const p1 = pageRange(1), p5 = pageRange(5), p3 = pageRange(3);
+    // ستّةُ مواضع (كلماتٌ متمايزة) في أوّل آيةٍ من الوجه الثالث
+    const mistakes = Array.from({ length: 6 }, (_, i) => ({ ...spot(`m${i}`, p3.start), wordIndex: i }));
+    const s = hz({ frontierId: p5.end, mistakes });
+    const parts = gradeByPage(s, { fromId: p1.start, toId: p5.end }, T);
+    expect(parts.map((p) => [idToPage(p.fromId), idToPage(p.toId), p.rating])).toEqual([
+      [1, 2, 3], [3, 3, 1], [4, 5, 3],
+    ]);
+    expect(worstGrade(parts)).toBe(1);
+    expect(parts.reduce((a, p) => a + p.ayat, 0)).toBe(p5.end - p1.start + 1);
+  });
+
+  it("مقطعٌ نظيف قيدٌ واحد لا خمسة", () => {
+    const p5 = pageRange(5);
+    const parts = gradeByPage(hz({ frontierId: p5.end }), { fromId: 1, toId: p5.end }, T);
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({ fromId: 1, toId: p5.end, rating: 3, marks: 0 });
+  });
+
+  it("وسمٌ سابق لم يُكرَّر اليوم لا يُحتسب على تسميع اليوم", () => {
+    const p1 = pageRange(1);
+    const old = { ...spot("o", p1.start), hits: ["2026-02-01"], updatedAt: "2026-02-01" };
+    const parts = gradeByPage(hz({ frontierId: p1.end, mistakes: [old] }), { fromId: 1, toId: p1.end }, T);
+    expect(parts[0].rating).toBe(3);
+  });
+});
+
+describe("latestRatingByPage — قيدٌ بلا تقييم لا يمحو ضعفاً", () => {
+  it("الوجه الضعيف يبقى ضعيفاً بعد تسجيلٍ بلا تقييم", () => {
+    const p1 = pageRange(1);
+    const s = hz({
+      frontierId: p1.end,
+      sessions: [ev(1, p1.end, "2026-01-01", 1)],
+      reviews: [ev(1, p1.end, "2026-01-05")],
+    });
+    expect(latestRatingByPage(s).get(1)).toEqual({ date: "2026-01-05", rating: 1 });
+    expect(weakPageSet(s).has(1)).toBe(true);
+  });
+});
+
+describe("خريطة الحفظ تقرأ الاستحقاق من الجدول", () => {
+  it("وجهٌ موعده بعيد ليس «محتاج مراجعة» ولو مرّ عليه أسبوع", () => {
+    const p1 = pageRange(1);
+    // أُتقن ثمّ رُوجع في موعده مرّتين ⇒ مدّته أسبوعان؛ بعد ثمانية أيام ليس مستحقّاً.
+    const s = hz({
+      frontierId: p1.end,
+      sessions: [ev(1, p1.end, "2026-01-01", 3)],
+      reviews: [ev(1, p1.end, "2026-01-04", 3), ev(1, p1.end, "2026-01-12", 3)],
+    });
+    const T = "2026-01-20";
+    const cell = hifzUnits(s, T, "page", duePageSet(s, T))[0];
+    expect(cell.daysSince).toBe(8);
+    expect(cell.state).toBe("fresh");
+    // وحين يحين موعده بالجدول تصير «مستحقّة»
+    const later = "2026-02-15";
+    expect(hifzUnits(s, later, "page", duePageSet(s, later))[0].state).toBe("due");
+  });
+
+  it("الجزءُ ضعيفٌ إن ضعُف وجهٌ فيه، لا بحسب آخر قيدٍ مسّه", () => {
+    const p1 = pageRange(1), p3 = pageRange(3);
+    const s = hz({
+      frontierId: p3.end,
+      sessions: [ev(1, p3.end, "2026-01-01", 3)],
+      reviews: [ev(p1.start, p1.end, "2026-01-02", 1), ev(pageRange(2).start, p3.end, "2026-01-03", 3)],
+    });
+    expect(hifzUnits(s, "2026-01-03", "juz", duePageSet(s, "2026-01-03"))[0].state).toBe("weak");
   });
 });

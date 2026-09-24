@@ -1,11 +1,11 @@
 "use client";
-import { useState, useMemo } from "react";
-import { idToSurahAyah, describeRange } from "@/lib/quran/meta";
+import { useState } from "react";
+import { idToSurahAyah, idToPage, describeRange } from "@/lib/quran/meta";
 import { textsInRange } from "@/lib/quran/text";
 import {
-  mistakesForAyah, gradeFromMistakes, explainGrade, countDays,
-  openMistakesInRange, marksTodayInRange, markedToday,
-  RATING_LABEL, type Portion,
+  mistakesForAyah, explainGrade, countDays, gradeByPage, worstGrade, bridgeBefore,
+  openMistakesInRange, markedToday,
+  RATING_LABEL, type Portion, type RatedPart, type GradedPart,
 } from "@/lib/quran/hifz";
 import { presetOf } from "@/lib/quran/intensity";
 import { nextDueDays } from "@/lib/quran/schedule";
@@ -19,13 +19,14 @@ import { EMPTY_HIFZ, type HifzMistake, type HifzRating } from "@/lib/types";
 import { today } from "@/lib/utils";
 import {
   X, Repeat, Eye, EyeOff, Check, ChevronLeft, Link2, CornerDownLeft, MousePointerClick,
-  CalendarClock, SlidersHorizontal, Undo2,
+  CalendarClock, SlidersHorizontal, Undo2, Footprints, Headphones,
 } from "lucide-react";
 import { arNum } from "@/lib/madar/format";
 
 // المُدرّب الموجّه — يقود الحفظ آيةً آية: تكرارٌ بعدد مرّاتٍ تحدّده شدّة التمرين،
-// ثم تسميعٌ بتلقين الآية السابقة، ثم «أتقنتها» للانتقال، وأخيراً مرحلة ربطٍ
-// للمقطع كله. له وضعان: memorize (تكرار+تسميع) للورد، وrecall (تسميع) للمراجعة.
+// ثم تلميحٌ بأوائل الأسطر، ثم تسميعٌ بتلقين الآية السابقة، ثم «أتقنتها» للانتقال،
+// ثم ربطٌ للمقطع كله، **ثمّ تسميعُه كاملاً مستوراً** يُشتقّ منه تقييمُ الورد. له
+// وضعان: memorize للورد، وrecall (تسميع) للمراجعة.
 //
 // **كلّ نصٍّ هنا يُعرض في وجهه من المصحف** (`MushafSheet`): الآية في موضعها من
 // اللوح، وحولها سياقُ وجهها، والوجهُ برقمه وجهته. الحفظ من آياتٍ مجرّدةٍ من
@@ -33,123 +34,114 @@ import { arNum } from "@/lib/madar/format";
 // أعلى اليمنى بعد آية كذا». والسترُ يُبقي أثر الآية في موضعها فلا تضيع الصورة
 // أثناء الاسترجاع.
 //
-// في وضع التسميع لا نسأل «كيف كانت مراجعتك؟» بعد أن وسمتَ مواضع تعثّرك — بل
-// يُشتقّ التقييم من عددها ويُعرض سببُه وموعدُ المراجعة القادمة، ولك أن تخالفه.
+// لا نسأل «كيف كانت مراجعتك؟» بعد أن وسمتَ مواضع تعثّرك — بل يُشتقّ التقييم من
+// عددها **لكلّ وجهٍ على حدة** ويُعرض سببُه وموعدُ المراجعة القادمة، ولك أن
+// تخالفه. وكذا الورد الجديد (٠٫١٫٤٥٧): كان «أتقنتها» ضغطةً بلا اختبار، والتقييمُ
+// في آخره اختيارياً بجانبه «أنهيت بلا تقييم» — فيدخل الجدولَ وجهٌ لم يُختبَر قطّ.
+//
+// **وقبل الورد جسرٌ** (`bridgeBefore`): تُسمَّع آخرُ آياتٍ محفوظة ثمّ تبدأ، ويُقرأ
+// الربطُ موصولاً منها — فالحدّ بين ورد أمس واليوم هو أكثرُ مواضع الانقطاع.
+type MemorizePhase = "bridge" | "repeat" | "cue" | "recall" | "link" | "final";
+
 export function HifzCoach({
   portion, text, mode, onDone, onClose, recallTitle = "سمّع مراجعتك",
 }: {
   portion: Portion;
   text: string[];
   mode: "memorize" | "recall";
-  onDone: (rating?: HifzRating) => void;
+  /** ما يُسجَّل: قيدٌ لكلّ جزءٍ اختلف تقييمُه (راجع `gradeByPage`). */
+  onDone: (parts: RatedPart[]) => void;
   onClose: () => void;
   recallTitle?: string; // عنوان شاشة التسميع (مراجعة/اختبار مفاجئ)
 }) {
   const quranHifz = useAppStore((s) => s.quranHifz);
-  const resolveMistake = useAppStore((s) => s.resolveMistake);
-  const toggleMistakeWord = useAppStore((s) => s.toggleMistakeWord);
   const h = quranHifz ?? EMPTY_HIFZ;
   const ayat = textsInRange(text, portion.fromId, portion.toId).map((r) => ({
     id: r.id, no: idToSurahAyah(r.id).ayah, text: r.text,
   }));
 
   const repTarget = presetOf(h.plan).reps;
+  // الجسرُ يُلتقط مرّةً عند الفتح: الجبهةُ تتقدّم عند التسجيل ولا يتزحزح الجسر.
+  const [bridge] = useState(() => (mode === "memorize" ? bridgeBefore(h, portion) : null));
 
   // memorize: نمرّ آيةً آية. recall: شاشة واحدة للمقطع كله.
   const [idx, setIdx] = useState(0);
-  const [phase, setPhase] = useState<"repeat" | "recall" | "link">(mode === "recall" ? "recall" : "repeat");
+  const [phase, setPhase] = useState<MemorizePhase>(bridge ? "bridge" : "repeat");
   const [reps, setReps] = useState(0);
-  const [revealed, setRevealed] = useState(mode === "recall" ? false : true);
+  const [revealed, setRevealed] = useState(false);
 
   const cur = ayat[idx];
   const isLast = idx >= ayat.length - 1;
-  const recallLeadId = leadOnPage(portion.fromId);
-
-  // مواضع المقطع المفتوحة، ومنها ما وُسم اليوم — مقروءةً من الحالة المحفوظة لا
-  // من لقطةٍ في الذاكرة، فما تراه على النصّ هو نفسه ما يُشتقّ منه التقييم.
-  const todayStr = today();
-  const openHere = openMistakesInRange(h, portion.fromId, portion.toId);
-  const marksToday = marksTodayInRange(h, portion.fromId, portion.toId, todayStr);
 
   function nextAyah() {
     if (isLast) { setPhase("link"); return; }
-    setIdx((i) => i + 1); setReps(0); setPhase("repeat"); setRevealed(true);
+    setIdx((i) => i + 1); setReps(0); setPhase("repeat"); setRevealed(false);
   }
 
   // ---- recall mode (مراجعة): تلقينٌ بالآية السابقة ثم سمّع المقطع ثم اكشف ----
-  // عند الكشف: الكلمات قابلة للضغط لتحديد مواضع الخطأ (تتلوّن بالأحمر وتُحفظ).
   if (mode === "recall") {
     return (
       <Shell title={recallTitle} subtitle={describeRange(portion.fromId, portion.toId)} onClose={onClose}>
-        <div className="hifz-mode-intro">
-          <span className="hifz-mode-intro-mark"><EyeOff size={13} /></span>
-          <div>
-            <strong>استرجاع من الذاكرة</strong>
-            <span>سمّع أولًا، ثم اكشف وعلّم مواضع التعثّر.</span>
-          </div>
-        </div>
-        {/* التلقين المرسوم يغني عن بطاقته: الآية السابقة ظاهرةٌ في موضعها من
-            الوجه. فإن بدأ المقطعُ الوجهَ فلا سابقةَ على الورقة — فتُعرض. */}
-        {recallLeadId == null && <LeadPrompt text={text} targetId={portion.fromId} />}
-        {!revealed ? (
-          <>
-            {/* المقطع مستورٌ **في وجهه**: أثرُ كلّ آيةٍ في موضعها، والسياق حولها
-                — تسترجع والصورةُ التي حفظتَ عليها قائمةٌ أمامك. */}
-            <MushafSheet
-              text={text}
-              fromId={portion.fromId}
-              toId={portion.toId}
-              context="shape"
-              leadId={recallLeadId}
-              hidden={() => true}
-              className="hifz-mushaf-stage" expandable
-            />
-            <p className="text-[11px] text-gray-400 text-center mt-2 flex items-center justify-center gap-1">
-              <EyeOff size={12} /> سمّع المقطع من حفظك…
-            </p>
-            <button onClick={() => setRevealed(true)} className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
-              <Eye size={16} /> اكشف للتحقّق
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
-              <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها — واضغطها ثانيةً للتراجع
-            </div>
-            <MarkableSheet text={text} portion={portion} today={todayStr} onToggle={toggleMistakeWord} />
-            <SpotStrip items={openHere} today={todayStr} onClear={resolveMistake} />
-            <div className="mt-3">
-              <MutashabihatAlert portion={portion} compact />
-            </div>
-            <GradeVerdict portion={portion} marks={marksToday} ayatCount={ayat.length} onDone={onDone} />
-          </>
-        )}
+        <RecallStage portion={portion} text={text} onDone={onDone} />
       </Shell>
     );
   }
 
-  // ---- memorize mode (ورد): آيةً آية ----
+  // ---- memorize mode (ورد): جسرٌ ← آيةً آية ← ربطٌ ← تسميعٌ كامل ----
+  const linkFrom = bridge?.fromId ?? portion.fromId;
+  const progress = phase === "bridge" ? 0 : phase === "link" || phase === "final" ? 1 : idx / ayat.length;
   return (
     <Shell
       title="احفظ بطريقة موجّهة"
-      subtitle={`${describeRange(portion.fromId, portion.toId)} · آية ${arNum(idx + 1)}/${arNum(ayat.length)}`}
+      subtitle={
+        phase === "bridge" || phase === "link" || phase === "final"
+          ? describeRange(portion.fromId, portion.toId)
+          : `${describeRange(portion.fromId, portion.toId)} · آية ${arNum(idx + 1)}/${arNum(ayat.length)}`
+      }
       onClose={onClose}
-      progress={(idx + (phase === "link" ? 1 : 0)) / ayat.length}
+      progress={progress}
     >
-      {phase === "link" ? (
+      {phase === "bridge" && bridge ? (
         <>
-          <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-2 flex items-center justify-center gap-1"><Link2 size={13} /> اربط المقطع كاملاً</div>
-          <p className="text-[11px] text-gray-400 text-center mb-3">اقرأ المقطع كله مرّةً موصولاً لتثبيت الربط بين الآيات.</p>
-          <MushafSheet text={text} fromId={portion.fromId} toId={portion.toId} className="hifz-mushaf-stage" expandable />
-          <div className="mt-4">
-            <div className="text-[11px] text-gray-500 text-center mb-1.5">كيف تقيّم حفظك للورد؟</div>
-            <RatingRow onRate={(r) => onDone(r)} />
-            <button onClick={() => onDone()} className="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 press py-1.5">أنهيت بلا تقييم</button>
+          <PhaseLabel icon={<Footprints size={13} />}>صِل بما قبله</PhaseLabel>
+          <p className="text-[11px] text-gray-400 text-center mb-3">سمّع آخرَ ما حفظت قبل أن تبدأ — الحدُّ بين الوردين أكثرُ مواضع الانقطاع.</p>
+          <MushafSheet
+            text={text}
+            fromId={bridge.fromId}
+            toId={bridge.toId}
+            context={revealed ? "text" : "shape"}
+            leadId={leadOnPage(bridge.fromId)}
+            hidden={() => !revealed}
+            className="hifz-mushaf-stage" expandable
+          />
+          <div className="flex gap-2 mt-4">
+            <button onClick={() => setRevealed((v) => !v)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran/10 text-quran font-semibold press">
+              {revealed ? <><EyeOff size={15} /> أخفِ</> : <><Eye size={15} /> تحقّق</>}
+            </button>
+            <button onClick={() => { setPhase("repeat"); setRevealed(false); }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran text-white font-bold press">
+              ابدأ الورد <ChevronLeft size={15} />
+            </button>
           </div>
+        </>
+      ) : phase === "final" ? (
+        <>
+          <PhaseLabel icon={<Headphones size={13} />}>سمّع الورد كاملاً</PhaseLabel>
+          <RecallStage portion={portion} text={text} onDone={onDone} memorize />
+        </>
+      ) : phase === "link" ? (
+        <>
+          <PhaseLabel icon={<Link2 size={13} />}>اربط المقطع كاملاً</PhaseLabel>
+          <p className="text-[11px] text-gray-400 text-center mb-3">
+            {bridge ? "اقرأه موصولاً بما قبله مرّةً لتثبيت الربط، ثمّ سمّعه من حفظك." : "اقرأ المقطع كله مرّةً موصولاً، ثمّ سمّعه من حفظك."}
+          </p>
+          <MushafSheet text={text} fromId={linkFrom} toId={portion.toId} className="hifz-mushaf-stage" expandable />
+          <button onClick={() => setPhase("final")} className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
+            <Headphones size={16} /> سمّع الورد كاملاً
+          </button>
         </>
       ) : phase === "repeat" ? (
         <>
-          <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><Repeat size={13} /> كرّر الآية حتى تألفها</div>
+          <PhaseLabel icon={<Repeat size={13} />}>كرّر الآية حتى تألفها</PhaseLabel>
           {/* الآية مُبرَزةٌ في وجهها والباقي خافت: تحفظها وأنت ترى أين تقع من
               الوجه — لا مقتطعةً في صندوق. */}
           <MushafSheet text={text} fromId={cur.id} toId={cur.id} spotlightId={cur.id} className="hifz-mushaf-stage" expandable />
@@ -166,17 +158,39 @@ export function HifzCoach({
               <SlidersHorizontal size={11} /> عدد التكرار من شدّة التمرين
             </span>
             <button
-              onClick={() => { setPhase("recall"); setRevealed(false); }}
+              onClick={() => setPhase("cue")}
               disabled={reps < repTarget}
               className="text-xs font-semibold text-quran disabled:opacity-40 press flex items-center gap-1"
             >
-              انتقل للتسميع <ChevronLeft size={14} />
+              اقرأ بالتلميح <ChevronLeft size={14} />
+            </button>
+          </div>
+        </>
+      ) : phase === "cue" ? (
+        <>
+          {/* الجسرُ بين النظر والاستظهار: أوّلُ كلمةٍ من كلّ سطرٍ ظاهرةٌ والباقي
+              مستور في موضعه — تقرأ الآية من حفظك وصورةُ أسطرها أمامك. */}
+          <PhaseLabel icon={<EyeOff size={13} />}>اقرأها بأوائل الأسطر</PhaseLabel>
+          <MushafSheet
+            text={text}
+            fromId={cur.id}
+            toId={cur.id}
+            spotlightId={cur.id}
+            renderAyah={revealed ? undefined : renderCue}
+            className="hifz-mushaf-stage" expandable
+          />
+          <div className="flex gap-2 mt-4">
+            <button onClick={() => setRevealed((v) => !v)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran/10 text-quran font-semibold press">
+              {revealed ? <><EyeOff size={15} /> أخفِ</> : <><Eye size={15} /> اكشف</>}
+            </button>
+            <button onClick={() => { setPhase("recall"); setRevealed(false); }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran text-white font-bold press">
+              للتسميع <ChevronLeft size={15} />
             </button>
           </div>
         </>
       ) : (
         <>
-          <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1"><CornerDownLeft size={13} /> سمّع الآية التالية من حفظك</div>
+          <PhaseLabel icon={<CornerDownLeft size={13} />}>سمّع الآية من حفظك</PhaseLabel>
           {leadOnPage(cur.id) == null && <LeadPrompt text={text} targetId={cur.id} />}
           {/* مستورةٌ في موضعها من الوجه — لا صندوقٌ فارغ خارج المصحف. */}
           <MushafSheet
@@ -194,12 +208,97 @@ export function HifzCoach({
               {revealed ? <><EyeOff size={15} /> أخفِ</> : <><Eye size={15} /> تحقّق</>}
             </button>
             <button onClick={nextAyah} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-quran text-white font-bold press">
-              <Check size={15} /> {isLast ? "أتقنت — للربط" : "أتقنتها"}
+              <Check size={15} /> {isLast ? "التالي — للربط" : "الآية التالية"}
             </button>
           </div>
         </>
       )}
     </Shell>
+  );
+}
+
+function PhaseLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="hifz-phase-label text-center text-[11px] font-semibold text-quran mb-3 flex items-center justify-center gap-1">
+      {icon} {children}
+    </div>
+  );
+}
+
+// أوّلُ كلمةٍ من كلّ سطرٍ تبقى، وما بعدها مستورٌ بعرضه (`mushaf-veil`) فلا يتزحزح
+// السطر. `renderAyah` يُنادى لكلّ مقطعٍ من الآية على سطره، فـ«أوّل كلمةٍ في المقطع»
+// هي أوّلُ كلمةٍ في السطر — إلا أن تبدأ الآيةُ وسطه، فهي أوّلُ كلمات الآية فيه.
+function renderCue(_a: SheetAyah, part: SheetPart) {
+  let shown = false;
+  return tokenizeRun(part.text, part.wordOffset).map((t, k) => {
+    if (t.index == null) return <span key={k}>{t.text}</span>;
+    if (!shown) { shown = true; return <span key={k}>{t.text}</span>; }
+    return <span key={k} className="mushaf-veil">{t.text}</span>;
+  });
+}
+
+// ===================== التسميعُ المستور ثمّ الحكم =====================
+// مشتركٌ بين المراجعة وآخرِ مراحل الحفظ: المقطع مستورٌ **في وجهه**، تسمّع، تكشف،
+// تسِم مواضعَ تعثّرك على الكلمات، فيخرج الحكمُ لكلّ وجهٍ من مواضعه هو.
+function RecallStage({
+  portion, text, onDone, memorize = false,
+}: {
+  portion: Portion; text: string[]; onDone: (parts: RatedPart[]) => void; memorize?: boolean;
+}) {
+  const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
+  const resolveMistake = useAppStore((s) => s.resolveMistake);
+  const toggleMistakeWord = useAppStore((s) => s.toggleMistakeWord);
+  const [revealed, setRevealed] = useState(false);
+  const todayStr = today();
+  const recallLeadId = leadOnPage(portion.fromId);
+  // مواضع المقطع المفتوحة، ومنها ما وُسم اليوم — مقروءةً من الحالة المحفوظة لا
+  // من لقطةٍ في الذاكرة، فما تراه على النصّ هو نفسه ما يُشتقّ منه التقييم.
+  const openHere = openMistakesInRange(h, portion.fromId, portion.toId);
+
+  return (
+    <>
+      <div className="hifz-mode-intro">
+        <span className="hifz-mode-intro-mark"><EyeOff size={13} /></span>
+        <div>
+          <strong>استرجاع من الذاكرة</strong>
+          <span>سمّع أولًا، ثم اكشف وعلّم مواضع التعثّر.</span>
+        </div>
+      </div>
+      {/* التلقين المرسوم يغني عن بطاقته: الآية السابقة ظاهرةٌ في موضعها من
+          الوجه. فإن بدأ المقطعُ الوجهَ فلا سابقةَ على الورقة — فتُعرض. */}
+      {recallLeadId == null && <LeadPrompt text={text} targetId={portion.fromId} />}
+      {!revealed ? (
+        <>
+          <MushafSheet
+            text={text}
+            fromId={portion.fromId}
+            toId={portion.toId}
+            context="shape"
+            leadId={recallLeadId}
+            hidden={() => true}
+            className="hifz-mushaf-stage" expandable
+          />
+          <p className="text-[11px] text-gray-400 text-center mt-2 flex items-center justify-center gap-1">
+            <EyeOff size={12} /> سمّع المقطع من حفظك…
+          </p>
+          <button onClick={() => setRevealed(true)} className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press">
+            <Eye size={16} /> اكشف للتحقّق
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="text-[11px] text-gray-400 text-center mb-2 flex items-center justify-center gap-1">
+            <MousePointerClick size={12} /> اضغط أيّ كلمةٍ أخطأت فيها — واضغطها ثانيةً للتراجع
+          </div>
+          <MarkableSheet text={text} portion={portion} today={todayStr} onToggle={toggleMistakeWord} />
+          <SpotStrip items={openHere} today={todayStr} onClear={resolveMistake} />
+          <div className="mt-3">
+            <MutashabihatAlert portion={portion} compact />
+          </div>
+          <GradeVerdict portion={portion} memorize={memorize} onDone={onDone} />
+        </>
+      )}
+    </>
   );
 }
 
@@ -233,21 +332,25 @@ function Shell({
 // بدل سؤال «كيف كانت مراجعتك؟» نعرض ما استنتجناه من وسمك: التقييم، وسببه
 // بجملةٍ صريحة، وموعد المراجعة القادمة إن سجّلتَه — مع «غيّر التقييم» لمن رأى
 // أنّ تعثّره كان لحناً عابراً لا نسياناً.
+//
+// **والحكمُ لكلّ وجهٍ على حدة** (`gradeByPage`): العنوانُ أضعفُها، وتحته سطرٌ لكلّ
+// جزءٍ اختلف تقييمه، ويُسجَّل كلٌّ بتقييمه. والمخالفةُ اليدوية قرارٌ صريحٌ منك
+// على المقطع كلّه.
 function GradeVerdict({
-  portion, marks, ayatCount, onDone,
+  portion, memorize, onDone,
 }: {
-  portion: Portion; marks: number; ayatCount: number; onDone: (r?: HifzRating) => void;
+  portion: Portion; memorize: boolean; onDone: (parts: RatedPart[]) => void;
 }) {
   const h = useAppStore((s) => s.quranHifz) ?? EMPTY_HIFZ;
   const [override, setOverride] = useState<HifzRating | null>(null);
   const [editing, setEditing] = useState(false);
-  const derived = gradeFromMistakes(marks, ayatCount);
-  const rating = override ?? derived;
   const todayStr = today();
-  const days = useMemo(
-    () => nextDueDays(h, portion, rating, todayStr),
-    [h, portion, rating, todayStr],
-  );
+  const parts = gradeByPage(h, portion, todayStr);
+  const derived = worstGrade(parts);
+  const rating = override ?? derived;
+  const weakest: Portion = override ? portion : parts.find((p) => p.rating === derived) ?? portion;
+  const days = nextDueDays(h, weakest, rating, todayStr);
+  const split = !override && parts.length > 1;
 
   const tone: Record<HifzRating, string> = {
     3: "border-quran/30 bg-quran/[0.07] text-quran",
@@ -255,23 +358,42 @@ function GradeVerdict({
     1: "border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15 text-red-600 dark:text-red-400",
   };
 
+  function record() {
+    onDone(override
+      ? [{ fromId: portion.fromId, toId: portion.toId, rating: override }]
+      : parts.map(({ fromId, toId, rating: r }) => ({ fromId, toId, rating: r })));
+  }
+
   return (
     <div className="mt-4 space-y-2.5">
       <div className={`rounded-2xl border p-3.5 text-center space-y-1 ${tone[rating]}`}>
-        <div className="text-base font-bold">{RATING_LABEL[rating]}</div>
-        <div className="text-[11px] text-gray-500 dark:text-gray-400">
-          {override ? "تقييمك أنت" : explainGrade(marks, ayatCount)}
-        </div>
+        <div className="text-base font-bold">{split ? `أضعفُه: ${RATING_LABEL[rating]}` : RATING_LABEL[rating]}</div>
+        {split ? (
+          <ul className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+            {parts.map((p) => (
+              <li key={p.fromId}>
+                {pagesLabel(p)} · <strong>{RATING_LABEL[p.rating]}</strong> · {explainGrade(p.marks, p.ayat)}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+            {override ? "تقييمك أنت" : explainGrade(parts[0]?.marks ?? 0, parts[0]?.ayat ?? 0)}
+          </div>
+        )}
         <div className="text-[11px] font-semibold flex items-center justify-center gap-1 pt-0.5">
-          <CalendarClock size={12} /> موعدها القادم {countDays(days)}
+          <CalendarClock size={12} />
+          {memorize
+            ? "يدخل المراجعةَ القريبة من الغد"
+            : `${split ? "موعدُ أضعفِه" : "موعدها القادم"} ${countDays(days)}`}
         </div>
       </div>
 
       <button
-        onClick={() => onDone(rating)}
+        onClick={record}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-quran text-white font-bold press shadow-sm"
       >
-        <Check size={16} /> سجّل المراجعة
+        <Check size={16} /> {memorize ? "سجّل الحفظ" : "سجّل المراجعة"}
       </button>
 
       {editing ? (
@@ -289,6 +411,11 @@ function GradeVerdict({
       )}
     </div>
   );
+}
+
+function pagesLabel(p: GradedPart): string {
+  const a = idToPage(p.fromId), b = idToPage(p.toId);
+  return a === b ? `وجه ${arNum(a)}` : `الأوجه ${arNum(a)}–${arNum(b)}`;
 }
 
 // لوحُ الوجه وآياتُ المقطع فيه **قابلة للتحديد**: كلُّ كلمةٍ زرٌّ يبدّل وسمها

@@ -12,7 +12,7 @@ import type {
 } from "./types";
 import { DEFAULT_CATEGORIES, SEED_HABITS, GENERAL_FUND_NAME, SURPLUS_FUND_NAME, EMPTY_KHATMA, EMPTY_HIFZ } from "./types";
 import { TOTAL_AYAT } from "./quran/meta";
-import { MISTAKE_MASTERY } from "./quran/hifz";
+import { MISTAKE_MASTERY, type RatedPart } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
 import { uid, today, toDateStr, parseDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, unionRefs } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
@@ -350,9 +350,11 @@ interface AppStore extends AppData {
   clearHifz: () => void; // delete plan + all progress
   recordHifzSession: (toId: number, rating?: HifzRating) => void; // memorize up to toId
   setFrontier: (id: number) => void; // move position manually (0..6236)
-  recordReview: (fromId: number, toId: number, rating?: HifzRating) => void; // مراجعة مسجّلة
   setHifzIntensity: (v: HifzIntensity) => void; // شدّة التمرين — الإعداد الوحيد
-  recordRandomTest: (fromId: number, toId: number, rating?: HifzRating) => void; // اختبار مفاجئ
+  // تسميعٌ مُقيَّمٌ لكلّ وجهٍ على حدة (المُدرّب): قيدٌ لكلّ جزءٍ في ضربةٍ واحدة.
+  // memorize يُقدّم الجبهة كـrecordHifzSession، وtest يضبط دوريّة الاختبار
+  // (lastTestDate). جدول المباعدة كلُّه مُشتقٌّ من هذا السجلّ — راجع pageSchedules.
+  recordGraded: (kind: "memorize" | "review" | "test", parts: RatedPart[]) => void;
   // سجل الحفظ والمراجعة: تعديل التقييم أو حذف قيدٍ (مع إعادة حساب الجبهة من
   // الجلسات) والتراجع بإعادة الإضافة.
   updateHifzSession: (id: string, patch: { rating?: HifzRating }) => void;
@@ -2801,16 +2803,6 @@ export const useAppStore = create<AppStore>()(
           return { quranHifz: { ...h, frontierId: Math.min(Math.max(Math.round(id) || 0, 0), TOTAL_AYAT), frontierUpdatedAt: Date.now() } };
         }),
 
-      // تسجيل مراجعة مقطعٍ محفوظ. جدول المباعدة كلُّه مُشتقٌّ من هذا السجلّ
-      // (راجع pageSchedules) — لا مؤشّر دورةٍ ولا حالةَ جدولةٍ منفصلة تُحفظ.
-      recordReview: (fromId, toId, rating) =>
-        set((s) => {
-          const h = s.quranHifz ?? EMPTY_HIFZ;
-          const now = Date.now();
-          const log = { id: uid(), date: today(), fromId, toId, rating, at: now, updatedAt: now };
-          return { quranHifz: { ...h, reviews: [log, ...h.reviews] } };
-        }),
-
       // شدّة التمرين — الإعداد الوحيد في القسم. يعيش داخل الخطة فيُزامَن، ونختم
       // planUpdatedAt فيفوز آخر تغييرٍ عند الدمج بين جهازين.
       setHifzIntensity: (v) =>
@@ -2820,14 +2812,40 @@ export const useAppStore = create<AppStore>()(
           return { quranHifz: { ...h, plan: { ...h.plan, intensity: v }, planUpdatedAt: Date.now() } };
         }),
 
-      // اختبار مفاجئ: يُسجَّل كمراجعةٍ (بلا تحريك مؤشّر الدورة) ويضبط تاريخ آخر
-      // اختبارٍ حتى تُحسب دوريّته.
-      recordRandomTest: (fromId, toId, rating) =>
+      // الأجزاءُ تُسجَّل بترتيبها في المصحف، و`at` يتدرّج بينها فيبقى ترتيبُها
+      // ثابتاً عند الدمج. الحفظُ يبني كلَّ جلسةٍ من الجبهة كما يفعل
+      // recordHifzSession، فلا ثغرةَ ولا تداخل ولو جاء جزءٌ متراكباً.
+      recordGraded: (kind, parts) =>
         set((s) => {
           const h = s.quranHifz ?? EMPTY_HIFZ;
           const now = Date.now();
-          const log = { id: uid(), date: today(), fromId, toId, rating, at: now, updatedAt: now };
-          return { quranHifz: { ...h, reviews: [log, ...h.reviews], lastTestDate: today() } };
+          const date = today();
+          const sorted = [...parts].sort((a, b) => a.fromId - b.fromId);
+          if (kind === "memorize") {
+            let frontier = h.frontierId;
+            const added: HifzSession[] = [];
+            for (const p of sorted) {
+              const from = frontier + 1;
+              const to = Math.min(Math.max(p.toId, from), TOTAL_AYAT);
+              if (to < from) continue;
+              const at = now + added.length;
+              added.push({ id: uid(), date, fromId: from, toId: to, rating: p.rating, at, updatedAt: at });
+              frontier = to;
+            }
+            if (!added.length) return {};
+            return { quranHifz: { ...h, frontierId: frontier, sessions: [...added.reverse(), ...h.sessions] } };
+          }
+          const logs: HifzReviewLog[] = sorted.map((p, i) => ({
+            id: uid(), date, fromId: p.fromId, toId: p.toId, rating: p.rating, at: now + i, updatedAt: now + i,
+          }));
+          if (!logs.length) return {};
+          return {
+            quranHifz: {
+              ...h,
+              reviews: [...logs.reverse(), ...h.reviews],
+              ...(kind === "test" ? { lastTestDate: date } : {}),
+            },
+          };
         }),
 
       // ---- سجل الحفظ: تعديل/حذف/تراجع مع إعادة حساب الجبهة من الجلسات ----

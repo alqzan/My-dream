@@ -27,23 +27,25 @@ describe("nextInterval — due per rating", () => {
     expect(nextInterval(0, 2)).toBe(3);
     expect(nextInterval(30, 2)).toBe(3);
   });
-  it("rating 3 (mastered) climbs the ladder 7 → 14 → 30 → 60, then caps", () => {
-    expect(nextInterval(0, 3)).toBe(7); // first mastery
+  it("rating 3 (mastered) climbs 3 → 7 → 14 → 30 → 60, then caps", () => {
+    expect(nextInterval(0, 3)).toBe(3); // أوّلُ إتقانٍ: درجةُ التثبيت القصيرة لا أسبوع
+    expect(nextInterval(3, 3)).toBe(7);
     expect(nextInterval(7, 3)).toBe(14);
     expect(nextInterval(14, 3)).toBe(30);
     expect(nextInterval(30, 3)).toBe(60);
     expect(nextInterval(60, 3)).toBe(60); // caps at the top
   });
-  it("first mastery after a non-ladder interval starts at 7", () => {
+  it("after 'good' the ladder starts at 7; after a lapse it passes the short step first", () => {
     expect(nextInterval(3, 3)).toBe(7); // was 'good' (3d) → now mastered
-    expect(nextInterval(1, 3)).toBe(7); // was 'needs' (1d) → now mastered
+    expect(nextInterval(1, 3)).toBe(3); // was 'needs' (1d) → يثبت أوّلاً ثمّ يصعد
   });
 });
 
 describe("nextInterval — معامل الرسوخ ومكافأة التأخّر", () => {
   it("المعامل يشدّ المدة على المتعثّر ويرخيها على الراسخ", () => {
-    expect(nextInterval(0, 3, INTENSITY.balanced, { ease: 0.6 })).toBe(4); // 7 × 0.6
-    expect(nextInterval(0, 3, INTENSITY.balanced, { ease: 1.4 })).toBe(10); // 7 × 1.4
+    expect(nextInterval(3, 3, INTENSITY.balanced, { ease: 0.6 })).toBe(4); // 7 × 0.6
+    expect(nextInterval(4, 3, INTENSITY.balanced, { ease: 1.4 })).toBe(10); // «جيّد» بمعامل ١٫٤ = ٤ أيام → 7 × 1.4
+    expect(nextInterval(0, 3, INTENSITY.balanced, { ease: 1.4 })).toBe(4); // 3 × 1.4
     expect(nextInterval(0, 2, INTENSITY.balanced, { ease: 0.6 })).toBe(2); // 3 × 0.6
   });
 
@@ -84,15 +86,36 @@ describe("foldMemory — طيّ سجلّ الوجه إلى مدّةٍ ومعام
 
   it("السلّم الأساس كما هو موثّق حين يكون المعامل محايداً", () => {
     expect([...MASTERY_LADDER]).toEqual([7, 14, 30, 60]);
-    expect(foldMemory([on(3, "2026-01-01")]).intervalDays).toBe(7);
+    expect(foldMemory([on(3, "2026-01-01")]).intervalDays).toBe(3);
+  });
+
+  it("المراجعةُ قبل موعدها لا تُصعِّد — وجهٌ عمره أسبوع لا يغيب شهرين", () => {
+    // حُفظ ثمّ سُمِّع في «القريبة» أربعة أيامٍ متتالية بإتقان: كان يخرج بثمانين يوماً.
+    const m = foldMemory(["01", "02", "03", "04", "05"].map((d) => on(3, `2026-01-${d}`)));
+    expect(m.intervalDays).toBe(3);
+    expect(m.ease).toBe(1.06); // ولا يتضخّم المعامل بمراجعاتٍ لم تختبر الذاكرة
+  });
+
+  it("والتعثّرُ المبكّر يُحتسب كاملاً", () => {
+    const m = foldMemory([on(3, "2026-01-01"), on(3, "2026-01-02"), on(1, "2026-01-03")]);
+    expect(m.intervalDays).toBe(1);
+    expect(m.lapses).toBe(1);
+    expect(m.ease).toBeLessThan(1);
+  });
+
+  it("الوجهُ الجديد يتدرّج: ٣ ← ٧ ← ١٤ حين يُراجَع في موعده", () => {
+    const m1 = foldMemory([on(3, "2026-01-01"), on(3, "2026-01-04")]);
+    expect(m1.intervalDays).toBe(8); // 7 × 1.12
+    const m2 = foldMemory([on(3, "2026-01-01"), on(3, "2026-01-04"), on(3, "2026-01-12")]);
+    expect(m2.intervalDays).toBe(17); // 14 × 1.19
   });
 
   it("الإتقان المتّصل يتباعد أبعدَ من سقف السلّم القديم", () => {
     const m = foldMemory([
-      on(3, "2026-01-01"), on(3, "2026-01-08"), on(3, "2026-01-20"), on(3, "2026-02-10"),
+      on(3, "2026-01-01"), on(3, "2026-01-08"), on(3, "2026-01-20"), on(3, "2026-02-10"), on(3, "2026-03-20"),
     ]);
-    expect(m.intervalDays).toBe(76); // كان يقف عند 60 لكلّ وجهٍ سواء
-    expect(m.ease).toBe(1.26);
+    expect(m.intervalDays).toBe(80); // كان يقف عند 60 لكلّ وجهٍ سواء
+    expect(m.ease).toBe(1.34);
     expect(m.lapses).toBe(0);
   });
 
@@ -156,12 +179,12 @@ describe("pageSchedules — per-page due dates derived from history", () => {
     expect(schedule.intervalDays).toBe(1);
   });
 
-  it("a page mastered today is NOT due until 7 days pass", () => {
+  it("a page mastered today is NOT due until its short first step (3 days) passes", () => {
     const p1 = pageRange(1);
     const s = hz({ frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] });
-    expect(pageSchedules(s, "2026-01-05")[0].due).toBe(false); // 4 days < 7
-    expect(pageSchedules(s, "2026-01-08")[0].due).toBe(true); // 7 days → due
-    expect(pageSchedules(s, "2026-01-08")[0].dueDate).toBe("2026-01-08");
+    expect(pageSchedules(s, "2026-01-03")[0].due).toBe(false); // 2 days < 3
+    expect(pageSchedules(s, "2026-01-04")[0].due).toBe(true); // 3 days → due
+    expect(pageSchedules(s, "2026-01-04")[0].dueDate).toBe("2026-01-04");
   });
 
   it("counts lapses (rating-1 events) across a page's history", () => {
@@ -217,12 +240,14 @@ describe("duePages / dueQueue — prioritization and daily cap", () => {
 
 describe("intensity drives the schedule", () => {
   it("the ladder and the short intervals follow the chosen intensity", () => {
-    expect(nextInterval(0, 3, INTENSITY.light)).toBe(10);
+    expect(nextInterval(0, 3, INTENSITY.light)).toBe(5);
+    expect(nextInterval(5, 3, INTENSITY.light)).toBe(10);
     expect(nextInterval(10, 3, INTENSITY.light)).toBe(21);
     expect(nextInterval(0, 2, INTENSITY.light)).toBe(5);
     expect(nextInterval(60, 1, INTENSITY.light)).toBe(2);
 
-    expect(nextInterval(0, 3, INTENSITY.intense)).toBe(5);
+    expect(nextInterval(0, 3, INTENSITY.intense)).toBe(2);
+    expect(nextInterval(2, 3, INTENSITY.intense)).toBe(5);
     expect(nextInterval(0, 2, INTENSITY.intense)).toBe(2);
   });
 
@@ -231,9 +256,9 @@ describe("intensity drives the schedule", () => {
     const base = { frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] };
     const balanced = hz(base);
     const light = hz({ ...base, plan: { startId: 1, unit: "page", amount: 1, createdAt: "2026-01-01", intensity: "light" } });
-    expect(pageSchedules(balanced, "2026-01-08")[0].due).toBe(true); // 7 يوماً
-    expect(pageSchedules(light, "2026-01-08")[0].due).toBe(false); // 10 أيام (× معامل الرسوخ)
-    expect(pageSchedules(light, "2026-01-12")[0].due).toBe(true);
+    expect(pageSchedules(balanced, "2026-01-04")[0].due).toBe(true); // ٣ أيام
+    expect(pageSchedules(light, "2026-01-04")[0].due).toBe(false); // ٥ أيام (× معامل الرسوخ)
+    expect(pageSchedules(light, "2026-01-06")[0].due).toBe(true);
   });
 
   it("سقفُ الشدّة هو الأساس، وشدّةٌ أعلى تعني سقفاً أعلى", () => {
@@ -306,10 +331,12 @@ describe("duePages — skipping the recent band", () => {
 describe("nextDueDays — previewing the effect of a rating", () => {
   it("shows the interval a rating would produce for the portion's page", () => {
     const p1 = pageRange(1);
-    const s = hz({ frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] }); // interval 7
+    const s = hz({ frontierId: p1.end, sessions: [sess(1, p1.end, "2026-01-01", 3)] }); // interval 3
     const portion = { fromId: p1.start, toId: p1.end };
-    // يصعد السلّم (14) ومعامل الرسوخ يمدّه — والمعروض هو ما سيُسجَّل بالضبط.
-    expect(nextDueDays(s, portion, 3, "2026-01-10")).toBe(16);
+    // يصعد إلى أوّل السلّم (7) وقد صمد تسعة أيام فتُحتسب، ومعامل الرسوخ يمدّها —
+    // والمعروض هو ما سيُسجَّل بالضبط.
+    expect(nextDueDays(s, portion, 3, "2026-01-10")).toBe(10);
+    expect(nextDueDays(s, portion, 3, "2026-01-02")).toBe(3); // مبكّرة: لا تُصعِّد
     expect(nextDueDays(s, portion, 1, "2026-01-10")).toBe(1); // الخطأ يُعيده لغد
   });
 

@@ -133,6 +133,19 @@ export function hifzPace(s: HifzState, todayStr: string = today()): HifzPace {
   return { perDay, perDayReal, finishInDays, text, enough };
 }
 
+// ===================== جسرُ الربط بما قبل الورد =====================
+// الربطُ داخل ورد اليوم وحده يترك الموضعَ الذي ينقطع عنده الحافظ أكثرَ من غيره:
+// **الحدّ بين ورد أمس وورد اليوم**. فقبل الحفظ تُسمَّع آخرُ `BRIDGE_AYAT` آياتٍ
+// محفوظة، ويُقرأ الربطُ في آخره موصولاً منها. لا شيء قبل أوّل ورد (لا محفوظ).
+export const BRIDGE_AYAT = 3;
+
+export function bridgeBefore(s: HifzState, portion: Portion, n: number = BRIDGE_AYAT): Portion | null {
+  const start = s.plan?.startId ?? 1;
+  const toId = Math.min(portion.fromId - 1, s.frontierId);
+  if (toId < start) return null;
+  return { fromId: Math.max(start, toId - n + 1), toId };
+}
+
 // ===================== المراجعة القريبة (نافذة متحرّكة) =====================
 // أوّل خطوةٍ بعد السَّبْق: «آخر N وجه» محفوظاً حتى الجبهة — ما زال طريّاً ويحتاج
 // تثبيتاً قبل أن يدخل جدول المباعدة. كلّما تقدّمت الجبهة انزلقت النافذة فخرج
@@ -332,6 +345,47 @@ export function gradeFromMistakes(marks: number, ayatCount: number): HifzRating 
   return marks <= mistakeTolerance(ayatCount) ? 2 : 1;
 }
 
+// ===================== التقييم لكلّ وجهٍ على حدة =====================
+// كان تسميعُ خمسة أوجهٍ يُقيَّم تقييماً واحداً يُنسخ عليها كلِّها: ستّةُ مواضعَ في
+// وجهٍ واحد تُحسب على حدّ تسامح الخمسة (١٥ موضعاً) فتخرج الخمسةُ «جيّداً» —
+// الضعيفُ يختفي والسليمُ يُعاقَب. والمواضعُ محفوظةٌ بآياتها أصلاً، فيُقيَّم كلُّ
+// وجهٍ من مواضعه هو وبحدّ تسامحه هو، وتُدمج الأوجهُ المتجاورة المتساوية في قيدٍ
+// واحد فلا يتضخّم السجلّ بلا فائدة.
+export interface GradedPart extends Portion {
+  rating: HifzRating;
+  marks: number; // مواضع تعثّر اليوم في هذا الجزء
+  ayat: number;
+}
+
+export function gradeByPage(s: HifzState, portion: Portion, todayStr: string): GradedPart[] {
+  const parts: GradedPart[] = [];
+  let id = portion.fromId;
+  while (id <= portion.toId) {
+    const to = Math.min(pageRange(idToPage(id)).end, portion.toId);
+    const marks = marksTodayInRange(s, id, to, todayStr);
+    const ayat = to - id + 1;
+    const rating = gradeFromMistakes(marks, ayat);
+    const last = parts[parts.length - 1];
+    if (last && last.rating === rating) {
+      last.toId = to;
+      last.marks += marks;
+      last.ayat += ayat;
+    } else {
+      parts.push({ fromId: id, toId: to, rating, marks, ayat });
+    }
+    id = to + 1;
+  }
+  return parts;
+}
+
+/** ما يُسجَّل من تسميعٍ: مدىً وتقييمُه (قيدٌ لكلّ جزءٍ تقييمُه مختلف). */
+export type RatedPart = Portion & { rating?: HifzRating };
+
+/** أضعفُ تقييمٍ في الأجزاء — هو ما يُعرض عنواناً للمقطع (والمنفرد يُسجَّل بتقييمه). */
+export function worstGrade(parts: readonly Pick<GradedPart, "rating">[]): HifzRating {
+  return parts.reduce<HifzRating>((w, p) => (p.rating < w ? p.rating : w), 3);
+}
+
 export const RATING_LABEL: Record<HifzRating, string> = {
   3: "متقن",
   2: "جيّد",
@@ -389,7 +443,9 @@ export function latestRatingByPage(s: HifzState): Map<number, { date: string; ra
   for (const e of events) {
     const ef = Math.max(firstPage, idToPage(e.fromId));
     const et = Math.min(lastPage, idToPage(e.toId));
-    for (let p = ef; p <= et; p++) m.set(p, { date: e.date, rating: e.rating });
+    // قيدٌ بلا تقييم لا يقول شيئاً عن الإتقان: يحدّث التاريخ ولا يمحو تقييماً سابقاً
+    // (كان يمحوه فيختفي الوجه الضعيف من «مواطن الضعف» بمجرّد تسجيلٍ بلا تقييم).
+    for (let p = ef; p <= et; p++) m.set(p, { date: e.date, rating: e.rating ?? m.get(p)?.rating });
   }
   return m;
 }
@@ -423,8 +479,13 @@ export function weakSpots(s: HifzState): { fromId: number; toId: number; date: s
 
 // ===================== خريطة الحفظ =====================
 // حالة كل جزءٍ من الثلاثين للعرض في لوحة كاملة: ما حُفظ، ما رُوجع حديثاً، وما
-// يحتاج مراجعة. الفاصل الزمني الذي يُعدّ بعده الجزءُ «محتاجاً للمراجعة».
-export const REVIEW_DUE_DAYS = 7;
+// يحتاج مراجعة.
+//
+// **«يحتاج مراجعة» يُقرأ من جدول المباعدة لا من فاصلٍ ثابت** (٠٫١٫٤٥٧): كانت
+// الخريطة تقول «مستحقّ» بعد سبعة أيامٍ لكلّ وجه، والجدولُ يقول إنّ موعده بعد
+// ستّين — إشارتان متعاكستان عن الوجه نفسه. فالمستدعي يمرّر أوجه الجدول المستحقّة
+// (`duePageSet` في schedule.ts)، والوحدةُ مستحقّةٌ إن استُحقّ وجهٌ فيها. و«ضعيف»
+// إن كان أحدثُ تقييمٍ لأيّ وجهٍ فيها «يحتاج إتقاناً» — لا آخرُ قيدٍ مسّ الوحدة.
 
 export type JuzState = "none" | "partial" | "fresh" | "due" | "weak";
 
@@ -460,8 +521,11 @@ function daysBetween(a: string, b: string): number {
 }
 
 // حالة كل وحدة (جزء/حزب/وجه) للعرض في الخريطة.
-export function hifzUnits(s: HifzState, todayStr: string, unit: MapUnit): UnitCell[] {
+export function hifzUnits(
+  s: HifzState, todayStr: string, unit: MapUnit, duePages: ReadonlySet<number>,
+): UnitCell[] {
   const from = s.plan?.startId ?? 1;
+  const ratedPages = latestRatingByPage(s);
   const frontierUnit = s.frontierId >= 1 ? unitOf(unit, s.frontierId) : 0;
   const events = [
     ...s.sessions.map((x) => ({ from: x.fromId, to: x.toId, date: x.date, rating: x.rating })),
@@ -483,10 +547,16 @@ export function hifzUnits(s: HifzState, todayStr: string, unit: MapUnit): UnitCe
     const overlapping = events.filter((e) => e.to >= r.start && e.from <= r.end);
     const last = overlapping[overlapping.length - 1];
     const daysSince = last ? daysBetween(last.date, todayStr) : null;
+    let weak = false;
+    let due = false;
+    for (let p = idToPage(memStart); p <= idToPage(memEnd); p++) {
+      if (ratedPages.get(p)?.rating === 1) weak = true;
+      if (duePages.has(p)) due = true;
+    }
     let state: JuzState;
-    if (last?.rating === 1) state = "weak";
+    if (weak) state = "weak";
     else if (memAyat < total && n === frontierUnit) state = "partial";
-    else if (daysSince == null || daysSince >= REVIEW_DUE_DAYS) state = "due";
+    else if (due) state = "due";
     else state = "fresh";
     cells.push({
       n, start: r.start, end: r.end, totalAyat: total, memorizedAyat: memAyat, fill: memAyat / total,

@@ -71,3 +71,25 @@ export function wordDiff(aRaw: string, bRaw: string): { a: DiffWord[]; b: DiffWo
     b: bw.map((t, k) => ({ text: t, same: bSame[k] })),
   };
 }
+
+// ===================== اختبار التمييز بين المتشابهين =====================
+// التنبيهُ وحده («لهذه الآية متشابه») لا يدرّب على شيء. فإذا تعثّر الحافظ في آيةٍ
+// لها نظير، سُئل في المذاكرة: **أيُّ الصيغتين في هذا الموضع؟** — والنظيرُ المختار
+// هو الأقربُ نصّاً (أكثرُ كلماتٍ مشتركة)، فهو الذي تنزلق إليه الذاكرة فعلاً.
+// والمتطابقان بعد التطبيع لا يُميَّز بينهما بالنصّ، فلا يُعرضان سؤالاً.
+export function discriminationDecoy(map: SimMap | null, text: readonly string[], id: number): number | null {
+  const own = text[id] ?? "";
+  if (!own) return null;
+  let best: number | null = null;
+  let bestScore = -1;
+  for (const other of similarOf(map, id)) {
+    const { a, b } = wordDiff(own, text[other] ?? "");
+    if (!b.length) continue;
+    const differs = a.some((w) => !w.same) || b.some((w) => !w.same);
+    if (!differs) continue;
+    const shared = a.filter((w) => w.same).length;
+    const score = shared / Math.max(a.length, b.length);
+    if (score > bestScore) { bestScore = score; best = other; }
+  }
+  return best;
+}

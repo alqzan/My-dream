@@ -9,6 +9,7 @@ import {
   hifzProgress, hifzPace, hifzStreak, hifzUnits, mapCounts, mistakesInRange, groupPagesByJuz,
   type Portion, type JuzState, type UnitCell, type MapUnit,
 } from "@/lib/quran/hifz";
+import { duePageSet } from "@/lib/quran/schedule";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { downloadPlainBackup } from "@/lib/backupFile";
 import { showToast } from "@/components/ui/UndoToast";
@@ -59,7 +60,8 @@ export function HifzMap({ text, onReview, onRead }: { text: string[] | null; onR
   const prog = hifzProgress(h);
   const pace = hifzPace(h);
   const streak = hifzStreak(h);
-  const cells = hifzUnits(h, today(), unit);
+  const todayStr = today();
+  const cells = hifzUnits(h, todayStr, unit, duePageSet(h, todayStr));
   const counts = mapCounts(cells);
   const plan = h.plan!;
   const selCell = sel ? cells.find((c) => c.n === sel) ?? null : null;

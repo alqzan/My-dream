@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { EMPTY_HIFZ, type HifzRating } from "@/lib/types";
 import { describeRange } from "@/lib/quran/meta";
 import { today } from "@/lib/utils";
-import { countPages, type Portion } from "@/lib/quran/hifz";
+import { countPages, type Portion, type RatedPart } from "@/lib/quran/hifz";
 import { leadOnPage } from "@/lib/quran/portionPage";
 import {
   buildTodayPlan, loadSession, saveSession, clearSession, drillOverflow,
@@ -69,6 +69,13 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
         ))}
       </div>
 
+      {/* لماذا نقص الجديد اليوم — يُقال صراحةً، والتجاوز بـ«زِد حفظك» تحت البطاقة. */}
+      {plan.paceNote && (
+        <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 text-center leading-relaxed">
+          {plan.paceNote}
+        </p>
+      )}
+
       {(plan.dueHidden > 0 || overflow > 0) && (
         <p className="text-[11px] text-gray-500 text-center leading-relaxed">
           {plan.dueHidden > 0 && `${countPages(plan.dueHidden)} مؤجَّلة لغدٍ حتى لا تتراكم. `}
@@ -91,9 +98,7 @@ export function TodaySessionCard({ onStart }: { onStart: (resume: boolean) => vo
 // أثناء الجلسة، وتُحفَظ لقطتُها على الجهاز فيُستأنف ما انقطع بدل البدء من الصفر.
 export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; resume: boolean; onClose: () => void }) {
   const quranHifz = useAppStore((s) => s.quranHifz);
-  const recordHifzSession = useAppStore((s) => s.recordHifzSession);
-  const recordRandomTest = useAppStore((s) => s.recordRandomTest);
-  const recordReview = useAppStore((s) => s.recordReview);
+  const recordGraded = useAppStore((s) => s.recordGraded);
   const h = quranHifz ?? EMPTY_HIFZ;
   const todayStr = today();
 
@@ -105,7 +110,7 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
   const [tally, setTally] = useState<SessionTally>(
     () => (resume ? loadSession(todayStr)?.tally : null) ?? { memorized: 0, reviewed: 0, mistakesClosed: 0 },
   );
-  const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; title?: string; onDone: (r?: HifzRating) => void } | null>(null);
+  const [coach, setCoach] = useState<{ portion: Portion; mode: "memorize" | "recall"; title?: string; onDone: (parts: RatedPart[]) => void } | null>(null);
 
   const total = steps.length;
   const done = idx >= total;
@@ -153,9 +158,9 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
             text={text}
             onSkip={() => advance()}
             onGuided={(portion, mode, title, onDoneRating) => setCoach({ portion, mode, title, onDone: onDoneRating })}
-            onMemorize={(portion, r) => { recordHifzSession(portion.toId, r); advance({ ...tally, memorized: tally.memorized + 1 }); }}
-            onReview={(portion, r) => { recordReview(portion.fromId, portion.toId, r); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
-            onTest={(portion, r) => { recordRandomTest(portion.fromId, portion.toId, r); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
+            onMemorize={(parts) => { recordGraded("memorize", parts); advance({ ...tally, memorized: tally.memorized + 1 }); }}
+            onReview={(parts) => { recordGraded("review", parts); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
+            onTest={(parts) => { recordGraded("test", parts); advance({ ...tally, reviewed: tally.reviewed + 1 }); }}
             onDrill={(closed) => advance({ ...tally, mistakesClosed: tally.mistakesClosed + (closed ? 1 : 0) })}
           />
         )}
@@ -168,7 +173,7 @@ export function TodaySessionFlow({ text, resume, onClose }: { text: string[]; re
           mode={coach.mode}
           recallTitle={coach.title}
           onClose={() => setCoach(null)}
-          onDone={(rating?: HifzRating) => { coach.onDone(rating); setCoach(null); }}
+          onDone={(parts) => { coach.onDone(parts); setCoach(null); }}
         />
       )}
     </div>
@@ -199,10 +204,10 @@ function StepView({
   step: SessionStep;
   text: string[];
   onSkip: () => void;
-  onGuided: (portion: Portion, mode: "memorize" | "recall", title: string | undefined, onDone: (r?: HifzRating) => void) => void;
-  onMemorize: (portion: Portion, r?: HifzRating) => void;
-  onReview: (portion: Portion, r?: HifzRating) => void;
-  onTest: (portion: Portion, r?: HifzRating) => void;
+  onGuided: (portion: Portion, mode: "memorize" | "recall", title: string | undefined, onDone: (parts: RatedPart[]) => void) => void;
+  onMemorize: (parts: RatedPart[]) => void;
+  onReview: (parts: RatedPart[]) => void;
+  onTest: (parts: RatedPart[]) => void;
   onDrill: (closed: boolean) => void;
 }) {
   if (step.kind === "drill") {
@@ -220,9 +225,13 @@ function StepView({
   }
 
   const { portion } = step;
-  const isMemorize = step.kind === "memorize";
-  const meta = isMemorize
-    ? { title: "السَّبْق — حفظٌ جديد", hint: "احفظ وردك الجديد بتؤدة، ثمّ قيّم حفظك.", coachTitle: undefined as string | undefined }
+  // التثبيتُ يمرّ بالمُدرّب نفسه (تكرارٌ وتسميع) لكنّه لا يُقدّم الجبهة: يُسجَّل مراجعة.
+  const isNew = step.kind === "memorize";
+  const isMemorize = isNew || step.kind === "consolidate";
+  const meta = isNew
+    ? { title: "السَّبْق — حفظٌ جديد", hint: "احفظ وردك الجديد بتؤدة، ثمّ سمّعه كاملاً.", coachTitle: undefined as string | undefined }
+    : step.kind === "consolidate"
+    ? { title: "تثبيتُ الورد السابق", hint: "تعثّرتَ فيه آخرَ مرّة — أعِد حفظه قبل أن تبني عليه جديداً.", coachTitle: undefined as string | undefined }
     : RECALL_META[step.kind];
   const icon = isMemorize
     ? <Sprout size={16} className="text-quran" />
@@ -230,8 +239,8 @@ function StepView({
     ? <Shuffle size={16} className="text-indigo-500" />
     : <RefreshCw size={16} className={step.kind === "due" ? "text-amber-600" : "text-quran"} />;
 
-  const record = (r?: HifzRating) =>
-    isMemorize ? onMemorize(portion, r) : step.kind === "test" ? onTest(portion, r) : onReview(portion, r);
+  const record = (parts: RatedPart[]) =>
+    isNew ? onMemorize(parts) : step.kind === "test" ? onTest(parts) : onReview(parts);
 
   return (
     <div className="hifz-step-card hifz-immersive-card space-y-4">
@@ -290,7 +299,7 @@ function StepView({
       {isMemorize && (
         <div className="hifz-direct-rating">
           <div className="text-[11px] text-gray-500 mb-1.5 text-center">أو سجّل مباشرةً — قيّم حفظك:</div>
-          <RatingRow onRate={(r) => onMemorize(portion, r)} />
+          <RatingRow onRate={(r) => record([{ ...portion, rating: r }])} />
         </div>
       )}
 

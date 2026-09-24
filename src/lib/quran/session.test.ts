@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTodayPlan, isValidSessionSnapshot } from "./session";
+import { buildTodayPlan, isValidSessionSnapshot, lastSabaq, halfPortion } from "./session";
 import { coveredToday, recentReviewBand } from "./hifz";
 import { pageRange, idToPage } from "./meta";
 import type { HifzState, HifzSession, HifzReviewLog, HifzRating, HifzMistake } from "../types";
@@ -169,5 +169,70 @@ describe("isValidSessionSnapshot — لا نستأنف لقطةً مشوّهة",
     expect(isValidSessionSnapshot({ ...valid, steps: [{ kind: "memorize", portion: { fromId: 0, toId: 7 } }] }, "2026-01-10")).toBe(false);
     expect(isValidSessionSnapshot({ ...valid, steps: [{ kind: "memorize", portion: { fromId: 1, toId: 6237 } }] }, "2026-01-10")).toBe(false);
     expect(isValidSessionSnapshot({ ...valid, tally: { memorized: "1", reviewed: 0, mistakesClosed: 0 } }, "2026-01-10")).toBe(false);
+  });
+});
+
+describe("ميزانُ الجديد والقديم — لا جديد على قديمٍ مهزوز", () => {
+  const p1 = pageRange(1), p2 = pageRange(2);
+
+  it("وردُ أمس «يحتاج إتقاناً» ⇒ تثبيتٌ أوّلاً ولا جديد", () => {
+    const s = hz({
+      frontierId: p2.end,
+      sessions: [sess(p2.start, p2.end, "2026-01-09", 1), sess(1, p1.end, "2026-01-08", 3)],
+    });
+    const plan = buildTodayPlan(s, "2026-01-10");
+    expect(plan.pace).toBe("hold");
+    expect(plan.newPortion).toBeNull();
+    expect(plan.paceNote).toBeTruthy();
+    expect(plan.steps[0]).toEqual({ kind: "consolidate", portion: { fromId: p2.start, toId: p2.end } });
+    expect(plan.steps.some((x) => x.kind === "memorize")).toBe(false);
+    // والمقطعُ نفسه لا يُعاد في القريبة ولا في المستحقّ
+    for (const st of plan.steps) {
+      if (st.kind === "recent" || st.kind === "due") expect(st.portion.toId).toBeLessThan(p2.start);
+    }
+  });
+
+  it("إذا ثبّتَه في مراجعةٍ لاحقة بإتقان عاد الجديد", () => {
+    const s = hz({
+      frontierId: p2.end,
+      sessions: [sess(p2.start, p2.end, "2026-01-09", 1), sess(1, p1.end, "2026-01-08", 3)],
+      reviews: [rev(p2.start, p2.end, "2026-01-09", 3)],
+    });
+    const plan = buildTodayPlan(s, "2026-01-10");
+    expect(plan.pace).toBe("full");
+    expect(plan.steps[0].kind).toBe("memorize");
+  });
+
+  it("تثبيتُ اليوم لا يُطلب ثانيةً في اليوم نفسه", () => {
+    const s = hz({
+      frontierId: p2.end,
+      sessions: [sess(p2.start, p2.end, "2026-01-09", 1), sess(1, p1.end, "2026-01-08", 3)],
+      reviews: [rev(p2.start, p2.end, "2026-01-10", 1)],
+    });
+    expect(buildTodayPlan(s, "2026-01-10").steps.some((x) => x.kind === "consolidate")).toBe(false);
+  });
+
+  it("متأخّراتٌ تفوق ضِعف سقف اليوم ⇒ نصفُ ورد", () => {
+    const p40 = pageRange(40);
+    // أربعون وجهاً لم يُراجَع أحدُها قطّ ⇒ كلّها مستحقّة
+    const s = hz({ frontierId: p40.end, sessions: [sess(1, p40.end, "2026-01-01")] });
+    const plan = buildTodayPlan(s, "2026-01-10");
+    expect(plan.pace).toBe("half");
+    const full = { fromId: p40.end + 1, toId: pageRange(41).end };
+    expect(plan.newPortion).toEqual(halfPortion(full));
+    expect(plan.newPortion!.toId).toBeLessThan(full.toId);
+  });
+
+  it("lastSabaq يضمّ جلسات آخر يومٍ قبل اليوم ولا يرى اليوم", () => {
+    const s = hz({
+      sessions: [sess(5, 6, "2026-01-10"), sess(3, 4, "2026-01-09"), sess(1, 2, "2026-01-09"), sess(1, 1, "2026-01-01")],
+    });
+    expect(lastSabaq(s, "2026-01-10")).toEqual({ fromId: 1, toId: 4 });
+    expect(lastSabaq(hz(), "2026-01-10")).toBeNull();
+  });
+
+  it("halfPortion لا يُنتج مقطعاً فارغاً", () => {
+    expect(halfPortion({ fromId: 10, toId: 10 })).toEqual({ fromId: 10, toId: 10 });
+    expect(halfPortion({ fromId: 10, toId: 14 })).toEqual({ fromId: 10, toId: 12 });
   });
 });

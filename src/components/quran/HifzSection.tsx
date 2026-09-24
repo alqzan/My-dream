@@ -129,8 +129,7 @@ function PlanSetup({ onStart }: { onStart: (startId: number, unit: HifzUnit, amo
 function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }) {
   const quranHifz = useAppStore((s) => s.quranHifz);
   const recordHifzSession = useAppStore((s) => s.recordHifzSession);
-  const recordRandomTest = useAppStore((s) => s.recordRandomTest);
-  const recordReview = useAppStore((s) => s.recordReview);
+  const recordGraded = useAppStore((s) => s.recordGraded);
   const h = quranHifz ?? EMPTY_HIFZ;
   const [showMore, setShowMore] = useState(false); // «زِد حفظك» بعد إتمام ورد اليوم
   // المُدرّب الموجّه خارج جلسة اليوم — للزيادة، أو للتسميع من الخريطة، أو للاختبار.
@@ -172,13 +171,14 @@ function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }
       {(showToday || showDrill) && hasSession ? (
         <>
           <TodaySessionCard onStart={(resume) => setFlow({ resume })} />
-          {/* أتممتَ وردك لكن بقيت مراجعة؟ يبقى بابُ الزيادة مفتوحاً */}
-          {wirdDoneToday && portion && !showMore && text && (
+          {/* أتممتَ وردك لكن بقيت مراجعة؟ يبقى بابُ الزيادة مفتوحاً — وكذا حين
+              أوقف الميزانُ الجديدَ للتثبيت: القرارُ الأخير لك. */}
+          {(wirdDoneToday || plan.pace === "hold") && portion && !showMore && text && (
             <button
               onClick={() => setShowMore(true)}
               className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-quran hover:bg-quran/10 rounded-xl py-2 press"
             >
-              <Sprout size={13} /> زِد حفظك اليوم
+              <Sprout size={13} /> {plan.pace === "hold" && !wirdDoneToday ? "احفظ جديداً رغم ذلك" : "زِد حفظك اليوم"}
             </button>
           )}
         </>
@@ -289,11 +289,9 @@ function HifzDashboard({ text, view }: { text: string[] | null; view: HifzView }
           mode={coach.mode}
           recallTitle={coach.kind === "memorize" ? undefined : RECALL_TITLE[coach.kind]}
           onClose={() => setCoach(null)}
-          onDone={(rating?: HifzRating) => {
-            const { portion: p, kind } = coach;
-            if (kind === "memorize") { recordHifzSession(p.toId, rating); setShowMore(false); }
-            else if (kind === "test") recordRandomTest(p.fromId, p.toId, rating);
-            else recordReview(p.fromId, p.toId, rating);
+          onDone={(parts) => {
+            recordGraded(coach.kind, parts);
+            if (coach.kind === "memorize") setShowMore(false);
             setCoach(null);
           }}
         />
