@@ -41,6 +41,13 @@
   (`scripts/check-version.mjs`)، ويخرج الموقع الثابت في `out/`.
 - `npm run bump` — **يرفع رقم الإصدار تعديلاً واحداً**: شغّله مع كل تعديلٍ جوهريّ
   (ميزة/إصلاح/مهاجرة) قبل الدفع، وسجّل السطر المقابل في `ROADMAP.md`.
+- `npm run build:native` — يبني نسخة iOS من دون `BASE_PATH` في `out-native/`
+  ويشغّل `cap sync ios`. بعده افتح مشروع Xcode بـ`npx cap open ios`.
+- `node scripts/package-ota.mjs` — بعد البناء الأصلي ينتج ZIP وmanifest في
+  `work/ota/` محلياً؛ سير Pages ينشرهما تحت `/My-dream/ota/` بعد بناء الموقع.
+- من GitHub Actions: **iOS free trial IPA** يبني artifact غير موقّع بلا أسرار؛
+  **Upload iOS build to TestFlight** يتطلب أسرار Apple المذكورة في
+  `docs/IOS-SETUP.md`. كلاهما يدوي ولا يغيّر سير نشر Pages.
 - النشر: ادفع إلى `main` (تلقائي عبر GitHub Pages).
 
 ## الإصدار (قاعدة ثابتة)

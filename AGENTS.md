@@ -9,6 +9,15 @@
 - لا تسلّم قبل تشغيل بوابات التحقق المطلوبة في `CLAUDE.md`.
 - لا تحذف بيانات، ولا تغيّر Firebase أو المزامنة أو النسخ الاحتياطي دون موافقة صريحة.
 
+## أوامر iOS
+
+- `npm run build:native` يبني نسخة iOS ويزامن Capacitor؛ `npx cap open ios`
+  يفتح مشروع Xcode. التحقق قبل كل commit هو `npm run verify` كما في `CLAUDE.md`.
+- `node scripts/package-ota.mjs` يحزم التحديث المحلي بعد البناء الأصلي.
+- سير **iOS free trial IPA** اليدوي ينتج artifact غير موقّع، وسير
+  **Upload iOS build to TestFlight** اليدوي يتطلب أسرار Apple. اتبع
+  `docs/IOS-SETUP.md` قبل التثبيت، ولا ترسل مفاتيح التوقيع أو المزامنة للوكيل.
+
 ## المهارات المحلية المشتركة
 
 - المهارات المثبتة في `.agents/skills/` مخصصة لـ Codex، ولها نسخة في
