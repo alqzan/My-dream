@@ -11,6 +11,7 @@ import { GoalWizard } from "@/components/finance/GoalWizard";
 import { TripPanel } from "@/components/finance/TripPanel";
 import { isTripEligibleFund, pastTrips, tripSummary } from "@/lib/trip";
 import { isSystemReserveFund } from "@/lib/reserveFunds";
+import { groupReserves, lastMovement } from "@/lib/reserveView";
 
 const ICONS = ["🏠", "✈️", "🎁", "🚗", "💍", "🎓", "🛠️", "🏥", "🐪", "⛱️", "📦", "💰"];
 const COLORS = ["#1f7a6c", "#3d9640", "#c9852a", "#8a6fb0", "#4a9fbd", "#c1663f"];
@@ -50,6 +51,8 @@ export function ReserveFunds() {
     [reserves, totals]
   );
   const trips = useMemo(() => pastTrips(reserves), [reserves]);
+  const groups = useMemo(() => groupReserves(reserves), [reserves]);
+  const autoOffset = useAppStore((s) => s.autoOffset);
 
   return (
     <div className="space-y-3 min-w-0">
@@ -92,7 +95,34 @@ export function ReserveFunds() {
         </button>
       )}
 
-      {reserves.length > 0 && (
+      {/* **ثلاثةُ أوعيةٍ بثلاثة أدوار** (٠٫١٫٤٦٣): المدّخرُ والوسادةُ بطاقتان عريضتان
+          تقولان ماذا تفعلان وآخرَ ما فعلتاه، ومظاريفُ الأهداف وحدَها أقراصاً تمتلئ نحو
+          غاية. كانت كلُّها أقراصاً متماثلة، فبدا «عام» بمئتي ألف كمظروف هدايا. */}
+      {groups.general && (
+        <RoleCard
+          fund={groups.general}
+          balance={totals.get(groups.general.id)?.balance ?? 0}
+          caption="مدّخرك — تُدفع منه الصدماتُ الكبيرة، لا المصروفُ اليومي"
+          active={expanded === groups.general.id}
+          onTap={() => setExpanded(expanded === groups.general!.id ? null : groups.general!.id)}
+        />
+      )}
+      {groups.surplus && (
+        <RoleCard
+          fund={groups.surplus}
+          balance={totals.get(groups.surplus.id)?.balance ?? 0}
+          caption={autoOffset === false
+            ? "وسادةُ اليومية — يصبّ فيها فائضُ كلّ دورة"
+            : "وسادةُ اليومية — تسدّ العجزَ وحدها، ويصبّ فيها فائضُ كلّ دورة"}
+          compact
+          active={expanded === groups.surplus.id}
+          onTap={() => setExpanded(expanded === groups.surplus!.id ? null : groups.surplus!.id)}
+        />
+      )}
+
+      {groups.goals.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] font-semibold pt-1" style={{ color: "var(--ink52)" }}>مظاريف لأهداف</div>
         <div className="overflow-x-auto scrollbar-none -mx-1 px-1 pt-1">
           <div className="relative flex w-max min-w-full justify-end gap-1.5">
             {/* خيط القافلة الذهبي يمرّ خلف الأقراص */}
@@ -103,7 +133,7 @@ export function ReserveFunds() {
                 background: "linear-gradient(to left, transparent, var(--theme-accent-line), transparent)",
               }}
             />
-            {reserves.map((fund) => (
+            {groups.goals.map((fund) => (
               <FundDial
                 key={fund.id}
                 fund={fund}
@@ -114,6 +144,15 @@ export function ReserveFunds() {
             ))}
           </div>
         </div>
+        </div>
+      )}
+      {reserves.length > 0 && groups.goals.length === 0 && !adding && !goal && (
+        <button
+          onClick={() => setGoal(true)}
+          className="w-full py-3 rounded-xl border border-dashed border-finance/30 text-finance text-xs font-medium hover:bg-finance/5 press"
+        >
+          لا مظاريف لأهداف بعد — جهّز لسفرٍ أو إيجارٍ أو هدية
+        </button>
       )}
 
       {openFund && <FundDetail key={openFund.id} fund={openFund} onClose={() => setExpanded(null)} />}
@@ -150,6 +189,43 @@ export function ReserveFunds() {
         </div>
       )}
     </div>
+  );
+}
+
+// ————————————————————————————————————————————————————————————————
+// بطاقةُ الدور: المدّخرُ والوسادة — عرضٌ لا ملءٌ نحو هدف. تقول ماذا يفعل الوعاء
+// (`caption`) وآخرَ ما فعله فعلاً (`lastMovement`): «− ٢٠٬٨٥٠ إيجار البيت». الضغطُ
+// يفتح التفاصيل نفسها (`FundDetail`) كما يفتحها القرص.
+function RoleCard({
+  fund, balance, caption, compact = false, active, onTap,
+}: {
+  fund: ReserveFund; balance: number; caption: string; compact?: boolean; active: boolean; onTap: () => void;
+}) {
+  const transactions = useAppStore((s) => s.transactions);
+  const move = useMemo(() => lastMovement(fund, transactions), [fund, transactions]);
+  return (
+    <button
+      type="button"
+      onClick={onTap}
+      aria-pressed={active}
+      className={cn("mdr-reserve-role press", compact && "is-compact", active && "is-active")}
+    >
+      <span className="mdr-reserve-role-icon" style={{ backgroundColor: fund.color + "1f" }}>{fund.icon}</span>
+      <span className="mdr-reserve-role-copy">
+        <strong>{fund.name}</strong>
+        <small>{caption}</small>
+        {move && (
+          <small className="mdr-reserve-role-move">
+            {/* التاريخُ قبل الملاحظة: الملاحظةُ قد تطول فتُقصّ، والتاريخُ لا يُستغنى عنه. */}
+            آخرُ حركة: <b className={move.amount < 0 ? "is-out" : "is-in"}>{move.amount < 0 ? "−" : "+"}{formatAmount(Math.abs(move.amount))}</b>
+            {" · "}{formatDateShort(move.date)}{move.note ? ` · ${move.note}` : ""}
+          </small>
+        )}
+      </span>
+      <span className={cn("mdr-reserve-role-value", balance < 0 && "is-low")}>
+        {formatAmount(balance)}<span> ر.س</span>
+      </span>
+    </button>
   );
 }
 

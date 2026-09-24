@@ -1,6 +1,7 @@
 "use client";
 import { useAppStore } from "@/lib/store";
 import { computeDailyBudgetStatus, formatAmount, reserveBalance, cashOut, today } from "@/lib/utils";
+import { groupReserves } from "@/lib/reserveView";
 
 // ===================== الأوعية الثلاثة — سطرُ الفهم =====================
 // الحوسةُ التي اشتكى منها المالك لم تكن في الأرقام؛ كانت في أنّ ثلاثة أرقامٍ
@@ -60,6 +61,15 @@ export function VesselsStrip({ onGo }: { onGo: (id: "daily" | "reserves" | "hist
 
   const status = dailyBudget ? computeDailyBudgetStatus(dailyBudget, transactions) : null;
   const envelopes = reserves.reduce((sum, f) => sum + reserveBalance(f, transactions), 0);
+  // المجموعُ يخلط مدّخراً طويل الأمد بمظاريف أهدافٍ قريبة — فيُقال تقسيمُه تحته
+  // (٠٫١٫٤٦٣) بدل «٢ مظروف». ما لا وجودَ له لا يُذكر.
+  const groups = groupReserves(reserves);
+  const split = [
+    groups.general && `مدّخر ${formatAmount(Math.round(reserveBalance(groups.general, transactions)))}`,
+    groups.surplus && `فوائض ${formatAmount(Math.round(reserveBalance(groups.surplus, transactions)))}`,
+    groups.goals.length > 0 &&
+      `أهداف ${formatAmount(Math.round(groups.goals.reduce((sum, f) => sum + reserveBalance(f, transactions), 0)))}`,
+  ].filter(Boolean).join(" · ");
   const month = today().slice(0, 7);
   const monthSpend = transactions.filter((t) => t.date.startsWith(month)).reduce((sum, t) => sum + cashOut(t), 0);
 
@@ -82,9 +92,7 @@ export function VesselsStrip({ onGo }: { onGo: (id: "daily" | "reserves" | "hist
       label: "في مظاريفك",
       value: formatAmount(Math.round(envelopes)),
       low: envelopes < 0,
-      sub: reserves.length
-        ? `${formatAmount(reserves.length)} مظروف — مالٌ مخصَّص، لا مصروف`
-        : "لا مظاريف بعد",
+      sub: reserves.length ? split : "لا مظاريف بعد",
     },
     {
       go: "history" as const,

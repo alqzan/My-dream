@@ -4333,6 +4333,39 @@ button.mdr-summary-habit-row { cursor: pointer; }
   border-radius: 0.76rem;
   background: var(--greenw);
 }
+/* بطاقةُ دورٍ في المظاريف: المدّخر («عام») والوسادة («الفوائض») — عرضٌ عريض
+   بدل قرصٍ يمتلئ نحو هدف لا وجود له. */
+.mdr-reserve-role {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--gline);
+  border-radius: 1rem;
+  background: var(--paper2);
+  color: var(--ink);
+  text-align: start;
+}
+.mdr-reserve-role.is-active { border-color: color-mix(in srgb, var(--theme-accent) 55%, var(--line)); }
+.mdr-reserve-role.is-compact { padding: 0.65rem 0.9rem; background: var(--paper); border-color: var(--line); }
+.mdr-reserve-role-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 2.5rem; height: 2.5rem; border-radius: 0.8rem; font-size: 1.2rem;
+}
+.mdr-reserve-role.is-compact .mdr-reserve-role-icon { width: 2rem; height: 2rem; font-size: 1rem; }
+.mdr-reserve-role-copy { display: grid; flex: 1; gap: 0.15rem; min-width: 0; }
+.mdr-reserve-role-copy strong { font-size: 0.85rem; font-weight: 900; }
+.mdr-reserve-role-copy small { color: var(--ink52); font-size: 0.66rem; line-height: 1.5; }
+.mdr-reserve-role-move { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mdr-reserve-role-move b { font-weight: 800; }
+.mdr-reserve-role-move b.is-out { color: var(--clay); }
+.mdr-reserve-role-move b.is-in { color: var(--theme-accent); }
+.mdr-reserve-role-value { flex: none; font-size: 1.15rem; font-weight: 950; color: var(--theme-accent); font-variant-numeric: tabular-nums; }
+.mdr-reserve-role.is-compact .mdr-reserve-role-value { font-size: 0.95rem; }
+.mdr-reserve-role-value span { font-size: 0.6rem; font-weight: 600; opacity: 0.6; }
+.mdr-reserve-role-value.is-low { color: var(--clay); }
+
 /* زرُّ «التفصيل الأعمق» في الإحصائيات — سطرٌ بعنوانٍ ووصفٍ لما خلفه. */
 .mdr-stats-deep-toggle {
   display: flex;
