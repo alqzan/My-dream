@@ -98,14 +98,31 @@ function daysBefore(date: string, days: number): string {
  * «due»: مرّ يوم الراتب ولم يُؤكَّد · «early»: الراتب خلال أسبوع ولم يُؤكَّد
  * بعد (يُعرض خيارُ التأكيد المبكر) · `null`: لا سؤال.
  */
+/** هل يُحسب تأكيدُ «نزل الراتب» لراتب `salaryDate`؟ (في يومه أو قبله بأسبوعٍ على الأكثر، أو بعده). */
+export function salaryConfirmedFor(lastConfirm: string | null | undefined, salaryDate: string): boolean {
+  return !!lastConfirm && /^\d{4}-\d{2}-\d{2}$/.test(lastConfirm) && lastConfirm >= daysBefore(salaryDate, EARLY_SALARY_DAYS);
+}
+
+/**
+ * الراتبُ القادم الفعليّ: كـ`nextSalaryDate`، إلّا أنّ راتباً أُكّد مبكّراً قد نزل
+ * فعلاً، فالقادمُ هو الذي بعده. بدون هذا صارت دورةُ تأكيدٍ يوم ٢٤ (والراتب ٢٧)
+ * ثلاثةَ أيام: منحنى يضغط شهراً فيها، و«إلى الراتب ٣ يوم».
+ */
+export function upcomingSalaryDate(
+  salaryDay: number,
+  lastConfirm: string | null | undefined,
+  todayStr: string
+): string {
+  const next = nextSalaryDate(salaryDay, todayStr);
+  return salaryConfirmedFor(lastConfirm, next) ? nextSalaryDate(salaryDay, next) : next;
+}
+
 export function salaryPrompt(
   salaryDay: number,
   lastConfirm: string | null | undefined,
   todayStr: string
 ): "due" | "early" | null {
-  const valid = lastConfirm && /^\d{4}-\d{2}-\d{2}$/.test(lastConfirm) ? lastConfirm : null;
-  const confirmedFor = (salaryDate: string) =>
-    valid !== null && valid >= daysBefore(salaryDate, EARLY_SALARY_DAYS);
+  const confirmedFor = (salaryDate: string) => salaryConfirmedFor(lastConfirm, salaryDate);
   if (!confirmedFor(lastSalaryDate(salaryDay, todayStr))) return "due";
   const next = nextSalaryDate(salaryDay, todayStr);
   if (todayStr >= daysBefore(next, EARLY_SALARY_DAYS) && !confirmedFor(next)) return "early";

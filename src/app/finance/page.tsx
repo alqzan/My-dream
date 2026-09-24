@@ -31,7 +31,7 @@ import {
   buildFinanceOverview, budgetAlerts, defaultPlanOpen, planSectionFromHash, historySlice,
   PLAN_SECTIONS, type PlanSectionId,
 } from "@/lib/financeOverview";
-import { spendWindow, nextSalaryDate } from "@/lib/budgetCycle";
+import { spendWindow, upcomingSalaryDate } from "@/lib/budgetCycle";
 import { buildCycleCurve } from "@/lib/cycleCurve";
 import { budgetStatuses } from "@/lib/budgetStatus";
 import {
@@ -208,9 +208,9 @@ export default function FinancePage() {
   const overview = useMemo(
     () => buildFinanceOverview({
       dailyBudget, transactions, reserves,
-      salaryDay: salaryDay ?? 27, monthPrefix: currentMonth, todayStr: today(),
+      salaryDay: salaryDay ?? 27, lastSalaryConfirm, monthPrefix: currentMonth, todayStr: today(),
     }),
-    [dailyBudget, transactions, reserves, salaryDay, currentMonth]
+    [dailyBudget, transactions, reserves, salaryDay, lastSalaryConfirm, currentMonth]
   );
   // تنبيهات السقوف على نافذة دورة الراتب (لا الشهر الميلادي) — نفس نافذة
   // BudgetTracker، فتتصفّر مع تأكيد «نزل الراتب».
@@ -235,8 +235,8 @@ export default function FinancePage() {
   // ببدلِ الميزانية اليومية و`dailyShare` نفسِهما، فلا تعطي الشاشةُ الواحدة
   // رقمين متناقضين — وبلا ميزانيةٍ يومية لا يُرسم أصلاً (لا خطَّ يُقاس عليه).
   const cycleCurve = useMemo(
-    () => buildCycleCurve(dailyBudget, transactions, curveStart, nextSalaryDate(salaryDay ?? 27, today()), today()),
-    [dailyBudget, transactions, curveStart, salaryDay]
+    () => buildCycleCurve(dailyBudget, transactions, curveStart, upcomingSalaryDate(salaryDay ?? 27, lastSalaryConfirm, today()), today()),
+    [dailyBudget, transactions, curveStart, salaryDay, lastSalaryConfirm]
   );
   const budgetRows = useMemo(
     () => budgetStatuses(budgets, transactions, categories, monthlyIncome, cycleStart),

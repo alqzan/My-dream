@@ -129,7 +129,7 @@ export default function SpendInsightsPage() {
       return { start: `${todayStr.slice(0, 8)}01`, daysLeft: inMonth - d.getDate() + 1, length: inMonth };
     }
     const start = spendWindow(budgetWindow, lastSalaryConfirm, salaryDay ?? 27, todayStr);
-    const left = daysUntilSalary(salaryDay ?? 27, todayStr);
+    const left = daysUntilSalary(salaryDay ?? 27, todayStr, lastSalaryConfirm);
     return { start, daysLeft: left, length: cycleDays(start, todayStr) + left };
   }, [budgetWindow, lastSalaryConfirm, salaryDay, todayStr]);
 

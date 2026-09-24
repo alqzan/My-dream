@@ -91,6 +91,7 @@ export function DailyBudgetCard() {
   const monthlyIncome = useAppStore((s) => s.monthlyIncome);
   const reserves = useAppStore((s) => s.reserves);
   const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
   const setDailyBudget = useAppStore((s) => s.setDailyBudget);
   const removeDailyBudget = useAppStore((s) => s.removeDailyBudget);
   const setMonthlyIncome = useAppStore((s) => s.setMonthlyIncome);
@@ -291,7 +292,7 @@ export function DailyBudgetCard() {
   const over = status.balance < 0;
   // «كم راح يتبقّى لي عند نزول الراتب؟» — على وتيرة صرفك الفعلية في هذه الدورة،
   // ومعها السقف الأعلى (لو ما صرفت شيئاً) حتى لا يُقرأ الرقم على أنه وعد.
-  const projection = projectedCycleSurplus(status, status.rate, daysUntilSalary(salaryDay ?? 27, today()));
+  const projection = projectedCycleSurplus(status, status.rate, daysUntilSalary(salaryDay ?? 27, today(), lastSalaryConfirm));
   // نسبة امتلاء الإناء = الرصيد المتراكم ÷ يوميّة يوم واحد — لا ÷ المتاح
   // التراكمي (status.allowance) الذي يكبر كل يوم، فيقسم رصيداً صحياً على رقم
   // ضخم ويُظهر إناءً شبه فارغ رغم الفائض. فرصيدٌ يعادل يوميّة كاملة (أو أكثر)

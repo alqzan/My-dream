@@ -109,6 +109,7 @@ export function BigExpenseRouter({ amount, note, eventId, splits, offBudget, onD
   const transactions = useAppStore((s) => s.transactions);
   const reserves = useAppStore((s) => s.reserves);
   const salaryDay = useAppStore((s) => s.salaryDay);
+  const lastSalaryConfirm = useAppStore((s) => s.lastSalaryConfirm);
 
   // مظاريفُ الأحداث (كلُّها عدا «الفوائض» — ذاك وعاءُ تمويلٍ لا وجهةُ صرف).
   const targets = useMemo(
@@ -145,7 +146,7 @@ export function BigExpenseRouter({ amount, note, eventId, splits, offBudget, onD
   const chosen = targets.find((t) => t.fund.id === destination);
 
   const len = cycleLength(salaryDay ?? 27, today());
-  const daysLeft = daysUntilSalary(salaryDay ?? 27, today());
+  const daysLeft = daysUntilSalary(salaryDay ?? 27, today(), lastSalaryConfirm);
   const surplus = surplusPullSource(reserves, transactions, true);
   const hasSurplus = (surplus?.balance ?? 0) > 0;
 

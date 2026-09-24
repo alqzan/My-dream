@@ -5,7 +5,8 @@
 import type {
   DailyBudget, Transaction, ReserveFund, Budget, FinanceCategoryDef,
 } from "./types";
-import { computeDailyBudgetStatus, reserveBalance, cashOut, parseDate } from "./utils";
+import { computeDailyBudgetStatus, reserveBalance, cashOut, parseDate, toDateStr } from "./utils";
+import { nextSalaryDate, salaryConfirmedFor } from "./budgetCycle";
 import { findReserveByRole } from "./reserveFunds";
 import { budgetStatuses } from "./budgetStatus";
 
@@ -23,15 +24,17 @@ export const PLAN_SECTIONS = ["daily", "budgets", "reserves"] as const;
 export type PlanSectionId = (typeof PLAN_SECTIONS)[number];
 
 // عدد الأيام حتى الراتب القادم (0 = يوم الراتب نفسه). عرضٌ محض، لا يمسّ أيّ حساب.
-export function daysUntilSalary(salaryDay: number, todayStr: string): number {
+// راتبٌ أُكّد مبكّراً (`lastConfirm`) قد نزل، فالعدُّ إلى الذي بعده.
+export function daysUntilSalary(salaryDay: number, todayStr: string, lastConfirm?: string | null): number {
   const [y, m, d] = todayStr.split("-").map(Number);
   const inThisMonth = d <= salaryDay;
   const sy = inThisMonth ? y : m === 12 ? y + 1 : y;
   const sm = inThisMonth ? m : m === 12 ? 1 : m + 1;
   const lastDay = new Date(sy, sm, 0).getDate(); // sm هنا 1..12 → اليوم الأخير للشهر sm
   const day = Math.min(Math.max(salaryDay, 1), lastDay);
-  const salaryDate = new Date(sy, sm - 1, day);
-  return Math.max(0, Math.round((salaryDate.getTime() - parseDate(todayStr).getTime()) / 86400000));
+  let salaryDate = toDateStr(new Date(sy, sm - 1, day));
+  if (salaryConfirmedFor(lastConfirm, salaryDate)) salaryDate = nextSalaryDate(salaryDay, salaryDate);
+  return Math.max(0, Math.round((parseDate(salaryDate).getTime() - parseDate(todayStr).getTime()) / 86400000));
 }
 
 // عدد السقوف المتجاوزة/القريبة داخل النافذة — عدٌّ محضٌ على `budgetStatuses`
@@ -56,6 +59,7 @@ export function buildFinanceOverview(data: {
   transactions: Transaction[];
   reserves: ReserveFund[];
   salaryDay: number;
+  lastSalaryConfirm?: string | null;
   monthPrefix: string; // YYYY-MM للشهر الحالي
   todayStr: string;
   now?: Date;
@@ -74,7 +78,7 @@ export function buildFinanceOverview(data: {
     hasBudget,
     availableToday,
     monthSpend,
-    daysToSalary: daysUntilSalary(data.salaryDay, data.todayStr),
+    daysToSalary: daysUntilSalary(data.salaryDay, data.todayStr, data.lastSalaryConfirm),
     reservesTotal,
     hasReserves: data.reserves.length > 0,
   };

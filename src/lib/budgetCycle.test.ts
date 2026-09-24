@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   lastSalaryDate, budgetCycleStart, nextSalaryDate, cycleDays, inSpendWindow,
-  spendWindow, salaryPrompt,
+  spendWindow, salaryPrompt, upcomingSalaryDate,
 } from "./budgetCycle";
-import { budgetAlerts, projectedCycleSurplus } from "./financeOverview";
+import { budgetAlerts, projectedCycleSurplus, daysUntilSalary } from "./financeOverview";
 import type { Budget, FinanceCategoryDef, Transaction } from "./types";
 
 describe("lastSalaryDate", () => {
@@ -116,5 +116,20 @@ describe("salaryPrompt", () => {
   it("keeps the old behaviour for an on-time confirmation", () => {
     expect(salaryPrompt(27, "2026-09-27", "2026-09-29")).toBeNull();
     expect(salaryPrompt(27, "2026-09-28", "2026-10-21")).toBe("early");
+  });
+});
+
+describe("upcomingSalaryDate / daysUntilSalary after an early confirmation", () => {
+  // بلاغ المالك: أكّد يوم ٢٤ والراتب ٢٧، فصارت الدورة ثلاثة أيام.
+  it("points past a salary that was confirmed early", () => {
+    expect(upcomingSalaryDate(27, "2026-09-24", "2026-09-24")).toBe("2026-10-27");
+    expect(daysUntilSalary(27, "2026-09-24", "2026-09-24")).toBe(33);
+    expect(daysUntilSalary(27, "2026-09-27", "2026-09-24")).toBe(30);
+  });
+  it("is unchanged without an early confirmation", () => {
+    expect(upcomingSalaryDate(27, "2026-08-27", "2026-09-24")).toBe("2026-09-27");
+    expect(daysUntilSalary(27, "2026-09-24", "2026-08-27")).toBe(3);
+    expect(daysUntilSalary(27, "2026-09-24")).toBe(3);
+    expect(upcomingSalaryDate(27, "2026-09-27", "2026-09-29")).toBe("2026-10-27");
   });
 });
