@@ -27,7 +27,7 @@ import type { HifzState } from "../types";
 import type { Portion } from "./hifz";
 import {
   plannedPortion, recentReviewBand, drillsToday, smartTestPortion, testDue,
-  countPages, countSpots, countAyat, openMistakes, coveredToday,
+  countPages, countSpots, countAyat, openMistakes, coveredToday, hifzEventsByRecency,
 } from "./hifz";
 import { dueQueue, type DuePage } from "./schedule";
 import { idToPage, TOTAL_AYAT, TOTAL_PAGES } from "./meta";
@@ -104,8 +104,7 @@ export function lastSabaq(s: HifzState, todayStr: string): Portion | null {
 export function consolidationPortion(s: HifzState, todayStr: string): Portion | null {
   const p = lastSabaq(s, todayStr);
   if (!p || coveredToday(s, p, todayStr)) return null;
-  const events = [...(s.sessions ?? []), ...(s.reviews ?? [])]
-    .map((e, order) => ({ ...e, order, at: typeof e.at === "number" && Number.isFinite(e.at) ? e.at : null }))
+  const events = hifzEventsByRecency(s)
     .filter((e) => e.rating != null && e.fromId <= p.toId && e.toId >= p.fromId)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? -Infinity) - (b.at ?? -Infinity) || a.order - b.order);
   for (let id = p.fromId; id <= p.toId; id++) {

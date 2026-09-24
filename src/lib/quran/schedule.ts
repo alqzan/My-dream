@@ -42,7 +42,7 @@
 
 import type { HifzState, HifzRating } from "../types";
 import type { Portion } from "./hifz";
-import { recentBandPages, plannedPortion, openMistakes } from "./hifz";
+import { recentBandPages, plannedPortion, openMistakes, hifzEventsByRecency } from "./hifz";
 import { presetOf, INTENSITY, DEFAULT_INTENSITY, type IntensityPreset } from "./intensity";
 import { idToPage, pageRange, idToSurahAyah, SURAHS } from "./meta";
 import { parseDate, toDateStr } from "../utils";
@@ -218,16 +218,15 @@ export function pageRisk(p: {
 interface RatedEvent { fromPage: number; toPage: number; date: string; rating: HifzRating; at: number | null; order: number }
 
 function ratedEvents(s: HifzState): RatedEvent[] {
-  const all = [...(s.sessions ?? []), ...(s.reviews ?? [])];
-  const events = all
+  const events = hifzEventsByRecency(s)
     .filter((e): e is typeof e & { rating: HifzRating } => e.rating === 1 || e.rating === 2 || e.rating === 3)
-    .map((e, order) => ({
+    .map((e) => ({
       fromPage: idToPage(e.fromId),
       toPage: idToPage(e.toId),
       date: e.date,
       rating: e.rating,
-      at: typeof e.at === "number" && Number.isFinite(e.at) ? e.at : null,
-      order,
+      at: e.at,
+      order: e.order,
     }))
     .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? -Infinity) - (b.at ?? -Infinity) || a.order - b.order);
 

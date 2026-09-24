@@ -84,6 +84,21 @@ describe("weakSpots — page-overlap based (not exact range-string)", () => {
     });
     expect(latestRatingByPage(s).get(1)).toEqual({ date: "2026-01-03", rating: 2 });
   });
+  // ٠٫١٫٤٧٠: الترتيبُ بالتاريخ وحده كان يُبقي الأقدمَ من تقييمَي اليوم نفسِه
+  // (المصفوفةُ الأحدثُ أوّلاً) — فيبقى الوجهُ «ضعيفاً» بعد إتقانه مساءً.
+  it("تقييمان للوجه في يومٍ واحد: الأحدثُ يغلب — بـ`at` وبدونه", () => {
+    const p1 = pageRange(1);
+    const morning = { ...ev(1, p1.end, "2026-01-03", 1), at: 1 };
+    const evening = { ...ev(1, p1.end, "2026-01-03", 3), at: 2 };
+    const withAt = hz({ frontierId: p1.end, reviews: [evening, morning] });
+    expect(latestRatingByPage(withAt).get(1)?.rating).toBe(3);
+    const { at: _a, ...eveningLegacy } = evening;
+    const { at: _b, ...morningLegacy } = morning;
+    void _a; void _b;
+    const legacy = hz({ frontierId: p1.end, reviews: [eveningLegacy, morningLegacy] });
+    expect(latestRatingByPage(legacy).get(1)?.rating).toBe(3);
+    expect(weakPageSet(withAt).has(1)).toBe(false);
+  });
 });
 
 describe("portionEnd — quarter/half accumulate across pages (P2)", () => {

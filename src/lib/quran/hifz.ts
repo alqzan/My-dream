@@ -430,16 +430,31 @@ export function countDays(n: number): string {
 // أحدث تقييمٍ مسّ كلَّ وجهٍ محفوظ (بتداخل الوجه لا بمطابقة المدى النصّي). هكذا
 // إذا كان وجهٌ ضعيفاً ثمّ راجعه المستخدم لاحقاً ضمن مدى مختلف وأتقنه، تتحدّث
 // حالتُه — كان المفتاح النصّي `fromId-toId` يُبقيه ضعيفاً لأنّ المدى اختلف.
+/**
+ * جلساتُ الحفظ ومراجعاتُه معاً، لكلٍّ منها `order` = **رتبةُ حداثته** في مصفوفته
+ * (الأكبرُ أحدث؛ والمراجعاتُ بعد الجلسات). المصفوفتان تُخزَّنان الأحدثَ أوّلاً، فكان الفهرسُ الخامُ في
+ * `[...sessions, ...reviews]` يجعل الأقدمَ «آخرَ» عند تعادل اليوم و`at` —
+ * فيغلب تقييمٌ صباحيٌّ تصحيحَه مساءً (٠٫١٫٤٧٠). يُرتَّب بها بعد التاريخ و`at`.
+ */
+export function hifzEventsByRecency(s: HifzState) {
+  const tag = <E extends { at?: number }>(list: E[], base: number) =>
+    list.map((e, i) => ({ ...e, at: typeof e.at === "number" && Number.isFinite(e.at) ? e.at : null, order: base + list.length - 1 - i }));
+  const sessions = s.sessions ?? [];
+  // ومراجعةُ اليوم بعد حفظه: الجلساتُ أوّلاً في الرتبة، فتعادلُ جلسةٍ ومراجعةٍ بلا
+  // `at` في اليوم نفسه يُحسم للمراجعة (هي التي تُثبّت ما حُفظ).
+  return [...tag(sessions, 0), ...tag(s.reviews ?? [], sessions.length)];
+}
+
 export function latestRatingByPage(s: HifzState): Map<number, { date: string; rating?: HifzRating }> {
   const from = s.plan?.startId ?? 1;
   const m = new Map<number, { date: string; rating?: HifzRating }>();
   if (s.frontierId < from) return m;
   const firstPage = idToPage(from);
   const lastPage = idToPage(s.frontierId);
-  const events = [
-    ...s.sessions.map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date, rating: x.rating })),
-    ...s.reviews.map((x) => ({ fromId: x.fromId, toId: x.toId, date: x.date, rating: x.rating })),
-  ].sort((a, b) => (a.date < b.date ? -1 : 1)); // تصاعدي: الأحدث يكتب أخيراً
+  // تصاعدي: الأحدث يكتب أخيراً — باليوم ثمّ `at` ثمّ الحداثة داخل اليوم، كما
+  // يرتّب الجدولُ (`schedule.ts`) فلا تختلف الخريطةُ عنه في وجهٍ قُيِّم مرّتين.
+  const events = hifzEventsByRecency(s)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? -Infinity) - (b.at ?? -Infinity) || a.order - b.order);
   for (const e of events) {
     const ef = Math.max(firstPage, idToPage(e.fromId));
     const et = Math.min(lastPage, idToPage(e.toId));
