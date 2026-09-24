@@ -12,6 +12,12 @@
 
 1. ثبّت Xcode وافتح آخر نسخة من المستودع. شغّل أوامر npm ci ثم
    npm run build:native ثم npx cap open ios.
+   **ولمزامنة الصور والصوت** مرّر رابط بوابة الوسائط كما في متغيّر
+   **NEXT_PUBLIC_R2_WORKER_URL** في GitHub (Settings ← Secrets and variables ←
+   Actions ← Variables) قبل البناء، مثلاً:
+   `NEXT_PUBLIC_R2_WORKER_URL=<الرابط> npm run build:native`. بدونه يعمل
+   التطبيق وتتزامن البيانات، لكن الوسائط لا تُرفع ولا تُنزَّل. بناءا Actions
+   (IPA وTestFlight) وحِزَم التحديث الحيّ تقرؤه تلقائياً.
 2. في هدف **App** داخل Xcode، افتح **Signing & Capabilities** واختر حسابك
    المجاني بوصفه **Personal Team**. لا تضف قدرات Apple لا يتيحها حسابك.
 3. صِل iPhone واختره هدفاً واضغط **Run**. اتبع رسائل Xcode لتسجيل الجهاز
