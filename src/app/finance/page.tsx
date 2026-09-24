@@ -323,6 +323,13 @@ export default function FinancePage() {
         <TripBanner onGo={() => goToSection("reserves")} />
       </div>
 
+      {/* **سؤالُ «نزل الراتب؟» فوق التبويبين** (٠٫١٫٤٥٦): كان في آخر تبويب «الدورة»
+          تحت لوحتها، فلم يجده المالك حين نزل راتبُه مبكّراً — وهو لحظةُ قرارٍ تفتح
+          الدورة، لا رقمٌ يُقرأ. ويختفي وحده حين لا سؤال (`salaryPrompt`). */}
+      {isFinanceSectionVisible("daily") && (
+        <div className="mdr-finance-salary animate-fade-up stagger-1"><SalaryBanner /></div>
+      )}
+
       {/* الأوعية الثلاثة: أيُّها يقرّر وأيُّها يخبر — قبل أيّ رقمٍ آخر. */}
       <div className="animate-fade-up stagger-1">
         <VesselsStrip onGo={goToSection} />
@@ -372,7 +379,6 @@ export default function FinancePage() {
             onGo={goToSection}
             visible={isFinanceSectionVisible}
           />
-          {isFinanceSectionVisible("daily") && <div className="mdr-finance-salary"><SalaryBanner /></div>}
         </div>
       ) : (
         <div id="finance-panel-now" role="tabpanel" aria-labelledby="finance-tab-now" tabIndex={0} className="mdr-finance-now-surface">

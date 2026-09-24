@@ -572,6 +572,10 @@ body {
   box-shadow: none !important;
 }
 .mdr-finance-insight-link .opacity-80 { opacity: 1 !important; color: var(--ink52) !important; }
+/* بلا سؤالٍ لا يبقى غلافٌ فارغٌ يترك فجوةً فوق التبويبين. */
+.mdr-finance-salary:empty {
+  display: none;
+}
 .mdr-finance-salary > * {
   background-image: none !important;
   box-shadow: none !important;

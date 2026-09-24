@@ -165,3 +165,19 @@ describe("browser Preferences behavior", () => {
     expect(nativeValues.size).toBe(0);
   });
 });
+
+describe("corrupt shadow values", () => {
+  it("skips an unparseable shadow instead of failing startup", async () => {
+    nativeValues.set("madar-sync-space", "native-value");
+    vi.stubGlobal("localStorage", storage({
+      "madar-pref-shadow:madar-sync-space": "{not json",
+      "madar-pref-shadow:madar-theme-preferences": JSON.stringify({ value: "dark" }),
+    }));
+
+    await expect(initializePrefs()).resolves.toBeUndefined();
+
+    expect(prefGet("madar-sync-space")).toBe("native-value");
+    expect(prefGet("madar-theme-preferences")).toBe("dark");
+    expect(localStorage.getItem("madar-pref-shadow:madar-sync-space")).toBeNull();
+  });
+});

@@ -124,7 +124,16 @@ export function initializePrefs(): Promise<void> {
           if (!key.startsWith(APP_KEY_PREFIX) || BOOT_GUARD_KEYS.has(key)) continue;
           const raw = local.getItem(storageKey);
           if (raw === null) continue;
-          const shadow = JSON.parse(raw) as ShadowValue;
+          let shadow: ShadowValue;
+          try {
+            shadow = JSON.parse(raw) as ShadowValue;
+          } catch {
+            // ظلٌّ تالف لا يحمل قيمةً تُستردّ؛ القيمةُ الأصلية تبقى هي المرجع.
+            // رميُه هنا كان يُسقط الإقلاع كلَّه إلى «تعذّر فتح بيانات التطبيق».
+            try { local.removeItem(storageKey); i--; } catch { /* retry next boot */ }
+            continue;
+          }
+          if (!shadow || typeof shadow !== "object") continue;
           if ("remove" in shadow && shadow.remove) {
             await preferences.remove({ key });
             cache.delete(key);
