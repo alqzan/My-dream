@@ -84,7 +84,10 @@ type StampedItem = { id: string; updatedAt?: number };
 // العادة أو تحرير نصّ المذكرة على الجهاز الآخر، وهو ما لا يريده أحد.
 const UNSTAMPED_FIELDS: Partial<Record<(typeof STAMPED_COLLECTIONS)[number], readonly string[]>> = {
   habits: ["logs"],
-  reserves: ["deposits"],
+  // والرحلاتُ مثلُ الإيداعات: تتّحد بمعرّفها في `merge.ts` (٠٫١٫٤٢٥). لو ختم بدءُ
+  // رحلةٍ أو إنهاؤها المظروفَ لَغلب — عند الدمج — إعادةَ تسميته أو تعديلَ هدفه
+  // وخطّةِ تمويله على الجهاز الآخر (وبدءُ رحلةٍ يُنهي الجاريةَ على مظروفٍ آخر أيضاً).
+  reserves: ["deposits", "trips"],
   journalEntries: [
     "photo", "photos", "audio", "audios", "videoRefs", "photoRefs", "audioRefs",
     "attachmentRefs", "audioMetadataRefs", "photoEdits",
@@ -1068,7 +1071,7 @@ export const useAppStore = create<AppStore>()(
 
       addJournalEntry: (entry) =>
         set((s) => ({
-          journalEntries: [{ ...entry, updatedAt: Date.now() }, ...s.journalEntries],
+          journalEntries: [entry, ...s.journalEntries],
           // Re-adding an id that was just deleted (Undo) must lift its tombstone,
           // else the next cloud merge's `alive()` filter deletes it right back.
           ...clearTombstone(s.deleted, entry.id),
@@ -1242,7 +1245,7 @@ export const useAppStore = create<AppStore>()(
 
       addTransaction: (tx) =>
         set((s) => ({
-          transactions: [{ ...normalizeTransactionReserveSplits(tx), updatedAt: Date.now() }, ...s.transactions],
+          transactions: [normalizeTransactionReserveSplits(tx), ...s.transactions],
           // Re-adding a just-deleted id (Undo) must lift its tombstone (see above).
           ...clearTombstone(s.deleted, tx.id),
         })),
@@ -1250,7 +1253,7 @@ export const useAppStore = create<AppStore>()(
       updateTransaction: (id, updates) =>
         set((s) => ({
           transactions: s.transactions.map((t) =>
-            t.id === id ? { ...normalizeTransactionReserveSplits({ ...t, ...updates }), updatedAt: Date.now() } : t
+            t.id === id ? normalizeTransactionReserveSplits({ ...t, ...updates }) : t
           ),
         })),
 
@@ -1794,7 +1797,7 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const next = [...(s.inboxDecisions ?? [])];
           const ix = next.findIndex((d) => d.eventId === decision.eventId);
-          const value = { ...decision, id: decision.id || decision.eventId, updatedAt: Date.now() };
+          const value = { ...decision, id: decision.id || decision.eventId };
           if (ix >= 0) next[ix] = { ...next[ix], ...value };
           else next.unshift(value);
           return { inboxDecisions: next };
@@ -1803,28 +1806,28 @@ export const useAppStore = create<AppStore>()(
       upsertAccount: (account) =>
         set((s) => {
           const next = [...(s.accounts ?? [])]; const ix = next.findIndex((a) => a.id === account.id);
-          if (ix >= 0) next[ix] = { ...next[ix], ...account, updatedAt: Date.now() }; else next.unshift({ ...account, updatedAt: Date.now() });
+          if (ix >= 0) next[ix] = { ...next[ix], ...account }; else next.unshift(account);
           return { accounts: next, ...clearTombstone(s.deleted, account.id) };
         }),
 
       upsertObligation: (obligation) =>
         set((s) => {
           const next = [...(s.obligations ?? [])]; const ix = next.findIndex((o) => o.id === obligation.id);
-          if (ix >= 0) next[ix] = { ...next[ix], ...obligation, updatedAt: Date.now() }; else next.unshift({ ...obligation, updatedAt: Date.now() });
+          if (ix >= 0) next[ix] = { ...next[ix], ...obligation }; else next.unshift(obligation);
           return { obligations: next, ...clearTombstone(s.deleted, obligation.id) };
         }),
 
       upsertObservedBalance: (balance) =>
         set((s) => {
           const next = [...(s.observedBalances ?? [])]; const ix = next.findIndex((b) => b.id === balance.id);
-          if (ix >= 0) next[ix] = { ...next[ix], ...balance, updatedAt: Date.now() }; else next.unshift({ ...balance, updatedAt: Date.now() });
+          if (ix >= 0) next[ix] = { ...next[ix], ...balance }; else next.unshift(balance);
           return { observedBalances: next, ...clearTombstone(s.deleted, balance.id) };
         }),
 
       addCardSettlement: (settlement) =>
         set((s) => {
           if ((s.settlements ?? []).some((x) => x.id === settlement.id || (settlement.eventId && x.eventId === settlement.eventId))) return {};
-          return { settlements: [{ ...settlement, updatedAt: Date.now() }, ...(s.settlements ?? [])], ...clearTombstone(s.deleted, settlement.id) };
+          return { settlements: [settlement, ...(s.settlements ?? [])], ...clearTombstone(s.deleted, settlement.id) };
         }),
 
       resolveSettlement: (resolution) =>

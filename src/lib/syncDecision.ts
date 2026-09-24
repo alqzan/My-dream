@@ -65,6 +65,13 @@ export function hasData(d: Partial<AppData>): boolean {
   if ((d.ownerAliases?.length ?? 0) > 0 || (d.ownerWallets?.length ?? 0) > 0 ||
     (d.ownerAccounts?.length ?? 0) > 0 || (d.salaryPayers?.length ?? 0) > 0 ||
     Object.keys(d.payerAliases ?? {}).length > 0 || d.cashbackEnabled === true || !!d.cashbackEnvelopeId) return true;
+  // إعداداتٌ تخرج عن افتراضها قصدٌ من المالك (٠٫١٫٤٦٨): كانت غائبةً هنا، فجهازٌ
+  // لم يغيّر إلا نافذةَ الميزانية أو المقاصةَ أو العاداتِ المجمّدة أو تأكيدَ الراتب
+  // يُقرأ «فارغاً» فيتبنّى السحابةَ كاملةً ويُمحى إعداده. (`salaryDay` مستثنىً:
+  // افتراضه ٢٧ ولا يُعرف أهو اختيارٌ أم افتراض.) والحارس في `store.roundtrip.test.ts`.
+  if ((d.frozenHabits?.length ?? 0) > 0 || !!d.lastSalaryConfirm ||
+    (d.budgetWindow !== undefined && d.budgetWindow !== "salary") || d.autoOffset === false) return true;
+  if (Object.keys(d.deletedMedia ?? {}).length > 0) return true;
   // A device whose only "state" is having deleted things still has real intent
   // to preserve — otherwise its tombstones can't seed a cloud that lacks them.
   if (Object.keys(d.deleted ?? {}).length > 0) return true;
@@ -83,7 +90,8 @@ export function hasData(d: Partial<AppData>): boolean {
 // **عند إضافة مجموعةٍ جديدة لـAppData أضِفها هنا وفي `hasData` معاً.** إغفالُها
 // عطلٌ صامت: `assets` أُضيفت في 0.1.295 ونُسيت في الدالتين، فأصلٌ سُجّل على
 // الجوّال لم يُعدّ «محتوىً لم يُرَ» على الآيباد — تسقط شبكة الأمان الثالثة
-// ويبقى الجهازان مختلفين. الحارس في `syncDecision.test.ts` يكشف الإغفال التالي.
+// ويبقى الجهازان مختلفين. (لا حارسَ آليّاً لهذه الدالّة بعد — `hasData` وحدها
+// مغطّاةٌ حقلاً حقلاً في `store.roundtrip.test.ts`.)
 export function cloudHasUnseen(cloud: Partial<AppData>, local: AppData): boolean {
   const hasNewId = (localItems: { id: string }[], cloudItems?: { id: string }[]) => {
     const ids = new Set(localItems.map((i) => i.id));

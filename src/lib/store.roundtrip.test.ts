@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // The persisted store talks to IndexedDB via idb-keyval; stub it so the store
 // boots in plain Node without a browser.
@@ -11,6 +11,7 @@ vi.mock("idb-keyval", () => ({
 
 import { useAppStore } from "./store";
 import { budgetTombKey, mergeAppData } from "./merge";
+import { hasData } from "./syncDecision";
 import { isValidBackupPayload } from "./backupValidation";
 import type { AppData } from "./types";
 import { flushPersisted } from "./idbStorage";
@@ -109,6 +110,8 @@ const FULL: Required<AppData> = {
 };
 
 // حالةٌ فارغة تماماً قبل كل اختبار (كجهازٍ جديد يتبنّى السحابة).
+afterEach(() => vi.useRealTimers());
+
 beforeEach(() => {
   useAppStore.setState({
     transactions: [], books: [], readingLogs: [], journalEntries: [], habits: [],
@@ -281,6 +284,47 @@ describe("أختام التعديل لكل عنصر — يضعها المتجر 
     expect(s.reserves[0].updatedAt).toBe(stampAfterEdit);
   });
 
+  // ٠٫١٫٤٦٨: الرحلاتُ تتّحد بمعرّفها كالإيداعات، فبدؤها وإنهاؤها لا يغلبان
+  // تعديلَ المظروف على الجهاز الآخر.
+  it("بدءُ رحلةٍ وإنهاؤها لا يرفعان طابع المظروف", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().updateReserve("f1", { target: 9000 });
+    const stampAfterEdit = useAppStore.getState().reserves[0].updatedAt!;
+    vi.setSystemTime(stampAfterEdit + 60_000); // لا يتساوى الطابعان صدفةً في الميلّي‌ثانية نفسها
+    useAppStore.getState().endTrip("f1");
+    useAppStore.getState().startTrip("f1");
+    const s = useAppStore.getState();
+    expect(s.reserves[0].trips?.some((t) => !t.endedAt)).toBe(true);
+    expect(s.reserves[0].updatedAt).toBe(stampAfterEdit);
+  });
+
+  // ٠٫١٫٤٦٨: كانت الإجراءاتُ تختم يدوياً، فحفظٌ بلا تغيير يصير أحدثَ نسخة ويغلب
+  // تعديلاً حقيقياً على الجهاز الآخر.
+  it("حفظُ معاملةٍ بلا تغيير لا يرفع طابعها، والتعديلُ الحقيقيّ يرفعه", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().updateTransaction("t1", { note: "قهوة الصباح" });
+    const stamp = useAppStore.getState().transactions[0].updatedAt!;
+    expect(stamp).toBeGreaterThan(0);
+    vi.setSystemTime(stamp + 60_000);
+    useAppStore.getState().updateTransaction("t1", { note: "قهوة الصباح" });
+    expect(useAppStore.getState().transactions[0].updatedAt).toBe(stamp);
+  });
+
+  it("رسالةٌ بنكية تُحدّث «آخر ظهور» للحساب لا ترفع طابعه", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    useAppStore.getState().hydrate(FULL);
+    useAppStore.getState().upsertAccount({ id: "acc-x", bank: "rajhi", label: "بطاقتي", lastSeen: "2026-05-01" } as never);
+    const stamp = useAppStore.getState().accounts?.find((a) => a.id === "acc-x")?.updatedAt;
+    expect(stamp).toBeGreaterThan(0);
+    vi.setSystemTime(stamp! + 60_000);
+    useAppStore.getState().upsertAccount({ id: "acc-x", lastSeen: "2026-05-09" } as never);
+    const acc = useAppStore.getState().accounts?.find((a) => a.id === "acc-x");
+    expect(acc?.lastSeen).toBe("2026-05-09");
+    expect(acc?.updatedAt).toBe(stamp);
+  });
+
   it("تعديلُ وسائط مذكرةٍ وحده لا يرفع طابع محتواها، وتعديلُ النصّ يرفعه", () => {
     useAppStore.getState().hydrate(FULL);
     useAppStore.getState().updateJournalEntry("e1", { content: "نصٌّ محرَّر" });
@@ -326,3 +370,25 @@ describe("أختام التعديل لكل عنصر — يضعها المتجر 
     expect(stamps[keys[0]]).toBeGreaterThan(0);
   });
 });
+
+// ٠٫١٫٤٦٨: الحارس كان يغطّي اثنين من الستّة (snapshot/hydrate) والتحقّق. هنا
+// الدمجُ و`hasData` حقلاً حقلاً على `FULL` نفسِه — حقلٌ جديد في `AppData` يُضاف
+// إلى `FULL` (يفرضه `Required<AppData>`) فيسقط هنا إن نُسي في أحدهما.
+describe("الحارس: كلّ حقلٍ في AppData يعبر الدمج ويُعدّ بياناً", () => {
+  const keys = Object.keys(FULL) as (keyof AppData)[];
+
+  it("mergeAppData لا يُسقط حقلاً", () => {
+    const merged = mergeAppData(FULL, structuredClone(FULL)) as Record<string, unknown>;
+    const dropped = keys.filter((k) => FULL[k] !== undefined && merged[k] === undefined);
+    expect(dropped).toEqual([]);
+  });
+
+  it("hasData يرى كلَّ حقلٍ وحده", () => {
+    // مستثناةٌ عمداً: ختمان داخليّان، ويومُ الراتب (افتراضُه ٢٧ فلا يُعرف أهو
+    // اختيار)، والمقاصةُ مفعّلةٌ (الافتراض).
+    const exempt = new Set<string>(["lastUpdated", "fieldUpdatedAt", "salaryDay", "autoOffset"]);
+    const unseen = keys.filter((k) => !exempt.has(k) && !hasData({ [k]: FULL[k] } as Partial<AppData>));
+    expect(unseen).toEqual([]);
+  });
+});
+
