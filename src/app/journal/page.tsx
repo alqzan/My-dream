@@ -125,15 +125,34 @@ export default function JournalPage() {
 
   const todayStr = today();
 
-  // «سطر سريع» — يُنشئ مذكرةً قصيرةً لليوم فوراً (مع إتاحة التراجع).
+  /** آخرُ مذكرةٍ كُتبت اليوم — بابُ اليوم الذي يُكمَل ولا يُكرَّر. */
+  function latestToday(): JournalEntry | undefined {
+    return journalEntries
+      .filter((e) => e.date === todayStr)
+      .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""))
+      .at(-1);
+  }
+
+  // «سطر سريع» — التقاطُ خاطرةٍ دون فتح المحرّر (مع إتاحة التراجع).
+  // **يُلحَق بمذكرة اليوم لا يُنشئ ثانية** (٠٫١٫٤٦٦): كان كلُّ سطرٍ مذكرةً
+  // مستقلّة، فثلاثُ خواطر في يومٍ = ثلاثُ مذكراتٍ يُدعى المالكُ بعدها لدمجها.
+  // السطرُ يدخل فقرةً في آخرها مسبوقةً بساعته، فيبقى وقتُ كلِّ خاطرةٍ ظاهراً.
   function addQuickLine() {
     const t = quickLine.trim();
     if (!t) return;
     const d = new Date();
     const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const host = latestToday();
+    setQuickLine("");
+    if (host) {
+      const before = host.content;
+      const line = `${time} — ${t}`;
+      updateJournalEntry(host.id, { content: before.trim() ? `${before.trimEnd()}\n\n${line}` : line });
+      showUndo("أُضيف السطرُ إلى مذكرة اليوم", () => updateJournalEntry(host.id, { content: before }));
+      return;
+    }
     const id = uid();
     addJournalEntry({ id, date: todayStr, content: t, time, source: "manual" });
-    setQuickLine("");
     showUndo("أُضيف سطرٌ سريع", () => deleteJournalEntry(id));
   }
 
@@ -205,10 +224,7 @@ export default function JournalPage() {
 
   /** زرُّ الكتابة: يُكمِل مذكرةَ اليوم إن وُجدت (آخرَها كتابةً)، ويبدأها إن لم توجد. */
   function writeToday() {
-    const latest = journalEntries
-      .filter((e) => e.date === todayStr)
-      .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""))
-      .at(-1);
+    const latest = latestToday();
     setAnswerMode(false);
     setWriteDate(undefined);
     if (latest) { setFocusEnd(true); setEditEntry(latest); }
@@ -270,7 +286,9 @@ export default function JournalPage() {
       if (!q) return true;
       return (haystacks.get(e.id) ?? "").includes(q);
     });
-    return [...list].sort((a, b) => b.date.localeCompare(a.date));
+    // الأحدثُ أوّلاً — يوماً ثمّ ساعةً، فيمشي العارضُ يوماً بيوم ولا يقفز
+    // بين مذكرتَي اليوم الواحد بترتيبٍ اعتباطيّ.
+    return [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? "").localeCompare(a.time ?? ""));
   }, [journalEntries, haystacks, deferredSearch, selectedYear, onlyStarred, selectedTag]);
 
   function selectYear(y: string) {
@@ -322,8 +340,9 @@ export default function JournalPage() {
   useEffect(() => {
     if (viewIndex === null) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "ArrowRight") stepViewer(1);
-      else if (e.key === "ArrowLeft") stepViewer(-1);
+      // بالعربية اليمينُ إلى الوراء في الصفحة: السهمُ الأيمن للأحدث، والأيسرُ للأقدم — كالزرّين.
+      if (e.key === "ArrowRight") stepViewer(-1);
+      else if (e.key === "ArrowLeft") stepViewer(1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -520,7 +539,8 @@ export default function JournalPage() {
                       <button
                         key={t}
                         type="button"
-                        onClick={() => selectTag(t)}
+                        // الأرشيفُ المرشَّح يعيش تحت «السماء» — فالوسمُ ينقلك إليه.
+                        onClick={() => { selectTag(t); setTopTab("السماء"); }}
                         style={{
                           minHeight: 32, padding: "0 11px", fontSize: 11.5, fontWeight: 700,
                           background: "var(--goldw)", color: "var(--gold)", border: "1px solid var(--gline)",
@@ -545,6 +565,10 @@ export default function JournalPage() {
       </div>
 
 
+      {/* **البحثُ والمرشّحاتُ والأرشيفُ تحت «السماء» و«الصور» وحدهما**
+          (٠٫١٫٤٦٦): كانت تظهر تحت «الشهر» و«الرسائل» أيضاً — قائمةُ مذكراتٍ
+          كاملةٌ تحت رسائل المستقبل لا علاقة لها بها. */}
+      {(topTab === "السماء" || topTab === "الصور") && (
       <div className="mdr-journal-archive">
       <div className="relative animate-fade-up stagger-3">
         <Search size={15} className="absolute top-1/2 -translate-y-1/2 right-3 text-gray-400" />
@@ -680,6 +704,7 @@ export default function JournalPage() {
       )}
 
       </div>
+      )}
 
       {/* محرّر المذكرة بملء الشاشة (يدير رقعته الكاملة بنفسه، لا نافذة) */}
       {(showForm || editEntry) && (
@@ -776,22 +801,25 @@ export default function JournalPage() {
             />
             {viewIndex !== null && filtered.length > 1 && (
               <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                <button
-                  onClick={() => stepViewer(1)}
-                  disabled={viewIndex >= filtered.length - 1}
-                  aria-label="التالي"
-                  className="flex items-center gap-1 text-xs font-bold text-gray-500 disabled:opacity-30 press"
-                >
-                  <ChevronRight size={16} /> التالي
-                </button>
-                <span className="text-[11px] text-gray-400">{viewIndex + 1} / {filtered.length}</span>
+                {/* «التالي/السابق» كانا لا يقولان إلى أين — والقائمةُ من الأحدث،
+                    فـ«التالي» يرجع في الزمن. الآن كلُّ زرٍّ يسمّي اتّجاهه ويومَه. */}
                 <button
                   onClick={() => stepViewer(-1)}
                   disabled={viewIndex <= 0}
-                  aria-label="السابق"
+                  aria-label="المذكرة الأحدث"
                   className="flex items-center gap-1 text-xs font-bold text-gray-500 disabled:opacity-30 press"
                 >
-                  السابق <ChevronLeft size={16} />
+                  <ChevronRight size={16} />
+                  <span>الأحدث{viewIndex > 0 && <span className="font-normal text-gray-400"> · {formatDate(filtered[viewIndex - 1].date)}</span>}</span>
+                </button>
+                <button
+                  onClick={() => stepViewer(1)}
+                  disabled={viewIndex >= filtered.length - 1}
+                  aria-label="المذكرة الأقدم"
+                  className="flex items-center gap-1 text-xs font-bold text-gray-500 disabled:opacity-30 press"
+                >
+                  <span>الأقدم{viewIndex < filtered.length - 1 && <span className="font-normal text-gray-400"> · {formatDate(filtered[viewIndex + 1].date)}</span>}</span>
+                  <ChevronLeft size={16} />
                 </button>
               </div>
             )}
@@ -824,14 +852,8 @@ export default function JournalPage() {
 
       <DayView date={selectedDay} onClose={() => setSelectedDay(null)} />
 
-      {/* زر عائم لكتابة مذكرة سريعة — مثل زر المصروف السريع في الرئيسية */}
-      <button
-        onClick={writeToday}
-        className="fab p-4 rounded-full bg-[var(--ink)] text-[var(--paper)] shadow-lg press"
-        aria-label={wroteToday ? "أضِف إلى مذكرة اليوم" : "اكتب مذكرة اليوم"}
-      >
-        <Plus size={22} />
-      </button>
+      {/* لا زرَّ عائماً للكتابة (٠٫١٫٤٦٦): كان يكرّر زرَّ «اكتب مذكرة اليوم» في
+          رأس الصفحة بالفعل نفسِه — بابان لشيءٍ واحد. */}
     </div>
   );
 }
