@@ -7,6 +7,11 @@ const config: CapacitorConfig = {
   appName: "مدار",
   webDir: process.env.CAPACITOR_WEB_DIR || "out",
   plugins: {
+    StatusBar: {
+      // Keep the WebView below the iPhone status bar. The mobile header is
+      // sticky at top: 0 and would otherwise sit behind the Dynamic Island.
+      overlaysWebView: false,
+    },
     CapacitorUpdater: {
       // Manual manifest polling is used because GitHub Pages serves static GETs,
       // not Capgo's POST update API. The timeout covers hydrated startup plus

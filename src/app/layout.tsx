@@ -124,7 +124,7 @@ export default function RootLayout({
             <SyncProvider>
               <div className="min-h-screen flex">
                 <Sidebar />
-                <main className="flex-1 min-w-0 lg:mr-56 pb-20 lg:pb-0">
+                <main className="flex-1 min-w-0 lg:mr-56 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
                   <MobileHeader />
                   <BootGuard />
                   <PageTransition>{children}</PageTransition>
