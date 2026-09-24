@@ -66,6 +66,27 @@ jobs:
       - name: Worker runtime tests
         run: npx vitest run cloudflare-worker/src/index.test.ts
 
+      # The native export uses BASE_PATH="" and overwrites `out`, so create it
+      # before the Pages export. Keep its public Firebase configuration in sync
+      # with the Pages build, then stage OTA files outside `out` until Pages'
+      # service-worker precache has been generated.
+      - name: Build native OTA bundle
+        env:
+          NEXT_PUBLIC_BUILD_TAG: ${{ github.sha }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+          NEXT_PUBLIC_R2_WORKER_URL: ${{ vars.NEXT_PUBLIC_R2_WORKER_URL }}
+        run: npm run build:native
+
+      - name: Package OTA bundle and manifest
+        env:
+          OTA_OUTPUT_DIR: ${{ runner.temp }}/madar-ota
+          OTA_BASE_URL: https://alqzan.github.io/My-dream
+        run: node scripts/package-ota.mjs
+
       - name: Build static site (with base path for project pages)
         env:
           BASE_PATH: /My-dream
@@ -84,6 +105,12 @@ jobs:
           # https://madar-r2-gateway.<subdomain>.workers.dev
           NEXT_PUBLIC_R2_WORKER_URL: ${{ vars.NEXT_PUBLIC_R2_WORKER_URL }}
         run: npm run build
+
+      # Add OTA assets only after gen-precache has produced the web precache.
+      - name: Add OTA assets to Pages output
+        run: |
+          mkdir -p out/ota
+          cp "${RUNNER_TEMP}/madar-ota/"* out/ota/
 
       - name: Disable Jekyll (needed for Next.js _next folder)
         run: touch out/.nojekyll

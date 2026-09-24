@@ -12,6 +12,7 @@ import {
   markBootStable,
 } from "@/lib/platform/bootGuard";
 import { toIndicDigits } from "@/lib/utils";
+import { notifyNativeAppReady } from "@/lib/platform/ota";
 
 // يُعلن استقرار الإقلاع (عشرون ثانيةً حيّة، أو خروجٌ طبيعيّ إلى الخلفية)،
 // ويعرض شريط الوضع الآمن حين يكون الإقلاع آمناً. المنطق في `platform/bootGuard.ts`.
@@ -22,17 +23,24 @@ export function BootGuard() {
 
   useEffect(() => {
     markBootPhase("render");
-    const timer = setTimeout(markBootStable, STABLE_AFTER_MS);
+    const markStable = () => {
+      markBootStable();
+      // This component is rendered inside ClientOnly, after preference/store
+      // hydration. Reuse the existing stability transition as the sole signal
+      // that a downloaded native bundle booted successfully.
+      void notifyNativeAppReady();
+    };
+    const timer = setTimeout(markStable, STABLE_AFTER_MS);
     // الخروجُ إلى الخلفية ليس انهياراً — وإلّا عُدّ إغلاقُ التطبيق سريعاً انهياراً.
     const onHide = () => {
-      if (document.visibilityState === "hidden") markBootStable();
+      if (document.visibilityState === "hidden") markStable();
     };
     document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", markBootStable);
+    window.addEventListener("pagehide", markStable);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", markBootStable);
+      window.removeEventListener("pagehide", markStable);
     };
   }, []);
 

@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { checkNativeOta, downloadNativeOta, type OtaManifest } from "@/lib/platform/ota";
 
 // Non-blocking "a new version is ready" banner (§13). Watches the already-
 // registered service worker (registered by SWRegister) for a freshly-installed
@@ -10,8 +12,19 @@ import { RefreshCw } from "lucide-react";
 // activation, only surface it instead of updating silently behind the user.
 export function UpdatePrompt() {
   const [available, setAvailable] = useState(false);
+  const [nativeUpdate, setNativeUpdate] = useState<OtaManifest | null>(null);
+  const [nativeState, setNativeState] = useState<"idle" | "downloading" | "queued" | "error">("idle");
 
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      let cancelled = false;
+      checkNativeOta()
+        .then((manifest) => { if (!cancelled) setNativeUpdate(manifest); })
+        .catch(() => { /* An offline or unavailable static manifest is non-fatal. */ });
+      return () => { cancelled = true; };
+    }
+
+    // Preserve the existing browser Service Worker update path unchanged.
     if (!("serviceWorker" in navigator)) return;
     let cancelled = false;
 
@@ -36,6 +49,48 @@ export function UpdatePrompt() {
 
     return () => { cancelled = true; };
   }, []);
+
+  if (Capacitor.isNativePlatform()) {
+    if (!nativeUpdate) return null;
+    const install = async () => {
+      if (nativeState === "downloading" || nativeState === "queued") return;
+      setNativeState("downloading");
+      try {
+        await downloadNativeOta(nativeUpdate);
+        setNativeState("queued");
+      } catch {
+        setNativeState("error");
+      }
+    };
+
+    return (
+      <div
+        role="status"
+        className="fixed inset-x-3 bottom-20 lg:bottom-4 z-[70] mx-auto w-fit max-w-[92%] flex items-center gap-3 rounded-2xl bg-brand-600 text-white shadow-lg px-4 py-3 animate-fade-up"
+      >
+        <RefreshCw size={15} className={nativeState === "downloading" ? "animate-spin" : ""} />
+        <span className="text-sm font-medium">
+          {nativeState === "queued"
+            ? "اكتمل تنزيل التحديث؛ سيُثبّت عند إعادة فتح التطبيق"
+            : nativeState === "downloading"
+              ? "جارٍ تنزيل تحديث مدار والتحقق منه…"
+              : nativeState === "error"
+                ? "تعذّر تنزيل التحديث؛ حاول لاحقاً"
+                : "يتوفّر تحديث جديد لمدار"}
+        </span>
+        {nativeState !== "queued" && (
+          <button
+            type="button"
+            onClick={install}
+            disabled={nativeState === "downloading"}
+            className="shrink-0 text-sm font-bold bg-white/20 hover:bg-white/30 disabled:opacity-60 rounded-full px-3 py-1 press"
+          >
+            {nativeState === "downloading" ? "جارٍ التنزيل" : nativeState === "error" ? "إعادة المحاولة" : "تنزيل"}
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (!available) return null;
 
