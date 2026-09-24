@@ -27,7 +27,7 @@ import type { HifzState } from "../types";
 import type { Portion } from "./hifz";
 import {
   plannedPortion, recentReviewBand, drillsToday, smartTestPortion, testDue,
-  countPages, countSpots, countAyat, openMistakes, coveredToday, latestRatingByPage,
+  countPages, countSpots, countAyat, openMistakes, coveredToday,
 } from "./hifz";
 import { dueQueue, type DuePage } from "./schedule";
 import { idToPage, TOTAL_AYAT, TOTAL_PAGES } from "./meta";
@@ -93,15 +93,25 @@ export function lastSabaq(s: HifzState, todayStr: string): Portion | null {
   };
 }
 
-// هل يحتاج آخرُ وردٍ تثبيتاً؟ أحدثُ تقييمٍ لأيّ وجهٍ فيه «يحتاج إتقاناً»، ولم
+// هل يحتاج آخرُ وردٍ تثبيتاً؟ أحدثُ تقييمٍ مسّ **آياتِه هو** «يحتاج إتقاناً»، ولم
 // يغطّه عملُ اليوم بعد (فإن ثبّتَّه اليوم لم يُطلب ثانيةً ولو خرج ضعيفاً مرّة أخرى
 // — غداً يُنظر فيه من جديد).
+//
+// **بالآية لا بالوجه** (٠٫١٫٤٥٩): وجدناه في بيانات المالك — حفظ ١٢٥–١٢٦ بإتقان،
+// ثمّ راجع ١٢٠–١٢٤ من الوجه نفسه فتعثّر. قراءةُ التقييم بالوجه نسبت التعثّر إلى
+// الورد، فأوقفت الجديد بجملة «وردُك السابق يحتاج تثبيتاً» وأعادت حفظ الآيتين
+// المتقنتين، والضعيفُ الحقيقيّ في المراجعة أصلاً.
 export function consolidationPortion(s: HifzState, todayStr: string): Portion | null {
   const p = lastSabaq(s, todayStr);
   if (!p || coveredToday(s, p, todayStr)) return null;
-  const rated = latestRatingByPage(s);
-  for (let pg = idToPage(p.fromId); pg <= idToPage(p.toId); pg++) {
-    if (rated.get(pg)?.rating === 1) return p;
+  const events = [...(s.sessions ?? []), ...(s.reviews ?? [])]
+    .map((e, order) => ({ ...e, order, at: typeof e.at === "number" && Number.isFinite(e.at) ? e.at : null }))
+    .filter((e) => e.rating != null && e.fromId <= p.toId && e.toId >= p.fromId)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? -Infinity) - (b.at ?? -Infinity) || a.order - b.order);
+  for (let id = p.fromId; id <= p.toId; id++) {
+    let last: (typeof events)[number] | undefined;
+    for (const e of events) if (e.fromId <= id && e.toId >= id) last = e;
+    if (last?.rating === 1) return p;
   }
   return null;
 }

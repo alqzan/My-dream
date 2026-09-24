@@ -48,7 +48,7 @@ describe("buildAiExport", () => {
       sections: ["journal", "finance", "prayer", "quran"],
       generatedAt: "2026-08-20T00:00:00.000Z",
     });
-    expect(payload.counts).toEqual({ journal: 1, finance: 1, prayer: 1, quran: 1 });
+    expect(payload.counts).toEqual({ journal: 1, finance: 1, prayer: 1, quran: 2 }); // تأمّلٌ + جلسة حفظ
     expect((payload.data.journal as { entries: unknown[] }).entries).toHaveLength(1);
     expect((payload.data.finance as { transactions: unknown[] }).transactions).toHaveLength(1);
     expect((payload.data.prayer as { logs: unknown[] }).logs).toHaveLength(1);
@@ -62,13 +62,23 @@ describe("buildAiExport", () => {
       sections: ["journal", "finance", "prayer", "quran"],
       generatedAt: "2026-08-20T00:00:00.000Z",
     });
-    expect(payload.counts).toEqual({ journal: 2, finance: 2, prayer: 2, quran: 2 });
+    expect(payload.counts).toEqual({ journal: 2, finance: 2, prayer: 2, quran: 3 });
     expect(payload.privacy.upload).toBe("manual-only");
     expect(payload.privacy.mediaBytesIncluded).toBe(false);
     const json = aiExportJson(payload);
     expect(json).not.toContain("data:image");
     expect(json).not.toContain("data:application");
     expect(json).not.toContain("localData");
+  });
+
+  it("says which envelope paid a transaction, by name", () => {
+    const data = fixture();
+    data.reserves = [{ id: "f-rent", name: "الإيجار", icon: "", color: "", deposits: [] }];
+    data.transactions[0].reserveSplits = [{ fundId: "f-rent", pct: 100 }];
+    const payload = buildAiExport(data, { sections: ["finance"], period: { mode: "all" } });
+    const txs = (payload.data.finance as { transactions: Record<string, unknown>[] }).transactions;
+    expect(txs.find((t) => t.date === "2026-08-01")?.paidFrom).toEqual([{ fund: "الإيجار", pct: 100 }]);
+    expect(txs.find((t) => t.date === "2026-02-01")?.paidFrom).toBeUndefined();
   });
 
   it("redacts finance amounts and notes when requested", () => {

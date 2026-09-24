@@ -256,6 +256,21 @@ describe("ميزانُ الجديد والقديم — لا جديد على قد
     expect(plan.steps[0].kind).toBe("memorize");
   });
 
+  // من بيانات المالك: ورده (آخر الوجه) متقن، وتعثّر في مراجعة آياتٍ قبله من الوجه
+  // نفسه — فلا يُنسب التعثّر إلى الورد ولا يُوقَف الجديد.
+  it("تعثّرٌ في مراجعة آياتٍ أخرى من وجه الورد لا يُوقف الجديد", () => {
+    const tail = { fromId: p2.end - 1, toId: p2.end };
+    const s = hz({
+      frontierId: p2.end,
+      sessions: [sess(1, p2.end - 2, "2026-01-08", 3), { ...sess(tail.fromId, tail.toId, "2026-01-09", 3), at: 1 }],
+      reviews: [{ ...rev(p2.start, p2.end - 2, "2026-01-09", 1), at: 2 }],
+    });
+    const plan = buildTodayPlan(s, "2026-01-10");
+    expect(plan.pace).not.toBe("hold");
+    expect(plan.steps.some((x) => x.kind === "consolidate")).toBe(false);
+    expect(plan.steps[0].kind).toBe("memorize");
+  });
+
   it("تثبيتُ اليوم لا يُطلب ثانيةً في اليوم نفسه", () => {
     const s = hz({
       frontierId: p2.end,

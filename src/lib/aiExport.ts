@@ -122,6 +122,14 @@ function financeTransaction(data: AppData, transaction: Transaction, redact: boo
     record.amount = transaction.amount;
     record.note = transaction.note;
   }
+  // من أين دُفع: بلا هذا يبدو إيجارٌ دُفع من مظروفٍ كأنّه أكل المصروف اليومي، فيخرج
+  // التحليل بعجزٍ لم يقع (وقع في تصدير المالك نفسه، ٠٫١٫٤٥٩). الاسمُ لا المعرّف.
+  if (transaction.reserveSplits?.length) {
+    record.paidFrom = transaction.reserveSplits.map((split) => ({
+      fund: data.reserves?.find((fund) => fund.id === split.fundId)?.name ?? split.fundId,
+      pct: split.pct,
+    }));
+  }
   return record;
 }
 
@@ -237,7 +245,11 @@ export function buildAiExport(data: AppData, options: AiExportOptions): AiExport
   if (sections.includes("quran")) {
     const quran = quranData(data, options.period);
     payloadData.quran = quran;
-    counts.quran = Array.isArray(quran.reflections) ? quran.reflections.length : 0;
+    // الحفظُ من القرآن: كان العدّ للتأمّلات وحدها فيقول «٠» وسجلُّ الحفظ ممتلئ.
+    // ويُعدّ المُصدَّرُ نفسه (بعد تصفية الفترة) لا السجلُّ كلُّه.
+    const hifz = quran.hifz as { sessions: unknown[]; reviews: unknown[] };
+    const reflections = Array.isArray(quran.reflections) ? quran.reflections.length : 0;
+    counts.quran = reflections + hifz.sessions.length + hifz.reviews.length;
   }
   return {
     format: "madar-ai-export",
