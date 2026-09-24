@@ -73,10 +73,10 @@ describe("defaultPlanOpen", () => {
     expect(defaultPlanOpen({ budgetAttention: true, negativeBalance: false }).budgets).toBe(true);
     expect(defaultPlanOpen({ budgetAttention: true, negativeBalance: false }).daily).toBe(false);
   });
-  it("otherwise opens the daily budget by default", () => {
-    const d = defaultPlanOpen({ budgetAttention: false, negativeBalance: false });
-    expect(d.daily).toBe(true);
-    expect(d.budgets).toBe(false);
+  it("opens the daily budget only when the balance is negative", () => {
+    expect(defaultPlanOpen({ budgetAttention: false, negativeBalance: true }).daily).toBe(true);
+    const calm = defaultPlanOpen({ budgetAttention: false, negativeBalance: false });
+    expect(calm).toEqual({ daily: false, budgets: false, reserves: false });
   });
 });
 

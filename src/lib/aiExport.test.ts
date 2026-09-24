@@ -73,7 +73,7 @@ describe("buildAiExport", () => {
 
   it("says which envelope paid a transaction, by name", () => {
     const data = fixture();
-    data.reserves = [{ id: "f-rent", name: "الإيجار", icon: "", color: "", deposits: [] }];
+    data.reserves = [{ id: "f-rent", name: "الإيجار", icon: "", color: "", createdAt: "2026-08-01", deposits: [] }];
     data.transactions[0].reserveSplits = [{ fundId: "f-rent", pct: 100 }];
     const payload = buildAiExport(data, { sections: ["finance"], period: { mode: "all" } });
     const txs = (payload.data.finance as { transactions: Record<string, unknown>[] }).transactions;

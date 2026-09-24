@@ -3,6 +3,7 @@ import {
   PRAYER_REMINDER_DELAY_MS,
   duePrayerReminders,
   pickPrayerReminderGroup,
+  isPrayerHomeRoute,
   duePrayerRemindersRange,
   lookbackDates,
   groupByDate,
@@ -152,5 +153,12 @@ describe("مطالبةٌ تجمع أيامًا مضت", () => {
     expect(d).toHaveLength(7);
     expect(d[0]).toBe("2026-05-04");
     expect(d[6]).toBe("2026-05-10");
+  });
+});
+
+describe("isPrayerHomeRoute — أين تُفتح المطالبة بنفسها", () => {
+  it("البيتُ وصفحةُ الصلاة فقط، بشرطةٍ أخيرة أو بدونها", () => {
+    for (const p of ["/", "", null, "/prayers", "/prayers/", "/prayers/month"]) expect(isPrayerHomeRoute(p)).toBe(true);
+    for (const p of ["/finance", "/finance/", "/quran", "/journal", "/prayersx"]) expect(isPrayerHomeRoute(p)).toBe(false);
   });
 });

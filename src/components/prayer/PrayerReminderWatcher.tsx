@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { prefGet, prefSet } from "@/lib/platform/prefs";
 import type { KhushuLevel, PrayerName, PrayerStatus } from "@/lib/types";
@@ -12,6 +13,7 @@ import {
   groupByDate,
   relativeDayLabel,
   pickPrayerReminderGroup,
+  isPrayerHomeRoute,
   type PrayerReminderCandidate,
 } from "@/lib/prayerReminder";
 import { Modal } from "@/components/ui/Modal";
@@ -99,6 +101,10 @@ export function PrayerReminderWatcher() {
   const setPrayerStatus = useAppStore((s) => s.setPrayerStatus);
   const setKhushu = useAppStore((s) => s.setKhushu);
   const bankReviewing = usePending((s) => s.reviewing);
+  const pathname = usePathname();
+  const autoOpen = isPrayerHomeRoute(pathname);
+  // في غير البيت وصفحة الصلاة: النافذةُ لا تُفتح إلا من الشريط.
+  const [summoned, setSummoned] = useState(false);
   const snoozesRef = useRef<SnoozeMap>({});
   // The store update is synchronous, but React may render the old selector
   // snapshot once more while a reminder is being answered. Keep the answer
@@ -310,6 +316,10 @@ export function PrayerReminderWatcher() {
     }
   }, [candidates.length, remaining]);
 
+  useEffect(() => {
+    if (!candidates.length) setSummoned(false);
+  }, [candidates.length]);
+
   // أوّلُ صفٍّ غير مُجابٍ يُفتح تلقائياً — فأوّلُ ضغطةٍ جوابٌ لا فتح.
   useEffect(() => {
     if (!candidates.length) return;
@@ -318,8 +328,21 @@ export function PrayerReminderWatcher() {
     setOpenToken(first ? first.token : null);
   }, [candidates, openToken, answers]);
 
+  const sheetOpen = candidates.length > 0 && (autoOpen || summoned);
+
   return (
-    <Modal open={candidates.length > 0} onClose={later} title={title} className="mdr-prayer-reminder-modal">
+    <>
+    {/* الشريطُ خارج البيت وصفحة الصلاة: خبرٌ يُرى لا بابٌ يُغلق عليك. */}
+    {candidates.length > 0 && !sheetOpen && (
+      <button type="button" className="mdr-prayer-reminder-pill press" onClick={() => setSummoned(true)}>
+        <span className="mdr-prayer-reminder-icon" aria-hidden="true"><MosqueIcon size={16} /></span>
+        <span>
+          {single ? `${single.prayer}${spansPast ? ` · ${relativeDayLabel(single.date, todayStr)}` : ""} — ما سجّلتها` : `${prayersCount(remaining)} ما سجّلتها`}
+        </span>
+      </button>
+    )}
+    {/* الإغلاقُ خارج البيت يُعيدها شريطاً ولا يؤجّل: أنت فتحتها، فلا تُعاقَب بمهلة. */}
+    <Modal open={sheetOpen} onClose={autoOpen ? later : () => setSummoned(false)} title={title} className="mdr-prayer-reminder-modal">
       {candidates.length > 0 && (
         <div className="mdr mdr-prayer-reminder">
           <div className="mdr-prayer-reminder-banner">
@@ -430,5 +453,6 @@ export function PrayerReminderWatcher() {
         </div>
       )}
     </Modal>
+    </>
   );
 }

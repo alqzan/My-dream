@@ -134,9 +134,17 @@ export function FinanceCycleDashboard({
             <span className={`mdr-finance-cycle-state ${curve?.over ? "is-over" : ""}`}><i />{curve?.over ? "يحتاج مراجعة" : overview.hasBudget ? "ضمن المسار" : "غير محدد"}</span>
             <h2 id="finance-cycle-title">حالة الدورة</h2>
           </div>
-          <button type="button" className={`mdr-finance-available ${overview.availableToday < 0 ? "is-negative" : ""}`} onClick={() => onGo("daily")}>
-            <strong>{overview.hasBudget ? formatAmount(overview.availableToday) : "—"}</strong>
-            <span>{overview.hasBudget ? "ر.س متاح حتى اليوم" : "حدّد الميزانية"}</span>
+          {/* **الرقمُ الكبير هنا ما سيبقى لا ما بقي** (٠٫١٫٤٦١): «المتاح حتى اليوم»
+              معروضٌ فوقُ في «متاح لك الآن»، وكان يتكرّر في هذه الصفحة ستَّ مرّات.
+              هذه البطاقةُ تجيب سؤالها هي — «كيف تنتهي الدورة؟» — والمتاحُ يعود
+              رقمَها حين لا منحنى يُقدَّر منه. */}
+          <button
+            type="button"
+            className={`mdr-finance-available ${(projected ? projected.projected : overview.availableToday) < 0 ? "is-negative" : ""}`}
+            onClick={() => onGo(projected ? (projected.projected >= 0 ? "reserves" : "daily") : "daily")}
+          >
+            <strong>{overview.hasBudget ? formatAmount(projected ? projected.projected : overview.availableToday) : "—"}</strong>
+            <span>{!overview.hasBudget ? "حدّد الميزانية" : projected ? "ر.س متوقّع عند الراتب" : "ر.س متاح حتى اليوم"}</span>
           </button>
         </div>
 
@@ -148,21 +156,13 @@ export function FinanceCycleDashboard({
         <div className="mdr-finance-cycle-metrics">
           <div><span>يوم الدورة</span><strong>{curve ? `${arNum(curve.idx)} / ${arNum(curve.total)}` : "—"}</strong></div>
           <button type="button" onClick={() => onGo("history")}><span>صرف الدورة</span><strong>{curve ? `${formatAmount(curve.spent)} ر.س` : "—"}</strong></button>
-          <button type="button" onClick={() => onGo("history")}><span>صرف الشهر</span><strong>{formatAmount(overview.monthSpend)} ر.س</strong></button>
+          {/* «صرف الشهر» في الأوعية فوقُ؛ هنا ما لا يُرى في غيرها: وتيرتُك أمام مصروفك. */}
+          <div><span>متوسّط يومك</span><strong className={projected && curve && projected.avgSpend > curve.perDay ? "is-over" : ""}>{projected && curve ? `${formatAmount(projected.avgSpend)} من ${formatAmount(curve.perDay)}` : "—"}</strong></div>
           <div><span>إلى الراتب</span><strong>{salaryLabel(overview.daysToSalary)}</strong></div>
         </div>
 
         {projected && (
-          <div className={`mdr-finance-projection ${projected.projected < 0 ? "is-negative" : ""}`}>
-            <span className="mdr-finance-projection-mark">◇</span>
-            <div>
-              <strong>المتوقع عند نزول الراتب: {formatAmount(projected.projected)} ر.س</strong>
-              <span>تقدير مبني على وتيرة صرفك الحالية، وليس رقمًا ثابتًا.</span>
-            </div>
-            <button type="button" onClick={() => onGo(projected.projected >= 0 ? "reserves" : "daily")}>
-              {projected.projected >= 0 ? "مظاريفي" : "راجع الخطة"}
-            </button>
-          </div>
+          <p className="mdr-finance-projection-note">تقديرٌ بوتيرة صرفك الحالية، لا رقمٌ ثابت.</p>
         )}
 
         {curve && score && (
@@ -183,7 +183,9 @@ export function FinanceCycleDashboard({
         )}
       </section>}
 
-      {visible("budgets") && <section className="mdr-finance-panel mdr-finance-budgets-panel" aria-labelledby="finance-budgets-title">
+      {/* بلا سقوفٍ لا لوحة (٠٫١٫٤٦١): كانت نصفَ شاشةٍ فارغةً تقول «أضف أول سقف»،
+          و«إدارة سقوف الإنفاق» تحتها مباشرةً تقول الشيء نفسه. الإضافةُ من هناك. */}
+      {visible("budgets") && budgetRows.length > 0 && <section className="mdr-finance-panel mdr-finance-budgets-panel" aria-labelledby="finance-budgets-title">
         <div className="mdr-finance-budgets-head">
           <div className="mdr-finance-section-title">
             <span><Gauge size={16} /></span>
@@ -194,31 +196,25 @@ export function FinanceCycleDashboard({
           </strong>
         </div>
 
-        {budgetRows.length ? (
-          <div className="mdr-finance-budget-grid">
-            {budgetRows.map((row) => {
-              const info = getCategoryInfo(categories, row.category);
-              const toneForRow = row.state === "over" ? "var(--clay)" : "var(--theme-accent)";
-              const style: RingStyle = {
-                "--ring-tone": toneForRow,
-                "--ring-progress": `${Math.min(100, Math.max(0, row.pct))}%`,
-              };
-              return (
-                <button key={row.category} type="button" className="mdr-finance-budget-item" onClick={() => onGo("budgets")}>
-                  <span className="mdr-finance-budget-ring" style={style}>
-                    <span><strong>{formatAmount(row.spent)}</strong><small>{arPct(row.pct / 100)}</small></span>
-                  </span>
-                  <strong className="mdr-finance-budget-name">{info.label}</strong>
-                  <small>{row.remaining < 0 ? `تجاوز ${formatAmount(Math.abs(row.remaining))}` : `يبقى ${formatAmount(row.remaining)} من ${formatAmount(row.cap)} ر.س`}</small>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <button type="button" className="mdr-finance-budget-empty" onClick={() => onGo("budgets")}>
-            أضف أول سقف إنفاق ليظهر هنا كدائرة واضحة.
-          </button>
-        )}
+        <div className="mdr-finance-budget-grid">
+          {budgetRows.map((row) => {
+            const info = getCategoryInfo(categories, row.category);
+            const toneForRow = row.state === "over" ? "var(--clay)" : "var(--theme-accent)";
+            const style: RingStyle = {
+              "--ring-tone": toneForRow,
+              "--ring-progress": `${Math.min(100, Math.max(0, row.pct))}%`,
+            };
+            return (
+              <button key={row.category} type="button" className="mdr-finance-budget-item" onClick={() => onGo("budgets")}>
+                <span className="mdr-finance-budget-ring" style={style}>
+                  <span><strong>{formatAmount(row.spent)}</strong><small>{arPct(row.pct / 100)}</small></span>
+                </span>
+                <strong className="mdr-finance-budget-name">{info.label}</strong>
+                <small>{row.remaining < 0 ? `تجاوز ${formatAmount(Math.abs(row.remaining))}` : `يبقى ${formatAmount(row.remaining)} من ${formatAmount(row.cap)} ر.س`}</small>
+              </button>
+            );
+          })}
+        </div>
 
         <div className="mdr-finance-budget-foot">
           <span>المبالغ من دورة مدار الحالية وتُحدّث مع كل مصروف.</span>

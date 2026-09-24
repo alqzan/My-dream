@@ -145,3 +145,13 @@ export function relativeDayLabel(date: string, todayStr: string): string {
   if (diff === 2) return "قبل يومين";
   return `قبل ${diff} أيام`;
 }
+
+/**
+ * أين تُفتح النافذةُ بنفسها: البيتُ وصفحةُ الصلاة — حيث يُسجَّل. وفي غيرهما لا
+ * تُغطّي الشاشة (٠٫١٫٤٦١): كان المالك يفتح المال فتحجبه نافذةٌ تسأله عن فجرِ
+ * ستّة أيامٍ مضت قبل أن يرى رقماً. هناك شريطٌ صغيرٌ يُفتح منه متى شاء.
+ */
+export function isPrayerHomeRoute(pathname: string | null): boolean {
+  const p = (pathname ?? "/").replace(/\/+$/, "") || "/";
+  return p === "/" || p === "/prayers" || p.startsWith("/prayers/");
+}

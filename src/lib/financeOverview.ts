@@ -84,8 +84,11 @@ export function buildFinanceOverview(data: {
   };
 }
 
-// حالة الفتح الافتراضية لأقسام الخطة: نفتح ما يحتاج انتباهاً، وإلا الميزانية
-// اليومية. تُستعمل فقط عند غياب تفضيلٍ محفوظٍ بالجهاز.
+// حالة الفتح الافتراضية لأقسام الخطة: نفتح ما يحتاج انتباهاً **فقط**. تُستعمل
+// عند غياب تفضيلٍ محفوظٍ بالجهاز.
+//
+// كانت «ضبط الميزانية اليومية» مفتوحةً دائماً (٠٫١٫٤٦١): إناءٌ ورقمٌ كبير يكرّر
+// المتاح المعروض ثلاث مرّاتٍ فوقه، وهو قسمُ ضبطٍ لا قسمُ قراءة — يُفتح حين يُحتاج.
 export function defaultPlanOpen(attention: {
   budgetAttention: boolean;
   negativeBalance: boolean;
@@ -94,7 +97,8 @@ export function defaultPlanOpen(attention: {
     daily: false, budgets: false, reserves: false,
   };
   if (attention.budgetAttention) return { ...base, budgets: true };
-  return { ...base, daily: true }; // يشمل حالة الرصيد السالب (القسم نفسه)
+  if (attention.negativeBalance) return { ...base, daily: true };
+  return base;
 }
 
 // أيّ قسمِ خطةٍ يخصّه رابطٌ عميق (‎#daily‎ …)؛ null لغير أقسام الخطة (مثل ‎#history‎

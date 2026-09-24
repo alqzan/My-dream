@@ -4333,6 +4333,41 @@ button.mdr-summary-habit-row { cursor: pointer; }
   border-radius: 0.76rem;
   background: var(--greenw);
 }
+/* شريطُ الصلوات غير المسجّلة خارج البيت وصفحة الصلاة — فوق شريط التنقّل،
+   في الجهة المقابلة لزرّ الإضافة العائم (.fab على اليسار) فلا يتراكبان. */
+.mdr-prayer-reminder-pill {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  max-width: calc(100% - 6rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.85rem 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 10%, var(--paper));
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.mdr-prayer-reminder-pill > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdr-prayer-reminder-pill .mdr-prayer-reminder-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+@media (min-width: 1024px) {
+  .mdr-prayer-reminder-pill {
+    right: calc(14rem + 1.5rem); /* بعد الشريط الجانبيّ الثابت (w-56) */
+    bottom: 1.5rem;
+  }
+}
 .mdr-prayer-reminder-banner-copy {
   display: grid;
   gap: 0.18rem;
@@ -4763,22 +4798,8 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-finance-cycle-metrics > * { min-width: 0; padding: 0.75rem 0.68rem; border: 0; background: var(--paper); text-align: right; }
 .mdr-finance-cycle-metrics span { display: block; color: var(--ink52); font-size: 0.61rem; }
 .mdr-finance-cycle-metrics strong { display: block; overflow: hidden; margin-top: 0.28rem; color: var(--ink); font-size: 0.78rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
-.mdr-finance-projection {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-top: 0.85rem;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid var(--gline);
-  border-radius: 0.85rem;
-  background: var(--goldw);
-}
-.mdr-finance-projection.is-negative { border-color: color-mix(in srgb, var(--clay) 35%, var(--line)); background: var(--clayw); }
-.mdr-finance-projection-mark { color: var(--gold); font-size: 1rem; }
-.mdr-finance-projection > div { display: grid; flex: 1; min-width: 0; gap: 0.14rem; }
-.mdr-finance-projection strong { color: var(--ink); font-size: 0.73rem; }
-.mdr-finance-projection span { color: var(--ink52); font-size: 0.6rem; }
-.mdr-finance-projection button { min-height: 2.25rem; padding: 0 0.65rem; border: 0; border-radius: 0.65rem; background: var(--ink); color: var(--paper); font: inherit; font-size: 0.62rem; font-weight: 900; }
+.mdr-finance-projection-note { margin-top: 0.5rem; color: var(--ink52); font-size: 0.64rem; }
+.mdr-finance-cycle-metrics strong.is-over { color: var(--clay); }
 .mdr-finance-next-commitment {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
@@ -4831,7 +4852,6 @@ button.mdr-summary-habit-row { cursor: pointer; }
 .mdr-finance-budget-ring small { color: var(--ring-tone); font-size: 0.6rem; font-weight: 950; }
 .mdr-finance-budget-name { display: block; overflow: hidden; margin-top: 0.58rem; font-size: 0.72rem; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
 .mdr-finance-budget-item > small { display: block; overflow: hidden; margin-top: 0.2rem; color: var(--ink52); font-size: 0.58rem; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
-.mdr-finance-budget-empty { width: 100%; min-height: 4.5rem; margin-top: 1rem; border: 1px dashed var(--gline); border-radius: 0.85rem; background: var(--goldw); color: var(--gold); font: inherit; font-size: 0.7rem; font-weight: 900; }
 .mdr-finance-budget-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 1.05rem; padding-top: 0.75rem; border-top: 1px solid var(--line); color: var(--ink52); font-size: 0.62rem; }
 .mdr-finance-budget-foot button { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 2.35rem; padding: 0 0.68rem; border: 1px solid var(--line); border-radius: 0.7rem; background: transparent; color: var(--gold); font: inherit; font-size: 0.63rem; font-weight: 950; }
 
@@ -4909,8 +4929,6 @@ button.mdr-summary-habit-row { cursor: pointer; }
   .mdr-finance-cycle-top { align-items: flex-start; }
   .mdr-finance-available strong { font-size: 1.65rem; }
   .mdr-finance-cycle-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .mdr-finance-projection { align-items: flex-start; flex-wrap: wrap; }
-  .mdr-finance-projection button { width: 100%; }
   .mdr-finance-next-commitment { grid-template-columns: auto minmax(0, 1fr) auto; }
   .mdr-finance-next-commitment b { grid-column: 2; }
   .mdr-finance-next-commitment svg { grid-column: 3; grid-row: 1 / span 2; }

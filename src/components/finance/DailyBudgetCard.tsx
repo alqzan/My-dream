@@ -425,7 +425,7 @@ export function DailyBudgetCard() {
         </p>
       ) : null}
 
-      {/* فائض متراكم؟ حوّله للاحتياطي بضغطة — ويبدأ العدّاد من جديد */}
+      {/* فائض متراكم؟ انقله إلى مظروف بضغطة — ويبدأ العدّاد من جديد. «مظروف» لا «احتياطي» (تسمية ٠٫١٫٤١٧). */}
       {status.balance > 0 && (
         sweeping ? (
           <div className="bg-white/70 dark:bg-white/5 rounded-xl p-2.5 space-y-1.5 animate-fade-up">
@@ -460,7 +460,7 @@ export function DailyBudgetCard() {
             className="w-full flex items-center justify-center gap-2 text-sm font-bold text-finance bg-finance/10 hover:bg-finance/15 rounded-xl py-2.5 transition-colors press"
           >
             <PiggyBank size={15} />
-            أضف الفائض ({formatAmount(status.balance)} ر.س) للاحتياطي
+            انقل الفائض ({formatAmount(status.balance)} ر.س) إلى مظروف
           </button>
         )
       )}
