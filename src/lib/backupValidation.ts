@@ -358,6 +358,9 @@ export function isValidJournalEntry(value: unknown): value is JournalEntry {
   if (value.photoEdits !== undefined && (
     !record(value.photoEdits) || !Object.values(value.photoEdits).every(validPhotoEdit)
   )) return false;
+  if (value.quickLines !== undefined && !collectionOf(value.quickLines, (q: unknown) =>
+    record(q) && nonEmptyString(q.id) && typeof q.text === "string"
+  )) return false;
   if (!optionalFiniteNumber(value.updatedAt)) return false;
   if (value.mood !== undefined && (!finiteNumber(value.mood) || !Number.isInteger(value.mood) || value.mood < 1 || value.mood > 5)) return false;
   if (value.mergedFrom !== undefined && !collectionOf(value.mergedFrom, validMergedSource)) return false;

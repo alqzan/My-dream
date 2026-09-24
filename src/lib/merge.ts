@@ -6,6 +6,7 @@ import type { AppData, FinanceCategoryDef, JournalEntry, HifzMistake, HifzState,
 import { EMPTY_HIFZ } from "./types";
 import { isOffsetDepositId } from "./budgetFlow";
 import { dedupeJournalEntries, mergeEntryMedia, stripTombstonedMediaRefs, toDateStr } from "./utils";
+import { mergeQuickLines } from "./journalQuickLine";
 import {
   canonicalizeReserveFunds,
   normalizeReserveFunds,
@@ -619,7 +620,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
         // still holds. Falls back to primary (e) when stamps are equal/missing.
         const base = (other.updatedAt ?? 0) > (e.updatedAt ?? 0) ? other : e;
         const from = base === e ? other : e;
-        return mergeEntryMedia(base, from);
+        // سطرٌ سريع أُلحق على الجهاز الآخر ولم يره الفائز يُكمَل به نصُّه
+        // (لا يُحسم النصُّ كلُّه بالطابع فيضيع السطر — `journalQuickLine.ts`).
+        return mergeEntryMedia(mergeQuickLines(base, from), from);
       }),
       sJournal,
       (e) => e.id

@@ -39,6 +39,7 @@ import { MoonQuestion, MonthGrid, PastDays } from "@/components/madar/journal/Jo
 import type { JournalEntry } from "@/lib/types";
 import { Plus, Upload, Search, Flame, Clock, PenLine, ChevronRight, ChevronLeft, Star, Zap, BarChart3, Combine } from "lucide-react";
 import { showUndo } from "@/components/ui/UndoToast";
+import { appendQuickLine, removeQuickLine } from "@/lib/journalQuickLine";
 import { SECTION_DEEP } from "@/lib/palette";
 
 const JOURNAL_TABS = ["السماء", "الشهر", "الصور", "الرسائل"] as const;
@@ -145,10 +146,15 @@ export default function JournalPage() {
     const host = latestToday();
     setQuickLine("");
     if (host) {
-      const before = host.content;
-      const line = `${time} — ${t}`;
-      updateJournalEntry(host.id, { content: before.trim() ? `${before.trimEnd()}\n\n${line}` : line });
-      showUndo("أُضيف السطرُ إلى مذكرة اليوم", () => updateJournalEntry(host.id, { content: before }));
+      // لكلّ سطرٍ معرّفٌ يحفظه الدمجُ فلا يضيع سطرُ جهازٍ آخر (٠٫١٫٤٦٧)، والتراجعُ
+      // يزيل هذه الفقرة وحدها من النصّ **الحاليّ** — لا يعيد لقطةً قديمةً تمحو
+      // ما وصل من الجهاز الآخر في ثواني التراجع.
+      const line = { id: uid(), text: `${time} — ${t}` };
+      updateJournalEntry(host.id, appendQuickLine(host, line));
+      showUndo("أُضيف السطرُ إلى مذكرة اليوم", () => {
+        const now = useAppStore.getState().journalEntries.find((e) => e.id === host.id);
+        if (now) updateJournalEntry(host.id, removeQuickLine(now, line.id));
+      });
       return;
     }
     const id = uid();

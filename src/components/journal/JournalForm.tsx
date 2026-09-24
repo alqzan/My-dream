@@ -249,7 +249,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering, foc
     if (initial) return;
     let writer: JournalDraftWriter | null = null;
     try {
-      writer = createJournalDraftWriter({ setItem: prefSet, removeItem: prefRemove }, DRAFT_KEY);
+      writer = createJournalDraftWriter({ setItem: prefSet, removeItem: prefRemove, getItem: prefGet }, DRAFT_KEY);
       draftWriterRef.current = writer;
       const raw = prefGet(DRAFT_KEY);
       const d = raw ? JSON.parse(raw) : null;
@@ -356,7 +356,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering, foc
       });
       savedId.current = id;
     }
-    if (draftWriterRef.current) draftWriterRef.current.clear();
+    if (draftWriterRef.current) draftWriterRef.current.clear(date);
     else {
       prefRemove(DRAFT_KEY);
     }
@@ -441,7 +441,7 @@ export function JournalForm({ onClose, initial, initialDate, startAnswering, foc
     } else if (savedId.current) {
       deleteJournalEntry(savedId.current);
     }
-    if (draftWriterRef.current) draftWriterRef.current.clear();
+    if (draftWriterRef.current) draftWriterRef.current.clear(date);
     else {
       prefRemove(DRAFT_KEY);
     }

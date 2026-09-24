@@ -19,12 +19,15 @@ export interface JournalDraft {
 export interface JournalDraftStorage {
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  /** اختياريّ: إن وُجد، لا يُمحى أبداً مسودةُ يومٍ آخر (انظر `removeOwn`). */
+  getItem?(key: string): string | null;
 }
 
 export interface JournalDraftWriter {
   schedule(draft: JournalDraft): void;
   flush(): void;
-  clear(): void;
+  /** يمحو مسودةَ `date` (أو آخرِ ما جُدول) — لا مسودةَ يومٍ آخر. */
+  clear(date?: string): void;
   dispose(): void;
 }
 
@@ -56,6 +59,24 @@ export function createJournalDraftWriter(
     firstScheduledAt = 0;
   };
 
+  // **لا تمحُ مسودةَ يومٍ آخر** (٠٫١٫٤٦٧): المفتاحُ واحدٌ للأيام كلّها، ومنذ
+  // صارت المسودةُ لا تُسترجع إلا ليومها (٠٫١٫٤٦٥) صار فتحُ المحرّر على يومٍ
+  // آخر يبدأ فارغاً — فكانت أوّلُ كتابةٍ فارغةٍ تحذف نصَّ ذلك اليوم الذي لم
+  // يُحفظ قطّ، بلا أن يُعرض على المالك. الفراغُ هنا «لا شيء لهذا اليوم»، لا
+  // «امحُ ما هناك». (الكتابةُ غيرُ الفارغة تغلب: المالك يكتب الآن.)
+  const removeOwn = (date: string | undefined) => {
+    if (storage.getItem && date) {
+      try {
+        const raw = storage.getItem(key);
+        const stored = raw ? (JSON.parse(raw) as Partial<JournalDraft> | null) : null;
+        if (stored && typeof stored.date === "string" && stored.date && stored.date !== date) return;
+      } catch {
+        /* مسودةٌ تالفة: لا تستحقّ الحماية */
+      }
+    }
+    storage.removeItem(key);
+  };
+
   const write = () => {
     clearTimer();
     if (disposed || !latest) return;
@@ -65,7 +86,7 @@ export function createJournalDraftWriter(
       if (draft.title.trim() || draft.content.trim()) {
         storage.setItem(key, JSON.stringify(draft));
       } else {
-        storage.removeItem(key);
+        removeOwn(draft.date);
       }
     } catch {
       // localStorage can be unavailable or full; the real journal save remains
@@ -93,11 +114,12 @@ export function createJournalDraftWriter(
       if (disposed) return;
       write();
     },
-    clear() {
+    clear(forDate) {
       if (disposed) return;
       clearTimer();
+      const date = forDate ?? latest?.date;
       latest = null;
-      try { storage.removeItem(key); } catch { /* storage unavailable */ }
+      try { removeOwn(date); } catch { /* storage unavailable */ }
     },
     dispose() {
       if (disposed) return;

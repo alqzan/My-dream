@@ -76,4 +76,36 @@ describe("createJournalDraftWriter", () => {
     const elapsed = 12 * 300;
     expect(store.writes.length).toBeLessThanOrEqual(Math.ceil(elapsed / JOURNAL_DRAFT_MAX_WAIT_MS) + 1);
   });
+
+  // ٠٫١٫٤٦٧: فتحُ المحرّر على يومٍ آخر يبدأ فارغاً، وكانت أوّلُ كتابةٍ فارغةٍ
+  // تمحو مسودةَ اليوم الأوّل التي لم تُحفظ قطّ ولم تُعرض على المالك.
+  it("لا يمحو مسودةَ يومٍ آخر بكتابةٍ فارغة ولا بالمسح ولا بالإغلاق", async () => {
+    const store = memoryStorage();
+    const storage = { ...store.storage, getItem: (k: string) => store.data.get(k) ?? null };
+    const other = JSON.stringify({ ...draft("نصٌّ لم يُحفظ"), date: "2026-09-20" });
+    store.data.set("draft", other);
+
+    const writer = createJournalDraftWriter(storage, "draft");
+    writer.schedule({ ...draft(""), date: "2026-09-18" });
+    await vi.advanceTimersByTimeAsync(JOURNAL_DRAFT_DEBOUNCE_MS);
+    expect(store.data.get("draft")).toBe(other);
+
+    writer.clear("2026-09-18");
+    expect(store.data.get("draft")).toBe(other);
+    writer.dispose();
+    expect(store.data.get("draft")).toBe(other);
+  });
+
+  it("يمحو مسودةَ يومه هو حين تفرغ", async () => {
+    const store = memoryStorage();
+    const storage = { ...store.storage, getItem: (k: string) => store.data.get(k) ?? null };
+    const writer = createJournalDraftWriter(storage, "draft");
+    writer.schedule(draft("سطر"));
+    writer.flush();
+    expect(store.data.has("draft")).toBe(true);
+    writer.schedule(draft(""));
+    await vi.advanceTimersByTimeAsync(JOURNAL_DRAFT_DEBOUNCE_MS);
+    expect(store.data.has("draft")).toBe(false);
+  });
 });
+
