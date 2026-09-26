@@ -60,6 +60,22 @@ enum RemoteMedia {
         return MediaStore.write(bytes, hash: hash, ext: ext == "bin" ? MediaStore.ext(forMime: sniff(bytes)) : ext)
     }
 
+    /// يرفع ملفّاً إلى R2 عبر الـWorker (نفس بروتوكول الويب `uploadMediaToR2`).
+    static func upload(ref: String, kind: String) async -> Bool {
+        guard let key = SyncKey.value, !workerURL.isEmpty, let h = MediaStore.hash(of: ref),
+              let fileURL = MediaStore.url(for: ref), let data = try? Data(contentsOf: fileURL) else { return false }
+        let ct = MediaStore.mime(forExt: fileURL.pathExtension)
+        guard let url = URL(string: "\(workerURL)/v1/media/put?kind=\(kind)&hash=\(h)&ct=\(ct.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ct)") else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        req.setValue(ct, forHTTPHeaderField: "Content-Type")
+        req.setValue(BankParser.sha256Hex(data), forHTTPHeaderField: "X-Madar-Content-SHA256")
+        req.httpBody = data
+        guard let (_, r) = try? await URLSession.shared.data(for: req) else { return false }
+        return (r as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+    }
+
     /// كثيراً ما يخزّن R2 النصَّ كما رفعه الويب: `data:...;base64,...`.
     private static func sniff(_ d: Data) -> String {
         let b = [UInt8](d.prefix(12))
@@ -206,10 +222,48 @@ final class SyncEngine: ObservableObject {
         }
     }
 
+    /// يرفع ما أُضيف على هذا الجهاز من صورٍ وصوت ولم يصل R2 بعد، ويسجّل بصمته
+    /// في `photoRefs`/`audioRefs` فتصل المذكرةُ بوسائطها إلى الويب وأجهزتك.
+    private func pushLocalMedia(_ store: Store) async -> [String: Set<String>] {
+        var done: [String: Set<String>] = ["photos": [], "audios": []]
+        var pending: [(entry: String, kind: String, ref: String)] = []
+        for e in store.data.journalEntries {
+            let pr = Set(e.raw.strings("photoRefs")), ar = Set(e.raw.strings("audioRefs"))
+            for p in e.raw.strings("photos") where p.hasPrefix(MediaStore.prefix) {
+                if let h = MediaStore.hash(of: p), !pr.contains(h) { pending.append((e.id, "photos", p)) }
+            }
+            for a in e.raw.strings("audios") where a.hasPrefix(MediaStore.prefix) {
+                if let h = MediaStore.hash(of: a), !ar.contains(h) { pending.append((e.id, "audios", a)) }
+            }
+        }
+        guard !pending.isEmpty, !RemoteMedia.workerURL.isEmpty else { return done }
+        var uploaded: [(entry: String, kind: String, hash: String)] = []
+        for item in pending.prefix(40) {
+            if await RemoteMedia.upload(ref: item.ref, kind: item.kind), let h = MediaStore.hash(of: item.ref) {
+                uploaded.append((item.entry, item.kind, h))
+                done[item.kind, default: []].insert(h)
+            }
+        }
+        guard !uploaded.isEmpty else { return done }
+        store.adoptFromSync({
+            var d = store.data
+            for u in uploaded {
+                guard let i = d.journalEntries.firstIndex(where: { $0.id == u.entry }) else { continue }
+                let key = u.kind == "photos" ? "photoRefs" : "audioRefs"
+                var refs = d.journalEntries[i].raw.strings(key)
+                if !refs.contains(u.hash) { refs.append(u.hash) }
+                d.journalEntries[i].raw.put(key, strings: refs)
+            }
+            return d
+        }())
+        return done
+    }
+
     private func attempt(space: String, store: Store) async throws {
         let mainPath = "userData/\(space)"
         // فحصٌ خفيف أوّلاً: لا تغيّر في السحابة ولا تعديل محليّ ⇒ لا رحلة كاملة.
         if !dirty, let rev = lastRevision, let head = try await fs.get(mainPath, mask: ["revision"]), head.fields.num("revision") == rev { return }
+        let newMedia = await pushLocalMedia(store)
         let main = try await fs.get(mainPath)
         let journalShards = try await loadShards("\(mainPath)/journal", field: "entries")
         let txShardsLoaded = (try? await loadShards("\(mainPath)/transactions", field: "transactions")) ?? [:]
@@ -282,6 +336,27 @@ final class SyncEngine: ObservableObject {
         }
         // ما يخصّ السحابة وحدها (مانيفست الوسائط وأخواته) يبقى كما هو.
         for k in ["mediaManifestMode", "mediaManifestVersion", "photoManifest", "audioManifest"] { if let v = main?.fields[k] { mainFields[k] = v } }
+        // مانيفست الوسائط: ما رُفع للتوّ يُضاف إلى شرائحه (إضافةٌ لا حذف، كالويب).
+        if main?.fields.str("mediaManifestMode") == "inline" {
+            for (kind, hashes) in newMedia where !hashes.isEmpty {
+                let k = kind == "photos" ? "photoManifest" : "audioManifest"
+                mainFields.put(k, strings: Array(Set(mainFields.strings(k)).union(hashes)).sorted())
+            }
+        } else {
+            for (kind, hashes) in newMedia where !hashes.isEmpty {
+                let byShard = Dictionary(grouping: hashes) { h -> String in
+                    let p = String(h.prefix(2)).lowercased()
+                    return "\(kind)-\(p.range(of: "^[0-9a-f]{2}$", options: .regularExpression) != nil ? p : "other")"
+                }
+                for (sid, hs) in byShard {
+                    let path = "\(mainPath)/mediaManifest/\(sid)"
+                    let existing = try? await fs.get(path)
+                    let union = Array(Set(existing?.fields.strings("hashes") ?? []).union(hs)).sorted()
+                    writes.append(.init(path: path, fields: ["kind": .string(kind), "hashes": .array(union.map { .string($0) }), "writerVersion": .number(1)],
+                                        updateTime: existing?.updateTime, mustNotExist: existing == nil))
+                }
+            }
+        }
         var mainOld = main?.fields ?? [:]
         mainOld["revision"] = nil
         var mainNew = mainFields

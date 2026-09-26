@@ -318,6 +318,10 @@ enum BankParser {
         return sha256Hex(n)
     }
 
+    static func sha256Hex(_ d: Data) -> String {
+        SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined()
+    }
+
     static func sha256Hex(_ s: String) -> String {
         SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
     }
