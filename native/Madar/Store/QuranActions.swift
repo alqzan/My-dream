@@ -4,7 +4,11 @@ extension Store {
     func toggleWird(_ date: String) {
         update { d in
             var w = d.quranWird
-            if let i = w.firstIndex(of: date) { w.remove(at: i) } else { w.append(date) }
+            var tomb = d.rest.obj("deleted") ?? [:]
+            // إلغاءُ يومٍ يُشهَد حذفاً (`wird:<date>`) فلا يعيده اتّحادٌ من جهازٍ آخر؛ وإعادتُه ترفع الشاهد.
+            if let i = w.firstIndex(of: date) { w.remove(at: i); tomb.put("wird:\(date)", DateKey.nowMs()) }
+            else { w.append(date); tomb["wird:\(date)"] = nil }
+            d.rest.put("deleted", tomb)
             d.quranWird = w
             var f = d.rest.obj("fieldUpdatedAt") ?? [:]
             f.put("quranWird", DateKey.nowMs())

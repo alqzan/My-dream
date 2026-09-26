@@ -3,6 +3,12 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject var store: Store
     @SceneStorage("tab") private var tab = "today"
+    /// `-tab <name>` يفتح تبويباً بعينه (لالتقاط الصور في CI).
+    private static let forcedTab: String? = {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-tab"), a.indices.contains(i + 1) else { return nil }
+        return a[i + 1]
+    }()
 
     var body: some View {
         TabView(selection: $tab) {
@@ -17,6 +23,7 @@ struct RootView: View {
             FinanceView()
                 .tabItem { Label("المال", systemImage: "wallet.pass") }.tag("finance")
         }
+        .onAppear { if let t = Self.forcedTab { tab = t } }
         .alert("تنبيه", isPresented: Binding(get: { store.loadError != nil }, set: { if !$0 { store.loadError = nil } })) {
             Button("حسناً", role: .cancel) {}
         } message: { Text(store.loadError ?? "") }

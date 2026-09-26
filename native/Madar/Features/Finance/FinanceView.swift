@@ -22,6 +22,10 @@ struct FinanceView: View {
                     }
                 }
 
+                Section {
+                    NavigationLink { InsightsView() } label: { Label("تحليل الصرف", systemImage: "chart.bar.xaxis") }
+                }
+
                 Section { recent } header: {
                     HStack { Text("آخر المصاريف"); Spacer(); NavigationLink("الكل") { TransactionsList() }.font(.footnote) }
                 }

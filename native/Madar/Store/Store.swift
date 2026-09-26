@@ -16,6 +16,11 @@ final class Store: ObservableObject {
     var onPrayerLogged: ((String, Prayer) -> Void)?
 
     init(fileURL: URL? = nil) {
+        if DemoData.isOn {
+            self.fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("madar-demo.json")
+            data = DemoData.make()
+            return
+        }
         let url = fileURL ?? Store.defaultURL
         self.fileURL = url
         if let raw = try? Data(contentsOf: url) {

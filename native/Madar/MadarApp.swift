@@ -31,7 +31,7 @@ struct MadarApp: App {
                     sync.store = store
                     inbox.store = store
                     store.onLocalChange = { [weak sync] in sync?.schedule() }
-                    Task { await sync.sync() }
+                    if !DemoData.isOn { Task { await sync.sync() } }
                 }
                 .onChange(of: location.lat) { _, _ in notifier.reschedule(location: location) }
                 // التطبيق عربيٌّ دائماً مهما كانت لغة الجهاز: الاتجاه واللغة
@@ -46,7 +46,7 @@ struct MadarApp: App {
             case .active:
                 lock.willEnterForeground()
                 notifier.reschedule(location: location)
-                Task { await sync.sync() }
+                if !DemoData.isOn { Task { await sync.sync() } }
             default: store.flush()
             }
         }

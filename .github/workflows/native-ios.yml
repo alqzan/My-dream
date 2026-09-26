@@ -60,6 +60,37 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           | tee "$RUNNER_TEMP/test.log" | grep -E "error:|warning: .*(took|long)|Test Case|Executed|FAIL|\\*\\*" ; exit ${PIPESTATUS[0]}
 
+      - name: Screenshots (demo data)
+        timeout-minutes: 12
+        continue-on-error: true
+        run: |
+          set -x
+          xcodebuild build -project MadarNative.xcodeproj -scheme Madar -destination "id=$SIM_ID" \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO -quiet
+          app=$(find "$RUNNER_TEMP/dd/Build/Products" -path "*iphonesimulator*" -name Madar.app | head -1)
+          xcrun simctl boot "$SIM_ID" || true
+          xcrun simctl bootstatus "$SIM_ID" -b
+          xcrun simctl install "$SIM_ID" "$app"
+          xcrun simctl status_bar "$SIM_ID" override --time 9:41 --batteryLevel 100 --cellularBars 4 || true
+          mkdir -p "$RUNNER_TEMP/shots"
+          for mode in light dark; do
+            xcrun simctl ui "$SIM_ID" appearance $mode
+            for tab in today prayer journal quran finance; do
+              xcrun simctl terminate "$SIM_ID" com.alqzan.madar.native || true
+              xcrun simctl launch "$SIM_ID" com.alqzan.madar.native -demo -tab $tab
+              sleep 7
+              xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/shots/$mode-$tab.png"
+            done
+          done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Archive without code signing
         run: >-
           xcodebuild archive

@@ -167,7 +167,10 @@ struct JournalEntry: RawRecord {
         get { raw.bool("starred") ?? false }
         set { if newValue { raw.put("starred", true) } else { raw["starred"] = nil } }
     }
-    var tags: [String] { raw.strings("tags") }
+    var tags: [String] {
+        get { raw.strings("tags") }
+        set { raw.put("tags", strings: newValue.isEmpty ? nil : newValue) }
+    }
     var question: String? { raw.str("question") }
     var place: String? { raw.obj("location")?.str("place") }
 
@@ -199,8 +202,11 @@ struct JournalEntry: RawRecord {
         return list
     }
     mutating func setAudios(_ list: [String]) {
-        raw.put("audios", strings: list.isEmpty ? nil : list)
-        raw.put("audio", list.first)
+        let local = list.filter { !$0.hasPrefix(MediaStore.remotePrefix) }
+        raw.put("audios", strings: local.isEmpty ? nil : local)
+        raw.put("audio", local.first)
+        let keep = list.compactMap(MediaStore.hash(of:)).filter { h in raw.strings("audioRefs").contains(h) || list.contains(MediaStore.remotePrefix + h) }
+        raw.put("audioRefs", strings: keep.isEmpty ? nil : keep)
     }
 
     var isEmpty: Bool { content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && title.isEmpty && photos.isEmpty && audios.isEmpty }
