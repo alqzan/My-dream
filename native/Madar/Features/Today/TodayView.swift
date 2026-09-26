@@ -57,28 +57,29 @@ struct TodayView: View {
 
     private func prayerCard(now: Date, today: String) -> some View {
         let log = store.prayerLog(today)
-        let times = location.times(for: DateKey.date(today) ?? now) ?? [:]
+        let day = DateKey.date(today) ?? now
+        let times = location.times(for: day) ?? [:]
         let pos = PrayerTimes.current(times, now: now)
         // أوّلُ فرضٍ دخل وقته ولم يُسجَّل — هو ما يُسأل عنه الآن.
         let pending = Prayer.allCases.first { p in log.status(p) == .none && (times[p] ?? .distantFuture) <= now }
-        return card("الصلاة", "building.columns", Theme.prayer) {
-            HStack(spacing: 6) {
-                ForEach(Prayer.allCases) { p in
-                    let s = log.status(p)
-                    Circle().fill(s == .none ? Color(.tertiarySystemFill) : Color(hex: s.colorHex))
-                        .frame(width: 14, height: 14)
-                        .overlay(Circle().stroke(Theme.prayer, lineWidth: pos.current == p ? 2 : 0).padding(-3))
+        return VStack(alignment: .leading, spacing: 6) {
+            DayOrbit(now: now, times: times, sunrise: PrayerTimes.sunrise(for: day, lat: location.lat, lng: location.lng),
+                     log: log, onTap: { answering = $0 })
+            HStack {
+                if let p = pending {
+                    Button { answering = p } label: { Label("صلَّيتَ \(p.rawValue)؟", systemImage: "hand.raised") }
+                        .buttonStyle(.borderedProminent).tint(Theme.prayer)
+                } else if let n = pos.next, let t = times[n] {
+                    Text("\(n.rawValue) \(Fmt.clock(t))").font(.headline).foregroundStyle(Theme.prayer)
+                } else {
+                    Text("تمّت صلوات اليوم").font(.headline).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if let n = pos.next, let t = times[n] { Text("\(n.rawValue) \(Fmt.clock(t))").font(.subheadline).foregroundStyle(.secondary) }
-            }
-            if let p = pending {
-                Button { answering = p } label: {
-                    Text("صلَّيتَ \(p.rawValue)؟").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent).tint(Theme.prayer)
+                Text("\(Fmt.count(log.prayedCount)) من ٥").font(.subheadline).foregroundStyle(.secondary)
             }
         }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private func journalCard(today: String) -> some View {
