@@ -4,15 +4,28 @@ import SwiftUI
 struct MadarApp: App {
     @StateObject private var store = Store()
     @StateObject private var location = LocationProvider()
+    @StateObject private var lock = AppLock()
+    @StateObject private var notifier = PrayerNotifications()
     @Environment(\.scenePhase) private var phase
 
     init() { QuranFont.register() }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            ZStack {
+                RootView()
+                if lock.locked { LockScreen().transition(.opacity) }
+            }
                 .environmentObject(store)
                 .environmentObject(location)
+                .environmentObject(lock)
+                .environmentObject(notifier)
+                .onAppear {
+                    notifier.store = store
+                    store.onPrayerLogged = { [weak notifier] date, p in notifier?.cancel(date: date, prayer: p) }
+                    notifier.reschedule(location: location)
+                }
+                .onChange(of: location.lat) { _, _ in notifier.reschedule(location: location) }
                 // التطبيق عربيٌّ دائماً مهما كانت لغة الجهاز: الاتجاه واللغة
                 // مثبّتان هنا مرّةً واحدة لا في كلّ شاشة.
                 .environment(\.layoutDirection, .rightToLeft)
@@ -20,7 +33,11 @@ struct MadarApp: App {
                 .tint(Theme.brand)
         }
         .onChange(of: phase) { _, newPhase in
-            if newPhase != .active { store.flush() }
+            switch newPhase {
+            case .background: store.flush(); lock.didEnterBackground()
+            case .active: lock.willEnterForeground(); notifier.reschedule(location: location)
+            default: store.flush()
+            }
         }
     }
 }

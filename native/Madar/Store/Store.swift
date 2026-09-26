@@ -12,6 +12,8 @@ final class Store: ObservableObject {
 
     private let fileURL: URL
     private var saveTask: Task<Void, Never>?
+    /// يُنادى حين تُحسم صلاة، فيُلغى تذكيرها المعلّق.
+    var onPrayerLogged: ((String, Prayer) -> Void)?
 
     init(fileURL: URL? = nil) {
         let url = fileURL ?? Store.defaultURL

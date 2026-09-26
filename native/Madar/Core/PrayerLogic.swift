@@ -82,6 +82,7 @@ extension Store {
 
     func setPrayer(_ p: Prayer, _ s: PrayerStatus, on date: String) {
         editPrayerLog(date) { $0.setStatus(s, p) }
+        if s != .none { onPrayerLogged?(date, p) }
         if s.isPrayed { Haptic.success() } else { Haptic.tap() }
     }
 
