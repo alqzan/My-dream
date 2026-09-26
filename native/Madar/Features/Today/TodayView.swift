@@ -24,6 +24,7 @@ struct TodayView: View {
 
                         prayerCard(now: now, today: today)
                         nudgeCard(now: now, today: today)
+                        ramadanCard(now: now, today: today)
                         EventsCard(managing: $managingEvents, today: today)
                         journalCard(today: today)
                         quranCard(today: today)
@@ -41,6 +42,10 @@ struct TodayView: View {
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     NavigationLink { StatsView() } label: { Image(systemName: "chart.bar.xaxis") }.accessibilityLabel("الحصيلة")
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink { DayView(date: DateKey.adding(days: -1, to: DateKey.today())) } label: { Image(systemName: "calendar") }
+                        .accessibilityLabel("يومٌ مضى")
                 }
             }
             .sheet(isPresented: $settings) { SettingsView() }
@@ -110,6 +115,29 @@ struct TodayView: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+    }
+
+    /// رمضان وحده: يومُه، وموعدا الإمساك والإفطار من مواقيت الجهاز. لا أثر لها بقيّة العام.
+    @ViewBuilder private func ramadanCard(now: Date, today: String) -> some View {
+        let hijri = Calendar(identifier: .islamicUmmAlQura)
+        let comps = hijri.dateComponents([.month, .day], from: now)
+        if comps.month == 9, let day = comps.day {
+            let times = location.times(for: DateKey.date(today) ?? now) ?? [:]
+            HStack(spacing: 14) {
+                Image(systemName: "moon.stars.fill").font(.title).foregroundStyle(Theme.brand)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("رمضان — اليوم \(Fmt.count(day))").font(.headline)
+                    HStack(spacing: 14) {
+                        if let f = times[.fajr] { Text("الإمساك \(Fmt.clock(f))") }
+                        if let m = times[.maghrib] { Text("الإفطار \(Fmt.clock(m))") }
+                    }
+                    .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding()
+            .background(Theme.brand.opacity(0.1), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 

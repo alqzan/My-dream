@@ -22,6 +22,8 @@ struct HifzView: View {
                 Section { header(h, plan) }
                 Section("جلسة اليوم") { todaySession(h) }
                 Section("المستحقّ للمراجعة") { dueSection(h) }
+                let sched = Hifz.schedules(h, today: today)
+                if !sched.isEmpty { Section("خريطة المحفوظ") { HifzMap(schedules: sched) } }
                 Section {
                     NavigationLink { MistakesView() } label: {
                         HStack {
@@ -180,6 +182,20 @@ struct HifzSessionView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("وجه \(Fmt.count(QuranMeta.page(ofAyah: part.fromId))) — \(QuranMeta.describe(part.fromId, part.toId))")
                                 .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.quran)
+                            let sims = Mutashabihat.inRange(part.fromId, part.toId)
+                            if !sims.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack {
+                                        ForEach(sims, id: \.self) { id in
+                                            NavigationLink { SimilarView(ayah: id) } label: {
+                                                Label("متشابه: آية \(Fmt.count(QuranMeta.surahAyah(id).ayah))", systemImage: "arrow.triangle.branch")
+                                                    .font(.caption)
+                                            }
+                                            .buttonStyle(.bordered).tint(Theme.brand).controlSize(.small)
+                                        }
+                                    }
+                                }
+                            }
                             if marking {
                                 MarkableAyat(portion: part, fontSize: fontSize)
                             } else {

@@ -50,17 +50,19 @@ struct Firestore {
         return obj
     }
 
-    func get(_ path: String) async throws -> Doc? {
-        let obj = try await send(URLRequest(url: url("\(Self.root)/\(path)")))
+    func get(_ path: String, mask: [String]? = nil) async throws -> Doc? {
+        let obj = try await send(URLRequest(url: url("\(Self.root)/\(path)", query: (mask ?? []).map { URLQueryItem(name: "mask.fieldPaths", value: $0) })))
         guard let name = obj["name"] as? String else { return nil }
         return Doc(name: name, fields: FirestoreValue.decodeFields(obj["fields"]), updateTime: obj["updateTime"] as? String)
     }
 
-    func list(_ collectionPath: String) async throws -> [Doc] {
+    /// `mask`: حقولٌ بعينها فقط (مثلاً `writerVersion`) — قائمةٌ خفيفة بالأسماء وأوقات التعديل.
+    func list(_ collectionPath: String, mask: [String]? = nil) async throws -> [Doc] {
         var out: [Doc] = []
         var token: String?
         repeat {
             var q = [URLQueryItem(name: "pageSize", value: "300")]
+            for f in mask ?? [] { q.append(URLQueryItem(name: "mask.fieldPaths", value: f)) }
             if let t = token { q.append(URLQueryItem(name: "pageToken", value: t)) }
             let obj = try await send(URLRequest(url: url("\(Self.root)/\(collectionPath)", query: q)))
             for d in obj["documents"] as? [[String: Any]] ?? [] {

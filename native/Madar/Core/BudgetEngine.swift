@@ -336,3 +336,70 @@ enum BudgetEngine {
         return round2(env + cycle)
     }
 }
+
+// MARK: - المصروف الكبير (`planBigExpense` · `buildPlanOptions`)
+
+extension BudgetEngine {
+    static let maxDripRatio = 1.0 / 3
+    static let surplusCushionDays = 3.0
+    static let maxPayoffCycles = 12
+
+    struct ExpensePlan {
+        var amount, fromCycle, fromSurplus, financed: Double
+        var cycles: Int
+        var perCycle, perDay: Double
+        var envelopePct: Int
+    }
+
+    enum PlanKind: String, CaseIterable { case mix, noTouchBudget, financeAll, fromBudget }
+
+    struct PlanOption: Identifiable {
+        var kind: PlanKind
+        var plan: ExpensePlan
+        var recommended: Bool
+        var rateAfter, surplusAfter, paceAfter: Double
+        var eatsCushion: Bool
+        var id: String { kind.rawValue }
+        var title: String {
+            switch kind {
+            case .mix: return "موزَّعة بذكاء"
+            case .noTouchBudget: return "من رصيدك والفوائض"
+            case .financeAll: return "كلُّه سداداً على دورات"
+            case .fromBudget: return "كلُّه الآن من مصروفي اليومي"
+            }
+        }
+    }
+
+    static func planOptions(amount: Double, cycleBalance bal: Double, rate r: Double, surplus: Double, cycleLen len: Int, daysLeft: Int) -> [PlanOption] {
+        let amt = round2(max(0, amount))
+        let left = Double(max(1, daysLeft))
+        let perCycleMax = round2(r * maxDripRatio * Double(len))
+        func make(_ kind: PlanKind, _ fromCycle: Double, _ fromSurplus: Double, cycles: Int? = nil) -> PlanOption {
+            let fc = round2(max(0, min(amt, fromCycle)))
+            let fs = round2(max(0, min(amt - fc, fromSurplus)))
+            let financed = round2(amt - fc - fs)
+            let n = financed <= 0 ? 0 : cycles ?? (perCycleMax > 0 ? min(maxPayoffCycles, max(1, Int((financed / perCycleMax).rounded(.up)))) : maxPayoffCycles)
+            let perCycle = n > 0 ? round2(financed / Double(n)) : 0
+            let perDay = n > 0 ? fundingPerDay(perCycle, cycleLength: len) : 0
+            let share = round2(fs + financed)
+            return PlanOption(kind: kind,
+                              plan: ExpensePlan(amount: amt, fromCycle: fc, fromSurplus: fs, financed: financed, cycles: n, perCycle: perCycle,
+                                                perDay: perDay, envelopePct: amt > 0 ? min(100, Int((share / amt * 100).rounded())) : 0),
+                              recommended: false, rateAfter: effectiveRate(amount: r, perDay: perDay), surplusAfter: round2(surplus - fs),
+                              paceAfter: round2((bal - fc + r * left) / left),
+                              eatsCushion: round2(surplus - fs) < round2(min(surplus, r * surplusCushionDays)))
+        }
+        // الموصى به: رصيد الدورة (مع يوميّة وسادة) ← الفوائض (مع ثلاث يوميّات) ← سداد.
+        let fromCycle = round2(max(0, min(amt, bal - r)))
+        let cushion = round2(min(surplus, r * surplusCushionDays))
+        let fromSurplus = round2(max(0, min(amt - fromCycle, surplus - cushion)))
+        var mix = make(.mix, fromCycle, fromSurplus)
+        mix.recommended = true
+        var out = [mix]
+        let both = make(.noTouchBudget, max(0, bal - r), surplus)
+        if both.plan.financed <= 0 && (both.plan.fromSurplus > mix.plan.fromSurplus || both.plan.fromCycle > mix.plan.fromCycle) { out.append(both) }
+        if amt > 0 { out.append(make(.financeAll, 0, 0)) }
+        out.append(make(.fromBudget, amt, 0))
+        return out
+    }
+}
