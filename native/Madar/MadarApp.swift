@@ -7,6 +7,7 @@ struct MadarApp: App {
     @StateObject private var lock = AppLock()
     @StateObject private var notifier = PrayerNotifications()
     @StateObject private var sync = SyncEngine()
+    @StateObject private var inbox = BankInbox()
     @Environment(\.scenePhase) private var phase
 
     init() { QuranFont.register() }
@@ -22,11 +23,13 @@ struct MadarApp: App {
                 .environmentObject(lock)
                 .environmentObject(notifier)
                 .environmentObject(sync)
+                .environmentObject(inbox)
                 .onAppear {
                     notifier.store = store
                     store.onPrayerLogged = { [weak notifier] date, p in notifier?.cancel(date: date, prayer: p) }
                     notifier.reschedule(location: location)
                     sync.store = store
+                    inbox.store = store
                     store.onLocalChange = { [weak sync] in sync?.schedule() }
                     Task { await sync.sync() }
                 }

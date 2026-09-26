@@ -30,7 +30,7 @@ struct Firestore {
     }()
 
     private func url(_ path: String, query: [URLQueryItem] = []) -> URL {
-        var comps = URLComponents(url: base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        var comps = URLComponents(url: Self.base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         comps.queryItems = query + [URLQueryItem(name: "key", value: Self.apiKey)]
         return comps.url!
     }
