@@ -22,6 +22,16 @@ struct HifzView: View {
                 Section { header(h, plan) }
                 Section("جلسة اليوم") { todaySession(h) }
                 Section("المستحقّ للمراجعة") { dueSection(h) }
+                Section {
+                    NavigationLink { MistakesView() } label: {
+                        HStack {
+                            Label("مواضع الخطأ", systemImage: "exclamationmark.bubble")
+                            Spacer()
+                            let n = Hifz.openMistakes(h).count
+                            if n > 0 { Text(Fmt.count(n)).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
                 Section("السجلّ") { logSection(h) }
                 Section {
                     Button("تعديل الخطة") { setup = true }
@@ -156,6 +166,7 @@ struct HifzSessionView: View {
     let target: HifzView.HifzSessionTarget
     @State private var ratings: [Int: Int] = [:]
     @State private var hidden = false
+    @State private var marking = false
     @AppStorage("mushaf-font") private var fontSize: Double = 24
 
     var body: some View {
@@ -164,17 +175,22 @@ struct HifzSessionView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Toggle("إخفاء النصّ للتسميع", isOn: $hidden).tint(Theme.quran)
+                    Toggle("تحديد الأخطاء بالضغط على الكلمة", isOn: $marking).tint(Theme.danger)
                     ForEach(parts, id: \.fromId) { part in
                         VStack(alignment: .leading, spacing: 12) {
                             Text("وجه \(Fmt.count(QuranMeta.page(ofAyah: part.fromId))) — \(QuranMeta.describe(part.fromId, part.toId))")
                                 .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.quran)
-                            Text((part.fromId...part.toId).map { "\(AyahText.text($0)) \u{FD3F}\(Digits.indic(String(QuranMeta.surahAyah($0).ayah)))\u{FD3E}" }.joined(separator: " "))
-                                .font(QuranFont.font(fontSize))
-                                .lineSpacing(fontSize * 0.5)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: .infinity)
-                                .blur(radius: hidden ? 9 : 0)
-                                .onTapGesture { if hidden { withAnimation { hidden = false } } }
+                            if marking {
+                                MarkableAyat(portion: part, fontSize: fontSize)
+                            } else {
+                                Text((part.fromId...part.toId).map { "\(AyahText.text($0)) \u{FD3F}\(Digits.indic(String(QuranMeta.surahAyah($0).ayah)))\u{FD3E}" }.joined(separator: " "))
+                                    .font(QuranFont.font(fontSize))
+                                    .lineSpacing(fontSize * 0.5)
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: .infinity)
+                                    .blur(radius: hidden ? 9 : 0)
+                                    .onTapGesture { if hidden { withAnimation { hidden = false } } }
+                            }
                             HStack(spacing: 8) {
                                 ForEach([1, 2, 3], id: \.self) { r in
                                     let on = ratings[part.fromId] == r

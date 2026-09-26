@@ -183,11 +183,16 @@ struct CapsEditor: View {
     private func setCap(_ id: String, _ v: Double?) {
         store.update { d in
             d.budgets.removeAll { $0.category == id }
+            var tomb = d.rest.obj("deleted") ?? [:]
             if let v, v > 0 {
                 var b = Budget(raw: ["category": .string(id), "limit": .number(v)])
                 b.stamp()
                 d.budgets.append(b)
+                tomb["budget:\(id)"] = nil
+            } else {
+                tomb.put("budget:\(id)", DateKey.nowMs())
             }
+            d.rest.put("deleted", tomb)
         }
     }
 }

@@ -11,6 +11,7 @@ struct JournalEditor: View {
     @State private var viewing: String?
     @State private var confirmDelete = false
     @State private var cancelled = false
+    @StateObject private var recorder = VoiceRecorder()
     @FocusState private var focused: Bool
     private let isNew: Bool
     private let original: JournalEntry
@@ -39,6 +40,8 @@ struct JournalEditor: View {
                         .lineSpacing(6)
                         .focused($focused)
                         .frame(minHeight: 220, alignment: .top)
+
+                    TagEditor(tags: $entry.tags, suggestions: allTags)
 
                     if !entry.photos.isEmpty { photoStrip }
                     if !entry.audios.isEmpty { AudioList(refs: entry.audios) }
@@ -75,6 +78,18 @@ struct JournalEditor: View {
                     PhotosPicker(selection: $picks, maxSelectionCount: 10, matching: .images) {
                         Image(systemName: "photo.on.rectangle")
                     }
+                    Button {
+                        if recorder.recording {
+                            if let ref = recorder.stop() { entry.setAudios(entry.audios + [ref]) }
+                        } else { recorder.start() }
+                    } label: {
+                        if recorder.recording {
+                            Label(Digits.indic(String(format: "%d:%02d", Int(recorder.elapsed) / 60, Int(recorder.elapsed) % 60)), systemImage: "stop.circle.fill")
+                                .foregroundStyle(Theme.danger)
+                        } else {
+                            Image(systemName: "mic")
+                        }
+                    }
                     Button { entry.starred.toggle() } label: { Image(systemName: entry.starred ? "star.fill" : "star") }
                     Spacer()
                     if !isNew {
@@ -96,6 +111,12 @@ struct JournalEditor: View {
     }
 
     private struct PhotoRef: Identifiable { let id: String }
+
+    private var allTags: [String] {
+        var counts: [String: Int] = [:]
+        for e in store.data.journalEntries { for t in e.tags { counts[t, default: 0] += 1 } }
+        return counts.sorted { $0.value > $1.value }.map(\.key).prefix(20).map { $0 }
+    }
 
     private var dateBinding: Binding<Date> {
         Binding(get: { DateKey.date(entry.date) ?? Date() }, set: { entry.date = DateKey.string($0) })
@@ -217,7 +238,21 @@ final class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     func toggle(_ ref: String) {
         if playing == ref { player?.stop(); playing = nil; return }
-        guard let data = MediaStore.data(ref), let p = try? AVAudioPlayer(data: data) else {
+        Task {
+            var r = ref
+            if r.hasPrefix(MediaStore.remotePrefix), !MediaStore.isLocal(r),
+               let local = await RemoteMedia.fetch(hash: String(r.dropFirst(MediaStore.remotePrefix.count)), kind: "audios") { r = local }
+            play(ref: ref, source: r)
+        }
+    }
+
+    private func play(ref: String, source: String) {
+        var bytes = MediaStore.data(source)
+        // R2 قد يحفظ نصَّ الـdata: URL كما رفعه الويب.
+        if let d = bytes, d.prefix(5) == Data("data:".utf8), let s = String(data: d, encoding: .utf8), let c = s.firstIndex(of: ",") {
+            bytes = Data(base64Encoded: String(s[s.index(after: c)...]), options: .ignoreUnknownCharacters)
+        }
+        guard let data = bytes, let p = try? AVAudioPlayer(data: data) else {
             error = "هذه الصيغة لا تُشغَّل على iPhone."
             return
         }
