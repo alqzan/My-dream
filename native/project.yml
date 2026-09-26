@@ -32,6 +32,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "لحساب مواقيت الصلاة في مدينتك."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "لإرفاق صورٍ بمذكراتك."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "لقفل «مدار» فلا يفتحه غيرك."
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
         TARGETED_DEVICE_FAMILY: "1"
   MadarTests:

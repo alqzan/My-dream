@@ -7,6 +7,7 @@ struct TodayView: View {
     @State private var settings = false
     @State private var answering: Prayer?
     @State private var writing: JournalEntry?
+    @State private var managingEvents = false
 
     var body: some View {
         NavigationStack {
@@ -22,6 +23,8 @@ struct TodayView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         prayerCard(now: now, today: today)
+                        nudgeCard(now: now, today: today)
+                        EventsCard(managing: $managingEvents, today: today)
                         journalCard(today: today)
                         quranCard(today: today)
                         financeCard(today: today)
@@ -36,12 +39,16 @@ struct TodayView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button { settings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("الإعدادات")
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink { StatsView() } label: { Image(systemName: "chart.bar.xaxis") }.accessibilityLabel("الحصيلة")
+                }
             }
             .sheet(isPresented: $settings) { SettingsView() }
             .sheet(item: $answering) { p in
                 AnswerSheet(prayer: p, date: DateKey.today()).presentationDetents([.medium])
             }
             .sheet(item: $writing) { e in JournalEditor(entry: e) }
+            .sheet(isPresented: $managingEvents) { EventsManager() }
         }
     }
 
@@ -80,6 +87,30 @@ struct TodayView: View {
         }
         .padding()
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    @ViewBuilder private func nudgeCard(now: Date, today: String) -> some View {
+        let hour = Calendar.current.component(.hour, from: now)
+        if let n = Nudges.build(store.data, today: today, hour: hour, prayed: store.prayerLog(today).prayedCount) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(n.title).font(.headline)
+                ForEach(n.lines) { line in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: line.done ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(line.done ? Theme.quran : .secondary)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(line.text)
+                            if let p = line.place { Text(p).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+                Text(n.closing).font(.footnote).foregroundStyle(.secondary).padding(.top, 2)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 
     private func journalCard(today: String) -> some View {

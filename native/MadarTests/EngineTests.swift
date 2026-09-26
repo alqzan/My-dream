@@ -129,3 +129,34 @@ final class BackupTests: XCTestCase {
         XCTAssertEqual(out.objects("books").first?.str("title"), "x")
     }
 }
+
+final class NudgeTests: XCTestCase {
+    func testSeedMatchesWebFNV() {
+        // FNV-1a 32-bit لـ"a" = 0xe40c292c → موقّعاً = -468965076.
+        XCTAssertEqual(Nudges.seed("a"), 468965076)
+    }
+
+    func testNoBlameAcrossGaps() {
+        for gap in [0, 1, 2, 5, 13, 20, 45, 70, 200] {
+            var d = AppData()
+            let past = DateKey.adding(days: -gap, to: "2026-09-26")
+            d.quranWird = [past]
+            var e = JournalEntry.new(date: past); e.content = "x"
+            d.journalEntries = [e]
+            for hour in [8, 20] {
+                let n = Nudges.build(d, today: "2026-09-26", hour: hour, prayed: 2)
+                for line in n?.lines ?? [] {
+                    for w in Nudges.blameWords { XCTAssertFalse(line.text.contains(w), line.text) }
+                }
+            }
+        }
+    }
+
+    func testNeverStartedComesLastInMorning() {
+        var d = AppData()
+        d.quranWird = ["2026-09-20"]
+        let n = Nudges.build(d, today: "2026-09-26", hour: 8, prayed: nil)!
+        XCTAssertEqual(n.lines.first?.key, "quran")
+        XCTAssertEqual(n.lines.last?.key, "journal")
+    }
+}

@@ -19,6 +19,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: native
@@ -41,12 +42,17 @@ jobs:
           echo "SIM_ID=$id" >> "$GITHUB_ENV"
 
       - name: Test
+        timeout-minutes: 25
         run: >-
           xcodebuild test
           -project MadarNative.xcodeproj
           -scheme Madar
           -destination "id=$SIM_ID"
+          -parallel-testing-enabled NO
+          -test-timeouts-enabled YES
+          -default-test-execution-time-allowance 60
           CODE_SIGNING_ALLOWED=NO
+          | tee "$RUNNER_TEMP/test.log" | grep -E "error:|warning: .*(took|long)|Test Case|Executed|FAIL|\\*\\*" ; exit ${PIPESTATUS[0]}
 
       - name: Archive without code signing
         run: >-

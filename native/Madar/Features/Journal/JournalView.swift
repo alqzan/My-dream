@@ -5,6 +5,8 @@ struct JournalView: View {
     @State private var search = ""
     @State private var starredOnly = false
     @State private var editing: JournalEntry?
+    @State private var quick = ""
+    @FocusState private var quickFocused: Bool
 
     private struct MonthGroup: Identifiable { let id: String; let title: String; let entries: [JournalEntry] }
 
@@ -35,6 +37,7 @@ struct JournalView: View {
     var body: some View {
         NavigationStack {
             List {
+                if search.isEmpty && !starredOnly { todayHeader }
                 if store.data.journalEntries.isEmpty {
                     ContentUnavailableView("لا مذكرات بعد", systemImage: "book.closed",
                                            description: Text("اكتب أوّل مذكرة، أو استورد نسختك من الإعدادات."))
@@ -67,6 +70,60 @@ struct JournalView: View {
             }
             .sheet(item: $editing) { e in JournalEditor(entry: e) }
         }
+    }
+
+    @ViewBuilder private var todayHeader: some View {
+        let today = DateKey.today()
+        let question = QuestionLibrary.daily(today)
+        Section {
+            HStack(spacing: 8) {
+                TextField("سطرٌ سريع يُلحق بمذكرة اليوم…", text: $quick, axis: .vertical)
+                    .focused($quickFocused)
+                    .submitLabel(.done)
+                    .onSubmit { store.appendQuickLine(quick, on: today); quick = "" }
+                if !quick.isEmpty {
+                    Button { store.appendQuickLine(quick, on: today); quick = ""; quickFocused = false } label: {
+                        Image(systemName: "arrow.up.circle.fill").font(.title2)
+                    }
+                    .tint(Theme.journal)
+                }
+            }
+            Button {
+                var e = store.data.journalEntries.first { $0.date == today } ?? JournalEntry.new(date: today)
+                if e.question == nil { e.raw.put("question", question) }
+                editing = e
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("سؤال اليوم", systemImage: "moon.stars").font(.caption.weight(.semibold)).foregroundStyle(Theme.journal)
+                    Text(question).foregroundStyle(.primary)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        let memories = onThisDay(today)
+        if !memories.isEmpty {
+            Section("في مثل هذا اليوم") {
+                ForEach(memories) { e in
+                    Button { editing = e } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(yearsAgo(e.date)).font(.caption.weight(.semibold)).foregroundStyle(Theme.journal)
+                            JournalRow(entry: e)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func onThisDay(_ today: String) -> [JournalEntry] {
+        let md = String(today.dropFirst(5))
+        return store.data.journalEntries.filter { $0.date.hasSuffix(md) && $0.date < today }.sorted { $0.date > $1.date }
+    }
+
+    private func yearsAgo(_ date: String) -> String {
+        let y = (Int(DateKey.today().prefix(4)) ?? 0) - (Int(date.prefix(4)) ?? 0)
+        return y == 1 ? "قبل سنة" : y == 2 ? "قبل سنتين" : "قبل \(Fmt.count(y)) سنوات"
     }
 
     private func delete(_ e: JournalEntry) {

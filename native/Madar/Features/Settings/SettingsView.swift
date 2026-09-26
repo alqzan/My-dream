@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var location: LocationProvider
+    @EnvironmentObject var lock: AppLock
+    @EnvironmentObject var notifier: PrayerNotifications
     @Environment(\.dismiss) private var dismiss
     @State private var importing = false
     @State private var pendingFile: Data?
@@ -26,12 +28,34 @@ struct SettingsView: View {
                     Text("الاستيراد يستبدل بيانات هذا الجهاز بالنسخة، وتُحفظ نسخةٌ من الحالية قبله. التصدير بصيغة الويب فتفتحه نسخة المتصفّح كما هي.")
                 }
 
+                Section {
+                    Toggle("قفل بـ\(lock.biometryName)", isOn: Binding(get: { lock.enabled }, set: { lock.setEnabled($0) }))
+                    if lock.enabled {
+                        Picker("يُقفل بعد", selection: $lock.delaySeconds) {
+                            Text("فوراً").tag(0)
+                            Text("٣٠ ثانية").tag(30)
+                            Text("دقيقتين").tag(120)
+                            Text("١٠ دقائق").tag(600)
+                        }
+                    }
+                } header: { Text("الخصوصية") }
+
+                Section {
+                    Toggle("اسألني بعد كلّ صلاة", isOn: Binding(get: { notifier.enabled }, set: { notifier.setEnabled($0, location: location) }))
+                } header: { Text("تذكير الصلاة") } footer: {
+                    Text("إشعارٌ بعد الأذان بنصف ساعة: «صلَّيتَ الظهر؟»، تسجّل منه مباشرة. لا يصل إن سجّلتها قبله.")
+                }
+
                 Section("الموقع والمواقيت") {
                     HStack {
                         Text(location.isFallback ? "الرياض (افتراضي)" : "موقعك الحالي")
                         Spacer()
                         Button("تحديث") { location.request() }
                     }
+                }
+
+                Section {
+                    NavigationLink("الأحداث المهمّة") { EventsManager() }
                 }
 
                 Section("الأرقام") {
