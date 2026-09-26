@@ -14,8 +14,6 @@ enum Digits {
 }
 
 enum Dates {
-    /// تاريخٌ ميلاديّ بالعربية وأرقامٍ هندية. التقويمُ ونظامُ الأرقام مثبّتان
-    /// صراحةً: `ar_SA` وحدها قد تختار الهجريّ أو اللاتينية حسب الجهاز.
     static func longArabic(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ar@numbers=arab")
