@@ -111,10 +111,10 @@ final class SyncEngine: ObservableObject {
     /// فلا يُنزَّل في كلّ مزامنة إلّا الشهرُ الذي تغيّر فعلاً.
     private struct ShardCache: Codable { var updateTime: String; var list: [JSONValue] }
     private var shardCache: [String: ShardCache] = SyncEngine.loadCache()
-    private static var cacheURL: URL {
+    nonisolated private static var cacheURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("sync-shards.json")
     }
-    private static func loadCache() -> [String: ShardCache] {
+    nonisolated private static func loadCache() -> [String: ShardCache] {
         (try? JSONDecoder().decode([String: ShardCache].self, from: Data(contentsOf: cacheURL))) ?? [:]
     }
     private func saveCache() {
