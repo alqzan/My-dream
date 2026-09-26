@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FinanceView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var inbox: BankInbox
     @State private var adding: Transaction?
     @State private var salarySheet = false
     @State private var settings = false
@@ -42,7 +43,20 @@ struct FinanceView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button { settings = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel("إعدادات المال")
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink { BankInboxView() } label: {
+                        Image(systemName: inbox.items.isEmpty ? "tray" : "tray.full")
+                            .overlay(alignment: .topTrailing) {
+                                if !inbox.expenses.isEmpty {
+                                    Text(Fmt.count(inbox.expenses.count)).font(.caption2.bold()).foregroundStyle(.white)
+                                        .padding(3).background(Theme.danger, in: Circle()).offset(x: 8, y: -8)
+                                }
+                            }
+                    }
+                    .accessibilityLabel("رسائل البنك")
+                }
             }
+            .task { await inbox.refresh() }
             .safeAreaInset(edge: .bottom) {
                 Button { adding = Transaction.new(date: today, amount: 0, category: store.data.categories.first?.id ?? "", note: "") } label: {
                     Label("سجّل مصروفاً", systemImage: "plus").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
