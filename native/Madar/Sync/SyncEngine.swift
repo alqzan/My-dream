@@ -86,6 +86,61 @@ final class SyncEngine: ObservableObject {
     weak var store: Store?
     private let fs = Firestore()
     private var pending: Task<Void, Never>?
+    /// تعديلٌ محليّ لم يُرفع بعد.
+    private var dirty = true
+    /// آخر مراجعةٍ للسحابة تبنّيناها — إن لم تتغيّر ولا شيء محليّ فلا رحلة.
+    private var lastRevision: Double? = UserDefaults.standard.object(forKey: "sync-last-revision") as? Double
+
+    /// شرائح السحابة المعروفة: اسمُها ← (وقت تعديلها، محتواها). تُحفظ على القرص
+    /// فلا يُنزَّل في كلّ مزامنة إلّا الشهرُ الذي تغيّر فعلاً.
+    private struct ShardCache: Codable { var updateTime: String; var list: [JSONValue] }
+    private var shardCache: [String: ShardCache] = SyncEngine.loadCache()
+    private static var cacheURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("sync-shards.json")
+    }
+    private static func loadCache() -> [String: ShardCache] {
+        (try? JSONDecoder().decode([String: ShardCache].self, from: Data(contentsOf: cacheURL))) ?? [:]
+    }
+    private func saveCache() {
+        let snapshot = shardCache
+        Task.detached(priority: .utility) {
+            if let d = try? JSONEncoder().encode(snapshot) { try? d.write(to: SyncEngine.cacheURL, options: .atomic) }
+        }
+    }
+
+    /// يقرأ مجموعة شرائح: أسماءٌ وأوقاتٌ أوّلاً، ثمّ ينزّل ما تغيّر وحده.
+    private func loadShards(_ collection: String, field: String) async throws -> [String: (list: [RawObject], updateTime: String?)] {
+        let metas = try await fs.list(collection, mask: ["writerVersion"])
+        var out: [String: (list: [RawObject], updateTime: String?)] = [:]
+        var fetched: [(String, String, [JSONValue])] = []
+        let stale = metas.compactMap { m -> String? in
+            let sid = String(m.name.split(separator: "/").last ?? "")
+            if let c = shardCache["\(collection)/\(sid)"], c.updateTime == m.updateTime {
+                out[sid] = (c.list.compactMap { if case .object(let o) = $0 { return o }; return nil }, m.updateTime)
+                return nil
+            }
+            return sid
+        }
+        // الشرائح التي تغيّرت تُنزَّل على دفعاتٍ متوازية صغيرة.
+        let client = fs
+        for batch in stride(from: 0, to: stale.count, by: 6).map({ Array(stale[$0..<min($0 + 6, stale.count)]) }) {
+            try await withThrowingTaskGroup(of: (String, String, [JSONValue]).self) { group in
+                for sid in batch {
+                    group.addTask {
+                        let d = try await client.get("\(collection)/\(sid)")
+                        return (sid, d?.updateTime ?? "", d?.fields.arr(field) ?? [])
+                    }
+                }
+                for try await r in group { fetched.append(r) }
+            }
+        }
+        for r in fetched {
+            shardCache["\(collection)/\(r.0)"] = ShardCache(updateTime: r.1, list: r.2)
+            out[r.0] = (r.2.compactMap { if case .object(let o) = $0 { return o }; return nil }, r.1)
+        }
+        saveCache()
+        return out
+    }
 
     init() { status = SyncKey.value == nil ? .off : .idle }
 
@@ -99,6 +154,7 @@ final class SyncEngine: ObservableObject {
 
     /// مزامنةٌ مؤجّلة بعد تعديلٍ محليّ — تعديلاتٌ متتابعة تُجمع في رحلةٍ واحدة.
     func schedule() {
+        dirty = true
         guard enabled else { return }
         pending?.cancel()
         pending = Task { [weak self] in
@@ -152,32 +208,22 @@ final class SyncEngine: ObservableObject {
 
     private func attempt(space: String, store: Store) async throws {
         let mainPath = "userData/\(space)"
+        // فحصٌ خفيف أوّلاً: لا تغيّر في السحابة ولا تعديل محليّ ⇒ لا رحلة كاملة.
+        if !dirty, let rev = lastRevision, let head = try await fs.get(mainPath, mask: ["revision"]), head.fields.num("revision") == rev { return }
         let main = try await fs.get(mainPath)
-        async let jDocs = fs.list("\(mainPath)/journal")
-        async let tDocs = fs.list("\(mainPath)/transactions")
-        let journalDocs = try await jDocs
-        let txDocs = (try? await tDocs) ?? []
+        let journalShards = try await loadShards("\(mainPath)/journal", field: "entries")
+        let txShardsLoaded = (try? await loadShards("\(mainPath)/transactions", field: "transactions")) ?? [:]
 
         // لقطة السحابة كاملةً بصيغة AppData.
         var cloud = main?.fields ?? [:]
         var journalById: [String: RawObject] = [:]
         for e in cloud.objects("journalEntries") { if let id = e.str("id") { journalById[id] = e } }
-        var cloudShards: [String: (list: [RawObject], updateTime: String?)] = [:]
-        for d in journalDocs {
-            let sid = String(d.name.split(separator: "/").last ?? "")
-            let entries = d.fields.objects("entries")
-            cloudShards[sid] = (entries, d.updateTime)
-            for e in entries { if let id = e.str("id") { journalById[id] = e } }
-        }
+        let cloudShards = journalShards
+        for (_, v) in journalShards { for e in v.list { if let id = e.str("id") { journalById[id] = e } } }
         var txById: [String: RawObject] = [:]
         for t in cloud.objects("transactions") { if let id = t.str("id") { txById[id] = t } }
-        var txShards: [String: (list: [RawObject], updateTime: String?)] = [:]
-        for d in txDocs {
-            let sid = String(d.name.split(separator: "/").last ?? "")
-            let list = d.fields.objects("transactions")
-            txShards[sid] = (list, d.updateTime)
-            for t in list { if let id = t.str("id") { txById[id] = t } }
-        }
+        let txShards = txShardsLoaded
+        for (_, v) in txShards { for t in v.list { if let id = t.str("id") { txById[id] = t } } }
         cloud.put("journalEntries", objects: Array(journalById.values))
         cloud.put("transactions", objects: Array(txById.values))
 
@@ -245,7 +291,14 @@ final class SyncEngine: ObservableObject {
             mainFields.put("revision", revision)
             writes.append(.init(path: mainPath, fields: mainFields, updateTime: main?.updateTime, mustNotExist: main == nil))
             try await fs.commit(writes)
+            // ما كتبناه صار قديماً في المخبأ (أوقاتُه تغيّرت) — يُعاد تنزيله مرّةً ثمّ يثبت.
+            for w in writes where w.path != mainPath { shardCache[w.path] = nil }
+            lastRevision = revision
+        } else {
+            lastRevision = main?.fields.num("revision")
         }
+        if let r = lastRevision { UserDefaults.standard.set(r, forKey: "sync-last-revision") }
+        dirty = false
         UserDefaults.standard.set(Date(), forKey: "sync-last")
     }
 }

@@ -9,6 +9,9 @@ struct ExpenseEditor: View {
     @State private var amountText: String
     @State private var destination: String   // "daily" | "off" | fundId
     @State private var confirmDelete = false
+    @State private var bigTarget = "new"
+    @State private var bigName = ""
+    @State private var bigPlan: BudgetEngine.PlanKind = .mix
     @FocusState private var amountFocused: Bool
     private let isNew: Bool
 
@@ -67,6 +70,8 @@ struct ExpenseEditor: View {
                     Text(destinationHint)
                 }
 
+                if weight.big && isNew && destination == "daily" { bigExpenseSection(rate: rate) }
+
                 if !isNew {
                     Section { Button("حذف المصروف", role: .destructive) { confirmDelete = true } }
                 }
@@ -116,12 +121,89 @@ struct ExpenseEditor: View {
         .buttonStyle(.plain)
     }
 
+    /// المصروف الكبير: الوجهةُ أوّلاً (مظروفٌ قائم · جديدٌ باسمك · اليوميّ)، ثمّ من أين يُموَّل.
+    @ViewBuilder private func bigExpenseSection(rate: Double) -> some View {
+        let options = planOptions(rate: rate)
+        Section {
+            Picker("على أيّ مظروف؟", selection: $bigTarget) {
+                Text("مظروف جديد").tag("new")
+                ForEach(store.data.reserves.filter { BudgetEngine.isTripEligible($0) }) { f in Text("\(f.icon) \(f.name)").tag(f.id) }
+                Text("من مصروفي اليومي").tag("daily")
+            }
+            if bigTarget == "new" {
+                TextField("اسمه (رحلة المدينة، صيانة السيارة…)", text: $bigName)
+            }
+            if bigTarget != "daily" {
+                ForEach(options) { o in
+                    Button { bigPlan = o.kind } label: {
+                        HStack(alignment: .top) {
+                            Image(systemName: bigPlan == o.kind ? "largecircle.fill.circle" : "circle").foregroundStyle(Theme.finance)
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack { Text(o.title).font(.subheadline.weight(.semibold)); if o.recommended { Pill(text: "الموصى به", color: Theme.finance) } }
+                                Text(summary(o)).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } header: {
+            Text("مصروفٌ كبير — يعادل \(Digits.indic(String(BudgetEngine.expenseWeight(amount: amount, daily: rate).days))) يوماً من مصروفك")
+        } footer: {
+            Text("الصدمة الكبيرة لا تدخل المصروف اليومي: تدخل مظروفاً، والمظروف يُموَّل على دورات.")
+        }
+    }
+
+    private func planOptions(rate: Double) -> [BudgetEngine.PlanOption] {
+        let today = DateKey.today()
+        let st = BudgetEngine.status(store.data, today: today)
+        let surplus = BudgetEngine.surplusFund(store.data.reserves).map { BudgetEngine.reserveBalance($0, store.data.transactions) } ?? 0
+        let next = BudgetEngine.upcomingSalaryDate(store.data.salaryDay, store.data.lastSalaryConfirm, today)
+        return BudgetEngine.planOptions(amount: amount, cycleBalance: st?.balance ?? 0, rate: rate, surplus: max(0, surplus),
+                                        cycleLen: BudgetEngine.cycleLength(store.data.salaryDay, today),
+                                        daysLeft: max(1, DateKey.days(from: today, to: next)))
+    }
+
+    private func summary(_ o: BudgetEngine.PlanOption) -> String {
+        var parts: [String] = []
+        if o.plan.fromCycle > 0 { parts.append("\(Fmt.amount(o.plan.fromCycle)) من رصيدك") }
+        if o.plan.fromSurplus > 0 { parts.append("\(Fmt.amount(o.plan.fromSurplus)) من الفوائض") }
+        if o.plan.financed > 0 { parts.append("\(Fmt.amount(o.plan.perCycle)) × \(Fmt.count(o.plan.cycles)) دورات") }
+        parts.append("مصروفك بعدها \(Fmt.amount(o.rateAfter))")
+        if o.kind == .fromBudget { parts.append("وتيرة بقيّة الدورة \(Fmt.amount(o.paceAfter))") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// تنفيذ الخطة مع حفظ المصروف — أو لا تقع أبداً (لا مظروف فارغ ولا خطة بلا مصروف).
+    private func applyBigPlan(_ x: inout Transaction, rate: Double) {
+        guard bigTarget != "daily", let o = planOptions(rate: rate).first(where: { $0.kind == bigPlan }), o.kind != .fromBudget else { return }
+        let fundId: String
+        if bigTarget == "new" {
+            fundId = "fund-expense:\(x.id)"
+            var f = ReserveFund.new(name: bigName.trimmingCharacters(in: .whitespaces).isEmpty ? (x.note.isEmpty ? "حدث" : x.note) : bigName, icon: "🎒", target: nil)
+            f.raw.put("id", fundId)
+            f.raw.put("color", "#8a6fb0")
+            store.saveFund(f)
+        } else { fundId = bigTarget }
+        if o.plan.fromSurplus > 0, let s = BudgetEngine.surplusFund(store.data.reserves) {
+            store.transfer(from: s.id, to: fundId, amount: o.plan.fromSurplus)
+        }
+        if o.plan.financed > 0 && o.plan.perCycle > 0, var f = store.data.reserves.first(where: { $0.id == fundId }) {
+            f.setFunding(perCycle: o.plan.perCycle, source: "salary", stop: "zero")
+            store.saveFund(f)
+        }
+        let pct = amount > 0 ? max(1, min(100, Int(((amount - o.plan.fromCycle) / amount * 100).rounded()))) : 100
+        x.setReserveSplits([(fundId, Double(pct))])
+    }
+
     private func save() {
         var x = t
         x.amount = amount
         x.offBudget = destination == "off"
         if destination == "daily" || destination == "off" { x.setReserveSplits([]) }
         else { x.setReserveSplits([(destination, 100)]) }
+        let rate = BudgetEngine.status(store.data)?.rate ?? 0
+        if isNew && destination == "daily" && BudgetEngine.expenseWeight(amount: amount, daily: rate).big { applyBigPlan(&x, rate: rate) }
         store.saveTransaction(x)
         dismiss()
     }

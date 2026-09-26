@@ -73,45 +73,66 @@ struct MushafPage: View {
     let fontSize: Double
 
     var body: some View {
-        let range = QuranMeta.pageRange(page)
-        ScrollView {
-            VStack(spacing: 14) {
-                ForEach(groups(range), id: \.first) { ids in
-                    let first = QuranMeta.surahAyah(ids[0])
-                    if first.ayah == 1 { SurahBanner(surah: first.surah) }
-                    Text(verseText(ids))
-                        .font(QuranFont.font(fontSize))
-                        .lineSpacing(fontSize * 0.55)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
+        if let lines = MushafLayout.lines(page: page) {
+            GeometryReader { geo in
+                let width = min(geo.size.width - 28, 520)
+                let size = width * MushafLayout.baseFont / MushafLayout.lineWidth
+                let height = size * (lines.count <= 8 ? 2.6 : 2.15)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { item in
+                            lineView(item.element, width: width, size: size)
+                                .frame(width: width, height: height, alignment: item.element.stretch == MushafLayout.centered ? .center : .trailing)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 72)
+                    .padding(.bottom, 110)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 70)
-            .padding(.bottom, 110)
+            .environment(\.layoutDirection, .rightToLeft)
+        } else {
+            FlowingPage(page: page, fontSize: fontSize)
+        }
+    }
+
+    @ViewBuilder
+    private func lineView(_ line: MushafLayout.Line, width: Double, size: Double) -> some View {
+        let isHeader = line.runs.count == 1 && line.runs[0].id == MushafLayout.suraHeader
+        if isHeader {
+            Text(line.runs[0].text)
+                .font(.system(size: size * 0.95, weight: .semibold))
+                .foregroundStyle(Theme.quran)
+                .frame(width: width, height: size * 1.9)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Theme.quran.opacity(0.45), lineWidth: 1))
+        } else {
+            let text = line.runs.map { r in r.num > 0 ? "\(r.text)\u{FD3F}\(Digits.indic(String(r.num)))\u{FD3E}" : r.text }.joined()
+            Text(text)
+                .font(QuranFont.font(size))
+                .lineLimit(1)
+                .fixedSize()
+                .scaleEffect(x: line.stretch > 0 ? line.stretch : 1, y: 1, anchor: .trailing)
+        }
+    }
+}
+
+/// الاحتياط حين لا تخطيط للوجه: نصّ الآيات متّصلاً.
+struct FlowingPage: View {
+    let page: Int
+    let fontSize: Double
+
+    var body: some View {
+        let range = QuranMeta.pageRange(page)
+        ScrollView {
+            Text(range.map { "\(AyahText.text($0)) \u{FD3F}\(Digits.indic(String(QuranMeta.surahAyah($0).ayah)))\u{FD3E}" }.joined(separator: " "))
+                .font(QuranFont.font(fontSize))
+                .lineSpacing(fontSize * 0.55)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 18)
+                .padding(.top, 70)
+                .padding(.bottom, 110)
         }
         .environment(\.layoutDirection, .rightToLeft)
-    }
-
-    /// تقسيم آيات الوجه عند بداية كلّ سورة.
-    private func groups(_ r: ClosedRange<Int>) -> [[Int]] {
-        var out: [[Int]] = []
-        for id in r {
-            if QuranMeta.surahAyah(id).ayah == 1 || out.isEmpty { out.append([id]) } else { out[out.count - 1].append(id) }
-        }
-        return out
-    }
-
-    private func verseText(_ ids: [Int]) -> String {
-        ids.map { id in
-            let a = QuranMeta.surahAyah(id)
-            var t = AyahText.text(id)
-            // البسملة في أوّل السورة تُفصل في الشعار (عدا الفاتحة والتوبة).
-            if a.ayah == 1, a.surah != 1, a.surah != 9, t.hasPrefix("بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ ") {
-                t = String(t.dropFirst("بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ ".count))
-            }
-            return "\(t) \u{FD3F}\(Digits.indic(String(a.ayah)))\u{FD3E}"
-        }.joined(separator: " ")
     }
 }
 
