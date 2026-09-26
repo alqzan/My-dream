@@ -9,6 +9,7 @@ struct MadarApp: App {
     @StateObject private var sync = SyncEngine()
     @StateObject private var inbox = BankInbox()
     @Environment(\.scenePhase) private var phase
+    @AppStorage("appearance") private var appearance = "system"
 
     init() { QuranFont.register() }
 
@@ -39,6 +40,7 @@ struct MadarApp: App {
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, Locale(identifier: "ar"))
                 .tint(Theme.brand)
+                .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
         }
         .onChange(of: phase) { _, newPhase in
             switch newPhase {
