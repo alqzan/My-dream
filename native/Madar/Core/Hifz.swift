@@ -106,7 +106,8 @@ enum Hifz {
     }
 
     static func nextEase(_ prev: Double, _ r: Int) -> Double {
-        let step = [1: 0.82, 2: 0.95, 3: 1.06][r] ?? 1
+        let steps: [Int: Double] = [1: 0.82, 2: 0.95, 3: 1.06]
+        let step = steps[r] ?? 1.0
         return clampEase((prev > 0 ? prev : 1) * step)
     }
 

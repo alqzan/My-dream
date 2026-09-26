@@ -23,6 +23,8 @@ targets:
         # فوقها يستبدلها ويمسح بياناتها قبل أن تُنقل.
         PRODUCT_BUNDLE_IDENTIFIER: com.alqzan.madar.native
         PRODUCT_NAME: Madar
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_CFBundleDisplayName: مدار
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
