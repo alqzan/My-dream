@@ -133,6 +133,30 @@ struct PrayerView: View {
             HStack { Text("قيام الليل"); Spacer(); Text("\(Fmt.count(log.qiyamRakaat)) ركعة").foregroundStyle(.secondary) }
         }
         Toggle("الوتر", isOn: Binding(get: { log.witr }, set: { v in store.editPrayerLog(today) { $0.setQiyam(rakaat: $0.qiyamRakaat, witr: v) } }))
+        qiyamNights
+    }
+
+    /// آخر ثلاثين ليلة: عمودٌ لكلّ ليلة بطول ركعاتها، ونقطةٌ للوتر.
+    private var qiyamNights: some View {
+        let days = (0..<30).map { DateKey.adding(days: -(29 - $0), to: today) }
+        let logs = Dictionary(store.data.prayerLogs.map { ($0.date, $0) }, uniquingKeysWith: { a, _ in a })
+        let nights = days.filter { (logs[$0]?.qiyamRakaat ?? 0) > 0 || (logs[$0]?.witr ?? false) }.count
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(days, id: \.self) { d in
+                    let r = logs[d]?.qiyamRakaat ?? 0
+                    VStack(spacing: 2) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(r > 0 ? Theme.prayer : Color(.tertiarySystemFill))
+                            .frame(height: max(3, CGFloat(r) / 21 * 40))
+                        Circle().fill((logs[d]?.witr ?? false) ? Theme.brand : Color.clear).frame(width: 4, height: 4)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 50, alignment: .bottom)
+            Text("\(Fmt.count(nights)) ليلةً من آخر ثلاثين").font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder private var qadaSection: some View {

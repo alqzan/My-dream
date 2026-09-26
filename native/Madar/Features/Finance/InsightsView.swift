@@ -80,6 +80,10 @@ struct InsightsView: View {
                 .frame(height: 180)
             }
 
+            if period == "شهر" {
+                Section("تقويم الشهر") { SpendCalendar(month: Date()).padding(.vertical, 4) }
+            }
+
             if !insights(current, bars: bars, byMain: byMain, total: total).isEmpty {
                 Section("ما يقوله صرفك") {
                     ForEach(insights(current, bars: bars, byMain: byMain, total: total), id: \.self) { Text($0).font(.subheadline) }

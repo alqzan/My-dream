@@ -20,6 +20,19 @@ struct FinanceView: View {
                     if let prompt = BudgetEngine.salaryPrompt(store.data.salaryDay, store.data.lastSalaryConfirm, today) {
                         Section { salaryBanner(prompt) }
                     }
+                    if reconcileDue {
+                        Section {
+                            Button { settings = true } label: {
+                                Label {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("وقفة المطابقة").font(.headline)
+                                        Text("رقمٌ واحد من كشوفك يصحّح ما فات التطبيقَ تسجيلُه — كلّ تسعين يوماً.").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                } icon: { Image(systemName: "checklist").foregroundStyle(Theme.finance) }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 Section {
@@ -73,6 +86,13 @@ struct FinanceView: View {
             .sheet(isPresented: $settings) { FinanceSettings() }
             .sheet(isPresented: $newFund) { FundEditor(fund: ReserveFund.new(name: "", icon: "💰", target: nil)) }
         }
+    }
+
+    /// المطابقة تُقترح كلّ تسعين يوماً — من آخر مطابقة، وإلّا من أوّل معاملةٍ في السجلّ (`reconcileStatus`).
+    private var reconcileDue: Bool {
+        let from = store.lastReconcileDate ?? store.data.transactions.map(\.date).filter(DateKey.isValid).min()
+        guard let f = from else { return false }
+        return DateKey.days(from: f, to: today) >= 90
     }
 
     private var onboarding: some View {

@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var preview: AppData?
     @State private var message: String?
     @State private var exportURL: URL?
+    @AppStorage("appearance") private var appearance = "system"
 
     var body: some View {
         NavigationStack {
@@ -46,6 +47,15 @@ struct SettingsView: View {
                     Toggle("اسألني بعد كلّ صلاة", isOn: Binding(get: { notifier.enabled }, set: { notifier.setEnabled($0, location: location) }))
                 } header: { Text("تذكير الصلاة") } footer: {
                     Text("إشعارٌ بعد الأذان بنصف ساعة: «صلَّيتَ الظهر؟»، تسجّل منه مباشرة. لا يصل إن سجّلتها قبله.")
+                }
+
+                Section("المظهر") {
+                    Picker("المظهر", selection: $appearance) {
+                        Text("تلقائي").tag("system")
+                        Text("فاتح").tag("light")
+                        Text("داكن").tag("dark")
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section("الموقع والمواقيت") {
