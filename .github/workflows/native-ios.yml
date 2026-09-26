@@ -73,12 +73,17 @@ jobs:
           xcrun simctl install "$SIM_ID" "$app"
           xcrun simctl status_bar "$SIM_ID" override --time 9:41 --batteryLevel 100 --cellularBars 4 || true
           mkdir -p "$RUNNER_TEMP/shots"
+          # المشغّلُ على UTC فتظهر المواقيت مزاحةً ثلاث ساعات؛ نمرّر توقيت الرياض للتطبيق.
+          export SIMCTL_CHILD_TZ=Asia/Riyadh
+          # أوّلُ تشغيلٍ بعد التثبيت بطيء (تحميل الخطوط وبيانات المصحف)، فكانت أوّلُ لقطتين بيضاوين.
+          xcrun simctl launch "$SIM_ID" com.alqzan.madar.native -demo -tab today
+          sleep 20
           for mode in light dark; do
             xcrun simctl ui "$SIM_ID" appearance $mode
             for tab in today prayer journal quran finance; do
               xcrun simctl terminate "$SIM_ID" com.alqzan.madar.native || true
               xcrun simctl launch "$SIM_ID" com.alqzan.madar.native -demo -tab $tab
-              sleep 7
+              sleep 9
               xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/shots/$mode-$tab.png"
             done
           done

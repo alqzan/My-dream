@@ -20,6 +20,17 @@ enum Fmt {
 
     static func count(_ n: Int) -> String { Digits.indic(String(n)) }
 
+    /// عددُ أيامٍ بتمييزه العربيّ: يومٌ واحد · يومان · ٣ أيام · ١١ يوماً.
+    static func days(_ n: Int) -> String {
+        switch n {
+        case ...0: return "اليوم"
+        case 1: return "يومٌ واحد"
+        case 2: return "يومان"
+        case 3...10: return "\(count(n)) أيام"
+        default: return "\(count(n)) يوماً"
+        }
+    }
+
     private static func formatter(_ template: String) -> DateFormatter {
         let f = DateFormatter()
         f.locale = arabicLocale

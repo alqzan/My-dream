@@ -14,17 +14,46 @@ struct DayOrbit: View {
     private var fajr: Date? { times[.fajr] }
     private var isha: Date? { times[.isha] }
 
-    /// نسبة موضعٍ زمنيّ من مدى الفجر→العشاء.
+    /// أقلُّ مسافةٍ بين خرزتين (نسبةً من القوس): المغربُ والعشاءُ بينهما ساعةٌ ونصف
+    /// فقط، فبمواقيتهما الحرفية تتراكبان. نُبعد الخرزات قليلاً ونطوي الزمن بينها
+    /// خطّياً، فتبقى الشمسُ بين الفرضين اللذين هي بينهما فعلاً.
+    private static let minGap = 0.17
+
+    /// عُقدُ الطيّ: (وقتٌ حقيقيّ، موضعٌ على القوس) لكلّ فرضٍ معروف الوقت.
+    private struct Knot { let time: Date; let pos: Double }
+    private var knots: [Knot] {
+        let ps = Prayer.allCases.compactMap { p in times[p].map { (p, $0) } }
+        guard let f = fajr, let i = isha, i > f, ps.count >= 2 else { return [] }
+        let raw = ps.map { max(0, min(1, $0.1.timeIntervalSince(f) / i.timeIntervalSince(f))) }
+        var w = raw
+        for k in 1..<w.count { w[k] = max(w[k], w[k - 1] + Self.minGap) }
+        w[w.count - 1] = 1
+        for k in stride(from: w.count - 2, through: 0, by: -1) { w[k] = min(w[k], w[k + 1] - Self.minGap) }
+        w[0] = 0
+        return zip(ps, w).map { pair, pos in Knot(time: pair.1, pos: pos) }
+    }
+
+    /// موضعُ لحظةٍ على القوس [٠، ١] بعد الطيّ.
     private func frac(_ d: Date) -> Double {
-        guard let f = fajr, let i = isha, i > f else { return 0 }
-        return max(0, min(1, d.timeIntervalSince(f) / i.timeIntervalSince(f)))
+        let k = knots
+        guard let first = k.first, let last = k.last else { return 0 }
+        if d <= first.time { return 0 }
+        if d >= last.time { return 1 }
+        for j in 1..<k.count where d <= k[j].time {
+            let a = k[j - 1], b = k[j]
+            let span = b.time.timeIntervalSince(a.time)
+            let t = span > 0 ? d.timeIntervalSince(a.time) / span : 0
+            return a.pos + (b.pos - a.pos) * t
+        }
+        return 1
     }
 
     /// نقطةٌ على نصف قطعٍ ناقص: الفجر على اليمين (بداية القراءة العربية) والعشاء يساراً.
-    private func point(_ t: Double, in size: CGSize) -> CGPoint {
+    /// `inset` يُقرّب النقطة نحو المركز — للتسميات داخل القوس فلا تخرج من الإطار.
+    private func point(_ t: Double, in size: CGSize, inset: CGFloat = 0) -> CGPoint {
         let a = Double.pi * t
-        let cx = size.width / 2, rx = size.width / 2 - 22
-        let base = size.height - 18, ry = size.height - 40
+        let cx = size.width / 2, rx = size.width / 2 - 22 - inset
+        let base = size.height - 18, ry = size.height - 40 - inset
         return CGPoint(x: cx + rx * cos(a), y: base - ry * sin(a))
     }
 
@@ -83,11 +112,14 @@ struct DayOrbit: View {
                         Text(p.rawValue)
                             .font(.caption2.weight(due ? .bold : .regular))
                             .foregroundStyle(due ? Theme.prayer : .secondary)
-                            .position(x: pt.x, y: pt.y + 24)
+                            .fixedSize()
+                            .position(point(frac(t), in: size, inset: 34))
                     }
                 }
             }
         }
+        // الإحداثياتُ هنا حرفية (الفجر يميناً)؛ بيئةُ RTL كانت تعكسها فيصير الفجرُ يساراً.
+        .environment(\.layoutDirection, .leftToRight)
         .frame(height: 170)
         .animation(.easeInOut(duration: 0.6), value: log.prayedCount)
     }

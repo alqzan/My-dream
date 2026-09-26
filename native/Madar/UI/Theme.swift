@@ -6,6 +6,16 @@ extension Color {
         self.init(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
                   blue: Double(hex & 0xFF) / 255, opacity: 1)
     }
+    /// لونٌ بدرجتين: الداكنةُ الأصلية نهاراً، وأفتحُ منها ليلاً — الأخضرُ العميق
+    /// على خلفيةٍ سوداء يضيع (زرّ «صفحتي» وشاراتُ «سجّل» كانت تكاد لا تُقرأ).
+    init(light: UInt32, dark: UInt32) {
+        func ui(_ h: UInt32) -> UIColor {
+            UIColor(red: CGFloat((h >> 16) & 0xFF) / 255, green: CGFloat((h >> 8) & 0xFF) / 255,
+                    blue: CGFloat(h & 0xFF) / 255, alpha: 1)
+        }
+        let l = ui(light), d = ui(dark)
+        self.init(uiColor: UIColor { $0.userInterfaceStyle == .dark ? d : l })
+    }
     init(hexString: String) {
         let s = hexString.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
         self.init(hex: UInt32(s, radix: 16) ?? 0x888888)
@@ -15,9 +25,9 @@ extension Color {
 /// ألوان الأقسام — نفسُ ألوان الويب، والأسطحُ أسطحُ iOS الأصلية.
 enum Theme {
     static let brand = Color(hex: 0xC9852A)
-    static let prayer = Color(hex: 0x1F7A6C)
-    static let journal = Color(hex: 0x8A6FB0)
-    static let quran = Color(hex: 0x1B6B4C)
+    static let prayer = Color(light: 0x1F7A6C, dark: 0x3AA893)
+    static let journal = Color(light: 0x8A6FB0, dark: 0xA88FD0)
+    static let quran = Color(light: 0x1B6B4C, dark: 0x3C9F72)
     static let finance = Color(hex: 0x3D9640)
     static let danger = Color(hex: 0xC15A34)
 }

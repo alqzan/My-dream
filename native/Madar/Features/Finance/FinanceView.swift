@@ -125,7 +125,7 @@ struct FinanceView: View {
             HStack(spacing: 16) {
                 stat("المصروف اليومي", Fmt.amount(s.rate))
                 stat("صرفتَ اليوم", Fmt.amount(s.spentToday))
-                stat("إلى الراتب", "\(Fmt.count(daysLeft)) يوم")
+                stat("إلى الراتب", Fmt.days(daysLeft))
             }
             if daysLeft > 0 {
                 Text(paceText(pace)).font(.footnote).foregroundStyle(pace.kind == .beyond || pace.kind == .tighten ? Theme.danger : .secondary)
