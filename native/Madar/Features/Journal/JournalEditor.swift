@@ -129,7 +129,7 @@ struct JournalEditor: View {
             let scale = min(1, maxSide / max(img.size.width, img.size.height))
             let size = CGSize(width: img.size.width * scale, height: img.size.height * scale)
             let resized = UIGraphicsImageRenderer(size: size).image { _ in img.draw(in: CGRect(origin: .zero, size: size)) }
-            if let jpg = resized.jpegData(compressionQuality: 0.82) { refs.append(MediaStore.save(jpg, ext: "jpg")) }
+            if let jpg = resized.jpegData(compressionQuality: 0.82) { refs.append(MediaStore.save(jpg, mime: "image/jpeg")) }
         }
         await MainActor.run {
             entry.setPhotos(entry.photos + refs.filter { !entry.photos.contains($0) })
@@ -141,7 +141,15 @@ struct JournalEditor: View {
         guard !entry.isEmpty, entry != original else { return }
         var e = entry
         e.stamp()
+        // صورةٌ أُزيلت من هذه المذكرة تُشهَد حذفاً لها وحدها (`entryId:photos:hash`)
+        // فلا يعيدها دمجٌ مع جهازٍ ما زال يحملها.
+        let removed = Set(original.photos.compactMap(MediaStore.hash(of:))).subtracting(entry.photos.compactMap(MediaStore.hash(of:)))
         store.update { d in
+            if !removed.isEmpty {
+                var dm = d.rest.obj("deletedMedia") ?? [:]
+                for h in removed { dm.put("\(e.id):photos:\(h)", DateKey.nowMs()) }
+                d.rest.put("deletedMedia", dm)
+            }
             if let i = d.journalEntries.firstIndex(where: { $0.id == e.id }) {
                 d.journalEntries[i] = e
             } else {
@@ -175,7 +183,12 @@ struct PhotoViewer: View {
             }
             .padding()
         }
-        .task { image = MediaStore.image(ref) }
+        .task {
+            var r = ref
+            if r.hasPrefix(MediaStore.remotePrefix), !MediaStore.isLocal(r),
+               let local = await RemoteMedia.fetch(hash: String(r.dropFirst(MediaStore.remotePrefix.count))) { r = local }
+            image = MediaStore.data(r).flatMap { UIImage(data: $0) ?? decodeDataURLText($0) }
+        }
     }
 }
 

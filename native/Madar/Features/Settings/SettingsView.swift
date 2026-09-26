@@ -18,6 +18,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                SyncSection()
+
                 Section {
                     Button { importing = true } label: { Label("استيراد نسخة احتياطية من الويب", systemImage: "square.and.arrow.down") }
                     Button { export() } label: { Label("تصدير نسخة احتياطية", systemImage: "square.and.arrow.up") }

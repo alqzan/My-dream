@@ -67,6 +67,10 @@ struct JournalView: View {
                     Button { starredOnly.toggle() } label: { Image(systemName: starredOnly ? "star.fill" : "star") }
                         .accessibilityLabel("المميّزة فقط")
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink { FutureLettersView() } label: { Image(systemName: "envelope") }
+                        .accessibilityLabel("رسائل للمستقبل")
+                }
             }
             .sheet(item: $editing) { e in JournalEditor(entry: e) }
         }

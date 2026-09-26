@@ -37,11 +37,20 @@ final class Store: ObservableObject {
         return dir.appendingPathComponent("madar.json")
     }
 
+    /// يُنادى بعد كلّ تعديلٍ محليّ (تُعلَّق عليه المزامنة المؤجّلة).
+    var onLocalChange: (() -> Void)?
+
     /// كلُّ تعديلٍ يمرّ من هنا فيُختم `lastUpdated` مرّةً واحدة.
     func update(_ change: (inout AppData) -> Void) {
         var d = data
         change(&d)
         d.touch()
+        data = d
+        onLocalChange?()
+    }
+
+    /// تبنّي ناتج الدمج — بلا ختمٍ جديد (وإلّا بدا كلُّ سحبٍ تعديلاً يُرفع من جديد).
+    func adoptFromSync(_ d: AppData) {
         data = d
     }
 
