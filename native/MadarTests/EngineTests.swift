@@ -160,3 +160,13 @@ final class NudgeTests: XCTestCase {
         XCTAssertEqual(n.lines.last?.key, "journal")
     }
 }
+
+final class CardLedgerTests: XCTestCase {
+    func testNetPerProvenCreditCardOnly() throws {
+        let json = #"{"accounts":[{"id":"snb:card:1234","bank":"snb","last4":"1234","kind":"card","isOwn":true,"fundingKind":"credit"},{"id":"rj:card:9999","bank":"rj","last4":"9999","kind":"card","isOwn":true,"fundingKind":"debit"}],"transactions":[{"id":"a","date":"2026-09-01","amount":100,"direction":"out","kind":"purchase","bank":"snb","cardLast4":"1234"},{"id":"b","date":"2026-09-02","amount":40,"direction":"out","kind":"purchase","bank":"rj","cardLast4":"9999"},{"id":"c","date":"2026-09-03","amount":10,"direction":"in","kind":"refund","cardId":"snb:card:1234"}],"settlements":[{"id":"s","cardId":"snb:card:1234","amount":60,"date":"2026-09-05"}]}"#
+        let raw = try JSONDecoder().decode(RawObject.self, from: Data(json.utf8))
+        let cards = CardLedger.summarize(data: AppData(raw: raw))
+        XCTAssertEqual(cards.map(\.id), ["snb:card:1234"])
+        XCTAssertEqual(cards.first?.net, 30)
+    }
+}

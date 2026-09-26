@@ -37,6 +37,7 @@ struct FinanceView: View {
 
                 Section {
                     NavigationLink { InsightsView() } label: { Label("تحليل الصرف", systemImage: "chart.bar.xaxis") }
+                    NavigationLink { CardsView() } label: { Label("البطاقات والالتزامات", systemImage: "creditcard") }
                 }
 
                 Section { recent } header: {
