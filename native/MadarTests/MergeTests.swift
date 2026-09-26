@@ -16,11 +16,13 @@ final class MergeTests: XCTestCase {
     }
 
     func testTombstoneStopsResurrectionButNewerReaddWins() {
-        let local = obj(#"{"lastUpdated":"b","deleted":{"t1":500},"transactions":[]}"#)
-        let cloud = obj(#"{"lastUpdated":"a","transactions":[{"id":"t1","amount":5,"updatedAt":400},{"id":"t2","amount":9,"updatedAt":600}]}"#)
+        // Stamps must be recent: tombstones older than the 365-day TTL expire by design.
+        let n = Int(DateKey.nowMs())
+        let local = obj(#"{"lastUpdated":"b","deleted":{"t1":\#(n - 100)},"transactions":[]}"#)
+        let cloud = obj(#"{"lastUpdated":"a","transactions":[{"id":"t1","amount":5,"updatedAt":\#(n - 200)},{"id":"t2","amount":9,"updatedAt":\#(n)}]}"#)
         let m = Merge.merge(local: local, cloud: cloud)
         XCTAssertEqual(m.objects("transactions").compactMap { $0.str("id") }, ["t2"])
-        let cloud2 = obj(#"{"lastUpdated":"a","transactions":[{"id":"t1","amount":5,"updatedAt":900}]}"#)
+        let cloud2 = obj(#"{"lastUpdated":"a","transactions":[{"id":"t1","amount":5,"updatedAt":\#(n + 100)}]}"#)
         XCTAssertEqual(Merge.merge(local: local, cloud: cloud2).objects("transactions").count, 1)
     }
 
