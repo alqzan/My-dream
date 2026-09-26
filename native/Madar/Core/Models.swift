@@ -171,22 +171,32 @@ struct JournalEntry: RawRecord {
     var question: String? { raw.str("question") }
     var place: String? { raw.obj("location")?.str("place") }
 
-    /// الصور: `photos` (الأحدث) أو `photo` المفردة القديمة. القيمة إمّا
-    /// `data:` مضمّنة أو مرجع `media:<hash>` في مخزن الوسائط المحليّ.
+    /// الصور المعروضة: المحليّة (`photos`) ثمّ ما في السحابة ولم يُنزَّل بعد
+    /// (`photoRefs` ← `r2:<hash>`)، بلا تكرارٍ للبصمة نفسها.
     var photos: [String] {
-        let list = raw.strings("photos")
-        if !list.isEmpty { return list }
-        return raw.str("photo").map { [$0] } ?? []
+        var list = raw.strings("photos")
+        if list.isEmpty, let p = raw.str("photo") { list = [p] }
+        let have = Set(list.compactMap(MediaStore.hash(of:)))
+        for h in raw.strings("photoRefs") where !have.contains(h) { list.append(MediaStore.remotePrefix + h) }
+        return list
     }
+
+    /// يحفظ القائمة: المحليّةُ في `photos`، والسحابيّةُ تبقى بصماتٍ في `photoRefs`.
     mutating func setPhotos(_ list: [String]) {
-        raw.put("photos", strings: list.isEmpty ? nil : list)
-        raw.put("photo", list.first)
+        let local = list.filter { !$0.hasPrefix(MediaStore.remotePrefix) }
+        let refs = list.compactMap(MediaStore.hash(of:))
+        raw.put("photos", strings: local.isEmpty ? nil : local)
+        raw.put("photo", local.first)
+        let keepRefs = refs.filter { h in raw.strings("photoRefs").contains(h) || list.contains(MediaStore.remotePrefix + h) }
+        raw.put("photoRefs", strings: keepRefs.isEmpty ? nil : keepRefs)
     }
 
     var audios: [String] {
-        let list = raw.strings("audios")
-        if !list.isEmpty { return list }
-        return raw.str("audio").map { [$0] } ?? []
+        var list = raw.strings("audios")
+        if list.isEmpty, let a = raw.str("audio") { list = [a] }
+        let have = Set(list.compactMap(MediaStore.hash(of:)))
+        for h in raw.strings("audioRefs") where !have.contains(h) { list.append(MediaStore.remotePrefix + h) }
+        return list
     }
     mutating func setAudios(_ list: [String]) {
         raw.put("audios", strings: list.isEmpty ? nil : list)

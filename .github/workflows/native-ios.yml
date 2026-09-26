@@ -26,6 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Inject build config
+        env:
+          R2_WORKER_URL: ${{ vars.NEXT_PUBLIC_R2_WORKER_URL }}
+        run: |
+          printf 'import Foundation\n\nenum BuildConfig {\n    static let r2WorkerURL = "%s"\n}\n' "$R2_WORKER_URL" > Madar/Core/BuildConfig.swift
+
       - name: Generate Xcode project
         run: |
           brew install xcodegen

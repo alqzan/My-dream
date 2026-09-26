@@ -6,6 +6,7 @@ struct MadarApp: App {
     @StateObject private var location = LocationProvider()
     @StateObject private var lock = AppLock()
     @StateObject private var notifier = PrayerNotifications()
+    @StateObject private var sync = SyncEngine()
     @Environment(\.scenePhase) private var phase
 
     init() { QuranFont.register() }
@@ -20,10 +21,14 @@ struct MadarApp: App {
                 .environmentObject(location)
                 .environmentObject(lock)
                 .environmentObject(notifier)
+                .environmentObject(sync)
                 .onAppear {
                     notifier.store = store
                     store.onPrayerLogged = { [weak notifier] date, p in notifier?.cancel(date: date, prayer: p) }
                     notifier.reschedule(location: location)
+                    sync.store = store
+                    store.onLocalChange = { [weak sync] in sync?.schedule() }
+                    Task { await sync.sync() }
                 }
                 .onChange(of: location.lat) { _, _ in notifier.reschedule(location: location) }
                 // التطبيق عربيٌّ دائماً مهما كانت لغة الجهاز: الاتجاه واللغة
@@ -35,7 +40,10 @@ struct MadarApp: App {
         .onChange(of: phase) { _, newPhase in
             switch newPhase {
             case .background: store.flush(); lock.didEnterBackground()
-            case .active: lock.willEnterForeground(); notifier.reschedule(location: location)
+            case .active:
+                lock.willEnterForeground()
+                notifier.reschedule(location: location)
+                Task { await sync.sync() }
             default: store.flush()
             }
         }
