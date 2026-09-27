@@ -77,9 +77,10 @@ struct FinanceView: View {
             .task { await inbox.refresh() }
             .safeAreaInset(edge: .bottom) {
                 Button { adding = Transaction.new(date: today, amount: 0, category: store.data.categories.first?.id ?? "", note: "") } label: {
-                    Label("سجّل مصروفاً", systemImage: "plus").font(.mdrHeadline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                    Label("سجّل مصروفاً", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent).tint(Theme.finance).controlSize(.large)
+                .buttonStyle(.mdr(.brand, grow: true))
+                .shadow(color: Mdr.gold.opacity(0.3), radius: 10, y: 4)
                 .padding(.horizontal).padding(.bottom, 8)
             }
             .sheet(item: $adding) { t in ExpenseEditor(transaction: t) }
@@ -101,46 +102,88 @@ struct FinanceView: View {
             Text("كم تصرف في اليوم؟").font(.mdrHeadline)
             Text("رقمٌ واحد يجيب «أقدر أصرف الآن؟» — ما لم تصرفه يبقى لك غداً، وما زدتَه يُخصم منه.")
                 .foregroundStyle(.secondary)
-            Button { settings = true } label: { Text("اضبط مصروفك اليومي").frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent).tint(Theme.finance).controlSize(.large)
+            Button { settings = true } label: { Text("اضبط مصروفك اليومي") }
+                .buttonStyle(.mdr(.brand, grow: true))
         }
         .padding(.vertical, 6)
     }
 
+    /// «واحدٌ يقرّر واثنان يخبران» — كما في الويب: المتاحُ اليوم يقرّر، والمظاريفُ
+    /// وصرفُ الدورة مرآتان لا تُسألان «أقدر أصرف؟».
     private var hero: some View {
         let s = BudgetEngine.status(store.data, today: today)!
         let next = BudgetEngine.upcomingSalaryDate(store.data.salaryDay, store.data.lastSalaryConfirm, today)
         let daysLeft = max(0, DateKey.days(from: today, to: next))
         let pace = BudgetEngine.cyclePace(balance: s.balance, daily: s.rate, daysLeft: daysLeft)
         let negative = s.balance < 0
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("متاحٌ لك اليوم").font(.mdrSubheadline).foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(Fmt.amount(s.balance))
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
-                    .foregroundStyle(negative ? Theme.danger : .primary)
-                    .contentTransition(.numericText(value: s.balance))
-                Text("ر.س").font(.mdrTitle3).foregroundStyle(.secondary)
+        let funds = store.data.reserves.map { BudgetEngine.reserveBalance($0, store.data.transactions) }.reduce(0, +)
+        let window = BudgetEngine.spendWindow(store.data, today: today)
+        let spentCycle = store.data.transactions.filter { BudgetEngine.inWindow($0.date, window) }
+            .reduce(0) { $0 + BudgetEngine.cashOut($1) }
+        return VStack(spacing: 10) {
+            Panel(tone: .gold) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "hourglass").foregroundStyle(Mdr.gold)
+                        Text("متاحٌ لك اليوم").font(Mdr.font(15, black: true))
+                        Spacer()
+                        chip("يقرّر", Mdr.gold)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(Fmt.amount(s.balance))
+                            .font(Mdr.font(46, black: true))
+                            .foregroundStyle(negative ? Mdr.clay : Mdr.ink)
+                            .contentTransition(.numericText(value: s.balance))
+                        Text("ر.س").font(Mdr.font(15)).foregroundStyle(Mdr.ink52)
+                    }
+                    HStack(spacing: 16) {
+                        stat("المصروف اليومي", Fmt.amount(s.rate))
+                        stat("صرفتَ اليوم", Fmt.amount(s.spentToday))
+                        stat("إلى الراتب", Fmt.days(daysLeft))
+                    }
+                    if daysLeft > 0 {
+                        Text(paceText(pace)).font(Mdr.font(12))
+                            .foregroundStyle(pace.kind == .beyond || pace.kind == .tighten ? Mdr.clay : Mdr.ink52)
+                    }
+                }
             }
-            HStack(spacing: 16) {
-                stat("المصروف اليومي", Fmt.amount(s.rate))
-                stat("صرفتَ اليوم", Fmt.amount(s.spentToday))
-                stat("إلى الراتب", Fmt.days(daysLeft))
-            }
-            if daysLeft > 0 {
-                Text(paceText(pace)).font(.mdrFootnote).foregroundStyle(pace.kind == .beyond || pace.kind == .tighten ? Theme.danger : .secondary)
+            mirror(icon: "envelope", title: "في مظاريفك", chipText: "محجوز", amount: funds,
+                   sub: "مالٌ موجودٌ مخصَّص — لا يُحتسب من مصروفك اليومي")
+            mirror(icon: "mappin.and.ellipse", title: "صرفتَ هذه الدورة", chipText: "مرآة", amount: spentCycle,
+                   sub: "كلّ ما خرج فعلاً — من جيبك ومن مظاريفك")
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func mirror(icon: String, title: String, chipText: String, amount: Double, sub: String) -> some View {
+        Panel(padding: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: icon).foregroundStyle(Mdr.gold)
+                    Text(title).font(Mdr.font(14, black: true))
+                    Spacer()
+                    chip(chipText, Mdr.ink52)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(Fmt.amount(amount)).font(Mdr.font(28, black: true))
+                    Text("ر.س").font(Mdr.font(13)).foregroundStyle(Mdr.ink52)
+                }
+                Text(sub).font(Mdr.font(11)).foregroundStyle(Mdr.ink52)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .padding(.vertical, 6)
+    }
+
+    private func chip(_ text: String, _ color: Color) -> some View {
+        Text(text).font(Mdr.font(11, black: true)).foregroundStyle(color)
+            .padding(.horizontal, 10).padding(.vertical, 3)
+            .background(Mdr.paper, in: Capsule())
+            .overlay(Capsule().strokeBorder(Mdr.line))
     }
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.mdrHeadline).monospacedDigit()
-            Text(label).font(.mdrCaption).foregroundStyle(.secondary)
+            Text(value).font(Mdr.font(17, black: true))
+            Text(label).font(Mdr.font(11)).foregroundStyle(Mdr.ink52)
         }
     }
 

@@ -23,14 +23,14 @@ struct PrayerAnswer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("صلَّيتَ \(prayer.rawValue)\(when.map { " \($0)" } ?? "")؟").font(.mdrHeadline)
+                Text("صلَّيتَ \(prayer.rawValue)\(when.map { " \($0)" } ?? "")؟").font(Mdr.font(20, black: true))
                 Spacer()
                 if let t = timeLabel { Text(t).font(.mdrSubheadline).foregroundStyle(.secondary) }
             }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(Self.states) { choice in
                     let on = status == choice.status
-                    let c = Color(hex: choice.status.colorHex)
+                    let c = PrayerView.tone(choice.status)
                     Button {
                         onStatus(on ? .none : choice.status)
                     } label: {
@@ -39,8 +39,9 @@ struct PrayerAnswer: View {
                             Text(choice.hint).font(.mdrCaption2).opacity(0.8)
                         }
                         .frame(maxWidth: .infinity, minHeight: 52)
-                        .foregroundStyle(on ? .white : c)
-                        .background(on ? c : c.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(on ? .white : Mdr.ink)
+                        .background(on ? c : Mdr.paper2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(on ? c : Mdr.line))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(on ? .isSelected : [])
@@ -60,7 +61,8 @@ struct PrayerAnswer: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 48)
                                 .foregroundStyle(on ? .white : c)
-                                .background(on ? c : c.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .background(on ? c : Mdr.paper2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? c : c.opacity(0.5)))
                             }
                             .buttonStyle(.plain)
                         }

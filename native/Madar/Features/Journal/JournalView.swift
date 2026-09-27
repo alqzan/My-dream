@@ -79,31 +79,59 @@ struct JournalView: View {
     @ViewBuilder private var todayHeader: some View {
         let today = DateKey.today()
         let question = QuestionLibrary.daily(today)
+        let todays = store.data.journalEntries.first { $0.date == today }
         Section {
-            HStack(spacing: 8) {
-                TextField("سطرٌ سريع يُلحق بمذكرة اليوم…", text: $quick, axis: .vertical)
-                    .focused($quickFocused)
-                    .submitLabel(.done)
-                    .onSubmit { store.appendQuickLine(quick, on: today); quick = "" }
-                if !quick.isEmpty {
-                    Button { store.appendQuickLine(quick, on: today); quick = ""; quickFocused = false } label: {
-                        Image(systemName: "arrow.up.circle.fill").font(.mdrTitle2)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 8) {
+                    Text("\(Fmt.count(store.data.journalEntries.count)) مذكرة")
+                    Diamond(size: 5)
+                    Text("\(Fmt.count(writingStreak(today))) يوم متواصل")
+                    Spacer()
+                    Star(size: 22)
+                }
+                .font(Mdr.font(13)).foregroundStyle(Mdr.ink52)
+
+                Button { editing = todays ?? JournalEntry.new(date: today) } label: {
+                    Text(todays == nil ? "اكتب مذكرة اليوم" : "أضِف إلى مذكرة اليوم")
+                }
+                .buttonStyle(.mdr(.ink, grow: true))
+
+                HStack(spacing: 8) {
+                    TextField("سطرٌ سريع… خاطرة، امتنان، أو ملاحظة", text: $quick, axis: .vertical)
+                        .font(Mdr.font(15))
+                        .focused($quickFocused)
+                        .submitLabel(.done)
+                        .onSubmit { store.appendQuickLine(quick, on: today); quick = "" }
+                    Button("أضف") { store.appendQuickLine(quick, on: today); quick = ""; quickFocused = false }
+                        .buttonStyle(.mdr(quick.isEmpty ? .ghost : .ink))
+                        .disabled(quick.isEmpty)
+                }
+                .padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6)
+                .background(Mdr.paper2, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Mdr.line))
+
+                Panel(tone: .gold) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "moon.fill").font(.system(size: 20)).foregroundStyle(Mdr.gold)
+                            .frame(width: 40, height: 40)
+                            .background(Mdr.goldw, in: Circle())
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("سؤال اليوم").font(Mdr.font(11, black: true)).foregroundStyle(Mdr.ink52)
+                            Text(question).font(Mdr.font(18, black: true))
+                            Button("اكتب عنه") {
+                                var e = todays ?? JournalEntry.new(date: today)
+                                if e.question == nil { e.raw.put("question", question) }
+                                editing = e
+                            }
+                            .buttonStyle(.mdr(.gold))
+                        }
                     }
-                    .tint(Theme.journal)
                 }
             }
-            Button {
-                var e = store.data.journalEntries.first { $0.date == today } ?? JournalEntry.new(date: today)
-                if e.question == nil { e.raw.put("question", question) }
-                editing = e
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("سؤال اليوم", systemImage: "moon.stars").font(.mdrCaption.weight(.semibold)).foregroundStyle(Theme.journal)
-                    Text(question).foregroundStyle(.primary)
-                }
-            }
-            .buttonStyle(.plain)
+            .padding(.vertical, 4)
         }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         let memories = onThisDay(today)
         if !memories.isEmpty {
             Section("في مثل هذا اليوم") {
@@ -118,6 +146,15 @@ struct JournalView: View {
                 }
             }
         }
+    }
+
+    /// أيامٌ متتاليةٌ فيها مذكرة، تنتهي اليوم أو أمس (اليومُ الذي لم يُكتب بعدُ لا يقطعها).
+    private func writingStreak(_ today: String) -> Int {
+        let days = Set(store.data.journalEntries.map(\.date))
+        var d = days.contains(today) ? today : DateKey.adding(days: -1, to: today)
+        var n = 0
+        while days.contains(d) { n += 1; d = DateKey.adding(days: -1, to: d) }
+        return n
     }
 
     private func onThisDay(_ today: String) -> [JournalEntry] {
@@ -154,7 +191,7 @@ struct JournalRow: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(spacing: 0) {
                 Text(Fmt.count(DateKey.calendar.component(.day, from: DateKey.date(entry.date) ?? Date())))
-                    .font(.mdrTitle2.weight(.semibold))
+                    .font(Mdr.font(24, black: true))
                 Text(weekday).font(.mdrCaption2).foregroundStyle(.secondary)
             }
             .frame(width: 40)

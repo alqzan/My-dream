@@ -13,39 +13,43 @@ struct QuranView: View {
 
     var body: some View {
         NavigationStack {
-            MdrList {
-                Section { khatmaHero }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    khatmaPanel.padding(.top, 16)
 
-                Section("الوِرد اليومي") { wirdRow }
+                    SectionHead("الوِردُ اليومي").padding(.top, 26).padding(.bottom, 12)
+                    wirdRow
 
-                Section {
-                    NavigationLink { HifzView() } label: {
-                        Label("الحفظ والمراجعة", systemImage: "brain.head.profile")
+                    VStack(spacing: 0) {
+                        NavigationLink { HifzView() } label: { linkRow("الحفظ والمراجعة", "brain.head.profile") }
+                        Rectangle().fill(Mdr.line).frame(height: 1).padding(.horizontal, 18)
+                        NavigationLink { SurahIndex(open: { readerPage = ReaderTarget(page: $0) }) } label: {
+                            linkRow("فهرس السور والأجزاء", "list.bullet")
+                        }
                     }
-                    NavigationLink { SurahIndex(open: { readerPage = ReaderTarget(page: $0) }) } label: {
-                        Label("فهرس السور والأجزاء", systemImage: "list.bullet")
+                    .buttonStyle(.plain)
+                    .background(Mdr.paper2, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Mdr.line))
+                    .padding(.top, 14)
+
+                    SectionHead(title: "تدبّرات") {
+                        Button { reflecting = QuranReflection.new(surah: nil, from: nil, to: nil, text: "") } label: {
+                            Image(systemName: "plus").font(.system(size: 15, weight: .semibold)).foregroundStyle(Mdr.gold)
+                                .frame(width: 32, height: 32)
+                        }
+                        .accessibilityLabel("تدبّرٌ جديد")
                     }
+                    .padding(.top, 26).padding(.bottom, 12)
+                    reflections
+
+                    ayahCard.padding(.top, 26)
                 }
-
-                Section {
-                    if store.data.quranReflections.isEmpty {
-                        Text("آيةٌ استوقفتك؟ اكتب ما فهمته منها بعبارتك.").foregroundStyle(.secondary)
-                    }
-                    ForEach(store.data.quranReflections.sorted { $0.date > $1.date }.prefix(20)) { r in
-                        Button { reflecting = r } label: { ReflectionRow(r: r) }.buttonStyle(.plain)
-                            .swipeActions { Button(role: .destructive) { store.deleteReflection(r.id) } label: { Label("حذف", systemImage: "trash") } }
-                    }
-                } header: {
-                    HStack {
-                        Text("تدبّرات")
-                        Spacer()
-                        Button { reflecting = QuranReflection.new(surah: nil, from: nil, to: nil, text: "") } label: { Image(systemName: "plus") }
-                    }
-                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 30)
             }
-            .navigationTitle("القرآن")
+            .mdrPage()
+            .toolbar(.hidden, for: .navigationBar)
             .fullScreenCover(item: $readerPage) { t in MushafReader(startPage: t.page) }
             .sheet(isPresented: $pageEditor) { KhatmaPageEditor() }
             .sheet(item: $reflecting) { r in ReflectionEditor(reflection: r) }
@@ -55,68 +59,160 @@ struct QuranView: View {
         }
     }
 
-    private var khatmaHero: some View {
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "book").font(.system(size: 18)).foregroundStyle(Mdr.gold)
+                .frame(width: 44, height: 44)
+                .background(Mdr.goldw, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text("القرآن").font(Mdr.font(30, black: true))
+                Text("الختمة والحفظ والتدبّر").font(Mdr.font(13)).foregroundStyle(Mdr.ink52)
+            }
+            Spacer()
+        }
+        .padding(.top, 8)
+    }
+
+    private func linkRow(_ title: String, _ icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).foregroundStyle(Mdr.gold).frame(width: 26)
+            Text(title).font(Mdr.font(16, black: true))
+            Spacer()
+            Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(Mdr.ink34)
+        }
+        .padding(.horizontal, 18).frame(minHeight: 58)
+        .contentShape(Rectangle())
+    }
+
+    /// «مدار الختمة» — حلقةُ الأجزاء الثلاثين وتحتها وتيرتُك وهدفُ يومك.
+    private var khatmaPanel: some View {
         let k = store.data.khatma
         let read = k.pagesRead(on: today)
         let eta = KhatmaMath.eta(page: k.page, startDate: k.startDate, today: today, log: k.pageLog)
         let juz = QuranMeta.juzCompleted(page: k.page)
-        return VStack(spacing: 16) {
-            HStack(spacing: 18) {
+        let goal = max(1, k.dailyPageGoal)
+        return Panel(tone: .gold) {
+            VStack(spacing: 14) {
+                HStack {
+                    Star(size: 13)
+                    Text("مدار الختمة").font(Mdr.font(17, black: true))
+                    Spacer()
+                    if k.completed > 0 {
+                        Text("أتممتَ \(Fmt.count(k.completed)) ختمات 🌙").font(Mdr.font(12, black: true))
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(Mdr.goldw, in: Capsule())
+                    }
+                }
                 ZStack {
                     JuzRing(completed: juz, progress: Double(k.page) / Double(QuranMeta.totalPages))
-                    VStack(spacing: 0) {
-                        Text(Fmt.count(k.page)).font(.mdrTitle.bold()).contentTransition(.numericText())
-                        Text("من ٦٠٤").font(.mdrCaption2).foregroundStyle(.secondary)
+                    VStack(spacing: 2) {
+                        Text(Fmt.count(k.page)).font(Mdr.font(40, black: true)).contentTransition(.numericText())
+                        Text("من ٦٠٤ صفحة").font(Mdr.font(12)).foregroundStyle(Mdr.ink52)
                     }
                 }
-                .frame(width: 112, height: 112)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(k.page > 0 ? "وقفتَ في \(QuranMeta.pageTitle(k.page))" : "ابدأ ختمتك").font(.mdrHeadline)
-                    Text("الجزء \(Fmt.count(max(1, QuranMeta.juz(ofAyah: QuranMeta.pageRange(max(1, k.page)).upperBound))))")
-                        .font(.mdrSubheadline).foregroundStyle(.secondary)
-                    Text("اليوم \(Fmt.count(read)) من \(Fmt.count(k.dailyPageGoal)) صفحة")
-                        .font(.mdrSubheadline).foregroundStyle(read >= k.dailyPageGoal ? Theme.quran : .secondary)
+                .frame(width: 210, height: 210)
+                .frame(maxWidth: .infinity)
+                VStack(spacing: 4) {
+                    Text(k.page > 0 ? "وقفتَ في \(QuranMeta.pageTitle(k.page)) · الجزء \(Fmt.count(max(1, juz + 1 > 30 ? 30 : juz + 1)))" : "ابدأ ختمتك")
+                        .font(Mdr.font(15, black: true))
                     if let days = eta.daysLeft {
-                        Text("على وتيرتك تختم بعد \(Fmt.count(days)) يوماً").font(.mdrCaption).foregroundStyle(.secondary)
+                        Text("على وتيرتك تختم خلال \(Fmt.count(days)) يوماً").font(Mdr.font(12, black: true)).foregroundStyle(Mdr.gold)
                     }
-                    if k.completed > 0 { Text("ختماتٌ سابقة: \(Fmt.count(k.completed))").font(.mdrCaption).foregroundStyle(.secondary) }
                 }
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 10) {
-                Button { readerPage = ReaderTarget(page: max(1, k.page == 0 ? 1 : min(k.page + 1, 604))) } label: {
-                    Label("تابع القراءة", systemImage: "book.pages").frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("هدف اليوم: \(Fmt.count(goal)) صفحة").font(Mdr.font(13, black: true))
+                        Spacer()
+                        Button("عدّل") { pageEditor = true }.font(Mdr.font(12, black: true)).foregroundStyle(Mdr.gold)
+                    }
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Mdr.line)
+                            Capsule().fill(Mdr.gold).frame(width: g.size.width * min(1, Double(read) / Double(goal)))
+                        }
+                    }
+                    .frame(height: 6)
+                    .environment(\.layoutDirection, .rightToLeft)
+                    Text("قرأتَ اليوم \(Fmt.count(read)) من \(Fmt.count(goal)) صفحة").font(Mdr.font(11)).foregroundStyle(Mdr.ink52)
                 }
-                .buttonStyle(.borderedProminent).tint(Theme.quran)
-                Button { pageEditor = true } label: { Label("صفحتي", systemImage: "bookmark").frame(maxWidth: .infinity) }
-                    .buttonStyle(.bordered).tint(Theme.quran)
-            }
-            .controlSize(.large)
-            if k.page >= QuranMeta.totalPages {
-                Button("ختمتُ — ابدأ ختمةً جديدة") { confirmFinish = true }.tint(Theme.quran)
+                .padding(14)
+                .background(Mdr.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Mdr.gline))
+                HStack(spacing: 10) {
+                    Button { readerPage = ReaderTarget(page: max(1, k.page == 0 ? 1 : min(k.page + 1, 604))) } label: {
+                        Label("تابع القراءة", systemImage: "book.pages")
+                    }
+                    .buttonStyle(.mdr(.brand, grow: true))
+                    Button { pageEditor = true } label: { Label("صفحتي", systemImage: "bookmark") }
+                        .buttonStyle(.mdr(.gold, grow: true))
+                }
+                if k.page >= QuranMeta.totalPages {
+                    Button("ختمتُ — ابدأ ختمةً جديدة") { confirmFinish = true }.buttonStyle(.mdr(.ink, grow: true))
+                }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .padding(.vertical, 6)
     }
 
     private var wirdRow: some View {
         let done = store.data.quranWird.contains(today)
         let streak = PrayerLogic.streak(of: Set(store.data.quranWird), today: today)
-        return Button { store.toggleWird(today) } label: {
-            HStack {
+        return Button { Haptic.tap(); store.toggleWird(today) } label: {
+            HStack(spacing: 12) {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                    .font(.mdrTitle2).foregroundStyle(done ? Theme.quran : .secondary)
+                    .font(.system(size: 26)).foregroundStyle(done ? Mdr.teal : Mdr.ink34)
                     .symbolEffect(.bounce, value: done)
-                VStack(alignment: .leading) {
-                    Text(done ? "أتممتَ وِرد اليوم" : "أتممتُ وِرد اليوم")
-                    if streak > 1 { Text("\(Fmt.count(streak)) أيامٍ متتالية").font(.mdrCaption).foregroundStyle(.secondary) }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(done ? "أتممتَ وِرد اليوم" : "أتممتُ وِرد اليوم").font(Mdr.font(16, black: true))
+                    if streak > 1 { Text("\(Fmt.count(streak)) أيامٍ متتالية").font(Mdr.font(12)).foregroundStyle(Mdr.ink52) }
                 }
                 Spacer()
             }
+            .padding(16)
+            .background(done ? Mdr.tealw : Mdr.paper2, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(done ? Mdr.teal.opacity(0.34) : Mdr.line))
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var reflections: some View {
+        let list = store.data.quranReflections.sorted { $0.date > $1.date }.prefix(20)
+        if list.isEmpty {
+            Text("آيةٌ استوقفتك؟ اكتب ما فهمته منها بعبارتك.").font(Mdr.font(14)).foregroundStyle(Mdr.ink52)
+        }
+        VStack(spacing: 10) {
+            ForEach(Array(list)) { r in
+                Button { reflecting = r } label: { Panel(padding: 14) { ReflectionRow(r: r) } }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) { store.deleteReflection(r.id) } label: { Label("حذف", systemImage: "trash") }
+                    }
+            }
+        }
+    }
+
+    /// خاتمةُ الصفحة كما في الويب: آيةٌ في إطارٍ ودعاء.
+    private var ayahCard: some View {
+        let id = QuranMeta.id(surah: 54, ayah: 17)
+        let text = AyahText.text(id)
+        return VStack(spacing: 12) {
+            Text("سورة القمر").font(Mdr.font(12, black: true))
+                .padding(.horizontal, 16).padding(.vertical, 5)
+                .overlay(Capsule().strokeBorder(Mdr.gold, lineWidth: 1.2))
+            Text(text.isEmpty ? "وَلَقَدْ يَسَّرْنَا الْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ" : text)
+                .font(QuranFont.font(24)).multilineTextAlignment(.center)
+            HStack(spacing: 8) {
+                Rectangle().fill(Mdr.gline).frame(height: 1)
+                Diamond(size: 6)
+                Rectangle().fill(Mdr.gline).frame(height: 1)
+            }
+            Text("اللهم اجعل القرآن ربيع قلبي").font(Mdr.font(14, black: true))
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(Mdr.paper2, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Mdr.gline))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Mdr.gline).padding(8))
     }
 }
 
@@ -128,17 +224,17 @@ struct JuzRing: View {
     var body: some View {
         ZStack {
             ForEach(0..<30, id: \.self) { i in
-                let gap = 0.004
+                let gap = 0.009
                 Circle()
                     .trim(from: Double(i) / 30 + gap, to: Double(i + 1) / 30 - gap)
-                    .stroke(i < completed ? Theme.quran : Theme.quran.opacity(0.14),
-                            style: StrokeStyle(lineWidth: 9, lineCap: .butt))
+                    .stroke(i < completed ? Mdr.goldLight : Mdr.line,
+                            style: StrokeStyle(lineWidth: 14, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
             Circle().trim(from: 0, to: progress)
-                .stroke(Theme.brand, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(Mdr.gold, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .padding(9)
+                .padding(16)
         }
         .animation(.easeOut(duration: 0.5), value: completed)
     }

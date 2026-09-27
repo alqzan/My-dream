@@ -237,6 +237,7 @@ struct AnswerSheet: View {
             )
             .padding()
         }
+        .presentationBackground(Mdr.paper)
     }
 
     private var whenLabel: String? {
