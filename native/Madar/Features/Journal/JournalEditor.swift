@@ -33,9 +33,9 @@ struct JournalEditor: View {
                     TextField("عنوان اليوم", text: $entry.title, axis: .vertical)
                         .font(.mdrTitle2.weight(.semibold))
 
-                    if let q = entry.question { Text(q).font(.mdrSubheadline).foregroundStyle(.secondary) }
+                    if let q = entry.question { Text(q).font(.mdrSubheadline).foregroundStyle(Mdr.ink52) }
 
-                    TextField("ماذا في يومك؟", text: $entry.content, axis: .vertical)
+                    TextField("ماذا في يومك؟", text: $entry.content, axis: .vertical).accessibilityIdentifier("journal.content")
                         .font(.mdrBody)
                         .lineSpacing(6)
                         .focused($focused)
@@ -47,7 +47,7 @@ struct JournalEditor: View {
                     if !entry.audios.isEmpty { AudioList(refs: entry.audios) }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("شعور اليوم").font(.mdrSubheadline).foregroundStyle(.secondary)
+                        Text("شعور اليوم").font(.mdrSubheadline).foregroundStyle(Mdr.ink52)
                         HStack {
                             ForEach(Mood.all) { m in
                                 Button {
@@ -72,7 +72,7 @@ struct JournalEditor: View {
             .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("تم") { dismiss() }.bold() }
+                ToolbarItem(placement: .confirmationAction) { Button("تم") { dismiss() }.bold().accessibilityIdentifier("journal.done") }
                 ToolbarItem(placement: .cancellationAction) { Button("إلغاء", role: .cancel) { cancelled = true; dismiss() } }
                 ToolbarItemGroup(placement: .bottomBar) {
                     PhotosPicker(selection: $picks, maxSelectionCount: 10, matching: .images) {
@@ -225,7 +225,7 @@ struct AudioList: View {
                     Label("ملاحظة صوتية \(Fmt.count(i + 1))", systemImage: player.playing == ref ? "stop.circle.fill" : "play.circle.fill")
                 }
             }
-            if let err = player.error { Text(err).font(.mdrCaption).foregroundStyle(.secondary) }
+            if let err = player.error { Text(err).font(.mdrCaption).foregroundStyle(Mdr.ink52) }
         }
     }
 }

@@ -71,7 +71,7 @@ struct EventsManager: View {
                             Text(e.emoji ?? "📅")
                             Text(e.title)
                             Spacer()
-                            Text(Fmt.shortDate(key: e.date)).foregroundStyle(.secondary)
+                            Text(Fmt.shortDate(key: e.date)).foregroundStyle(Mdr.ink52)
                         }
                         .swipeActions { Button(role: .destructive) { store.deleteEvent(e.id) } label: { Label("حذف", systemImage: "trash") } }
                     }

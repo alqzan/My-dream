@@ -17,7 +17,7 @@ struct DayView: View {
                 DatePicker("اليوم", selection: Binding(get: { DateKey.date(date) ?? Date() }, set: { date = DateKey.string($0) }),
                            in: ...Date(), displayedComponents: .date)
                     .environment(\.locale, Fmt.arabicLocale)
-                if let d = DateKey.date(date) { Text(Fmt.hijri(d)).foregroundStyle(.secondary) }
+                if let d = DateKey.date(date) { Text(Fmt.hijri(d)).foregroundStyle(Mdr.ink52) }
             }
             Section {
                 Button { editingPrayers = true } label: {
@@ -25,8 +25,8 @@ struct DayView: View {
                         ForEach(Prayer.allCases) { p in
                             let s = log?.status(p) ?? .none
                             VStack(spacing: 4) {
-                                Circle().fill(s == .none ? Color(.tertiarySystemFill) : Color(hex: s.colorHex)).frame(width: 16, height: 16)
-                                Text(p.rawValue).font(.mdrCaption2).foregroundStyle(.secondary)
+                                Circle().fill(s == .none ? Mdr.line : Color(hex: s.colorHex)).frame(width: 16, height: 16)
+                                Text(p.rawValue).font(.mdrCaption2).foregroundStyle(Mdr.ink52)
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -35,15 +35,15 @@ struct DayView: View {
                 .buttonStyle(.plain)
             } header: { Text("الصلاة") }
             Section("المذكرات") {
-                if entries.isEmpty { Text("لم يُكتب هذا اليوم.").foregroundStyle(.secondary) }
+                if entries.isEmpty { Text("لم يُكتب هذا اليوم.").foregroundStyle(Mdr.ink52) }
                 ForEach(entries) { e in Button { editingEntry = e } label: { JournalRow(entry: e) }.buttonStyle(.plain) }
             }
             Section("القرآن") {
                 Label(quran ? "كان لك فيه وِردٌ أو حفظ أو قراءة" : "لا أثر للقرآن مسجّلاً", systemImage: quran ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(quran ? Theme.quran : .secondary)
+                    .foregroundStyle(quran ? Theme.quran : Mdr.ink52)
             }
             Section {
-                if txs.isEmpty { Text("لا مصاريف.").foregroundStyle(.secondary) }
+                if txs.isEmpty { Text("لا مصاريف.").foregroundStyle(Mdr.ink52) }
                 ForEach(txs) { t in TransactionRow(t: t) }
             } header: {
                 HStack { Text("المال"); Spacer(); Text(Fmt.amount(txs.reduce(0) { $0 + BudgetEngine.cashOut($1) })).monospacedDigit() }

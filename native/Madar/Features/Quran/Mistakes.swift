@@ -78,7 +78,7 @@ struct MarkableAyat: View {
                     let marked = open["\(id):\(i)"] != nil
                     Text(w)
                         .font(QuranFont.font(fontSize))
-                        .foregroundStyle(marked ? Theme.danger : .primary)
+                        .foregroundStyle(marked ? Theme.danger : Mdr.ink)
                         .underline(marked, color: Theme.danger)
                         .onTapGesture { store.toggleMistake(ayah: id, word: i, text: w) }
                 }
@@ -120,11 +120,11 @@ struct MistakesView: View {
                         .onTapGesture { revealed.insert(id) }
                     HStack {
                         Button("أصبتُ") { store.drillMistake(id, ok: true); revealed.remove(id) }
-                            .buttonStyle(.borderedProminent).tint(Theme.quran)
+                            .buttonStyle(.mdr(.brand)).tint(Theme.quran)
                         Button("أخطأتُ") { store.drillMistake(id, ok: false); revealed.insert(id) }
-                            .buttonStyle(.bordered).tint(Theme.danger)
+                            .buttonStyle(.mdr(.gold)).tint(Theme.danger)
                         Spacer()
-                        if (m.int("okStreak") ?? 0) > 0 { Text("نجاح \(Fmt.count(m.int("okStreak") ?? 0)) من ٢").font(.mdrCaption).foregroundStyle(.secondary) }
+                        if (m.int("okStreak") ?? 0) > 0 { Text("نجاح \(Fmt.count(m.int("okStreak") ?? 0)) من ٢").font(.mdrCaption).foregroundStyle(Mdr.ink52) }
                     }
                 }
                 .padding(.vertical, 6)

@@ -40,11 +40,11 @@ struct ExpenseEditor: View {
             MdrForm {
                 Section {
                     HStack(alignment: .firstTextBaseline) {
-                        TextField("٠", text: $amountText)
+                        TextField("٠", text: $amountText).accessibilityIdentifier("expense.amount")
                             .keyboardType(.decimalPad)
-                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                            .font(Mdr.font(44, black: true))
                             .focused($amountFocused)
-                        Text("ر.س").foregroundStyle(.secondary)
+                        Text("ر.س").foregroundStyle(Mdr.ink52)
                     }
                     if weight.big && destination == "daily" {
                         Label("يعادل \(Digits.indic(String(weight.days))) يوماً من مصروفك — أهو حدثٌ له مظروف؟", systemImage: "exclamationmark.circle")
@@ -55,7 +55,7 @@ struct ExpenseEditor: View {
                 Section("القسم") { categoryGrid }
 
                 Section {
-                    TextField("ملاحظة (المكان، الغرض)", text: Binding(get: { t.note }, set: { t.note = $0 }))
+                    TextField("ملاحظة (المكان، الغرض)", text: Binding(get: { t.note }, set: { t.note = $0 })).accessibilityIdentifier("expense.note")
                     DatePicker("التاريخ", selection: Binding(get: { DateKey.date(t.date) ?? Date() }, set: { t.date = DateKey.string($0) }),
                                in: ...Date(), displayedComponents: .date)
                 }
@@ -79,7 +79,7 @@ struct ExpenseEditor: View {
             .navigationTitle(isNew ? "مصروف جديد" : "تعديل المصروف")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("حفظ") { save() }.bold().disabled(amount <= 0) }
+                ToolbarItem(placement: .confirmationAction) { Button("حفظ") { save() }.bold().disabled(amount <= 0).accessibilityIdentifier("expense.save") }
                 ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } }
             }
             .onAppear { if isNew { amountFocused = true } }
@@ -115,7 +115,7 @@ struct ExpenseEditor: View {
                 Text(c.label).font(.mdrCaption).lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 60)
-            .background(on ? color.opacity(0.22) : Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(on ? color.opacity(0.22) : Mdr.line, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(on ? color : .clear, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
@@ -140,7 +140,7 @@ struct ExpenseEditor: View {
                             Image(systemName: bigPlan == o.kind ? "largecircle.fill.circle" : "circle").foregroundStyle(Theme.finance)
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack { Text(o.title).font(.mdrSubheadline.weight(.semibold)); if o.recommended { Pill(text: "الموصى به", color: Theme.finance) } }
-                                Text(summary(o)).font(.mdrCaption).foregroundStyle(.secondary)
+                                Text(summary(o)).font(.mdrCaption).foregroundStyle(Mdr.ink52)
                             }
                         }
                     }

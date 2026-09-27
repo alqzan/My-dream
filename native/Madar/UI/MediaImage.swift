@@ -25,7 +25,7 @@ struct MediaImage: View {
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                Rectangle().fill(Color(.tertiarySystemFill))
+                Rectangle().fill(Mdr.line)
             }
         }
         .task(id: ref) {

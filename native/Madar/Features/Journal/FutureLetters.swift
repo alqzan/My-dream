@@ -41,12 +41,12 @@ struct FutureLettersView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: ready ? (l.opened ? "envelope.open" : "envelope.badge") : "lock.fill")
-                            .foregroundStyle(ready ? Theme.journal : .secondary)
+                            .foregroundStyle(ready ? Theme.journal : Mdr.ink52)
                             .font(.mdrTitle3)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(l.title.isEmpty ? "رسالة \(Fmt.shortDate(key: l.writtenDate))" : l.title)
                             Text(ready ? "وصلت \(Fmt.shortDate(key: l.deliveryDate))" : "تُفتح \(Countdown.describe(DateKey.days(from: today, to: l.deliveryDate)))")
-                                .font(.mdrCaption).foregroundStyle(.secondary)
+                                .font(.mdrCaption).foregroundStyle(Mdr.ink52)
                         }
                     }
                 }
@@ -65,7 +65,7 @@ struct FutureLettersView: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("كتبتَها في \(Fmt.shortDate(key: l.writtenDate))").font(.mdrCaption).foregroundStyle(.secondary)
+                        Text("كتبتَها في \(Fmt.shortDate(key: l.writtenDate))").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                         if !l.title.isEmpty { Text(l.title).font(.mdrTitle2.bold()) }
                         Text(l.content).lineSpacing(6)
                     }

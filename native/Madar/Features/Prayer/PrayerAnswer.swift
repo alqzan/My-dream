@@ -25,7 +25,7 @@ struct PrayerAnswer: View {
             HStack {
                 Text("صلَّيتَ \(prayer.rawValue)\(when.map { " \($0)" } ?? "")؟").font(Mdr.font(20, black: true))
                 Spacer()
-                if let t = timeLabel { Text(t).font(.mdrSubheadline).foregroundStyle(.secondary) }
+                if let t = timeLabel { Text(t).font(.mdrSubheadline).foregroundStyle(Mdr.ink52) }
             }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(Self.states) { choice in
@@ -45,11 +45,12 @@ struct PrayerAnswer: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(on ? .isSelected : [])
+                    .accessibilityIdentifier("status.\(String(describing: choice.status))")
                 }
             }
             if status.isPrayed {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("وكيف كان قلبُك فيها؟").font(.mdrSubheadline).foregroundStyle(.secondary)
+                    Text("وكيف كان قلبُك فيها؟").font(.mdrSubheadline).foregroundStyle(Mdr.ink52)
                     HStack(spacing: 8) {
                         ForEach(Khushu.allCases) { k in
                             let on = khushu == k
@@ -65,6 +66,7 @@ struct PrayerAnswer: View {
                                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? c : c.opacity(0.5)))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("khushu.\(k.rawValue)")
                         }
                     }
                 }

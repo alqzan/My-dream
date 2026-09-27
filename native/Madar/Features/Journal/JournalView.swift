@@ -95,6 +95,7 @@ struct JournalView: View {
                     Text(todays == nil ? "اكتب مذكرة اليوم" : "أضِف إلى مذكرة اليوم")
                 }
                 .buttonStyle(.mdr(.ink, grow: true))
+                .accessibilityIdentifier("journal.addToday")
 
                 HStack(spacing: 8) {
                     TextField("سطرٌ سريع… خاطرة، امتنان، أو ملاحظة", text: $quick, axis: .vertical)
@@ -192,7 +193,7 @@ struct JournalRow: View {
             VStack(spacing: 0) {
                 Text(Fmt.count(DateKey.calendar.component(.day, from: DateKey.date(entry.date) ?? Date())))
                     .font(Mdr.font(24, black: true))
-                Text(weekday).font(.mdrCaption2).foregroundStyle(.secondary)
+                Text(weekday).font(.mdrCaption2).foregroundStyle(Mdr.ink52)
             }
             .frame(width: 40)
             VStack(alignment: .leading, spacing: 4) {
@@ -202,14 +203,14 @@ struct JournalRow: View {
                     if let m = Mood.of(entry.mood) { Text(m.emoji).font(.mdrCaption) }
                 }
                 if !snippet.isEmpty {
-                    Text(snippet).font(.mdrSubheadline).foregroundStyle(entry.title.isEmpty ? .primary : .secondary).lineLimit(3)
+                    Text(snippet).font(.mdrSubheadline).foregroundStyle(entry.title.isEmpty ? Mdr.ink : Mdr.ink52).lineLimit(3)
                 }
                 HStack(spacing: 8) {
                     if let t = entry.time { Text(Digits.indic(t)) }
                     if let p = entry.place { Label(p, systemImage: "mappin").lineLimit(1) }
                     if !entry.audios.isEmpty { Image(systemName: "waveform") }
                 }
-                .font(.mdrCaption).foregroundStyle(.secondary)
+                .font(.mdrCaption).foregroundStyle(Mdr.ink52)
             }
             Spacer(minLength: 0)
             if let first = entry.photos.first {

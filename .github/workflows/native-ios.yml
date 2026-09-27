@@ -48,7 +48,7 @@ jobs:
           echo "SIM_ID=$id" >> "$GITHUB_ENV"
 
       - name: Test
-        timeout-minutes: 25
+        timeout-minutes: 45
         run: >-
           xcodebuild test
           -project MadarNative.xcodeproj
@@ -56,7 +56,7 @@ jobs:
           -destination "id=$SIM_ID"
           -parallel-testing-enabled NO
           -test-timeouts-enabled YES
-          -default-test-execution-time-allowance 60
+          -default-test-execution-time-allowance 240
           CODE_SIGNING_ALLOWED=NO
           | tee "$RUNNER_TEMP/test.log" | grep -E "error:|warning: .*(took|long)|Test Case|Executed|FAIL|\\*\\*" ; exit ${PIPESTATUS[0]}
 
@@ -86,6 +86,18 @@ jobs:
               sleep 9
               xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/shots/$mode-$tab.png"
             done
+          done
+
+      # نسخةٌ مصغّرةٌ من اللقطات في السجلّ نفسِه (سطرٌ لكلّ لقطة) — تُقرأ عبر واجهة
+      # GitHub حين لا يُتاح تنزيلُ الـartifact من مخزنه.
+      - name: Screenshots in log (small JPEG, base64)
+        if: always()
+        continue-on-error: true
+        run: |
+          cd "$RUNNER_TEMP/shots" 2>/dev/null || exit 0
+          for f in *.png; do
+            sips -Z 640 -s format jpeg -s formatOptions 45 "$f" --out "/tmp/${f%.png}.jpg" >/dev/null
+            echo "SHOT ${f%.png} $(base64 -i "/tmp/${f%.png}.jpg" | tr -d '\n')"
           done
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

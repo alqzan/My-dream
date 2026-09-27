@@ -13,7 +13,7 @@ struct TagEditor: View {
                     Button { tags.removeAll { $0 == t } } label: {
                         Label(t, systemImage: "xmark").labelStyle(TrailingIcon())
                     }
-                    .buttonStyle(.bordered).tint(Theme.journal).controlSize(.small)
+                    .buttonStyle(.mdr(.gold)).tint(Theme.journal).controlSize(.small)
                 }
                 TextField("وسم", text: $draft)
                     .frame(width: 90)
@@ -25,7 +25,7 @@ struct TagEditor: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
                         ForEach(Array(rest), id: \.self) { s in
-                            Button("#\(s)") { tags.append(s); draft = "" }.font(.mdrCaption).foregroundStyle(.secondary)
+                            Button("#\(s)") { tags.append(s); draft = "" }.font(.mdrCaption).foregroundStyle(Mdr.ink52)
                         }
                     }
                 }

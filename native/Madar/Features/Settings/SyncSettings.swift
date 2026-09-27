@@ -11,7 +11,7 @@ struct SyncSection: View {
             HStack {
                 Text("الحالة")
                 Spacer()
-                statusText.foregroundStyle(.secondary)
+                statusText.foregroundStyle(Mdr.ink52)
             }
             if sync.enabled {
                 Button("زامن الآن") { Task { await sync.sync() } }

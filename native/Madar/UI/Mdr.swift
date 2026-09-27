@@ -56,15 +56,19 @@ enum Mdr {
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
         UINavigationBar.appearance().compactAppearance = nav
-        let item = UITabBarItemAppearance()
-        item.normal.titleTextAttributes = [.font: uiFont(10, black: true)]
-        item.selected.titleTextAttributes = [.font: uiFont(10, black: true)]
-        let tab = UITabBarAppearance()
-        tab.configureWithDefaultBackground()
-        tab.stackedLayoutAppearance = item
-        tab.inlineLayoutAppearance = item
-        tab.compactInlineLayoutAppearance = item
-        UITabBar.appearance().standardAppearance = tab
+        // شريطُ التبويب يُترك لنظامه: على iOS 26 وما بعده زجاجٌ سائل يصغُر مع التمرير،
+        // وأيُّ `standardAppearance` مخصَّص يطفئ ذلك الزجاج — فلا نلمسه إلّا قبله.
+        if #unavailable(iOS 26) {
+            let item = UITabBarItemAppearance()
+            item.normal.titleTextAttributes = [.font: uiFont(10, black: true)]
+            item.selected.titleTextAttributes = [.font: uiFont(10, black: true)]
+            let tab = UITabBarAppearance()
+            tab.configureWithDefaultBackground()
+            tab.stackedLayoutAppearance = item
+            tab.inlineLayoutAppearance = item
+            tab.compactInlineLayoutAppearance = item
+            UITabBar.appearance().standardAppearance = tab
+        }
         UISegmentedControl.appearance().setTitleTextAttributes([.font: uiFont(13, black: true)], for: .normal)
     }
 }
@@ -292,4 +296,59 @@ struct MdrForm<Content: View>: View {
 extension View {
     /// ورقُ مدار خلفيةً لشاشةٍ كاملة.
     func mdrPage() -> some View { background(Mdr.paper.ignoresSafeArea()) }
+}
+
+// MARK: - الزجاج والسلاسة
+
+extension View {
+    /// سطحٌ زجاجيٌّ سائل (iOS 26+) يستجيب للّمس، وعلى ما قبله مادّةٌ رقيقة.
+    @ViewBuilder func mdrGlass<S: Shape>(in shape: S, tint: Color? = nil, interactive: Bool = true) -> some View {
+        if #available(iOS 26, *) {
+            let base: Glass = interactive ? .regular.interactive() : .regular
+            glassEffect(tint.map { base.tint($0) } ?? base, in: shape)
+        } else {
+            background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(Mdr.gline, lineWidth: 0.8))
+        }
+    }
+
+    /// زرٌّ زجاجيٌّ بارز (iOS 26+)، وقبله زرُّ مدار البنّيّ.
+    @ViewBuilder func mdrGlassProminent(_ tint: Color = Mdr.gold) -> some View {
+        if #available(iOS 26, *) {
+            buttonStyle(.glassProminent).tint(tint)
+        } else {
+            buttonStyle(.mdr(.brand))
+        }
+    }
+
+    /// شريطُ التبويب يصغُر عند التمرير للأسفل ويعود عند الصعود (iOS 26+).
+    @ViewBuilder func mdrMinimizingTabBar() -> some View {
+        if #available(iOS 26, *) {
+            tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            self
+        }
+    }
+
+    /// دخولٌ ناعم للبطاقات أثناء التمرير: تكبر قليلاً وتصفو حين تبلغ الشاشة.
+    func mdrScrollReveal() -> some View {
+        scrollTransition(.interactive, axis: .vertical) { content, phase in
+            content
+                .opacity(phase.isIdentity ? 1 : 0.55)
+                .scaleEffect(phase.isIdentity ? 1 : 0.96)
+                .blur(radius: phase.isIdentity ? 0 : 1.5)
+        }
+    }
+}
+
+extension View {
+    /// الأوراقُ الجزئيّة زجاجٌ على iOS 26+ بنفسها؛ قبله ورقُ مدار.
+    @ViewBuilder func mdrSheetBackground() -> some View {
+        if #available(iOS 26, *) { self } else { presentationBackground(Mdr.paper) }
+    }
+}
+
+extension Animation {
+    /// نابضُ مدار الواحد — سريعٌ بلا ارتداد مزعج.
+    static let mdr = Animation.spring(response: 0.38, dampingFraction: 0.82)
 }

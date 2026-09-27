@@ -58,10 +58,10 @@ struct LockScreen: View {
             Button { lock.unlock() } label: {
                 Label("افتح بـ\(lock.biometryName)", systemImage: "faceid").frame(minWidth: 200)
             }
-            .buttonStyle(.borderedProminent).tint(Theme.brand).controlSize(.large)
+            .buttonStyle(.mdr(.brand)).tint(Theme.brand).controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial)
+        .background(Mdr.paper)
         .onAppear { lock.unlock() }
     }
 }

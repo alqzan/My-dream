@@ -16,7 +16,7 @@ struct SpendCalendar: View {
         for t in store.data.transactions where t.date.hasPrefix(String(DateKey.string(start).prefix(7))) { daily[t.date, default: 0] += BudgetEngine.dailyShare(t) }
         let today = DateKey.today()
         return LazyVGrid(columns: cols, spacing: 4) {
-            ForEach(["ح", "ن", "ث", "ر", "خ", "ج", "س"], id: \.self) { Text($0).font(.mdrCaption2).foregroundStyle(.secondary) }
+            ForEach(["ح", "ن", "ث", "ر", "خ", "ج", "س"], id: \.self) { Text($0).font(.mdrCaption2).foregroundStyle(Mdr.ink52) }
             ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 38) }
             ForEach(days, id: \.self) { d in
                 let v = daily[d] ?? 0
@@ -27,8 +27,8 @@ struct SpendCalendar: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 38)
                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(v == 0 ? Color(.tertiarySystemFill).opacity(d > today ? 0.3 : 1) : (over ? Theme.danger : Theme.finance).opacity(min(0.85, 0.2 + (rate > 0 ? v / rate : 0.5) * 0.35))))
-                .foregroundStyle(v > 0 && (rate > 0 ? v / rate > 1.4 : false) ? .white : .primary)
+                    .fill(v == 0 ? Mdr.line.opacity(d > today ? 0.3 : 1) : (over ? Theme.danger : Theme.finance).opacity(min(0.85, 0.2 + (rate > 0 ? v / rate : 0.5) * 0.35))))
+                .foregroundStyle(v > 0 && (rate > 0 ? v / rate > 1.4 : false) ? .white : Mdr.ink)
             }
         }
     }

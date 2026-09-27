@@ -26,7 +26,7 @@ struct FinanceView: View {
                                 Label {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("وقفة المطابقة").font(.mdrHeadline)
-                                        Text("رقمٌ واحد من كشوفك يصحّح ما فات التطبيقَ تسجيلُه — كلّ تسعين يوماً.").font(.mdrCaption).foregroundStyle(.secondary)
+                                        Text("رقمٌ واحد من كشوفك يصحّح ما فات التطبيقَ تسجيلُه — كلّ تسعين يوماً.").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                                     }
                                 } icon: { Image(systemName: "checklist").foregroundStyle(Theme.finance) }
                             }
@@ -77,10 +77,12 @@ struct FinanceView: View {
             .task { await inbox.refresh() }
             .safeAreaInset(edge: .bottom) {
                 Button { adding = Transaction.new(date: today, amount: 0, category: store.data.categories.first?.id ?? "", note: "") } label: {
-                    Label("سجّل مصروفاً", systemImage: "plus")
+                    Label("سجّل مصروفاً", systemImage: "plus").font(Mdr.font(16, black: true))
+                        .frame(maxWidth: .infinity, minHeight: 36)
                 }
-                .buttonStyle(.mdr(.brand, grow: true))
-                .shadow(color: Mdr.gold.opacity(0.3), radius: 10, y: 4)
+                .mdrGlassProminent()
+                .buttonBorderShape(.capsule)
+                .shadow(color: Mdr.gold.opacity(0.3), radius: 12, y: 5)
                 .padding(.horizontal).padding(.bottom, 8)
             }
             .sheet(item: $adding) { t in ExpenseEditor(transaction: t) }
@@ -101,7 +103,7 @@ struct FinanceView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("كم تصرف في اليوم؟").font(.mdrHeadline)
             Text("رقمٌ واحد يجيب «أقدر أصرف الآن؟» — ما لم تصرفه يبقى لك غداً، وما زدتَه يُخصم منه.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Mdr.ink52)
             Button { settings = true } label: { Text("اضبط مصروفك اليومي") }
                 .buttonStyle(.mdr(.brand, grow: true))
         }
@@ -202,10 +204,10 @@ struct FinanceView: View {
                 Image(systemName: "banknote").foregroundStyle(Theme.finance)
                 VStack(alignment: .leading) {
                     Text(p == .due ? "نزل الراتب؟" : "نزل الراتب مبكّراً؟").font(.mdrHeadline)
-                    Text("أكّده لتبدأ دورةٌ جديدة ويُرحَّل فائضك.").font(.mdrCaption).foregroundStyle(.secondary)
+                    Text("أكّده لتبدأ دورةٌ جديدة ويُرحَّل فائضك.").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                 }
                 Spacer()
-                Image(systemName: "chevron.left").foregroundStyle(.tertiary)
+                Image(systemName: "chevron.left").foregroundStyle(Mdr.ink34)
             }
         }
         .buttonStyle(.plain)
@@ -213,7 +215,7 @@ struct FinanceView: View {
 
     @ViewBuilder private var recent: some View {
         let list = store.data.transactions.sorted { $0.date > $1.date }.prefix(8)
-        if list.isEmpty { Text("لا مصاريف بعد.").foregroundStyle(.secondary) }
+        if list.isEmpty { Text("لا مصاريف بعد.").foregroundStyle(Mdr.ink52) }
         ForEach(Array(list)) { t in
             Button { adding = t } label: { TransactionRow(t: t) }.buttonStyle(.plain)
                 .swipeActions { Button(role: .destructive) { store.deleteTransaction(t.id) } label: { Label("حذف", systemImage: "trash") } }
@@ -237,11 +239,11 @@ struct TransactionRow: View {
                     if let f = fund { Text("من \(f.name)") }
                     if t.offBudget { Text("خارج الميزانية") }
                 }
-                .font(.mdrCaption).foregroundStyle(.secondary)
+                .font(.mdrCaption).foregroundStyle(Mdr.ink52)
             }
             Spacer()
             Text(Fmt.amount(t.amount)).font(.mdrBody.weight(.semibold)).monospacedDigit()
-                .foregroundStyle(t.direction == "in" ? Theme.finance : .primary)
+                .foregroundStyle(t.direction == "in" ? Theme.finance : Mdr.ink)
         }
         .contentShape(Rectangle())
     }
@@ -255,7 +257,7 @@ struct CapRow: View {
             HStack {
                 Text("\(cap.icon) \(cap.label)")
                 Spacer()
-                Text("\(Fmt.amount(cap.spent)) / \(Fmt.amount(cap.cap))").font(.mdrSubheadline).monospacedDigit().foregroundStyle(.secondary)
+                Text("\(Fmt.amount(cap.spent)) / \(Fmt.amount(cap.cap))").font(.mdrSubheadline).monospacedDigit().foregroundStyle(Mdr.ink52)
             }
             ProgressView(value: min(1, cap.spent / max(1, cap.cap))).tint(color)
             if cap.state == "over" {
@@ -281,12 +283,12 @@ struct FundRow: View {
                 if let t = fund.target, t > 0 {
                     ProgressView(value: max(0, min(1, bal / t))).tint(Theme.finance)
                 } else if let per = fund.fundingPerCycle {
-                    Text("\(Fmt.amount(per)) كلّ دورة").font(.mdrCaption).foregroundStyle(.secondary)
+                    Text("\(Fmt.amount(per)) كلّ دورة").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                 }
             }
             Spacer()
             Text(Fmt.amount(bal)).font(.mdrBody.weight(.semibold)).monospacedDigit()
-                .foregroundStyle(bal < 0 ? Theme.danger : .primary)
+                .foregroundStyle(bal < 0 ? Theme.danger : Mdr.ink)
         }
     }
 }

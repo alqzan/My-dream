@@ -30,7 +30,7 @@ struct HifzView: View {
                             Label("مواضع الخطأ", systemImage: "exclamationmark.bubble")
                             Spacer()
                             let n = Hifz.openMistakes(h).count
-                            if n > 0 { Text(Fmt.count(n)).foregroundStyle(.secondary) }
+                            if n > 0 { Text(Fmt.count(n)).foregroundStyle(Mdr.ink52) }
                         }
                     }
                 }
@@ -44,9 +44,9 @@ struct HifzView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("احفظ متتابعاً من حيث تختار").font(.mdrHeadline)
                         Text("وردٌ يوميّ بقدرٍ تحدّده، ومراجعةٌ متباعدة تعيد إليك كلَّ وجهٍ قبل أن يفلت.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Mdr.ink52)
                         Button { setup = true } label: { Text("ابدأ خطة الحفظ").frame(maxWidth: .infinity) }
-                            .buttonStyle(.borderedProminent).tint(Theme.quran).controlSize(.large)
+                            .buttonStyle(.mdr(.brand)).tint(Theme.quran).controlSize(.large)
                     }
                     .padding(.vertical, 6)
                 }
@@ -75,8 +75,8 @@ struct HifzView: View {
                 } else {
                     Text("تبدأ من \(QuranMeta.describe(plan.startId, plan.startId))").font(.mdrHeadline)
                 }
-                Text("الورد: \(Fmt.count(plan.amount)) \(Hifz.unitLabel[plan.unit] ?? "")").font(.mdrSubheadline).foregroundStyle(.secondary)
-                if streak > 1 { Text("\(Fmt.count(streak)) أيامٍ متتالية").font(.mdrCaption).foregroundStyle(.secondary) }
+                Text("الورد: \(Fmt.count(plan.amount)) \(Hifz.unitLabel[plan.unit] ?? "")").font(.mdrSubheadline).foregroundStyle(Mdr.ink52)
+                if streak > 1 { Text("\(Fmt.count(streak)) أيامٍ متتالية").font(.mdrCaption).foregroundStyle(Mdr.ink52) }
             }
         }
         .padding(.vertical, 6)
@@ -89,7 +89,7 @@ struct HifzView: View {
                 session = HifzSessionTarget(kind: .memorize, title: "الورد الجديد", portion: p)
             }
         } else {
-            Text("أتممتَ المصحف — ما شاء الله.").foregroundStyle(.secondary)
+            Text("أتممتَ المصحف — ما شاء الله.").foregroundStyle(Mdr.ink52)
         }
         if let band = Hifz.recentBand(h) {
             let reviewedBand = h.reviews.contains { $0.str("date") == today && $0.int("toId") == band.toId }
@@ -102,7 +102,7 @@ struct HifzView: View {
     @ViewBuilder private func dueSection(_ h: HifzState) -> some View {
         let q = Hifz.dueQueue(h, today: today)
         if q.pages.isEmpty {
-            Text("لا شيء مستحقّ اليوم.").foregroundStyle(.secondary)
+            Text("لا شيء مستحقّ اليوم.").foregroundStyle(Mdr.ink52)
         }
         ForEach(q.pages) { p in
             let portion = Hifz.portion(ofPage: p.page, h)
@@ -114,18 +114,18 @@ struct HifzView: View {
             }
         }
         if q.total > q.pages.count {
-            Text("و\(Fmt.count(q.total - q.pages.count)) أوجهٍ أخرى تُوزَّع على الأيام القادمة.").font(.mdrCaption).foregroundStyle(.secondary)
+            Text("و\(Fmt.count(q.total - q.pages.count)) أوجهٍ أخرى تُوزَّع على الأيام القادمة.").font(.mdrCaption).foregroundStyle(Mdr.ink52)
         }
     }
 
     @ViewBuilder private func logSection(_ h: HifzState) -> some View {
         let events = h.eventsByRecency().sorted { ($0.date, $0.at ?? 0) > ($1.date, $1.at ?? 0) }.prefix(15)
-        if events.isEmpty { Text("لا جلسات بعد.").foregroundStyle(.secondary) }
+        if events.isEmpty { Text("لا جلسات بعد.").foregroundStyle(Mdr.ink52) }
         ForEach(Array(events), id: \.id) { e in
             HStack {
                 VStack(alignment: .leading) {
                     Text(QuranMeta.describe(e.fromId, e.toId))
-                    Text(Fmt.shortDate(key: e.date)).font(.mdrCaption).foregroundStyle(.secondary)
+                    Text(Fmt.shortDate(key: e.date)).font(.mdrCaption).foregroundStyle(Mdr.ink52)
                 }
                 Spacer()
                 if let r = e.rating { RatingBadge(rating: r) }
@@ -138,13 +138,13 @@ struct HifzView: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: done ? "checkmark.circle.fill" : icon)
-                    .foregroundStyle(done ? Theme.quran : .secondary).frame(width: 26)
+                    .foregroundStyle(done ? Theme.quran : Mdr.ink52).frame(width: 26)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                    Text(detail).font(.mdrCaption).foregroundStyle(.secondary)
+                    Text(detail).font(.mdrCaption).foregroundStyle(Mdr.ink52)
                 }
                 Spacer()
-                Image(systemName: "chevron.left").font(.mdrCaption).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.left").font(.mdrCaption).foregroundStyle(Mdr.ink34)
             }
             .contentShape(Rectangle())
         }
@@ -191,7 +191,7 @@ struct HifzSessionView: View {
                                                 Label("متشابه: آية \(Fmt.count(QuranMeta.surahAyah(id).ayah))", systemImage: "arrow.triangle.branch")
                                                     .font(.mdrCaption)
                                             }
-                                            .buttonStyle(.bordered).tint(Theme.brand).controlSize(.small)
+                                            .buttonStyle(.mdr(.gold)).tint(Theme.brand).controlSize(.small)
                                         }
                                     }
                                 }

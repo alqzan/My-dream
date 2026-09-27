@@ -13,7 +13,7 @@ struct MushafReader: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color(.systemBackground).ignoresSafeArea()
+            Mdr.paper.ignoresSafeArea()
             TabView(selection: $page) {
                 ForEach(1...604, id: \.self) { p in
                     MushafPage(page: p, fontSize: fontSize)
@@ -27,12 +27,13 @@ struct MushafReader: View {
             if chrome {
                 HStack {
                     Button { dismiss() } label: { Image(systemName: "xmark").font(.mdrBody.weight(.semibold)) }
+                        .accessibilityLabel("إغلاق").accessibilityIdentifier("reader.close")
                         .buttonStyle(.bordered).buttonBorderShape(.circle)
                     Spacer()
                     VStack(spacing: 0) {
                         Text(QuranMeta.pageTitle(page)).font(.mdrHeadline)
                         Text("صفحة \(Fmt.count(page)) · الجزء \(Fmt.count(QuranMeta.juz(ofAyah: QuranMeta.pageRange(page).lowerBound)))")
-                            .font(.mdrCaption).foregroundStyle(.secondary)
+                            .font(.mdrCaption).foregroundStyle(Mdr.ink52)
                     }
                     Spacer()
                     Menu {
@@ -43,7 +44,7 @@ struct MushafReader: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
-                .background(.bar)
+                .background(Mdr.paper2)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
@@ -58,7 +59,7 @@ struct MushafReader: View {
                         Label(marked ? "هنا وقفتَ" : "وقفتُ هنا", systemImage: marked ? "bookmark.fill" : "bookmark")
                             .padding(.horizontal, 8)
                     }
-                    .buttonStyle(.borderedProminent).tint(Theme.quran).controlSize(.large)
+                    .buttonStyle(.mdr(.brand)).tint(Theme.quran).controlSize(.large)
                     .padding(.bottom, 24)
                 }
                 .transition(.opacity)
@@ -168,16 +169,16 @@ struct SurahIndex: View {
                 ForEach(QuranMeta.surahs.filter { search.isEmpty || $0.name.contains(search) }) { s in
                     Button { open(QuranMeta.page(ofAyah: s.first)) } label: {
                         HStack {
-                            Text(Fmt.count(s.num)).font(.mdrCaption).foregroundStyle(.secondary).frame(width: 30)
+                            Text(Fmt.count(s.num)).font(.mdrCaption).foregroundStyle(Mdr.ink52).frame(width: 30)
                             VStack(alignment: .leading) {
                                 Text(s.name)
-                                Text("\(s.meccan ? "مكية" : "مدنية") · \(Fmt.count(s.ayat)) آية").font(.mdrCaption).foregroundStyle(.secondary)
+                                Text("\(s.meccan ? "مكية" : "مدنية") · \(Fmt.count(s.ayat)) آية").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                             }
                             Spacer()
-                            Text(Fmt.count(QuranMeta.page(ofAyah: s.first))).font(.mdrCaption).foregroundStyle(.secondary)
+                            Text(Fmt.count(QuranMeta.page(ofAyah: s.first))).font(.mdrCaption).foregroundStyle(Mdr.ink52)
                         }
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Mdr.ink)
                 }
             } else {
                 ForEach(1...30, id: \.self) { j in
@@ -185,10 +186,10 @@ struct SurahIndex: View {
                         HStack {
                             Text("الجزء \(Fmt.count(j))")
                             Spacer()
-                            Text(QuranMeta.pageTitle(QuranMeta.juzStartPage(j))).foregroundStyle(.secondary)
+                            Text(QuranMeta.pageTitle(QuranMeta.juzStartPage(j))).foregroundStyle(Mdr.ink52)
                         }
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Mdr.ink)
                 }
             }
         }

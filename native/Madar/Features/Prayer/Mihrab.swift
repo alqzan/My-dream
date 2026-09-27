@@ -102,6 +102,8 @@ struct Mihrab: View {
                                    .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom),
             in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Mdr.gline))
+        .animation(.mdr, value: prayed)
+        .sensoryFeedback(.success, trigger: prayed)
     }
 
     private func lead(_ left: Int) -> String {

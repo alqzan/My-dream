@@ -16,15 +16,15 @@ struct FundDetail: View {
             MdrList {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(Fmt.amount(bal)).font(.system(size: 40, weight: .bold, design: .rounded))
-                            .foregroundStyle(bal < 0 ? Theme.danger : .primary)
+                        Text(Fmt.amount(bal)).font(Mdr.font(40, black: true))
+                            .foregroundStyle(bal < 0 ? Theme.danger : Mdr.ink)
                         if let t = f.target, t > 0 {
                             ProgressView(value: max(0, min(1, bal / t))).tint(Theme.finance)
-                            Text("الهدف \(Fmt.amount(t))").font(.mdrCaption).foregroundStyle(.secondary)
+                            Text("الهدف \(Fmt.amount(t))").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                         }
                         if let per = f.fundingPerCycle {
                             Text("\(Fmt.amount(per)) كلّ دورة \(f.fundingSource == "surplus" ? "من الفوائض" : "من الراتب")\(f.fundingStop == "zero" ? " حتى يصفر العجز" : f.fundingStop == "target" ? " حتى الهدف" : "")")
-                                .font(.mdrSubheadline).foregroundStyle(.secondary)
+                                .font(.mdrSubheadline).foregroundStyle(Mdr.ink52)
                         }
                     }
                     .padding(.vertical, 4)
@@ -51,7 +51,7 @@ struct FundDetail: View {
                             Button("أنهِ الرحلة") { store.endTrip(f.id) }
                         } else {
                             Button("ابدأ رحلة على هذا المظروف") { store.startTrip(f.id) }
-                            Text("كلُّ مصروفٍ تسجّله أثناءها يُحسب عليه تلقائياً.").font(.mdrCaption).foregroundStyle(.secondary)
+                            Text("كلُّ مصروفٍ تسجّله أثناءها يُحسب عليه تلقائياً.").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                             if let s = BudgetEngine.tripSummary(f, store.data.transactions, today: DateKey.today()), !s.ongoing {
                                 LabeledContent("آخر رحلة", value: "\(Fmt.amount(s.total)) في \(Fmt.count(s.days)) يوم")
                             }
@@ -64,11 +64,11 @@ struct FundDetail: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(m.title).lineLimit(1)
-                                Text(Fmt.shortDate(key: m.date)).font(.mdrCaption).foregroundStyle(.secondary)
+                                Text(Fmt.shortDate(key: m.date)).font(.mdrCaption).foregroundStyle(Mdr.ink52)
                             }
                             Spacer()
                             Text((m.amount >= 0 ? "+" : "−") + Fmt.amount(abs(m.amount))).monospacedDigit()
-                                .foregroundStyle(m.amount >= 0 ? Theme.finance : .primary)
+                                .foregroundStyle(m.amount >= 0 ? Theme.finance : Mdr.ink)
                         }
                     }
                 }
@@ -121,7 +121,7 @@ struct MoveSheet: View {
                         ForEach(store.data.reserves.filter { $0.id != fund.id }) { Text("\($0.icon) \($0.name)").tag($0.id) }
                     }
                 }
-                if kind != .deposit { Text("الرصيد \(Fmt.amount(balance))").foregroundStyle(.secondary) }
+                if kind != .deposit { Text("الرصيد \(Fmt.amount(balance))").foregroundStyle(Mdr.ink52) }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)

@@ -24,7 +24,7 @@ struct SimilarView: View {
             FlowLayout(spacing: 6, lineSpacing: 10) {
                 ForEach(words) { w in
                     Text(w.text).font(QuranFont.font(22))
-                        .foregroundStyle(w.same ? Color.primary : Theme.danger)
+                        .foregroundStyle(w.same ? Mdr.ink : Theme.danger)
                         .padding(.horizontal, w.same ? 0 : 3)
                         .background(w.same ? Color.clear : Theme.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
                 }

@@ -21,7 +21,7 @@ struct HifzMap: View {
                 legend(Theme.brand, "مستحقّ")
                 legend(Theme.danger, "متعثّر")
             }
-            .font(.mdrCaption2).foregroundStyle(.secondary)
+            .font(.mdrCaption2).foregroundStyle(Mdr.ink52)
         }
         .padding(.vertical, 4)
     }

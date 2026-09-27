@@ -46,11 +46,23 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: "YES"
         PRODUCT_BUNDLE_IDENTIFIER: com.alqzan.madar.native.tests
+  MadarUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [MadarUITests]
+    dependencies:
+      - target: Madar
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.alqzan.madar.native.uitests
+        TEST_TARGET_NAME: Madar
 schemes:
   Madar:
     build:
       targets:
         Madar: all
         MadarTests: [test]
+        MadarUITests: [test]
     test:
-      targets: [MadarTests]
+      targets: [MadarTests, MadarUITests]

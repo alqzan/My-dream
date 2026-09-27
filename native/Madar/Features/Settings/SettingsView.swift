@@ -83,7 +83,7 @@ struct SettingsView: View {
             }
             .navigationTitle("الإعدادات")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("تم") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("تم") { dismiss() }.accessibilityIdentifier("settings.done") } }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
                 guard case .success(let url) = result else { return }
                 let ok = url.startAccessingSecurityScopedResource()

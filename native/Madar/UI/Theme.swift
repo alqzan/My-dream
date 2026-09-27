@@ -64,10 +64,11 @@ struct Pill: View {
     var filled = false
     var body: some View {
         Text(text)
-            .font(.mdrCaption.weight(.semibold))
+            .font(Mdr.font(12, black: true))
             .padding(.horizontal, 10).padding(.vertical, 4)
             .foregroundStyle(filled ? .white : color)
-            .background(filled ? color : color.opacity(0.14), in: Capsule())
+            .background(filled ? color : Mdr.paper2, in: Capsule())
+            .overlay(Capsule().strokeBorder(filled ? color : color.opacity(0.5)))
     }
 }
 
@@ -78,7 +79,7 @@ struct ProgressRing: View {
     var lineWidth: CGFloat = 8
     var body: some View {
         ZStack {
-            Circle().stroke(color.opacity(0.15), lineWidth: lineWidth)
+            Circle().stroke(Mdr.line, lineWidth: lineWidth)
             Circle().trim(from: 0, to: max(0, min(1, progress)))
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))

@@ -50,7 +50,7 @@ struct StatsView: View {
                     kpi("الصرف", Fmt.amount(w.spend), "ر.س في ثلاثين يوماً", Theme.finance)
                 }
                 .padding(.vertical, 6)
-                Text(insight(w)).font(.mdrSubheadline).foregroundStyle(.secondary).padding(.vertical, 4)
+                Text(insight(w)).font(.mdrSubheadline).foregroundStyle(Mdr.ink52).padding(.vertical, 4)
             } header: { Text("آخر ثلاثين يوماً") }
 
             Section("السلاسل") {
@@ -68,9 +68,9 @@ struct StatsView: View {
 
     private func kpi(_ label: String, _ value: String, _ note: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.mdrCaption).foregroundStyle(.secondary)
+            Text(label).font(.mdrCaption).foregroundStyle(Mdr.ink52)
             Text(value).font(.mdrTitle2.bold()).foregroundStyle(color).minimumScaleFactor(0.7).lineLimit(1)
-            Text(note).font(.mdrCaption2).foregroundStyle(.secondary)
+            Text(note).font(.mdrCaption2).foregroundStyle(Mdr.ink52)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -84,7 +84,7 @@ struct StatsView: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 0) {
                 Text("\(Fmt.count(current)) يوم").font(.mdrHeadline).monospacedDigit()
-                Text("الأطول \(Fmt.count(best))").font(.mdrCaption2).foregroundStyle(.secondary)
+                Text("الأطول \(Fmt.count(best))").font(.mdrCaption2).foregroundStyle(Mdr.ink52)
             }
         }
     }
@@ -114,7 +114,7 @@ struct StatsView: View {
                 .foregroundStyle(Theme.finance.gradient)
                 .cornerRadius(6)
                 .annotation(position: .top) {
-                    if m.total > 0 { Text(Fmt.amount(m.total.rounded())).font(.mdrCaption2).foregroundStyle(.secondary) }
+                    if m.total > 0 { Text(Fmt.amount(m.total.rounded())).font(.mdrCaption2).foregroundStyle(Mdr.ink52) }
                 }
         }
         .chartYAxis(.hidden)
@@ -139,7 +139,7 @@ struct YearGrid: View {
                         ForEach(columns[c], id: \.self) { d in
                             let n = counts[d] ?? 0
                             RoundedRectangle(cornerRadius: 2.5)
-                                .fill(n == 0 ? Color(.tertiarySystemFill) : Theme.prayer.opacity(0.2 + Double(n) / 5 * 0.8))
+                                .fill(n == 0 ? Mdr.line : Theme.prayer.opacity(0.2 + Double(n) / 5 * 0.8))
                                 .frame(width: 12, height: 12)
                         }
                     }

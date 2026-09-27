@@ -48,6 +48,7 @@ struct QuranView: View {
                 .padding(.horizontal, 18)
                 .padding(.bottom, 30)
             }
+            .scrollIndicators(.hidden)
             .mdrPage()
             .toolbar(.hidden, for: .navigationBar)
             .fullScreenCover(item: $readerPage) { t in MushafReader(startPage: t.page) }
@@ -144,6 +145,7 @@ struct QuranView: View {
                         Label("تابع القراءة", systemImage: "book.pages")
                     }
                     .buttonStyle(.mdr(.brand, grow: true))
+                    .accessibilityIdentifier("quran.continue")
                     Button { pageEditor = true } label: { Label("صفحتي", systemImage: "bookmark") }
                         .buttonStyle(.mdr(.gold, grow: true))
                 }
@@ -173,6 +175,7 @@ struct QuranView: View {
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(done ? Mdr.teal.opacity(0.34) : Mdr.line))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("quran.wird")
     }
 
     @ViewBuilder private var reflections: some View {
@@ -246,7 +249,7 @@ struct ReflectionRow: View {
         VStack(alignment: .leading, spacing: 4) {
             if let ref = r.reference { Text(Digits.indic(ref)).font(.mdrCaption.weight(.semibold)).foregroundStyle(Theme.quran) }
             Text(r.text).lineLimit(3)
-            Text(Fmt.shortDate(key: r.date)).font(.mdrCaption2).foregroundStyle(.secondary)
+            Text(Fmt.shortDate(key: r.date)).font(.mdrCaption2).foregroundStyle(Mdr.ink52)
         }
         .padding(.vertical, 2)
     }
@@ -266,7 +269,7 @@ struct KhatmaPageEditor: View {
                         HStack { Text("الصفحة"); Spacer(); Text(Fmt.count(page)).monospacedDigit() }
                     }
                     Slider(value: Binding(get: { Double(page) }, set: { page = Int($0) }), in: 0...604, step: 1).tint(Theme.quran)
-                    if page > 0 { Text("\(QuranMeta.pageTitle(page)) — الجزء \(Fmt.count(QuranMeta.juz(ofAyah: QuranMeta.pageRange(page).lowerBound)))").foregroundStyle(.secondary) }
+                    if page > 0 { Text("\(QuranMeta.pageTitle(page)) — الجزء \(Fmt.count(QuranMeta.juz(ofAyah: QuranMeta.pageRange(page).lowerBound)))").foregroundStyle(Mdr.ink52) }
                 } header: { Text("قرأتُ حتى") }
                 Section {
                     Stepper(value: $goal, in: 1...604) {

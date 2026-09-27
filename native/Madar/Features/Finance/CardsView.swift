@@ -34,7 +34,7 @@ struct CardsView: View {
                                     .foregroundStyle(c.net > 0.009 ? Theme.danger : Theme.finance)
                             }
                             Text(c.net > 0.009 ? "مستحقّ لم يُسدَّد" : c.net < -0.009 ? "سدادٌ زائد لم يُفسَّر" : "مسدَّدة بالكامل")
-                                .font(.mdrFootnote).foregroundStyle(.secondary)
+                                .font(.mdrFootnote).foregroundStyle(Mdr.ink52)
                             HStack(spacing: 14) {
                                 stat("مشتريات", c.charges)
                                 stat("سداد", c.settlements)
@@ -54,7 +54,7 @@ struct CardsView: View {
                             VStack(alignment: .leading) {
                                 Text(o.str("label") ?? o.str("source") ?? "التزام")
                                 if let d = o.str("dueDate") {
-                                    Text("الاستحقاق \(dateText(d))").font(.mdrCaption).foregroundStyle(.secondary)
+                                    Text("الاستحقاق \(dateText(d))").font(.mdrCaption).foregroundStyle(Mdr.ink52)
                                 }
                             }
                             Spacer()
@@ -78,7 +78,7 @@ struct CardsView: View {
                 Section("آخر السدادات") {
                     ForEach(Array(settlements.prefix(10).enumerated()), id: \.offset) { _, s in
                         HStack {
-                            Text(dateText(s.str("date") ?? "")).foregroundStyle(.secondary)
+                            Text(dateText(s.str("date") ?? "")).foregroundStyle(Mdr.ink52)
                             Spacer()
                             Text(Fmt.amount(s.num("amount") ?? 0)).monospacedDigit()
                         }
@@ -95,7 +95,7 @@ struct CardsView: View {
 
     private func stat(_ title: String, _ v: Double) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.mdrCaption2).foregroundStyle(.secondary)
+            Text(title).font(.mdrCaption2).foregroundStyle(Mdr.ink52)
             Text(Fmt.amount(v)).font(.mdrCaption).monospacedDigit()
         }
     }

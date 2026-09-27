@@ -140,7 +140,7 @@ struct BankInboxView: View {
                 Section {
                     ForEach(inbox.noise) { item in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(kindLabel(item.event?.kind)).font(.mdrCaption.weight(.semibold)).foregroundStyle(.secondary)
+                            Text(kindLabel(item.event?.kind)).font(.mdrCaption.weight(.semibold)).foregroundStyle(Mdr.ink52)
                             Text(item.text).font(.mdrCaption).lineLimit(2)
                         }
                         .swipeActions { Button("امسح", role: .destructive) { Task { await inbox.remove(item) } } }
@@ -173,7 +173,7 @@ struct BankInboxView: View {
                     Text(Fmt.shortDate(key: e?.date ?? DateKey.today()))
                     if let r = e?.reviewReason { Text(r).foregroundStyle(Theme.brand).lineLimit(1) }
                 }
-                .font(.mdrCaption).foregroundStyle(.secondary)
+                .font(.mdrCaption).foregroundStyle(Mdr.ink52)
             }
             Spacer()
             Text(e.map { $0.amount > 0 ? Fmt.amount($0.amount) : "؟" } ?? "؟").font(.mdrHeadline).monospacedDigit()
@@ -208,7 +208,7 @@ struct InboxReview: View {
     var body: some View {
         NavigationStack {
             MdrForm {
-                Section { Text(item.text).font(.mdrCallout).foregroundStyle(.secondary) }
+                Section { Text(item.text).font(.mdrCallout).foregroundStyle(Mdr.ink52) }
                 Section {
                     TextField("المبلغ", text: $amount).keyboardType(.decimalPad).font(.mdrTitle2.bold())
                     TextField("التاجر / الملاحظة", text: $note)

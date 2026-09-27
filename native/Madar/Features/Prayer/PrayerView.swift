@@ -59,6 +59,7 @@ struct PrayerView: View {
                     .padding(.horizontal, 18)
                     .padding(.bottom, 30)
                 }
+                .scrollIndicators(.hidden)
                 .mdrPage()
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -121,6 +122,7 @@ struct PrayerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("prayerRow.\(Prayer.allCases.firstIndex(of: p) ?? 0)")
         .contextMenu {
             Button { store.setPrayer(p, .jamaah, on: today) } label: { Label("جماعة", systemImage: "person.3") }
             Button { store.setPrayer(p, .alone, on: today) } label: { Label("وحدي", systemImage: "person") }
@@ -156,10 +158,10 @@ struct PrayerView: View {
 
     @ViewBuilder private func extras(_ log: PrayerLog) -> some View {
         Stepper(value: Binding(get: { log.sunan }, set: { v in store.editPrayerLog(today) { $0.setSunan(v) } }), in: 0...12, step: 2) {
-            HStack { Text("السنن الرواتب"); Spacer(); Text("\(Fmt.count(log.sunan)) ركعة").foregroundStyle(.secondary) }
+            HStack { Text("السنن الرواتب"); Spacer(); Text("\(Fmt.count(log.sunan)) ركعة").foregroundStyle(Mdr.ink52) }
         }
         Stepper(value: Binding(get: { log.qiyamRakaat }, set: { v in store.editPrayerLog(today) { $0.setQiyam(rakaat: min(v, 21), witr: $0.witr) } }), in: 0...21, step: 2) {
-            HStack { Text("قيام الليل"); Spacer(); Text("\(Fmt.count(log.qiyamRakaat)) ركعة").foregroundStyle(.secondary) }
+            HStack { Text("قيام الليل"); Spacer(); Text("\(Fmt.count(log.qiyamRakaat)) ركعة").foregroundStyle(Mdr.ink52) }
         }
         Toggle("الوتر", isOn: Binding(get: { log.witr }, set: { v in store.editPrayerLog(today) { $0.setQiyam(rakaat: $0.qiyamRakaat, witr: v) } }))
         qiyamNights
@@ -184,7 +186,7 @@ struct PrayerView: View {
                 }
             }
             .frame(height: 50, alignment: .bottom)
-            Text("\(Fmt.count(nights)) ليلةً من آخر ثلاثين").font(.mdrCaption).foregroundStyle(.secondary)
+            Text("\(Fmt.count(nights)) ليلةً من آخر ثلاثين").font(.mdrCaption).foregroundStyle(Mdr.ink52)
         }
     }
 
@@ -194,7 +196,7 @@ struct PrayerView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(owed == 0 ? "لا فوائت عليك" : "عليك \(Fmt.count(owed)) فائتة").font(.mdrBody.weight(.medium))
-                if doneToday > 0 { Text("قضيتَ اليوم \(Fmt.count(doneToday))").font(.mdrCaption).foregroundStyle(.secondary) }
+                if doneToday > 0 { Text("قضيتَ اليوم \(Fmt.count(doneToday))").font(.mdrCaption).foregroundStyle(Mdr.ink52) }
             }
             Spacer()
             if owed > 0 {
@@ -237,7 +239,7 @@ struct AnswerSheet: View {
             )
             .padding()
         }
-        .presentationBackground(Mdr.paper)
+        .mdrSheetBackground()
     }
 
     private var whenLabel: String? {

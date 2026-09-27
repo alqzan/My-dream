@@ -24,7 +24,7 @@ struct PrayerHistoryView: View {
                     .padding(.horizontal)
 
                     LazyVGrid(columns: cols, spacing: 6) {
-                        ForEach(weekdayNames, id: \.self) { Text($0).font(.mdrCaption2).foregroundStyle(.secondary) }
+                        ForEach(weekdayNames, id: \.self) { Text($0).font(.mdrCaption2).foregroundStyle(Mdr.ink52) }
                         ForEach(0..<leadingBlanks, id: \.self) { _ in Color.clear.frame(height: 44) }
                         ForEach(days, id: \.self) { key in dayCell(key) }
                     }
@@ -75,7 +75,7 @@ struct PrayerHistoryView: View {
                 Text(future || log == nil ? " " : Fmt.count(n)).font(.mdrCaption2)
             }
             .frame(maxWidth: .infinity, minHeight: 44)
-            .foregroundStyle(n == 5 ? .white : .primary)
+            .foregroundStyle(n == 5 ? .white : Mdr.ink)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(n == 5 ? color : color.opacity(Double(n) / 5 * 0.35 + (log == nil ? 0 : 0.05)))
@@ -107,7 +107,7 @@ struct PrayerHistoryView: View {
             if mosque > 1 { Text("سلسلة الجماعة: \(Fmt.count(mosque)) يوماً").font(.mdrSubheadline) }
         }
         .padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Mdr.paper2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .padding(.horizontal)
     }
 }

@@ -54,10 +54,10 @@ struct InsightsView: View {
             }
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(r.label).font(.mdrSubheadline).foregroundStyle(.secondary)
+                    Text(r.label).font(.mdrSubheadline).foregroundStyle(Mdr.ink52)
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(Fmt.amount(total.rounded())).font(.system(size: 40, weight: .bold, design: .rounded))
-                        Text("ر.س").foregroundStyle(.secondary)
+                        Text(Fmt.amount(total.rounded())).font(Mdr.font(40, black: true))
+                        Text("ر.س").foregroundStyle(Mdr.ink52)
                     }
                     if prevTotal > 0 {
                         let delta = (total - prevTotal) / prevTotal * 100
@@ -97,7 +97,7 @@ struct InsightsView: View {
                             Text("\(row.main.icon) \(row.main.label)")
                             Spacer()
                             Text(Fmt.amount(row.total.rounded())).monospacedDigit()
-                            Text("\(Fmt.count(Int((row.total / max(1, total) * 100).rounded())))٪").font(.mdrCaption).foregroundStyle(.secondary).frame(width: 40)
+                            Text("\(Fmt.count(Int((row.total / max(1, total) * 100).rounded())))٪").font(.mdrCaption).foregroundStyle(Mdr.ink52).frame(width: 40)
                         }
                         ProgressView(value: row.total / max(1, total)).tint(Color(hexString: row.main.color))
                     }

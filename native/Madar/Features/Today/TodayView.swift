@@ -31,16 +31,21 @@ struct TodayView: View {
                         header
                         hero(now: now, today: today)
                         rhythm(now: now, today: today)
-                        nudgeCard(now: now, today: today)
-                        ramadanCard(now: now, today: today)
-                        dayCard(today: today)
-                        EventsCard(managing: $managingEvents, today: today)
-                        weekCard(today: today)
+                        Group {
+                            nudgeCard(now: now, today: today)
+                            ramadanCard(now: now, today: today)
+                            dayCard(today: today)
+                            EventsCard(managing: $managingEvents, today: today)
+                            weekCard(today: today)
+                        }
+                        .mdrScrollReveal()
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 90)
                 }
+                .scrollIndicators(.hidden)
                 .mdrPage()
+                .animation(.mdr, value: store.data.prayerLogs.count)
             }
             .toolbar(.hidden, for: .navigationBar)
             .overlay(alignment: .bottomTrailing) { fab }
@@ -62,20 +67,21 @@ struct TodayView: View {
             Text("مدار").font(Mdr.font(22, black: true))
             Spacer()
             NavigationLink { DayView(date: DateKey.adding(days: -1, to: DateKey.today())) } label: { headerIcon("calendar") }
-                .accessibilityLabel("يومٌ مضى")
+                .accessibilityLabel("يومٌ مضى").accessibilityIdentifier("today.day")
             NavigationLink { StatsView() } label: { headerIcon("chart.bar.xaxis") }
-                .accessibilityLabel("الحصيلة")
+                .accessibilityLabel("الحصيلة").accessibilityIdentifier("today.stats")
             Button { settings = true } label: { headerIcon("gearshape") }
-                .accessibilityLabel("الإعدادات")
+                .accessibilityLabel("الإعدادات").accessibilityIdentifier("today.settings")
         }
         .padding(.top, 6)
     }
 
     private func headerIcon(_ name: String) -> some View {
-        Image(systemName: name).font(.system(size: 17, weight: .regular))
+        Image(systemName: name).font(.system(size: 16, weight: .medium))
             .foregroundStyle(Mdr.gold)
-            .frame(width: 40, height: 40)
-            .contentShape(Rectangle())
+            .frame(width: 42, height: 42)
+            .mdrGlass(in: Circle())
+            .contentShape(Circle())
     }
 
     private func hero(now: Date, today: String) -> some View {
@@ -317,12 +323,14 @@ struct TodayView: View {
             Haptic.tap()
             adding = Transaction.new(date: DateKey.today(), amount: 0, category: store.data.categories.first?.id ?? "", note: "")
         } label: {
-            Image(systemName: "plus").font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
-                .frame(width: 58, height: 58)
-                .background(Mdr.gold, in: Circle())
-                .shadow(color: Mdr.gold.opacity(0.35), radius: 10, y: 4)
+            Image(systemName: "plus").font(.system(size: 22, weight: .semibold))
+                .frame(width: 44, height: 44)
         }
+        .mdrGlassProminent()
+        .buttonBorderShape(.circle)
+        .shadow(color: Mdr.gold.opacity(0.3), radius: 12, y: 5)
         .padding(.trailing, 18).padding(.bottom, 16)
         .accessibilityLabel("سجّل مصروفاً سريعاً")
+        .accessibilityIdentifier("fab.expense")
     }
 }

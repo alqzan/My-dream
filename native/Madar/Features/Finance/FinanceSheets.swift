@@ -58,7 +58,7 @@ struct FinanceSettings: View {
                     TextField("المصروف اليومي", text: $daily).keyboardType(.decimalPad)
                     if let b = store.data.dailyBudget, b.fundingPerDay > 0 {
                         Text("ينقص منه \(Fmt.amount(b.fundingPerDay)) يومياً لتمويل المظاريف، فالفعليّ \(Fmt.amount(BudgetEngine.effectiveRate(amount: b.amount, perDay: b.fundingPerDay))).")
-                            .font(.mdrFootnote).foregroundStyle(.secondary)
+                            .font(.mdrFootnote).foregroundStyle(Mdr.ink52)
                     }
                 } header: { Text("المصروف اليومي") } footer: {
                     Text("تغيير المبلغ يبدأ حساباً جديداً من اليوم.")
@@ -131,7 +131,7 @@ struct CategoriesEditor: View {
                 HStack {
                     Text(c.icon)
                     Text(c.label)
-                    if c.parentId != nil { Text("فرعي").font(.mdrCaption).foregroundStyle(.secondary) }
+                    if c.parentId != nil { Text("فرعي").font(.mdrCaption).foregroundStyle(Mdr.ink52) }
                 }
             }
             .onDelete { idx in

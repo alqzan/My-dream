@@ -222,6 +222,7 @@ struct ThreeArcs: View {
                 VStack(spacing: 3) {
                     Text(a.big).font(Mdr.font(bigSize(a.big), black: true)).foregroundStyle(a.color)
                         .lineLimit(1).minimumScaleFactor(0.5)
+                        .contentTransition(.numericText())
                     Text(a.unit).font(Mdr.font(10)).foregroundStyle(Mdr.ink52).lineLimit(1)
                 }
                 .frame(width: w * 0.6)
@@ -230,6 +231,8 @@ struct ThreeArcs: View {
             .frame(width: w, height: h)
         }
         .aspectRatio(100 / 132, contentMode: .fit)
+        .animation(.mdr, value: a.ratio)
+        .animation(.mdr, value: a.big)
     }
 
     /// `bigFitSize` في الويب: المقاسُ يتبع الطولَ بعد إسقاط الحركات.
