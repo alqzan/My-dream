@@ -47,6 +47,12 @@ jobs:
           print(ios[-1][1]["udid"])')
           echo "SIM_ID=$id" >> "$GITHUB_ENV"
 
+      # محاكٍ مُقلَعٌ مسبقاً: أوّلُ اختبار واجهةٍ كان ينتهي مهلةُ إطلاقه وهو يُقلع.
+      - name: Boot simulator
+        run: |
+          xcrun simctl boot "$SIM_ID" || true
+          xcrun simctl bootstatus "$SIM_ID" -b
+
       - name: Test
         timeout-minutes: 45
         run: >-
@@ -61,6 +67,7 @@ jobs:
           | tee "$RUNNER_TEMP/test.log" | grep -E "error:|warning: .*(took|long)|Test Case|Executed|FAIL|\\*\\*" ; exit ${PIPESTATUS[0]}
 
       - name: Screenshots (demo data)
+        if: always()
         timeout-minutes: 12
         continue-on-error: true
         run: |

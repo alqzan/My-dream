@@ -46,9 +46,11 @@ final class FlowTests: XCTestCase {
         while !e.isHittable && n < maxSwipes { app.swipeUp(); n += 1 }
     }
 
-    private func back() {
-        let b = app.navigationBars.buttons.firstMatch
-        if b.waitForExistence(timeout: 3) { b.tap() } else { app.swipeRight() }
+    /// العودة لجذر القسم: الضغطُ على التبويب النشط يُفرغ مكدّس التنقّل (سلوكُ iOS).
+    private func back(to tabName: String) {
+        sleep(1)
+        app.tabBars.buttons[tabName].tap()
+        sleep(1)
     }
 
     // MARK: الأقسام كلّها تُفتح
@@ -69,10 +71,10 @@ final class FlowTests: XCTestCase {
         wait(app.buttons["settings.done"], "إغلاق الإعدادات").tap()
 
         wait(app.buttons["today.stats"], "زرّ الحصيلة").tap()
-        sleep(1); back()
+        back(to: "اليوم")
 
         wait(app.buttons["today.day"], "زرّ يومٍ مضى").tap()
-        sleep(1); back()
+        back(to: "اليوم")
         wait(text(containing: "مدار اليوم"), "العودة للبهو")
     }
 
@@ -85,7 +87,10 @@ final class FlowTests: XCTestCase {
         if note.exists { note.tap(); note.typeText("UITEST") }
         wait(app.buttons["expense.save"], "زرّ الحفظ").tap()
         tab("المال")
-        wait(anyElement(containing: "UITEST"), "المصروف الجديد في آخر المصاريف")
+        let saved = anyElement(containing: "UITEST")
+        var n = 0
+        while !saved.exists && n < 10 { app.swipeUp(); n += 1 }
+        wait(saved, "المصروف الجديد في آخر المصاريف")
     }
 
     // MARK: الصلاة
@@ -99,6 +104,7 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["prayerRow.4"].waitForExistence(timeout: 5))
         let label = app.buttons["prayerRow.4"].label
         XCTAssertTrue(label.contains("جماعة"), "العشاء لم تُسجَّل جماعة: \(label)")
+        XCTAssertTrue(label.contains("خاشع"), "درجةُ الخشوع لم تظهر: \(label)")
     }
 
     func testMissedPrayerHasNoKhushu() {
@@ -107,7 +113,7 @@ final class FlowTests: XCTestCase {
         wait(app.buttons["status.missed"], "خيار «فاتتني»").tap()
         // «فاتتني» تُغلق الورقة ولا تسأل عن القلب.
         XCTAssertFalse(app.buttons["khushu.1"].waitForExistence(timeout: 2), "سُئل عن الخشوع لفرضٍ فات")
-        XCTAssertTrue(app.buttons["prayerRow.3"].label.contains("فائتة"))
+        XCTAssertTrue(app.buttons["prayerRow.3"].label.contains("فاتتني"), app.buttons["prayerRow.3"].label)
     }
 
     func testPrayerHistoryOpens() {
@@ -115,8 +121,9 @@ final class FlowTests: XCTestCase {
         let history = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "السجلّ")).firstMatch
         scrollTo(history)
         wait(history, "زرّ السجلّ").tap()
-        sleep(1)
+        sleep(2)
         app.swipeDown(velocity: .fast)
+        wait(app.buttons["prayerRow.0"], "العودة لصفحة الصلاة")
     }
 
     // MARK: المذكرات
@@ -154,11 +161,11 @@ final class FlowTests: XCTestCase {
         let hifz = app.buttons["الحفظ والمراجعة"]
         scrollTo(hifz)
         wait(hifz, "رابط الحفظ").tap()
-        sleep(1); back()
+        back(to: "القرآن")
         let index = app.buttons["فهرس السور والأجزاء"]
         scrollTo(index)
         wait(index, "رابط الفهرس").tap()
-        sleep(1); back()
+        back(to: "القرآن")
     }
 
     // MARK: المال
@@ -169,11 +176,11 @@ final class FlowTests: XCTestCase {
             let link = app.buttons[name]
             scrollTo(link)
             wait(link, name).tap()
-            sleep(1); back()
+            back(to: "المال")
         }
         let fund = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "سفرة الصيف")).firstMatch
         scrollTo(fund, maxSwipes: 12)
-        if fund.exists { fund.tap(); sleep(1); back() }
+        if fund.exists { fund.tap(); back(to: "المال") }
     }
 
     // MARK: الاستقرار

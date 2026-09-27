@@ -53,9 +53,6 @@ enum Haptic {
     static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
 }
 
-struct SectionHeaderStyle: ViewModifier {
-    func body(content: Content) -> some View { content.font(.mdrFootnote.weight(.semibold)) }
-}
 
 /// شارةٌ مستديرة ملوّنة (حالة، رقم).
 struct Pill: View {

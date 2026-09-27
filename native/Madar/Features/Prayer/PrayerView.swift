@@ -112,7 +112,7 @@ struct PrayerView: View {
                     .padding(.horizontal, 9).padding(.vertical, 3)
                     .overlay(Capsule().strokeBorder(Color(hex: k.colorHex)))
                 }
-                Text(s == .alone ? "وحدي" : s == .none ? "لم تُسجَّل" : s.label)
+                Text(Self.rowLabel(s))
                     .font(Mdr.font(13, black: true)).foregroundStyle(s == .none ? Mdr.ink34 : tone)
             }
             .padding(.horizontal, 12)
@@ -136,6 +136,17 @@ struct PrayerView: View {
         case .missed: return Mdr.clay
         case .qada: return Mdr.blue
         default: return Mdr.ink34
+        }
+    }
+
+    /// نصُّ الصفّ بكلمات أزرار السؤال نفسِها («في جماعة» ← «جماعة»)، لا بمرادفٍ ثانٍ.
+    static func rowLabel(_ s: PrayerStatus) -> String {
+        switch s {
+        case .jamaah: return "جماعة"
+        case .alone: return "وحدي"
+        case .qada: return "قضاء"
+        case .missed: return "فاتتني"
+        default: return "لم تُسجَّل"
         }
     }
 
