@@ -607,3 +607,22 @@ describe("saveUserData — a bytes-less ref the manifest doesn't know", () => {
     expect(r.mediaMissing).toBe(0);
   });
 });
+
+describe("inventoryMedia — names the entries that lost a file", () => {
+  it("lists each entry holding a broken ref, newest first, with how many it lost", async () => {
+    const F = "f".repeat(32);
+    global.fetch = vi.fn(async (url: unknown, opts: unknown) => {
+      if (String(url).includes("/v1/media/inventory")) {
+        const kind = JSON.parse((opts as { body: string }).body).kind;
+        return { ok: true, status: 200, json: async () => ({ hashes: kind === "photos" ? [HASH_A] : [] }) };
+      }
+      return { ok: false, status: 503, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+    const old = { ...cloudEntry("old", { photoRefs: [F] }), date: "2025-03-01", content: "<p>رحلة البحر</p>" } as JournalEntry;
+    const fresh = { ...cloudEntry("new", { photoRefs: [HASH_A, F, HASH_B] }), date: "2026-02-01" } as JournalEntry;
+    const safe = cloudEntry("safe", { photoRefs: [HASH_A] });
+    const inv = await sync.inventoryMedia("space", appData([old, safe, fresh]));
+    expect(inv.brokenEntries.map((e) => [e.id, e.missing])).toEqual([["new", 2], ["old", 1]]);
+    expect(inv.brokenEntries[1].excerpt).toBe("رحلة البحر");
+  });
+});

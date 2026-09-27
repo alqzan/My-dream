@@ -7,7 +7,7 @@ import { journalShardId } from "@/lib/merge";
 import { splitTransactionShards } from "@/lib/transactionShards";
 import { getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import { prefGet } from "@/lib/platform/prefs";
-import { entryPhotos, filesCount } from "@/lib/utils";
+import { entryPhotos, entriesCount, filesCount, toIndicDigits } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
@@ -330,6 +330,22 @@ export function DataHealthCard() {
                   ⚠️ يوجد {scan.photos.broken + scan.audios.broken} مرجع مكسور (ملف مفقود من السحابة ولا نسخة محلية له).
                   إعادة الرفع تُصلح المعلّق المحلي فقط؛ المكسور تمامًا يُستعاد من نسخة احتياطية إن وُجدت.
                 </p>
+              )}
+              {scan.brokenEntries.length > 0 && (
+                <div className="rounded-lg bg-white/70 dark:bg-white/5 p-2.5">
+                  <div className="text-[11px] font-semibold text-gray-600 mb-1.5">
+                    المذكرات التي فقدت ملفاتها · {entriesCount(scan.brokenEntries.length)}
+                  </div>
+                  <ul className="space-y-1 max-h-48 overflow-y-auto">
+                    {scan.brokenEntries.map((e) => (
+                      <li key={e.id} className="flex items-baseline gap-2 text-[11px]">
+                        <span className="shrink-0 font-semibold text-gray-700 dark:text-gray-300">{toIndicDigits(e.date)}</span>
+                        <span className="flex-1 truncate text-gray-500" dir="auto">{e.excerpt || "—"}</span>
+                        <span className="shrink-0 text-red-500">{filesCount(e.missing)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
               {(scan.photos.pendingUpload > 0 || scan.audios.pendingUpload > 0 || scan.photos.broken > 0 || scan.audios.broken > 0) && (
                 <button

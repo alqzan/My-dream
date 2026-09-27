@@ -1953,6 +1953,10 @@ export async function saveUserData(
 // whole bucket every time; `reuploadAllMedia` clears them for a fresh check.
 let confirmedMissingPhotos = new Set<string>();
 let confirmedMissingAudios = new Set<string>();
+// Another device may upload the file minutes later (it held the bytes all
+// along). Ask R2 again after a while instead of saying "missing" all session.
+const MISSING_RECHECK_MS = 10 * 60 * 1000;
+let confirmedMissingAt = 0;
 
 async function probeUnresolvedRefs(
   uid: string,
@@ -1962,6 +1966,11 @@ async function probeUnresolvedRefs(
   queued: Map<string, string>,
   mediaKey: string
 ): Promise<{ found: string[] }> {
+  if (confirmedMissingAt && Date.now() - confirmedMissingAt > MISSING_RECHECK_MS) {
+    confirmedMissingPhotos = new Set();
+    confirmedMissingAudios = new Set();
+    confirmedMissingAt = 0;
+  }
   const missing = kind === "photos" ? confirmedMissingPhotos : confirmedMissingAudios;
   const unresolved = [...refs].filter((h) => !known.has(h) && !queued.has(h) && !missing.has(h));
   if (!unresolved.length) return { found: [] };
@@ -1971,7 +1980,7 @@ async function probeUnresolvedRefs(
   const found: string[] = [];
   for (const h of unresolved) {
     if (cloud.hashes.has(h)) { known.add(h); found.push(h); }
-    else missing.add(h);
+    else { missing.add(h); confirmedMissingAt ||= Date.now(); }
   }
   return { found };
 }
@@ -2044,10 +2053,19 @@ export interface MediaTypeReport {
   broken: number;       // referenced, not in cloud, and NO local copy → the file is gone
   orphans: number;      // in R2 but referenced by nothing → safe to ignore/GC later
 }
+export interface BrokenMediaEntry {
+  id: string;
+  date: string;
+  excerpt: string;
+  missing: number; // broken files on this entry
+}
 export interface MediaInventory {
   photos: MediaTypeReport;
   audios: MediaTypeReport;
   brokenSamples: string[]; // a few hashes with a missing file, for reference
+  // The entries holding a broken ref — a bare hash tells the owner nothing, a
+  // date and an opening line tell them which memory lost its file (newest first).
+  brokenEntries: BrokenMediaEntry[];
   // False when R2 couldn't be listed at all (network blocked, offline,
   // a Worker/R2 outage) — so the UI never reports a misleading "0 in cloud" when the
   // truth is "couldn't reach R2". The referenced photos may be perfectly safe
@@ -2121,6 +2139,33 @@ function addPendingRefs(refs: Map<string, "local" | "cloud">, pending: Set<strin
   for (const h of pending) if (!refs.has(h)) refs.set(h, "cloud");
 }
 
+// Map broken hashes back to the entries that reference them. Only cloud refs
+// can be broken (local bytes are "pending", not broken), so hashing the
+// entry's refs — never its data: URLs — is enough and stays cheap.
+function entriesHolding(
+  entries: JournalEntry[],
+  brokenPhotos: Set<string>,
+  brokenAudios: Set<string>
+): BrokenMediaEntry[] {
+  if (!brokenPhotos.size && !brokenAudios.size) return [];
+  const out: BrokenMediaEntry[] = [];
+  for (const e of entries) {
+    const ce = e as { photoRefs?: string[]; audioRefs?: string[] };
+    const photoHashes = new Set<string>(ce.photoRefs ?? []);
+    for (const attachment of e.attachmentRefs ?? []) if (attachment.hash) photoHashes.add(attachment.hash);
+    const audioHashes = new Set<string>(ce.audioRefs ?? []);
+    for (const u of entryPhotos(e)) if (isStorageUrl(u)) { const h = hashFromStorageUrl(u); if (h) photoHashes.add(h); }
+    for (const u of entryAudios(e)) if (isStorageUrl(u)) { const h = hashFromStorageUrl(u); if (h) audioHashes.add(h); }
+    const missing =
+      [...photoHashes].filter((h) => brokenPhotos.has(h)).length +
+      [...audioHashes].filter((h) => brokenAudios.has(h)).length;
+    if (!missing) continue;
+    const excerpt = (e.content ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    out.push({ id: e.id, date: e.date, excerpt, missing });
+  }
+  return out.sort((x, y) => y.date.localeCompare(x.date));
+}
+
 export async function inventoryMedia(
   uid: string,
   data: AppData,
@@ -2155,6 +2200,7 @@ export async function inventoryMedia(
     photos: p.report,
     audios: a.report,
     brokenSamples: [...p.broken, ...a.broken].slice(0, 5),
+    brokenEntries: entriesHolding(data.journalEntries, new Set(p.broken), new Set(a.broken)),
     storageReachable: cloudPhotos.ok && cloudAudios.ok,
     storageError: cloudPhotos.error ?? cloudAudios.error,
   };
