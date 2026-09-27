@@ -23,6 +23,7 @@ struct RootView: View {
             FinanceView()
                 .tabItem { Label("المال", systemImage: "wallet.pass") }.tag("finance")
         }
+        .environment(\.selectTab, { t in withAnimation { tab = t } })
         .onAppear { if let t = Self.forcedTab { tab = t } }
         .alert("تنبيه", isPresented: Binding(get: { store.loadError != nil }, set: { if !$0 { store.loadError = nil } })) {
             Button("حسناً", role: .cancel) {}

@@ -5,7 +5,7 @@ struct SimilarView: View {
     let ayah: Int
 
     var body: some View {
-        List {
+        MdrList {
             ForEach(Mutashabihat.similar(ayah), id: \.self) { other in
                 let d = Mutashabihat.diff(AyahText.text(ayah), AyahText.text(other))
                 Section {
@@ -20,7 +20,7 @@ struct SimilarView: View {
     private func block(_ id: Int, _ words: [Mutashabihat.Word]) -> some View {
         let a = QuranMeta.surahAyah(id)
         return VStack(alignment: .leading, spacing: 6) {
-            Text("\(QuranMeta.surahs[a.surah - 1].name) \(Fmt.count(a.ayah))").font(.caption.weight(.semibold)).foregroundStyle(Theme.quran)
+            Text("\(QuranMeta.surahs[a.surah - 1].name) \(Fmt.count(a.ayah))").font(.mdrCaption.weight(.semibold)).foregroundStyle(Theme.quran)
             FlowLayout(spacing: 6, lineSpacing: 10) {
                 ForEach(words) { w in
                     Text(w.text).font(QuranFont.font(22))

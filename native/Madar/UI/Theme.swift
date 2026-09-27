@@ -24,12 +24,15 @@ extension Color {
 
 /// ألوان الأقسام — نفسُ ألوان الويب، والأسطحُ أسطحُ iOS الأصلية.
 enum Theme {
-    static let brand = Color(hex: 0xC9852A)
-    static let prayer = Color(light: 0x1F7A6C, dark: 0x3AA893)
-    static let journal = Color(light: 0x8A6FB0, dark: 0xA88FD0)
-    static let quran = Color(light: 0x1B6B4C, dark: 0x3C9F72)
-    static let finance = Color(hex: 0x3D9640)
-    static let danger = Color(hex: 0xC15A34)
+    /// ألوانُ الأقسام بعد طبقة تصميم مدار في الويب: الذهبُ للعلامة والقرآن
+    /// والمال، والطينيُّ للصلاة والتنبيه، والأزرقُ للمذكرات — والفيروزيّ
+    /// يبقى لحالات الصلاة المؤدّاة كما في صفوف صفحة الصلاة.
+    static let brand = Mdr.gold
+    static let prayer = Mdr.teal
+    static let journal = Mdr.blue
+    static let quran = Mdr.gold
+    static let finance = Mdr.gold
+    static let danger = Mdr.clay
 }
 
 enum QuranFont {
@@ -51,7 +54,7 @@ enum Haptic {
 }
 
 struct SectionHeaderStyle: ViewModifier {
-    func body(content: Content) -> some View { content.font(.footnote.weight(.semibold)) }
+    func body(content: Content) -> some View { content.font(.mdrFootnote.weight(.semibold)) }
 }
 
 /// شارةٌ مستديرة ملوّنة (حالة، رقم).
@@ -61,7 +64,7 @@ struct Pill: View {
     var filled = false
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(.mdrCaption.weight(.semibold))
             .padding(.horizontal, 10).padding(.vertical, 4)
             .foregroundStyle(filled ? .white : color)
             .background(filled ? color : color.opacity(0.14), in: Capsule())

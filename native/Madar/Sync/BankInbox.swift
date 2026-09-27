@@ -123,7 +123,7 @@ struct BankInboxView: View {
     @State private var paste = ""
 
     var body: some View {
-        List {
+        MdrList {
             if inbox.items.isEmpty && !inbox.loading {
                 ContentUnavailableView("لا رسائل تنتظر", systemImage: "tray",
                                        description: Text("تصل رسائل البنك هنا من أتمتة iOS، أو الصق رسالةً بالأسفل."))
@@ -140,8 +140,8 @@ struct BankInboxView: View {
                 Section {
                     ForEach(inbox.noise) { item in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(kindLabel(item.event?.kind)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            Text(item.text).font(.caption).lineLimit(2)
+                            Text(kindLabel(item.event?.kind)).font(.mdrCaption.weight(.semibold)).foregroundStyle(.secondary)
+                            Text(item.text).font(.mdrCaption).lineLimit(2)
                         }
                         .swipeActions { Button("امسح", role: .destructive) { Task { await inbox.remove(item) } } }
                     }
@@ -166,17 +166,17 @@ struct BankInboxView: View {
         let e = item.event
         let cat = store.data.categories.first { $0.id == e?.category } ?? .unknown
         return HStack(spacing: 12) {
-            Text(cat.icon).font(.title3)
+            Text(cat.icon).font(.mdrTitle3)
             VStack(alignment: .leading, spacing: 2) {
                 Text(e?.note ?? "رسالة").lineLimit(1)
                 HStack(spacing: 6) {
                     Text(Fmt.shortDate(key: e?.date ?? DateKey.today()))
                     if let r = e?.reviewReason { Text(r).foregroundStyle(Theme.brand).lineLimit(1) }
                 }
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.mdrCaption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(e.map { $0.amount > 0 ? Fmt.amount($0.amount) : "؟" } ?? "؟").font(.headline).monospacedDigit()
+            Text(e.map { $0.amount > 0 ? Fmt.amount($0.amount) : "؟" } ?? "؟").font(.mdrHeadline).monospacedDigit()
         }
     }
 
@@ -207,10 +207,10 @@ struct InboxReview: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section { Text(item.text).font(.callout).foregroundStyle(.secondary) }
+            MdrForm {
+                Section { Text(item.text).font(.mdrCallout).foregroundStyle(.secondary) }
                 Section {
-                    TextField("المبلغ", text: $amount).keyboardType(.decimalPad).font(.title2.bold())
+                    TextField("المبلغ", text: $amount).keyboardType(.decimalPad).font(.mdrTitle2.bold())
                     TextField("التاجر / الملاحظة", text: $note)
                     Picker("القسم", selection: $category) {
                         ForEach(store.data.categories) { c in Text("\(c.icon) \(c.label)").tag(c.id) }

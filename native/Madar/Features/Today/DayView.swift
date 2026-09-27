@@ -12,7 +12,7 @@ struct DayView: View {
         let entries = store.data.journalEntries.filter { $0.date == date }
         let txs = store.data.transactions.filter { $0.date == date }
         let quran = Nudges.quranDates(store.data).contains(date)
-        List {
+        MdrList {
             Section {
                 DatePicker("اليوم", selection: Binding(get: { DateKey.date(date) ?? Date() }, set: { date = DateKey.string($0) }),
                            in: ...Date(), displayedComponents: .date)
@@ -26,7 +26,7 @@ struct DayView: View {
                             let s = log?.status(p) ?? .none
                             VStack(spacing: 4) {
                                 Circle().fill(s == .none ? Color(.tertiarySystemFill) : Color(hex: s.colorHex)).frame(width: 16, height: 16)
-                                Text(p.rawValue).font(.caption2).foregroundStyle(.secondary)
+                                Text(p.rawValue).font(.mdrCaption2).foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity)
                         }

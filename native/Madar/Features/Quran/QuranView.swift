@@ -13,7 +13,7 @@ struct QuranView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            MdrList {
                 Section { khatmaHero }
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
@@ -65,21 +65,21 @@ struct QuranView: View {
                 ZStack {
                     JuzRing(completed: juz, progress: Double(k.page) / Double(QuranMeta.totalPages))
                     VStack(spacing: 0) {
-                        Text(Fmt.count(k.page)).font(.title.bold()).contentTransition(.numericText())
-                        Text("من ٦٠٤").font(.caption2).foregroundStyle(.secondary)
+                        Text(Fmt.count(k.page)).font(.mdrTitle.bold()).contentTransition(.numericText())
+                        Text("من ٦٠٤").font(.mdrCaption2).foregroundStyle(.secondary)
                     }
                 }
                 .frame(width: 112, height: 112)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(k.page > 0 ? "وقفتَ في \(QuranMeta.pageTitle(k.page))" : "ابدأ ختمتك").font(.headline)
+                    Text(k.page > 0 ? "وقفتَ في \(QuranMeta.pageTitle(k.page))" : "ابدأ ختمتك").font(.mdrHeadline)
                     Text("الجزء \(Fmt.count(max(1, QuranMeta.juz(ofAyah: QuranMeta.pageRange(max(1, k.page)).upperBound))))")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.mdrSubheadline).foregroundStyle(.secondary)
                     Text("اليوم \(Fmt.count(read)) من \(Fmt.count(k.dailyPageGoal)) صفحة")
-                        .font(.subheadline).foregroundStyle(read >= k.dailyPageGoal ? Theme.quran : .secondary)
+                        .font(.mdrSubheadline).foregroundStyle(read >= k.dailyPageGoal ? Theme.quran : .secondary)
                     if let days = eta.daysLeft {
-                        Text("على وتيرتك تختم بعد \(Fmt.count(days)) يوماً").font(.caption).foregroundStyle(.secondary)
+                        Text("على وتيرتك تختم بعد \(Fmt.count(days)) يوماً").font(.mdrCaption).foregroundStyle(.secondary)
                     }
-                    if k.completed > 0 { Text("ختماتٌ سابقة: \(Fmt.count(k.completed))").font(.caption).foregroundStyle(.secondary) }
+                    if k.completed > 0 { Text("ختماتٌ سابقة: \(Fmt.count(k.completed))").font(.mdrCaption).foregroundStyle(.secondary) }
                 }
                 Spacer(minLength: 0)
             }
@@ -107,11 +107,11 @@ struct QuranView: View {
         return Button { store.toggleWird(today) } label: {
             HStack {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                    .font(.title2).foregroundStyle(done ? Theme.quran : .secondary)
+                    .font(.mdrTitle2).foregroundStyle(done ? Theme.quran : .secondary)
                     .symbolEffect(.bounce, value: done)
                 VStack(alignment: .leading) {
                     Text(done ? "أتممتَ وِرد اليوم" : "أتممتُ وِرد اليوم")
-                    if streak > 1 { Text("\(Fmt.count(streak)) أيامٍ متتالية").font(.caption).foregroundStyle(.secondary) }
+                    if streak > 1 { Text("\(Fmt.count(streak)) أيامٍ متتالية").font(.mdrCaption).foregroundStyle(.secondary) }
                 }
                 Spacer()
             }
@@ -148,9 +148,9 @@ struct ReflectionRow: View {
     let r: QuranReflection
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let ref = r.reference { Text(Digits.indic(ref)).font(.caption.weight(.semibold)).foregroundStyle(Theme.quran) }
+            if let ref = r.reference { Text(Digits.indic(ref)).font(.mdrCaption.weight(.semibold)).foregroundStyle(Theme.quran) }
             Text(r.text).lineLimit(3)
-            Text(Fmt.shortDate(key: r.date)).font(.caption2).foregroundStyle(.secondary)
+            Text(Fmt.shortDate(key: r.date)).font(.mdrCaption2).foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
     }
@@ -164,7 +164,7 @@ struct KhatmaPageEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 Section {
                     Stepper(value: $page, in: 0...604) {
                         HStack { Text("الصفحة"); Spacer(); Text(Fmt.count(page)).monospacedDigit() }
@@ -208,7 +208,7 @@ struct ReflectionEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 Section("الآية") {
                     Picker("السورة", selection: $surah) {
                         Text("بلا مرجع").tag(0)

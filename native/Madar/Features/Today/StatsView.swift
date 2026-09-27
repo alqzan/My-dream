@@ -41,7 +41,7 @@ struct StatsView: View {
         let fullPrayer = Set(store.data.prayerLogs.filter { $0.prayedCount == 5 }.map(\.date))
         let journal = Set(store.data.journalEntries.map(\.date))
         let quran = Nudges.quranDates(store.data)
-        List {
+        MdrList {
             Section {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     kpi("الصلوات المسجّلة", "\(Fmt.count(Int((Double(w.prayed) / 150 * 100).rounded())))٪", "\(Fmt.count(w.jamaah)) في جماعة", Theme.prayer)
@@ -50,7 +50,7 @@ struct StatsView: View {
                     kpi("الصرف", Fmt.amount(w.spend), "ر.س في ثلاثين يوماً", Theme.finance)
                 }
                 .padding(.vertical, 6)
-                Text(insight(w)).font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 4)
+                Text(insight(w)).font(.mdrSubheadline).foregroundStyle(.secondary).padding(.vertical, 4)
             } header: { Text("آخر ثلاثين يوماً") }
 
             Section("السلاسل") {
@@ -68,9 +68,9 @@ struct StatsView: View {
 
     private func kpi(_ label: String, _ value: String, _ note: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title2.bold()).foregroundStyle(color).minimumScaleFactor(0.7).lineLimit(1)
-            Text(note).font(.caption2).foregroundStyle(.secondary)
+            Text(label).font(.mdrCaption).foregroundStyle(.secondary)
+            Text(value).font(.mdrTitle2.bold()).foregroundStyle(color).minimumScaleFactor(0.7).lineLimit(1)
+            Text(note).font(.mdrCaption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -83,8 +83,8 @@ struct StatsView: View {
             Text(label)
             Spacer()
             VStack(alignment: .trailing, spacing: 0) {
-                Text("\(Fmt.count(current)) يوم").font(.headline).monospacedDigit()
-                Text("الأطول \(Fmt.count(best))").font(.caption2).foregroundStyle(.secondary)
+                Text("\(Fmt.count(current)) يوم").font(.mdrHeadline).monospacedDigit()
+                Text("الأطول \(Fmt.count(best))").font(.mdrCaption2).foregroundStyle(.secondary)
             }
         }
     }
@@ -114,7 +114,7 @@ struct StatsView: View {
                 .foregroundStyle(Theme.finance.gradient)
                 .cornerRadius(6)
                 .annotation(position: .top) {
-                    if m.total > 0 { Text(Fmt.amount(m.total.rounded())).font(.caption2).foregroundStyle(.secondary) }
+                    if m.total > 0 { Text(Fmt.amount(m.total.rounded())).font(.mdrCaption2).foregroundStyle(.secondary) }
                 }
         }
         .chartYAxis(.hidden)

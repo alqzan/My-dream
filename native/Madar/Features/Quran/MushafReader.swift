@@ -26,13 +26,13 @@ struct MushafReader: View {
 
             if chrome {
                 HStack {
-                    Button { dismiss() } label: { Image(systemName: "xmark").font(.body.weight(.semibold)) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").font(.mdrBody.weight(.semibold)) }
                         .buttonStyle(.bordered).buttonBorderShape(.circle)
                     Spacer()
                     VStack(spacing: 0) {
-                        Text(QuranMeta.pageTitle(page)).font(.headline)
+                        Text(QuranMeta.pageTitle(page)).font(.mdrHeadline)
                         Text("صفحة \(Fmt.count(page)) · الجزء \(Fmt.count(QuranMeta.juz(ofAyah: QuranMeta.pageRange(page).lowerBound)))")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.mdrCaption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Menu {
@@ -141,7 +141,7 @@ struct SurahBanner: View {
     var body: some View {
         VStack(spacing: 8) {
             Text("سورة \(QuranMeta.surahs[surah - 1].name)")
-                .font(.headline)
+                .font(.mdrHeadline)
                 .foregroundStyle(Theme.quran)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -160,7 +160,7 @@ struct SurahIndex: View {
     @State private var search = ""
 
     var body: some View {
-        List {
+        MdrList {
             Picker("", selection: $mode) { Text("السور").tag(0); Text("الأجزاء").tag(1) }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
@@ -168,13 +168,13 @@ struct SurahIndex: View {
                 ForEach(QuranMeta.surahs.filter { search.isEmpty || $0.name.contains(search) }) { s in
                     Button { open(QuranMeta.page(ofAyah: s.first)) } label: {
                         HStack {
-                            Text(Fmt.count(s.num)).font(.caption).foregroundStyle(.secondary).frame(width: 30)
+                            Text(Fmt.count(s.num)).font(.mdrCaption).foregroundStyle(.secondary).frame(width: 30)
                             VStack(alignment: .leading) {
                                 Text(s.name)
-                                Text("\(s.meccan ? "مكية" : "مدنية") · \(Fmt.count(s.ayat)) آية").font(.caption).foregroundStyle(.secondary)
+                                Text("\(s.meccan ? "مكية" : "مدنية") · \(Fmt.count(s.ayat)) آية").font(.mdrCaption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text(Fmt.count(QuranMeta.page(ofAyah: s.first))).font(.caption).foregroundStyle(.secondary)
+                            Text(Fmt.count(QuranMeta.page(ofAyah: s.first))).font(.mdrCaption).foregroundStyle(.secondary)
                         }
                     }
                     .foregroundStyle(.primary)

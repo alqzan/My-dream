@@ -98,7 +98,7 @@ struct MistakesView: View {
 
     var body: some View {
         let list = Hifz.openMistakes(store.hifz).sorted { $0.strings("hits").count > $1.strings("hits").count }.map(Row.init(raw:))
-        List {
+        MdrList {
             if list.isEmpty {
                 ContentUnavailableView("لا مواضع مفتوحة", systemImage: "checkmark.seal",
                                        description: Text("اضغط كلمةً أخطأتَ فيها أثناء التسميع لتُحفظ هنا وتُختبر."))
@@ -110,7 +110,7 @@ struct MistakesView: View {
                 let a = QuranMeta.surahAyah(ayah)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("\(QuranMeta.surahs[a.surah - 1].name) \(Fmt.count(a.ayah))").font(.subheadline.weight(.semibold))
+                        Text("\(QuranMeta.surahs[a.surah - 1].name) \(Fmt.count(a.ayah))").font(.mdrSubheadline.weight(.semibold))
                         Spacer()
                         Pill(text: "\(Fmt.count(m.strings("hits").count)) مرّة", color: Theme.danger)
                     }
@@ -124,7 +124,7 @@ struct MistakesView: View {
                         Button("أخطأتُ") { store.drillMistake(id, ok: false); revealed.insert(id) }
                             .buttonStyle(.bordered).tint(Theme.danger)
                         Spacer()
-                        if (m.int("okStreak") ?? 0) > 0 { Text("نجاح \(Fmt.count(m.int("okStreak") ?? 0)) من ٢").font(.caption).foregroundStyle(.secondary) }
+                        if (m.int("okStreak") ?? 0) > 0 { Text("نجاح \(Fmt.count(m.int("okStreak") ?? 0)) من ٢").font(.mdrCaption).foregroundStyle(.secondary) }
                     }
                 }
                 .padding(.vertical, 6)

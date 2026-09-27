@@ -44,7 +44,7 @@ struct InsightsView: View {
         let prevTotal = prev.reduce(0) { $0 + BudgetEngine.cashOut($1) }
         let bars = makeBars(current, r)
         let byMain = rollup(current)
-        List {
+        MdrList {
             Section {
                 Picker("الفترة", selection: $period) {
                     ForEach(["أسبوع", "شهر", "سنة"], id: \.self) { Text($0).tag($0) }
@@ -54,7 +54,7 @@ struct InsightsView: View {
             }
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(r.label).font(.subheadline).foregroundStyle(.secondary)
+                    Text(r.label).font(.mdrSubheadline).foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(Fmt.amount(total.rounded())).font(.system(size: 40, weight: .bold, design: .rounded))
                         Text("ر.س").foregroundStyle(.secondary)
@@ -63,7 +63,7 @@ struct InsightsView: View {
                         let delta = (total - prevTotal) / prevTotal * 100
                         Label("\(delta >= 0 ? "أكثر" : "أقلّ") بـ\(Fmt.count(Int(abs(delta).rounded())))٪ من \(r.prevLabel)",
                               systemImage: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.footnote).foregroundStyle(delta > 10 ? Theme.danger : Theme.finance)
+                            .font(.mdrFootnote).foregroundStyle(delta > 10 ? Theme.danger : Theme.finance)
                     }
                 }
                 Chart(bars) { b in
@@ -86,7 +86,7 @@ struct InsightsView: View {
 
             if !insights(current, bars: bars, byMain: byMain, total: total).isEmpty {
                 Section("ما يقوله صرفك") {
-                    ForEach(insights(current, bars: bars, byMain: byMain, total: total), id: \.self) { Text($0).font(.subheadline) }
+                    ForEach(insights(current, bars: bars, byMain: byMain, total: total), id: \.self) { Text($0).font(.mdrSubheadline) }
                 }
             }
 
@@ -97,7 +97,7 @@ struct InsightsView: View {
                             Text("\(row.main.icon) \(row.main.label)")
                             Spacer()
                             Text(Fmt.amount(row.total.rounded())).monospacedDigit()
-                            Text("\(Fmt.count(Int((row.total / max(1, total) * 100).rounded())))٪").font(.caption).foregroundStyle(.secondary).frame(width: 40)
+                            Text("\(Fmt.count(Int((row.total / max(1, total) * 100).rounded())))٪").font(.mdrCaption).foregroundStyle(.secondary).frame(width: 40)
                         }
                         ProgressView(value: row.total / max(1, total)).tint(Color(hexString: row.main.color))
                     }

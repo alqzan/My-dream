@@ -37,7 +37,7 @@ struct ExpenseEditor: View {
         let rate = BudgetEngine.status(store.data)?.rate ?? 0
         let weight = BudgetEngine.expenseWeight(amount: amount, daily: rate)
         NavigationStack {
-            Form {
+            MdrForm {
                 Section {
                     HStack(alignment: .firstTextBaseline) {
                         TextField("٠", text: $amountText)
@@ -48,7 +48,7 @@ struct ExpenseEditor: View {
                     }
                     if weight.big && destination == "daily" {
                         Label("يعادل \(Digits.indic(String(weight.days))) يوماً من مصروفك — أهو حدثٌ له مظروف؟", systemImage: "exclamationmark.circle")
-                            .font(.footnote).foregroundStyle(Theme.brand)
+                            .font(.mdrFootnote).foregroundStyle(Theme.brand)
                     }
                 }
 
@@ -111,8 +111,8 @@ struct ExpenseEditor: View {
         let color = Color(hexString: c.color)
         return Button { t.category = c.id; Haptic.tap() } label: {
             VStack(spacing: 4) {
-                Text(c.icon).font(.title3)
-                Text(c.label).font(.caption).lineLimit(1)
+                Text(c.icon).font(.mdrTitle3)
+                Text(c.label).font(.mdrCaption).lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 60)
             .background(on ? color.opacity(0.22) : Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -139,8 +139,8 @@ struct ExpenseEditor: View {
                         HStack(alignment: .top) {
                             Image(systemName: bigPlan == o.kind ? "largecircle.fill.circle" : "circle").foregroundStyle(Theme.finance)
                             VStack(alignment: .leading, spacing: 3) {
-                                HStack { Text(o.title).font(.subheadline.weight(.semibold)); if o.recommended { Pill(text: "الموصى به", color: Theme.finance) } }
-                                Text(summary(o)).font(.caption).foregroundStyle(.secondary)
+                                HStack { Text(o.title).font(.mdrSubheadline.weight(.semibold)); if o.recommended { Pill(text: "الموصى به", color: Theme.finance) } }
+                                Text(summary(o)).font(.mdrCaption).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -221,7 +221,7 @@ struct TransactionsList: View {
             .filter { q.isEmpty || $0.note.localizedCaseInsensitiveContains(q) }
             .sorted { $0.date > $1.date }
         let days = Dictionary(grouping: list, by: \.date).sorted { $0.key > $1.key }
-        List {
+        MdrList {
             ForEach(days, id: \.key) { entry in
                 let day = entry.key, items = entry.value
                 Section {

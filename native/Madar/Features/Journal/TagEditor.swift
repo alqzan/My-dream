@@ -25,7 +25,7 @@ struct TagEditor: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
                         ForEach(Array(rest), id: \.self) { s in
-                            Button("#\(s)") { tags.append(s); draft = "" }.font(.caption).foregroundStyle(.secondary)
+                            Button("#\(s)") { tags.append(s); draft = "" }.font(.mdrCaption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -42,6 +42,6 @@ struct TagEditor: View {
 
 struct TrailingIcon: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 4) { configuration.title; configuration.icon.font(.caption2) }
+        HStack(spacing: 4) { configuration.title; configuration.icon.font(.mdrCaption2) }
     }
 }

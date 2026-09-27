@@ -12,7 +12,7 @@ struct FinanceView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            MdrList {
                 if store.data.dailyBudget == nil {
                     Section { onboarding }
                 } else {
@@ -25,8 +25,8 @@ struct FinanceView: View {
                             Button { settings = true } label: {
                                 Label {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("وقفة المطابقة").font(.headline)
-                                        Text("رقمٌ واحد من كشوفك يصحّح ما فات التطبيقَ تسجيلُه — كلّ تسعين يوماً.").font(.caption).foregroundStyle(.secondary)
+                                        Text("وقفة المطابقة").font(.mdrHeadline)
+                                        Text("رقمٌ واحد من كشوفك يصحّح ما فات التطبيقَ تسجيلُه — كلّ تسعين يوماً.").font(.mdrCaption).foregroundStyle(.secondary)
                                     }
                                 } icon: { Image(systemName: "checklist").foregroundStyle(Theme.finance) }
                             }
@@ -41,7 +41,7 @@ struct FinanceView: View {
                 }
 
                 Section { recent } header: {
-                    HStack { Text("آخر المصاريف"); Spacer(); NavigationLink("الكل") { TransactionsList() }.font(.footnote) }
+                    HStack { Text("آخر المصاريف"); Spacer(); NavigationLink("الكل") { TransactionsList() }.font(.mdrFootnote) }
                 }
 
                 let caps = BudgetEngine.capStatuses(store.data, today: today)
@@ -66,7 +66,7 @@ struct FinanceView: View {
                         Image(systemName: inbox.items.isEmpty ? "tray" : "tray.full")
                             .overlay(alignment: .topTrailing) {
                                 if !inbox.expenses.isEmpty {
-                                    Text(Fmt.count(inbox.expenses.count)).font(.caption2.bold()).foregroundStyle(.white)
+                                    Text(Fmt.count(inbox.expenses.count)).font(.mdrCaption2.bold()).foregroundStyle(.white)
                                         .padding(3).background(Theme.danger, in: Circle()).offset(x: 8, y: -8)
                                 }
                             }
@@ -77,7 +77,7 @@ struct FinanceView: View {
             .task { await inbox.refresh() }
             .safeAreaInset(edge: .bottom) {
                 Button { adding = Transaction.new(date: today, amount: 0, category: store.data.categories.first?.id ?? "", note: "") } label: {
-                    Label("سجّل مصروفاً", systemImage: "plus").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                    Label("سجّل مصروفاً", systemImage: "plus").font(.mdrHeadline).frame(maxWidth: .infinity).padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent).tint(Theme.finance).controlSize(.large)
                 .padding(.horizontal).padding(.bottom, 8)
@@ -98,7 +98,7 @@ struct FinanceView: View {
 
     private var onboarding: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("كم تصرف في اليوم؟").font(.headline)
+            Text("كم تصرف في اليوم؟").font(.mdrHeadline)
             Text("رقمٌ واحد يجيب «أقدر أصرف الآن؟» — ما لم تصرفه يبقى لك غداً، وما زدتَه يُخصم منه.")
                 .foregroundStyle(.secondary)
             Button { settings = true } label: { Text("اضبط مصروفك اليومي").frame(maxWidth: .infinity) }
@@ -114,13 +114,13 @@ struct FinanceView: View {
         let pace = BudgetEngine.cyclePace(balance: s.balance, daily: s.rate, daysLeft: daysLeft)
         let negative = s.balance < 0
         return VStack(alignment: .leading, spacing: 12) {
-            Text("متاحٌ لك اليوم").font(.subheadline).foregroundStyle(.secondary)
+            Text("متاحٌ لك اليوم").font(.mdrSubheadline).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Fmt.amount(s.balance))
                     .font(.system(size: 52, weight: .bold, design: .rounded))
                     .foregroundStyle(negative ? Theme.danger : .primary)
                     .contentTransition(.numericText(value: s.balance))
-                Text("ر.س").font(.title3).foregroundStyle(.secondary)
+                Text("ر.س").font(.mdrTitle3).foregroundStyle(.secondary)
             }
             HStack(spacing: 16) {
                 stat("المصروف اليومي", Fmt.amount(s.rate))
@@ -128,7 +128,7 @@ struct FinanceView: View {
                 stat("إلى الراتب", Fmt.days(daysLeft))
             }
             if daysLeft > 0 {
-                Text(paceText(pace)).font(.footnote).foregroundStyle(pace.kind == .beyond || pace.kind == .tighten ? Theme.danger : .secondary)
+                Text(paceText(pace)).font(.mdrFootnote).foregroundStyle(pace.kind == .beyond || pace.kind == .tighten ? Theme.danger : .secondary)
             }
         }
         .padding()
@@ -139,8 +139,8 @@ struct FinanceView: View {
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.headline).monospacedDigit()
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.mdrHeadline).monospacedDigit()
+            Text(label).font(.mdrCaption).foregroundStyle(.secondary)
         }
     }
 
@@ -158,8 +158,8 @@ struct FinanceView: View {
             HStack {
                 Image(systemName: "banknote").foregroundStyle(Theme.finance)
                 VStack(alignment: .leading) {
-                    Text(p == .due ? "نزل الراتب؟" : "نزل الراتب مبكّراً؟").font(.headline)
-                    Text("أكّده لتبدأ دورةٌ جديدة ويُرحَّل فائضك.").font(.caption).foregroundStyle(.secondary)
+                    Text(p == .due ? "نزل الراتب؟" : "نزل الراتب مبكّراً؟").font(.mdrHeadline)
+                    Text("أكّده لتبدأ دورةٌ جديدة ويُرحَّل فائضك.").font(.mdrCaption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.left").foregroundStyle(.tertiary)
@@ -185,7 +185,7 @@ struct TransactionRow: View {
         let cat = store.data.categories.first { $0.id == t.category } ?? .unknown
         let fund = t.reserveSplits.first.flatMap { s in store.data.reserves.first { $0.id == s.fundId } }
         HStack(spacing: 12) {
-            Text(cat.icon).font(.title3).frame(width: 36, height: 36)
+            Text(cat.icon).font(.mdrTitle3).frame(width: 36, height: 36)
                 .background(Color(hexString: cat.color).opacity(0.15), in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(t.note.isEmpty ? cat.label : t.note).lineLimit(1)
@@ -194,10 +194,10 @@ struct TransactionRow: View {
                     if let f = fund { Text("من \(f.name)") }
                     if t.offBudget { Text("خارج الميزانية") }
                 }
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.mdrCaption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(Fmt.amount(t.amount)).font(.body.weight(.semibold)).monospacedDigit()
+            Text(Fmt.amount(t.amount)).font(.mdrBody.weight(.semibold)).monospacedDigit()
                 .foregroundStyle(t.direction == "in" ? Theme.finance : .primary)
         }
         .contentShape(Rectangle())
@@ -212,11 +212,11 @@ struct CapRow: View {
             HStack {
                 Text("\(cap.icon) \(cap.label)")
                 Spacer()
-                Text("\(Fmt.amount(cap.spent)) / \(Fmt.amount(cap.cap))").font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                Text("\(Fmt.amount(cap.spent)) / \(Fmt.amount(cap.cap))").font(.mdrSubheadline).monospacedDigit().foregroundStyle(.secondary)
             }
             ProgressView(value: min(1, cap.spent / max(1, cap.cap))).tint(color)
             if cap.state == "over" {
-                Text("تجاوزتَ بـ\(Fmt.amount(-cap.remaining))").font(.caption).foregroundStyle(Theme.danger)
+                Text("تجاوزتَ بـ\(Fmt.amount(-cap.remaining))").font(.mdrCaption).foregroundStyle(Theme.danger)
             }
         }
         .padding(.vertical, 2)
@@ -229,7 +229,7 @@ struct FundRow: View {
     var body: some View {
         let bal = BudgetEngine.reserveBalance(fund, store.data.transactions)
         HStack(spacing: 12) {
-            Text(fund.icon).font(.title3)
+            Text(fund.icon).font(.mdrTitle3)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(fund.name)
@@ -238,11 +238,11 @@ struct FundRow: View {
                 if let t = fund.target, t > 0 {
                     ProgressView(value: max(0, min(1, bal / t))).tint(Theme.finance)
                 } else if let per = fund.fundingPerCycle {
-                    Text("\(Fmt.amount(per)) كلّ دورة").font(.caption).foregroundStyle(.secondary)
+                    Text("\(Fmt.amount(per)) كلّ دورة").font(.mdrCaption).foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            Text(Fmt.amount(bal)).font(.body.weight(.semibold)).monospacedDigit()
+            Text(Fmt.amount(bal)).font(.mdrBody.weight(.semibold)).monospacedDigit()
                 .foregroundStyle(bal < 0 ? Theme.danger : .primary)
         }
     }

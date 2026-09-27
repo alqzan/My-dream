@@ -16,7 +16,7 @@ struct PrayerHistoryView: View {
                     HStack {
                         Button { shift(-1) } label: { Image(systemName: "chevron.right") }
                         Spacer()
-                        Text(Fmt.monthYear(month)).font(.headline)
+                        Text(Fmt.monthYear(month)).font(.mdrHeadline)
                         Spacer()
                         Button { shift(1) } label: { Image(systemName: "chevron.left") }
                             .disabled(isCurrentMonth)
@@ -24,7 +24,7 @@ struct PrayerHistoryView: View {
                     .padding(.horizontal)
 
                     LazyVGrid(columns: cols, spacing: 6) {
-                        ForEach(weekdayNames, id: \.self) { Text($0).font(.caption2).foregroundStyle(.secondary) }
+                        ForEach(weekdayNames, id: \.self) { Text($0).font(.mdrCaption2).foregroundStyle(.secondary) }
                         ForEach(0..<leadingBlanks, id: \.self) { _ in Color.clear.frame(height: 44) }
                         ForEach(days, id: \.self) { key in dayCell(key) }
                     }
@@ -71,8 +71,8 @@ struct PrayerHistoryView: View {
         return Button { if !future { editing = key } } label: {
             VStack(spacing: 2) {
                 Text(Fmt.count(DateKey.calendar.component(.day, from: DateKey.date(key) ?? Date())))
-                    .font(.subheadline.weight(key == DateKey.today() ? .bold : .regular))
-                Text(future || log == nil ? " " : Fmt.count(n)).font(.caption2)
+                    .font(.mdrSubheadline.weight(key == DateKey.today() ? .bold : .regular))
+                Text(future || log == nil ? " " : Fmt.count(n)).font(.mdrCaption2)
             }
             .frame(maxWidth: .infinity, minHeight: 44)
             .foregroundStyle(n == 5 ? .white : .primary)
@@ -92,19 +92,19 @@ struct PrayerHistoryView: View {
         let avg = PrayerLogic.khushuAverage(logs, lastDays: 30)
         let mosque = PrayerLogic.streak(logs, mosqueOnly: true)
         return VStack(alignment: .leading, spacing: 10) {
-            Text("آخر ثلاثين يوماً").font(.headline)
+            Text("آخر ثلاثين يوماً").font(.mdrHeadline)
             ForEach(Prayer.allCases) { p in
                 HStack {
                     Text(p.rawValue).frame(width: 60, alignment: .leading)
                     ProgressView(value: cons[p] ?? 0).tint(Theme.prayer)
-                    Text("\(Fmt.count(Int(((cons[p] ?? 0) * 100).rounded())))٪").font(.caption).frame(width: 44)
+                    Text("\(Fmt.count(Int(((cons[p] ?? 0) * 100).rounded())))٪").font(.mdrCaption).frame(width: 44)
                 }
             }
             if let a = avg {
                 let level = Khushu(rawValue: Int(a.rounded())) ?? .present
-                Text("حضور القلب في المتوسّط: \(level.label)").font(.subheadline).foregroundStyle(Color(hex: level.colorHex))
+                Text("حضور القلب في المتوسّط: \(level.label)").font(.mdrSubheadline).foregroundStyle(Color(hex: level.colorHex))
             }
-            if mosque > 1 { Text("سلسلة الجماعة: \(Fmt.count(mosque)) يوماً").font(.subheadline) }
+            if mosque > 1 { Text("سلسلة الجماعة: \(Fmt.count(mosque)) يوماً").font(.mdrSubheadline) }
         }
         .padding()
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))

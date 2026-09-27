@@ -23,9 +23,9 @@ struct PrayerAnswer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("صلَّيتَ \(prayer.rawValue)\(when.map { " \($0)" } ?? "")؟").font(.headline)
+                Text("صلَّيتَ \(prayer.rawValue)\(when.map { " \($0)" } ?? "")؟").font(.mdrHeadline)
                 Spacer()
-                if let t = timeLabel { Text(t).font(.subheadline).foregroundStyle(.secondary) }
+                if let t = timeLabel { Text(t).font(.mdrSubheadline).foregroundStyle(.secondary) }
             }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(Self.states) { choice in
@@ -35,8 +35,8 @@ struct PrayerAnswer: View {
                         onStatus(on ? .none : choice.status)
                     } label: {
                         VStack(spacing: 2) {
-                            Text(choice.label).font(.subheadline.weight(.semibold))
-                            Text(choice.hint).font(.caption2).opacity(0.8)
+                            Text(choice.label).font(.mdrSubheadline.weight(.semibold))
+                            Text(choice.hint).font(.mdrCaption2).opacity(0.8)
                         }
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .foregroundStyle(on ? .white : c)
@@ -48,15 +48,15 @@ struct PrayerAnswer: View {
             }
             if status.isPrayed {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("وكيف كان قلبُك فيها؟").font(.subheadline).foregroundStyle(.secondary)
+                    Text("وكيف كان قلبُك فيها؟").font(.mdrSubheadline).foregroundStyle(.secondary)
                     HStack(spacing: 8) {
                         ForEach(Khushu.allCases) { k in
                             let on = khushu == k
                             let c = Color(hex: k.colorHex)
                             Button { onKhushu(on ? nil : k) } label: {
                                 VStack(spacing: 2) {
-                                    Text(k.label).font(.subheadline.weight(.semibold))
-                                    Text(k.hint).font(.caption2).lineLimit(1).minimumScaleFactor(0.8).opacity(0.8)
+                                    Text(k.label).font(.mdrSubheadline.weight(.semibold))
+                                    Text(k.hint).font(.mdrCaption2).lineLimit(1).minimumScaleFactor(0.8).opacity(0.8)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 48)
                                 .foregroundStyle(on ? .white : c)

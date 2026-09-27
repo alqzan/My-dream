@@ -9,7 +9,7 @@ struct SalarySheet: View {
     var body: some View {
         let computed = max(0, round2(BudgetEngine.status(store.data)?.balance ?? 0))
         NavigationStack {
-            Form {
+            MdrForm {
                 Section {
                     LabeledContent("الفائض المحسوب", value: "\(Fmt.amount(computed)) ر.س")
                     TextField("المُرحَّل فعلاً (اختياري)", text: $carry).keyboardType(.decimalPad)
@@ -53,12 +53,12 @@ struct FinanceSettings: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 Section {
                     TextField("المصروف اليومي", text: $daily).keyboardType(.decimalPad)
                     if let b = store.data.dailyBudget, b.fundingPerDay > 0 {
                         Text("ينقص منه \(Fmt.amount(b.fundingPerDay)) يومياً لتمويل المظاريف، فالفعليّ \(Fmt.amount(BudgetEngine.effectiveRate(amount: b.amount, perDay: b.fundingPerDay))).")
-                            .font(.footnote).foregroundStyle(.secondary)
+                            .font(.mdrFootnote).foregroundStyle(.secondary)
                     }
                 } header: { Text("المصروف اليومي") } footer: {
                     Text("تغيير المبلغ يبدأ حساباً جديداً من اليوم.")
@@ -126,12 +126,12 @@ struct CategoriesEditor: View {
     @State private var newIcon = "📌"
 
     var body: some View {
-        List {
+        MdrList {
             ForEach(store.data.categories) { c in
                 HStack {
                     Text(c.icon)
                     Text(c.label)
-                    if c.parentId != nil { Text("فرعي").font(.caption).foregroundStyle(.secondary) }
+                    if c.parentId != nil { Text("فرعي").font(.mdrCaption).foregroundStyle(.secondary) }
                 }
             }
             .onDelete { idx in
@@ -162,7 +162,7 @@ struct CapsEditor: View {
     @EnvironmentObject var store: Store
 
     var body: some View {
-        Form {
+        MdrForm {
             ForEach(store.data.categories.filter { $0.parentId == nil }) { c in
                 let b = store.data.budgets.first { $0.category == c.id }
                 HStack {

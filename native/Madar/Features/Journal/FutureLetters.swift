@@ -28,7 +28,7 @@ struct FutureLettersView: View {
     private var today: String { DateKey.today() }
 
     var body: some View {
-        List {
+        MdrList {
             let letters = store.data.futureLetters.sorted { $0.deliveryDate < $1.deliveryDate }
             if letters.isEmpty {
                 ContentUnavailableView("لا رسائل بعد", systemImage: "envelope",
@@ -42,11 +42,11 @@ struct FutureLettersView: View {
                     HStack(spacing: 12) {
                         Image(systemName: ready ? (l.opened ? "envelope.open" : "envelope.badge") : "lock.fill")
                             .foregroundStyle(ready ? Theme.journal : .secondary)
-                            .font(.title3)
+                            .font(.mdrTitle3)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(l.title.isEmpty ? "رسالة \(Fmt.shortDate(key: l.writtenDate))" : l.title)
                             Text(ready ? "وصلت \(Fmt.shortDate(key: l.deliveryDate))" : "تُفتح \(Countdown.describe(DateKey.days(from: today, to: l.deliveryDate)))")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.mdrCaption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -65,8 +65,8 @@ struct FutureLettersView: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("كتبتَها في \(Fmt.shortDate(key: l.writtenDate))").font(.caption).foregroundStyle(.secondary)
-                        if !l.title.isEmpty { Text(l.title).font(.title2.bold()) }
+                        Text("كتبتَها في \(Fmt.shortDate(key: l.writtenDate))").font(.mdrCaption).foregroundStyle(.secondary)
+                        if !l.title.isEmpty { Text(l.title).font(.mdrTitle2.bold()) }
                         Text(l.content).lineSpacing(6)
                     }
                     .padding()
@@ -102,7 +102,7 @@ struct LetterComposer: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 TextField("عنوان (اختياري)", text: $title)
                 DatePicker("تُفتح في", selection: $delivery, in: Date().addingTimeInterval(86400)..., displayedComponents: .date)
                 TextField("اكتب لنفسك…", text: $content, axis: .vertical).lineLimit(8...30)

@@ -31,12 +31,12 @@ struct JournalEditor: View {
                         .environment(\.locale, Fmt.arabicLocale)
 
                     TextField("عنوان اليوم", text: $entry.title, axis: .vertical)
-                        .font(.title2.weight(.semibold))
+                        .font(.mdrTitle2.weight(.semibold))
 
-                    if let q = entry.question { Text(q).font(.subheadline).foregroundStyle(.secondary) }
+                    if let q = entry.question { Text(q).font(.mdrSubheadline).foregroundStyle(.secondary) }
 
                     TextField("ماذا في يومك؟", text: $entry.content, axis: .vertical)
-                        .font(.body)
+                        .font(.mdrBody)
                         .lineSpacing(6)
                         .focused($focused)
                         .frame(minHeight: 220, alignment: .top)
@@ -47,7 +47,7 @@ struct JournalEditor: View {
                     if !entry.audios.isEmpty { AudioList(refs: entry.audios) }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("شعور اليوم").font(.subheadline).foregroundStyle(.secondary)
+                        Text("شعور اليوم").font(.mdrSubheadline).foregroundStyle(.secondary)
                         HStack {
                             ForEach(Mood.all) { m in
                                 Button {
@@ -55,8 +55,8 @@ struct JournalEditor: View {
                                     Haptic.tap()
                                 } label: {
                                     VStack(spacing: 2) {
-                                        Text(m.emoji).font(.title2)
-                                        Text(m.label).font(.caption2)
+                                        Text(m.emoji).font(.mdrTitle2)
+                                        Text(m.label).font(.mdrCaption2)
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 56)
                                     .background(entry.mood == m.value ? Theme.journal.opacity(0.18) : Color.clear,
@@ -200,7 +200,7 @@ struct PhotoViewer: View {
                 Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill").font(.title).foregroundStyle(.white.opacity(0.85))
+                Image(systemName: "xmark.circle.fill").font(.mdrTitle).foregroundStyle(.white.opacity(0.85))
             }
             .padding()
         }
@@ -225,7 +225,7 @@ struct AudioList: View {
                     Label("ملاحظة صوتية \(Fmt.count(i + 1))", systemImage: player.playing == ref ? "stop.circle.fill" : "play.circle.fill")
                 }
             }
-            if let err = player.error { Text(err).font(.caption).foregroundStyle(.secondary) }
+            if let err = player.error { Text(err).font(.mdrCaption).foregroundStyle(.secondary) }
         }
     }
 }

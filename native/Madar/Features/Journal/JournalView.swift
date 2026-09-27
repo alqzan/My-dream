@@ -36,7 +36,7 @@ struct JournalView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            MdrList {
                 if search.isEmpty && !starredOnly { todayHeader }
                 if store.data.journalEntries.isEmpty {
                     ContentUnavailableView("لا مذكرات بعد", systemImage: "book.closed",
@@ -87,7 +87,7 @@ struct JournalView: View {
                     .onSubmit { store.appendQuickLine(quick, on: today); quick = "" }
                 if !quick.isEmpty {
                     Button { store.appendQuickLine(quick, on: today); quick = ""; quickFocused = false } label: {
-                        Image(systemName: "arrow.up.circle.fill").font(.title2)
+                        Image(systemName: "arrow.up.circle.fill").font(.mdrTitle2)
                     }
                     .tint(Theme.journal)
                 }
@@ -98,7 +98,7 @@ struct JournalView: View {
                 editing = e
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Label("سؤال اليوم", systemImage: "moon.stars").font(.caption.weight(.semibold)).foregroundStyle(Theme.journal)
+                    Label("سؤال اليوم", systemImage: "moon.stars").font(.mdrCaption.weight(.semibold)).foregroundStyle(Theme.journal)
                     Text(question).foregroundStyle(.primary)
                 }
             }
@@ -110,7 +110,7 @@ struct JournalView: View {
                 ForEach(memories) { e in
                     Button { editing = e } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(yearsAgo(e.date)).font(.caption.weight(.semibold)).foregroundStyle(Theme.journal)
+                            Text(yearsAgo(e.date)).font(.mdrCaption.weight(.semibold)).foregroundStyle(Theme.journal)
                             JournalRow(entry: e)
                         }
                     }
@@ -154,25 +154,25 @@ struct JournalRow: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(spacing: 0) {
                 Text(Fmt.count(DateKey.calendar.component(.day, from: DateKey.date(entry.date) ?? Date())))
-                    .font(.title2.weight(.semibold))
-                Text(weekday).font(.caption2).foregroundStyle(.secondary)
+                    .font(.mdrTitle2.weight(.semibold))
+                Text(weekday).font(.mdrCaption2).foregroundStyle(.secondary)
             }
             .frame(width: 40)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    if !entry.title.isEmpty { Text(entry.title).font(.headline).lineLimit(1) }
-                    if entry.starred { Image(systemName: "star.fill").font(.caption).foregroundStyle(Theme.brand) }
-                    if let m = Mood.of(entry.mood) { Text(m.emoji).font(.caption) }
+                    if !entry.title.isEmpty { Text(entry.title).font(.mdrHeadline).lineLimit(1) }
+                    if entry.starred { Image(systemName: "star.fill").font(.mdrCaption).foregroundStyle(Theme.brand) }
+                    if let m = Mood.of(entry.mood) { Text(m.emoji).font(.mdrCaption) }
                 }
                 if !snippet.isEmpty {
-                    Text(snippet).font(.subheadline).foregroundStyle(entry.title.isEmpty ? .primary : .secondary).lineLimit(3)
+                    Text(snippet).font(.mdrSubheadline).foregroundStyle(entry.title.isEmpty ? .primary : .secondary).lineLimit(3)
                 }
                 HStack(spacing: 8) {
                     if let t = entry.time { Text(Digits.indic(t)) }
                     if let p = entry.place { Label(p, systemImage: "mappin").lineLimit(1) }
                     if !entry.audios.isEmpty { Image(systemName: "waveform") }
                 }
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.mdrCaption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             if let first = entry.photos.first {

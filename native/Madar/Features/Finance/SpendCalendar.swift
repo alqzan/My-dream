@@ -16,13 +16,13 @@ struct SpendCalendar: View {
         for t in store.data.transactions where t.date.hasPrefix(String(DateKey.string(start).prefix(7))) { daily[t.date, default: 0] += BudgetEngine.dailyShare(t) }
         let today = DateKey.today()
         return LazyVGrid(columns: cols, spacing: 4) {
-            ForEach(["ح", "ن", "ث", "ر", "خ", "ج", "س"], id: \.self) { Text($0).font(.caption2).foregroundStyle(.secondary) }
+            ForEach(["ح", "ن", "ث", "ر", "خ", "ج", "س"], id: \.self) { Text($0).font(.mdrCaption2).foregroundStyle(.secondary) }
             ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 38) }
             ForEach(days, id: \.self) { d in
                 let v = daily[d] ?? 0
                 let over = rate > 0 && v > rate
                 VStack(spacing: 1) {
-                    Text(Fmt.count(Int(d.suffix(2)) ?? 0)).font(.caption2.weight(d == today ? .bold : .regular))
+                    Text(Fmt.count(Int(d.suffix(2)) ?? 0)).font(.mdrCaption2.weight(d == today ? .bold : .regular))
                     if v > 0 { Text(Fmt.amount(v.rounded())).font(.system(size: 8)).lineLimit(1).minimumScaleFactor(0.6) }
                 }
                 .frame(maxWidth: .infinity, minHeight: 38)

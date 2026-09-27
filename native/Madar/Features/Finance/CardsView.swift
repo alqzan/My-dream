@@ -16,7 +16,7 @@ struct CardsView: View {
     }
 
     var body: some View {
-        List {
+        MdrList {
             if cards.isEmpty && obligations.isEmpty && balances.isEmpty {
                 ContentUnavailableView("لا بطاقات بعد", systemImage: "creditcard",
                                        description: Text("تظهر هنا البطاقات الائتمانية والالتزامات التي أكّدتها من رسائل البنك."))
@@ -27,14 +27,14 @@ struct CardsView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Image(systemName: "creditcard.fill").foregroundStyle(Theme.finance)
-                                Text(c.label).font(.headline)
+                                Text(c.label).font(.mdrHeadline)
                                 Spacer()
                                 Text(Fmt.amount(abs(c.net)))
-                                    .font(.title3.weight(.semibold)).monospacedDigit()
+                                    .font(.mdrTitle3.weight(.semibold)).monospacedDigit()
                                     .foregroundStyle(c.net > 0.009 ? Theme.danger : Theme.finance)
                             }
                             Text(c.net > 0.009 ? "مستحقّ لم يُسدَّد" : c.net < -0.009 ? "سدادٌ زائد لم يُفسَّر" : "مسدَّدة بالكامل")
-                                .font(.footnote).foregroundStyle(.secondary)
+                                .font(.mdrFootnote).foregroundStyle(.secondary)
                             HStack(spacing: 14) {
                                 stat("مشتريات", c.charges)
                                 stat("سداد", c.settlements)
@@ -54,7 +54,7 @@ struct CardsView: View {
                             VStack(alignment: .leading) {
                                 Text(o.str("label") ?? o.str("source") ?? "التزام")
                                 if let d = o.str("dueDate") {
-                                    Text("الاستحقاق \(dateText(d))").font(.caption).foregroundStyle(.secondary)
+                                    Text("الاستحقاق \(dateText(d))").font(.mdrCaption).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
@@ -95,8 +95,8 @@ struct CardsView: View {
 
     private func stat(_ title: String, _ v: Double) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-            Text(Fmt.amount(v)).font(.caption).monospacedDigit()
+            Text(title).font(.mdrCaption2).foregroundStyle(.secondary)
+            Text(Fmt.amount(v)).font(.mdrCaption).monospacedDigit()
         }
     }
 }

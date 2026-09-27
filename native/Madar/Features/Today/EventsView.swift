@@ -9,28 +9,32 @@ struct EventsCard: View {
     var body: some View {
         let events = Countdown.visible(store.data.countdownEvents, from: today)
         if !events.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label("أحداث قادمة", systemImage: "calendar.badge.clock").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.brand)
-                    Spacer()
-                    Button("إدارة") { managing = true }.font(.footnote)
-                }
-                ForEach(events.prefix(3)) { e in
-                    let d = Countdown.daysUntil(e.date, from: today) ?? 0
-                    HStack {
-                        Text(e.emoji ?? "📅")
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(e.title)
-                            if let c = Countdown.coarse(d) { Text(c).font(.caption2).foregroundStyle(.secondary) }
-                        }
+            Panel {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.clock").foregroundStyle(Mdr.gold)
+                        Text("العدّ التنازلي").font(Mdr.font(16, black: true))
                         Spacer()
-                        Text(Countdown.describe(d)).font(.subheadline.weight(.semibold)).foregroundStyle(d == 0 ? Theme.brand : .primary)
+                        Button("إدارة") { managing = true }.font(Mdr.font(12)).foregroundStyle(Mdr.ink52)
+                    }
+                    ForEach(events.prefix(3)) { e in
+                        let d = Countdown.daysUntil(e.date, from: today) ?? 0
+                        HStack(spacing: 12) {
+                            Text(e.emoji ?? "📅").font(.system(size: 22))
+                                .frame(width: 40, height: 40)
+                                .background(Mdr.paper, in: Circle())
+                                .overlay(Circle().strokeBorder(Mdr.line))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(e.title).font(Mdr.font(15, black: true))
+                                if let c = Countdown.coarse(d) { Text(c).font(Mdr.font(11)).foregroundStyle(Mdr.ink34) }
+                            }
+                            Spacer()
+                            Text(Countdown.describe(d)).font(Mdr.font(14, black: true))
+                                .foregroundStyle(d == 0 ? Mdr.gold : Mdr.ink)
+                        }
                     }
                 }
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }
@@ -45,7 +49,7 @@ struct EventsManager: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 Section("حدث جديد") {
                     HStack {
                         TextField("📅", text: $emoji).frame(width: 40)

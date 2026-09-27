@@ -54,7 +54,7 @@ struct LockScreen: View {
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "lock.fill").font(.system(size: 44)).foregroundStyle(Theme.brand)
-            Text("مدار مقفل").font(.title2.bold())
+            Text("مدار مقفل").font(.mdrTitle2.bold())
             Button { lock.unlock() } label: {
                 Label("افتح بـ\(lock.biometryName)", systemImage: "faceid").frame(minWidth: 200)
             }

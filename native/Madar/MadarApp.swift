@@ -11,12 +11,18 @@ struct MadarApp: App {
     @Environment(\.scenePhase) private var phase
     @AppStorage("appearance") private var appearance = "system"
 
-    init() { QuranFont.register() }
+    init() {
+        QuranFont.register()
+        Mdr.registerFonts()
+        Mdr.applyAppearance()
+    }
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 RootView()
+                    .font(.mdrBody)
+                    .tint(Mdr.gold)
                 if lock.locked { LockScreen().transition(.opacity) }
             }
                 .environmentObject(store)

@@ -13,18 +13,18 @@ struct FundDetail: View {
     var body: some View {
         if let f = store.data.reserves.first(where: { $0.id == fundId }) {
             let bal = BudgetEngine.reserveBalance(f, store.data.transactions)
-            List {
+            MdrList {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(Fmt.amount(bal)).font(.system(size: 40, weight: .bold, design: .rounded))
                             .foregroundStyle(bal < 0 ? Theme.danger : .primary)
                         if let t = f.target, t > 0 {
                             ProgressView(value: max(0, min(1, bal / t))).tint(Theme.finance)
-                            Text("الهدف \(Fmt.amount(t))").font(.caption).foregroundStyle(.secondary)
+                            Text("الهدف \(Fmt.amount(t))").font(.mdrCaption).foregroundStyle(.secondary)
                         }
                         if let per = f.fundingPerCycle {
                             Text("\(Fmt.amount(per)) كلّ دورة \(f.fundingSource == "surplus" ? "من الفوائض" : "من الراتب")\(f.fundingStop == "zero" ? " حتى يصفر العجز" : f.fundingStop == "target" ? " حتى الهدف" : "")")
-                                .font(.subheadline).foregroundStyle(.secondary)
+                                .font(.mdrSubheadline).foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 4)
@@ -51,7 +51,7 @@ struct FundDetail: View {
                             Button("أنهِ الرحلة") { store.endTrip(f.id) }
                         } else {
                             Button("ابدأ رحلة على هذا المظروف") { store.startTrip(f.id) }
-                            Text("كلُّ مصروفٍ تسجّله أثناءها يُحسب عليه تلقائياً.").font(.caption).foregroundStyle(.secondary)
+                            Text("كلُّ مصروفٍ تسجّله أثناءها يُحسب عليه تلقائياً.").font(.mdrCaption).foregroundStyle(.secondary)
                             if let s = BudgetEngine.tripSummary(f, store.data.transactions, today: DateKey.today()), !s.ongoing {
                                 LabeledContent("آخر رحلة", value: "\(Fmt.amount(s.total)) في \(Fmt.count(s.days)) يوم")
                             }
@@ -64,7 +64,7 @@ struct FundDetail: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(m.title).lineLimit(1)
-                                Text(Fmt.shortDate(key: m.date)).font(.caption).foregroundStyle(.secondary)
+                                Text(Fmt.shortDate(key: m.date)).font(.mdrCaption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text((m.amount >= 0 ? "+" : "−") + Fmt.amount(abs(m.amount))).monospacedDigit()
@@ -113,8 +113,8 @@ struct MoveSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                TextField("المبلغ", text: $amount).keyboardType(.decimalPad).font(.title2)
+            MdrForm {
+                TextField("المبلغ", text: $amount).keyboardType(.decimalPad).font(.mdrTitle2)
                 if kind == .deposit || kind == .withdraw { TextField("ملاحظة", text: $note) }
                 if kind == .transfer {
                     Picker("إلى", selection: $target) {
@@ -167,7 +167,7 @@ struct FundEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 Section {
                     HStack {
                         TextField("💰", text: Binding(get: { fund.icon }, set: { fund.icon = $0 })).frame(width: 44)

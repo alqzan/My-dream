@@ -18,7 +18,7 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MdrForm {
                 SyncSection()
 
                 Section {
