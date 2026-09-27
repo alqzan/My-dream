@@ -560,3 +560,50 @@ describe("hydrateCloudPhotos — سقف الذاكرة", () => {
     ).toBe(true);
   });
 });
+
+// ===================== مرجعٌ بلا بايتات ولا مانيفست =====================
+// مذكراتُ «مستورد الذكريات» تصل بهاشاتٍ رُفعت إلى R2 مباشرةً ولم تُكتب في
+// المانيفست. لا بايتات على الجهاز ترفعها، فكانت «بانتظار رفع الوسائط» معلّقةً
+// إلى الأبد. الآن: نسأل R2 مرّة؛ الموجودُ يُشفى في المانيفست، والغائبُ «مفقود».
+describe("saveUserData — a bytes-less ref the manifest doesn't know", () => {
+  const inventoryWith = (photos: string[]) =>
+    vi.fn(async (url: unknown, opts: unknown) => {
+      const u = String(url);
+      if (u.includes("/v1/media/inventory")) {
+        const kind = JSON.parse((opts as { body: string }).body).kind;
+        return { ok: true, status: 200, json: async () => ({ hashes: kind === "photos" ? photos : [] }) };
+      }
+      return { ok: false, status: 503, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+  const manifestHashes = () =>
+    setDocMock.mock.calls
+      .filter((c) => ((c[0] as { __doc?: unknown[] })?.__doc ?? []).includes("mediaManifest"))
+      .flatMap((c) => (c[1] as { hashes: string[] }).hashes);
+
+  const D = "d".repeat(32);
+  const E = "e".repeat(32);
+
+  it("heals it into the manifest when R2 has it → not pending", async () => {
+    global.fetch = inventoryWith([D]);
+    const r = await sync.saveUserData("space", appData([cloudEntry("e1", { photoRefs: [D] })]));
+    expect(r.mediaComplete).toBe(true);
+    expect(r.mediaMissing).toBe(0);
+    expect(manifestHashes()).toContain(D);
+  });
+
+  it("reports it missing (not pending) when R2 lacks it", async () => {
+    global.fetch = inventoryWith([]);
+    const r = await sync.saveUserData("space", appData([cloudEntry("e1", { photoRefs: [E] })]));
+    expect(r.mediaComplete).toBe(true);
+    expect(r.mediaMissing).toBe(1);
+    expect(manifestHashes()).not.toContain(E);
+  });
+
+  it("stays pending when R2 can't be listed — unknown is not missing", async () => {
+    const C = "c".repeat(32);
+    const r = await sync.saveUserData("space", appData([cloudEntry("e1", { photoRefs: [C] })]));
+    expect(r.mediaComplete).toBe(false);
+    expect(r.mediaMissing).toBe(0);
+  });
+});

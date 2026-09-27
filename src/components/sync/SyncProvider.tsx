@@ -28,6 +28,7 @@ import {
 import { setRemoteMediaFetcher } from "@/lib/mediaCache";
 import { useAppStore } from "@/lib/store";
 import type { AppData } from "@/lib/types";
+import type { SaveResult } from "@/lib/sync";
 import { hasData, cloudHasUnseen, shouldAdoptCloud } from "@/lib/syncDecision";
 import { adoptCloudSnapshot } from "@/lib/syncAdopt";
 import { createSaveScheduler, type SaveScheduler } from "@/lib/saveScheduler";
@@ -47,6 +48,11 @@ interface SyncContextValue {
   // True when the text doc synced but some referenced photo/voice note hasn't
   // reached the cloud yet — so the UI can be honest instead of claiming "متزامن".
   mediaPending: boolean;
+  // Referenced media with no copy on this device that R2 confirmed it lacks —
+  // no retry will upload it, so it is shown apart from "pending".
+  mediaMissing: number;
+  // Why the last media upload failed (bad key, oversize, network), if it did.
+  mediaError: string | null;
   // Reason for a partial shard read, when the last full read identified one.
   issue: SyncIssue;
 }
@@ -56,6 +62,8 @@ const SyncContext = createContext<SyncContextValue>({
   status: "idle",
   lastSyncedAt: null,
   mediaPending: false,
+  mediaMissing: 0,
+  mediaError: null,
   issue: null,
 });
 
@@ -74,6 +82,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SyncState>(syncEnabled ? "syncing" : "idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [mediaPending, setMediaPending] = useState(false);
+  const [mediaMissing, setMediaMissing] = useState(0);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [issue, setIssue] = useState<SyncIssue>(null);
 
   // True while we're applying a remote snapshot, so the store subscription
@@ -124,6 +134,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // incomplete (a shard we couldn't read, or media still pending), so the UI
     // never claims a full "متزامن" over a partial state. Capture the reason
     // from the same full read that produced the boolean.
+    const applyMediaResult = (r: SaveResult) => {
+      setMediaPending(!r.mediaComplete);
+      setMediaMissing(r.mediaMissing);
+      setMediaError(r.mediaComplete ? null : r.uploadError ?? null);
+    };
+
     const markSynced = (mediaComplete = true) => {
       const shardIssue = lastShardLoadIssue();
       setIssue(shardIssue);
@@ -275,7 +291,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           markBootPhase("sync:save");
           const r = await saveUserData(space, merged, cloudMain.revision ?? 0, mediaKey);
           mediaComplete = r.mediaComplete;
-          setMediaPending(!r.mediaComplete);
+          applyMediaResult(r);
           lastCloudUpdatedRef.current = merged.lastUpdated ?? cloudMain.lastUpdated ?? "";
           lastRevisionRef.current = r.revision;
         } else if (cloudMain && cloudHasData) {
@@ -305,7 +321,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           const seed = snapshot();
           const r = await saveUserData(space, seed, cloudMain?.revision ?? 0, mediaKey);
           mediaComplete = r.mediaComplete;
-          setMediaPending(!r.mediaComplete);
+          applyMediaResult(r);
           lastCloudUpdatedRef.current = seed.lastUpdated ?? "";
           lastRevisionRef.current = r.revision;
         } else {
@@ -326,7 +342,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // advanced between our read and our write (a narrow race the re-read can't
       // close), saveUserData throws RevisionConflictError and we re-merge and
       // retry — bounded, so a persistent conflict can't spin forever.
-      const pushLocal = async (): Promise<boolean> => {
+      const pushLocal = async (): Promise<SaveResult> => {
         for (let attempt = 0; attempt < 4; attempt++) {
           // **قراءةٌ رخيصة أولاً**: مستندٌ واحد يحمل `lastUpdated`/`revision`.
           // كان الحفظ ينزّل كلّ shards المذكرات ليجيب سؤالاً لا علاقة له بها —
@@ -369,7 +385,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const res = await saveUserData(space, toSave, lastRevisionRef.current, mediaKey);
             lastCloudUpdatedRef.current = stamp;
             lastRevisionRef.current = res.revision;
-            return res.mediaComplete;
+            return res;
           } catch (err) {
             if (err instanceof RevisionConflictError) {
               // Another device wrote between our read and our transaction. Adopt
@@ -392,10 +408,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // مؤقّتٌ منتهٍ حفظاً معلّقاً، فيتكرّر الحفظ مع كلّ إخفاءٍ للصفحة.
       const saver = createSaveScheduler({
         save: () =>
-          pushLocal().then((mediaComplete) => {
+          pushLocal().then((r) => {
             saveFailNotified.current = false;
-            setMediaPending(!mediaComplete);
-            markSynced(mediaComplete);
+            applyMediaResult(r);
+            markSynced(r.mediaComplete);
           }),
         onError: (error) => {
           setStatus("offline");
@@ -550,7 +566,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [hydrate, snapshot]);
 
   return (
-    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt, mediaPending, issue }}>
+    <SyncContext.Provider value={{ enabled: syncEnabled, status, lastSyncedAt, mediaPending, mediaMissing, mediaError, issue }}>
       {children}
     </SyncContext.Provider>
   );

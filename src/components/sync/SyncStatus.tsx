@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { useSync } from "./SyncProvider";
 import { isFirebaseEnabled } from "@/lib/firebase";
-import { Cloud, CloudOff, RefreshCw, KeyRound, ImageUp } from "lucide-react";
+import { Cloud, CloudOff, RefreshCw, KeyRound, ImageUp, ImageOff } from "lucide-react";
+import { filesCount } from "@/lib/utils";
 
 // Automatic, login-free sync status. Every device shares one space, so there
 // is nothing to sign into — this just shows whether we're up to date.
 export function SyncStatus() {
-  const { enabled, status, mediaPending, issue } = useSync();
+  const { enabled, status, mediaPending, mediaMissing, mediaError, issue } = useSync();
 
   // Sync is possible on this build but no key is set on THIS device (e.g. a
   // freshly-opened laptop) → sync is silently off. Never render nothing here:
@@ -50,11 +51,29 @@ export function SyncStatus() {
     return (
       <div
         className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500"
-        title="النص تزامن، لكن رفع صورة/صوت لم يكتمل بعد — يُعاد المحاولة تلقائياً"
+        title={mediaError
+          ? `النص تزامن، لكن رفع صورة/صوت فشل: ${mediaError} — يُعاد المحاولة تلقائياً`
+          : "النص تزامن، لكن رفع صورة/صوت لم يكتمل بعد — يُعاد المحاولة تلقائياً"}
       >
         <ImageUp size={13} />
         <span className="hidden sm:inline">بانتظار رفع الوسائط</span>
       </div>
+    );
+  }
+
+  // Media no retry can fix: referenced here, no bytes on this device, and R2
+  // confirmed it lacks them. Saying "pending" forever would be a false promise;
+  // route the owner to the media scan instead.
+  if (!syncing && mediaMissing > 0) {
+    return (
+      <Link
+        href="/settings"
+        className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500 press"
+        title={`وسائط مفقودة (${filesCount(mediaMissing)}): لا نسخة لها على هذا الجهاز ولا في السحابة — افتح الجهاز الذي أضافها ليرفعها، أو افحص الصور من الإعدادات`}
+      >
+        <ImageOff size={13} />
+        <span className="hidden sm:inline">وسائط مفقودة</span>
+      </Link>
     );
   }
 

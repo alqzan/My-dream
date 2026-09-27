@@ -1747,6 +1747,10 @@ async function syncMediaToR2(
 // still pending. It's retried on the next save.
 export interface SaveResult {
   mediaComplete: boolean;
+  // Referenced photos/voice notes with no bytes on this device that R2 confirmed
+  // it does not hold either — nothing will upload them; they need the device
+  // that added them (or the media scan in settings). 0 when none.
+  mediaMissing: number;
   // When some media failed to upload, an actionable reason for the first
   // failure (bad R2 key, oversize, CORS/network) — undefined on success.
   uploadError?: string;
@@ -1772,7 +1776,7 @@ export async function saveUserData(
   expectedRevision?: number,
   mediaKey: string = uid
 ): Promise<SaveResult> {
-  if (!db) return { mediaComplete: true, revision: 0 };
+  if (!db) return { mediaComplete: true, mediaMissing: 0, revision: 0 };
   const database = db;
   const { main, cloudJournal, cloudTransactions, newPhotos, newAudios, photoRefs, audioRefs } =
     await prepareForCloud(data, knownCloudHashes, knownCloudAudioHashes);
@@ -1815,6 +1819,14 @@ export async function saveUserData(
   knownCloudAudioHashes = audioUpload.uploaded;
   const uploadError = photoUpload.error ?? audioUpload.error;
 
+  // 1b) مراجعُ بلا بايتاتٍ هنا ولا يعرفها المانيفست: لا شيء على هذا الجهاز
+  //     سيرفعها، فكانت تُبقي «بانتظار رفع الوسائط» معلّقةً إلى الأبد — وأطبعُ
+  //     مصادرها مذكراتُ «مستورد الذكريات» التي رُفعت وسائطها إلى R2 مباشرةً
+  //     وتحقّقنا منها هناك، لكن لم يُكتب هاشها في المانيفست قطّ. نسأل R2 نفسه
+  //     مرّةً: الموجودُ يُضاف للمانيفست (شفاءٌ ذاتيّ)، والغائبُ «مفقود» لا «معلّق».
+  const photoProbe = await probeUnresolvedRefs(uid, "photos", photoRefs, knownCloudHashes, newPhotos, mediaKey);
+  const audioProbe = await probeUnresolvedRefs(uid, "audios", audioRefs, knownCloudAudioHashes, newAudios, mediaKey);
+
   // 2) Write the media manifest shards and journal shards. The manifest is
   //    additive and includes legacy v1 hashes plus hashes confirmed uploaded
   //    (or already present in a loaded v2 shard). A failed upload is absent, so
@@ -1829,6 +1841,7 @@ export async function saveUserData(
     // call need to be added to the manifest; adding all known refs made every
     // ordinary save transactionally rewrite all touched manifest shards.
     ...photoUpload.newlyUploaded,
+    ...photoProbe.found,
   ]);
   const audioManifestAdds = new Set<string>([
     ...pendingLegacyAudioManifest,
@@ -1836,6 +1849,7 @@ export async function saveUserData(
       ? [...audioRefs].filter((hash) => knownCloudAudioHashes.has(hash))
       : []),
     ...audioUpload.newlyUploaded,
+    ...audioProbe.found,
   ]);
   if (!useInlineManifest) {
     try {
@@ -1921,10 +1935,45 @@ export async function saveUserData(
   });
 
   // Honest signal: did every referenced photo/audio actually land in the cloud?
-  const allIn = (refs: Set<string>, known: Set<string>) => [...refs].every((h) => known.has(h));
+  // A ref R2 itself confirmed absent (no bytes here either) is not "pending" —
+  // no retry can upload it — so it is reported as missing instead.
+  const allIn = (refs: Set<string>, known: Set<string>, missing: Set<string>) =>
+    [...refs].every((h) => known.has(h) || missing.has(h));
   const mediaComplete =
-    allIn(photoRefs, knownCloudHashes) && allIn(audioRefs, knownCloudAudioHashes);
-  return { mediaComplete, uploadError, revision };
+    allIn(photoRefs, knownCloudHashes, confirmedMissingPhotos) &&
+    allIn(audioRefs, knownCloudAudioHashes, confirmedMissingAudios);
+  const mediaMissing =
+    [...photoRefs].filter((h) => !knownCloudHashes.has(h) && confirmedMissingPhotos.has(h)).length +
+    [...audioRefs].filter((h) => !knownCloudAudioHashes.has(h) && confirmedMissingAudios.has(h)).length;
+  return { mediaComplete, mediaMissing, uploadError, revision };
+}
+
+// Hashes R2's own inventory confirmed absent this session, with no local bytes
+// to upload them from. Remembered so an ordinary text save does not list the
+// whole bucket every time; `reuploadAllMedia` clears them for a fresh check.
+let confirmedMissingPhotos = new Set<string>();
+let confirmedMissingAudios = new Set<string>();
+
+async function probeUnresolvedRefs(
+  uid: string,
+  kind: MediaKind,
+  refs: Set<string>,
+  known: Set<string>,
+  queued: Map<string, string>,
+  mediaKey: string
+): Promise<{ found: string[] }> {
+  const missing = kind === "photos" ? confirmedMissingPhotos : confirmedMissingAudios;
+  const unresolved = [...refs].filter((h) => !known.has(h) && !queued.has(h) && !missing.has(h));
+  if (!unresolved.length) return { found: [] };
+  const cloud = await listCloudHashes(uid, kind, mediaKey);
+  // R2 unreachable → we don't know; leave them pending and ask again next save.
+  if (!cloud.ok) return { found: [] };
+  const found: string[] = [];
+  for (const h of unresolved) {
+    if (cloud.hashes.has(h)) { known.add(h); found.push(h); }
+    else missing.add(h);
+  }
+  return { found };
 }
 
 // The whole main doc (transactions/settings/etc. — media is stored separately
@@ -1969,6 +2018,8 @@ export async function reuploadAllMedia(
 ): Promise<MediaInventory> {
   knownCloudHashes = new Set();
   knownCloudAudioHashes = new Set();
+  confirmedMissingPhotos = new Set();
+  confirmedMissingAudios = new Set();
   forceMediaReupload = true;
   let result: SaveResult;
   try {

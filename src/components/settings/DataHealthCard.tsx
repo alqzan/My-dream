@@ -7,7 +7,7 @@ import { journalShardId } from "@/lib/merge";
 import { splitTransactionShards } from "@/lib/transactionShards";
 import { getSyncSpace, getMediaAuthKey } from "@/lib/firebase";
 import { prefGet } from "@/lib/platform/prefs";
-import { entryPhotos } from "@/lib/utils";
+import { entryPhotos, filesCount } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
 import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
@@ -64,7 +64,7 @@ const STORAGE_ERROR_MESSAGE: Record<MediaAccessError, ReactNode> = {
 // happens here; it's a dashboard so nothing important stays invisible.
 export function DataHealthCard() {
   const snapshot = useAppStore((s) => s.snapshot);
-  const { mediaPending, lastSyncedAt, enabled } = useSync();
+  const { mediaPending, mediaMissing, mediaError, lastSyncedAt, enabled } = useSync();
   const [scan, setScan] = useState<MediaInventory | null>(null);
   const [scanning, setScanning] = useState(false);
   const [reuploading, setReuploading] = useState(false);
@@ -273,8 +273,12 @@ export function DataHealthCard() {
       {enabled && (
         <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/10 flex items-center gap-2 text-xs">
           {mediaPending ? (
-            <span className="flex items-center gap-1.5 text-amber-600">
+            <span className="flex items-center gap-1.5 text-amber-600" title={mediaError ?? undefined}>
               <ImageUp size={13} /> وسائط بانتظار الرفع
+            </span>
+          ) : mediaMissing > 0 ? (
+            <span className="flex items-center gap-1.5 text-amber-600">
+              <ImageUp size={13} /> وسائط مفقودة: {filesCount(mediaMissing)} — افحص الصور أدناه
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-finance">
