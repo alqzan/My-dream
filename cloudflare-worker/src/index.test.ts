@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, beforeEach } from "vitest";
 import worker from "./index";
 
@@ -5,6 +6,8 @@ const ORIGIN = "https://madar.example";
 const BAD_ORIGIN = "https://evil.example";
 const SYNC_KEY = "test-device-key";
 const PHOTO_HASH = "0123456789abcdef0123456789abcdef";
+const WRANGLER_CONFIG = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+const PRODUCTION_ALLOWED_ORIGINS = WRANGLER_CONFIG.match(/^ALLOWED_ORIGINS\s*=\s*"([^"]+)"/m)?.[1] ?? "";
 
 type StoredObject = {
   bytes: Uint8Array;
@@ -124,6 +127,21 @@ describe("madar-r2-gateway runtime", () => {
       headers: { Origin: BAD_ORIGIN },
     }), env);
     expect(forbidden.status).toBe(403);
+  });
+
+  it("allows the Capacitor iOS origin through the production CORS preflight", async () => {
+    const env = await envFor(bucket);
+    env.ALLOWED_ORIGINS = PRODUCTION_ALLOWED_ORIGINS;
+    const response = await worker.fetch(new Request("https://gateway.example/v1/media/inventory", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "capacitor://localhost",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization,content-type",
+      },
+    }), env);
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("capacitor://localhost");
   });
 
   // مختصرُ التكرار: بايتاتٌ مختلفةٌ بالطول نفسه تحت الهاش نفسِه كانت تُعَدّ

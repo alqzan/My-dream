@@ -25,10 +25,11 @@
 التطبيق الحالي يرفع وينزّل عبر ربط R2 داخل الـWorker فقط. لذلك اترك الـbucket
 خاصًا، ولا تفعّل **Public Development URL** أو **Custom Domain**، ولا تضف سياسة
 CORS للـbucket. متصفح التطبيق يتعامل مع CORS الخاص بعنوان الـWorker، وهو مضبوط
-في `ALLOWED_ORIGINS` داخل `cloudflare-worker/wrangler.toml`:
+في `ALLOWED_ORIGINS` داخل `cloudflare-worker/wrangler.toml`. تتضمن القائمة أصل
+GitHub Pages وأصل Capacitor الافتراضي على iOS (`capacitor://localhost`):
 
 ```text
-https://alqzan.github.io,http://localhost:3000,http://127.0.0.1:3000
+https://alqzan.github.io,capacitor://localhost
 ```
 
 الأصل لا يتضمن `/My-dream`. لا تستخدم `*` لأن الوسائط خاصة.
