@@ -4,9 +4,9 @@ compatibility_date = "2026-07-20"
 
 [vars]
 R2_BUCKET_NAME = "madar-media"
-# أصول الويب وCapacitor iOS الفعلية فقط. لا تضف أصول التطوير هنا؛ كل أصلٍ
-# منشور يسمح لأي صفحة تخدم منه بقراءة ردود الوسيط.
-ALLOWED_ORIGINS = "https://alqzan.github.io,capacitor://localhost"
+# أصول الويب والتطوير المحلية وCapacitor iOS. كل أصلٍ يسمح بقراءة ردود الوسيط؛
+# تبقى المسارات الخاصة محمية بمفتاح المزامنة.
+ALLOWED_ORIGINS = "https://alqzan.github.io,http://localhost:3000,http://127.0.0.1:3000,capacitor://localhost"
 MAX_IMAGE_BYTES = "8388608"
 MAX_PDF_BYTES = "33554432"
 MAX_AUDIO_BYTES = "33554432"

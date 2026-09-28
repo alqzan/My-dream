@@ -29,7 +29,7 @@ CORS للـbucket. متصفح التطبيق يتعامل مع CORS الخاص �
 GitHub Pages وأصل Capacitor الافتراضي على iOS (`capacitor://localhost`):
 
 ```text
-https://alqzan.github.io,capacitor://localhost
+https://alqzan.github.io,http://localhost:3000,http://127.0.0.1:3000,capacitor://localhost
 ```
 
 الأصل لا يتضمن `/My-dream`. لا تستخدم `*` لأن الوسائط خاصة.
