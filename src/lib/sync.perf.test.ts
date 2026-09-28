@@ -460,6 +460,59 @@ describe("transaction shards — migration and legacy compatibility", () => {
 describe("saveUserData — الوسيط الذي في R2 لا يُرفع ثانيةً", () => {
   const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
 
+  it("لا ينشر مرجع صورة لم ينجح رفعها إلى R2", async () => {
+    const photo = "data:image/jpeg;base64,AAECAwQ=";
+    const hash = await photoHash(photo);
+    const main = mainDoc({
+      mediaManifestVersion: 2,
+      mediaManifestMode: "sharded",
+      photoManifest: [],
+      audioManifest: [],
+    });
+    getDocMock.mockImplementation(async (ref: { __doc?: unknown[] }) => {
+      if ((ref.__doc ?? []).includes("mediaManifest")) {
+        throw Object.assign(new Error("rules do not cover mediaManifest"), { code: "permission-denied" });
+      }
+      return main;
+    });
+    await sync.readCloudMain("space");
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("data:")) {
+        return new Response(new Blob(["local photo"], { type: "image/jpeg" }));
+      }
+      return new Response(JSON.stringify({ error: "R2 unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await sync.saveUserData("space", appData([
+      { id: "e-photo-failed", date: "2026-01-10", content: "photo", photos: [photo] } as unknown as JournalEntry,
+    ]));
+
+    expect(result.mediaComplete).toBe(false);
+    const entries = journalWrites()[0][1] as { entries: Array<{ photoRefs?: string[] }> };
+    expect(entries.entries[0].photoRefs ?? []).not.toContain(hash);
+    const mainWrite = setDocMock.mock.calls.find((call) => ((call[0] as { __doc?: unknown[] }).__doc ?? []).length === 3);
+    expect((mainWrite?.[1] as { photoManifest?: string[] }).photoManifest).toEqual([]);
+
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("data:")) {
+        return new Response(new Blob(["local photo"], { type: "image/jpeg" }));
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    const retry = await sync.saveUserData("space", appData([
+      { id: "e-photo-failed", date: "2026-01-10", content: "photo", photos: [photo] } as unknown as JournalEntry,
+    ]));
+
+    expect(retry.mediaComplete).toBe(true);
+    const retriedEntries = journalWrites().at(-1)![1] as { entries: Array<{ photoRefs?: string[] }> };
+    expect(retriedEntries.entries[0].photoRefs).toContain(hash);
+    const retriedMain = setDocMock.mock.calls.filter((call) => ((call[0] as { __doc?: unknown[] }).__doc ?? []).length === 3).at(-1);
+    expect((retriedMain?.[1] as { photoManifest?: string[] }).photoManifest).toEqual([hash]);
+  });
+
   it("هاشٌ في المانيفست → صفرُ عمليات رفع، والمرجع باقٍ", async () => {
     const h = await photoHash(dataUrl);
     const main = mainDoc({ photoManifest: [h], audioManifest: [] });

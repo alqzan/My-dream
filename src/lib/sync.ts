@@ -1818,6 +1818,42 @@ export async function saveUserData(
   knownCloudHashes = photoUpload.uploaded;
   knownCloudAudioHashes = audioUpload.uploaded;
   const uploadError = photoUpload.error ?? audioUpload.error;
+  // Do not publish a brand-new cloud reference when its only local copy failed
+  // to reach R2. The local snapshot still keeps the bytes and will retry on the
+  // next save; omitting the unverified ref keeps other devices from recording a
+  // permanently broken pointer if this device closes before that retry.
+  const failedPhotoUploads = new Set([...newPhotos.keys()].filter((hash) => !photoUpload.uploaded.has(hash)));
+  const failedAudioUploads = new Set([...newAudios.keys()].filter((hash) => !audioUpload.uploaded.has(hash)));
+  const journalWithUploadedMedia = cloudJournal.map((entry): CloudEntry => {
+    const out = { ...entry };
+    if (failedPhotoUploads.size) {
+      const refs = (entry.photoRefs ?? []).filter((hash) => !failedPhotoUploads.has(hash));
+      if (refs.length) out.photoRefs = refs;
+      else delete out.photoRefs;
+      if (entry.attachmentRefs) {
+        out.attachmentRefs = entry.attachmentRefs.map((attachment) => {
+          const hash = attachment.hash && failedPhotoUploads.has(attachment.hash) ? undefined : attachment.hash;
+          const previewHash = attachment.previewHash && failedPhotoUploads.has(attachment.previewHash)
+            ? undefined
+            : attachment.previewHash;
+          if (hash === attachment.hash && previewHash === attachment.previewHash) return attachment;
+          const cleaned = { ...attachment };
+          if (hash) cleaned.hash = hash;
+          else delete cleaned.hash;
+          if (previewHash) cleaned.previewHash = previewHash;
+          else delete cleaned.previewHash;
+          cleaned.status = "failed";
+          return cleaned;
+        });
+      }
+    }
+    if (failedAudioUploads.size) {
+      const refs = (entry.audioRefs ?? []).filter((hash) => !failedAudioUploads.has(hash));
+      if (refs.length) out.audioRefs = refs;
+      else delete out.audioRefs;
+    }
+    return out;
+  });
 
   // 1b) مراجعُ بلا بايتاتٍ هنا ولا يعرفها المانيفست: لا شيء على هذا الجهاز
   //     سيرفعها، فكانت تُبقي «بانتظار رفع الوسائط» معلّقةً إلى الأبد — وأطبعُ
@@ -1876,7 +1912,7 @@ export async function saveUserData(
   // the space inline and we deliberately retain the old array in the main doc.
   let useInlineJournal = journalShardMode === "inline";
   if (!useInlineJournal) {
-    await writeJournalShards(uid, cloudJournal, data.deleted ?? {}, data.deletedMedia ?? {});
+    await writeJournalShards(uid, journalWithUploadedMedia, data.deleted ?? {}, data.deletedMedia ?? {});
   }
   let useInlineTransactions = transactionShardMode === "inline";
   if (!useInlineTransactions) {
@@ -1900,7 +1936,7 @@ export async function saveUserData(
   }
   const honestMain = {
     ...main,
-    ...(useInlineJournal ? { journalEntries: cloudJournal } : {}),
+    ...(useInlineJournal ? { journalEntries: journalWithUploadedMedia } : {}),
     ...(useInlineTransactions ? { transactions: cloudTransactions } : {}),
   };
   if (useInlineManifest) {
@@ -1911,8 +1947,14 @@ export async function saveUserData(
     // too large Firestore will reject it rather than silently dropping data.
     honestMain.mediaManifestMode = "inline";
     honestMain.mediaManifestVersion = 1;
-    honestMain.photoManifest = [...new Set([...knownCloudHashes, ...photoRefs])].sort();
-    honestMain.audioManifest = [...new Set([...knownCloudAudioHashes, ...audioRefs])].sort();
+    honestMain.photoManifest = [...new Set([
+      ...knownCloudHashes,
+      ...[...photoRefs].filter((hash) => !failedPhotoUploads.has(hash)),
+    ])].sort();
+    honestMain.audioManifest = [...new Set([
+      ...knownCloudAudioHashes,
+      ...[...audioRefs].filter((hash) => !failedAudioUploads.has(hash)),
+    ])].sort();
   }
   warnIfDocSizeNearLimit(honestMain);
 
