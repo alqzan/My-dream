@@ -10,7 +10,7 @@ import { prefGet } from "@/lib/platform/prefs";
 import { entryPhotos, entriesCount, filesCount, toIndicDigits } from "@/lib/utils";
 import { showToast } from "@/components/ui/UndoToast";
 import { Card } from "@/components/ui/Card";
-import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud } from "lucide-react";
+import { Activity, ImageUp, HardDrive, ShieldCheck, CheckCircle2, ScanSearch, Loader2, UploadCloud, Trash2 } from "lucide-react";
 
 const DOC_LIMIT = 1024 * 1024; // Firestore's hard 1MB-per-document cap.
 // Build marker, injected at build time (CI sets NEXT_PUBLIC_BUILD_TAG to the
@@ -64,6 +64,7 @@ const STORAGE_ERROR_MESSAGE: Record<MediaAccessError, ReactNode> = {
 // happens here; it's a dashboard so nothing important stays invisible.
 export function DataHealthCard() {
   const snapshot = useAppStore((s) => s.snapshot);
+  const dropMissingMedia = useAppStore((s) => s.dropMissingMedia);
   const { mediaPending, mediaMissing, mediaError, lastSyncedAt, enabled } = useSync();
   const [scan, setScan] = useState<MediaInventory | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -83,6 +84,16 @@ export function DataHealthCard() {
     } finally {
       setScanning(false);
     }
+  }
+
+  // الملفُّ ضاع فعلاً (لا نسخة محلية ولا سحابية) والمالك لا يريد استرجاعه: نُسقط
+  // المرجع من المذكرة بدل أن تبقى «وسائط مفقودة» تُظهر المزامنة ناقصة. المذكرة
+  // نفسُها ونصُّها يبقيان؛ تُحذف الصورة المكسورة وحدها، وبشاهد حذفٍ يتزامن.
+  function dropBroken() {
+    if (!scan) return;
+    const n = dropMissingMedia(scan.brokenPhotoHashes, scan.brokenAudioHashes);
+    showToast(n ? `أُزيلت المراجع المكسورة من ${entriesCount(n)}` : "لا مراجع مكسورة لإزالتها", n ? "success" : "default");
+    setScan(null);
   }
 
   async function reupload() {
@@ -330,6 +341,15 @@ export function DataHealthCard() {
                   ⚠️ يوجد {scan.photos.broken + scan.audios.broken} مرجع مكسور (ملف مفقود من السحابة ولا نسخة محلية له).
                   إعادة الرفع تُصلح المعلّق المحلي فقط؛ المكسور تمامًا يُستعاد من نسخة احتياطية إن وُجدت.
                 </p>
+              )}
+              {(scan.photos.broken > 0 || scan.audios.broken > 0) && (
+                <button
+                  onClick={dropBroken}
+                  className="w-full flex items-center justify-center gap-2 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl py-2.5 press"
+                >
+                  <Trash2 size={15} />
+                  حذف المراجع المكسورة (لا أريد استرجاعها)
+                </button>
               )}
               {scan.brokenEntries.length > 0 && (
                 <div className="rounded-lg bg-white/70 dark:bg-white/5 p-2.5">

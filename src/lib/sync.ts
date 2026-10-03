@@ -2105,6 +2105,10 @@ export interface MediaInventory {
   photos: MediaTypeReport;
   audios: MediaTypeReport;
   brokenSamples: string[]; // a few hashes with a missing file, for reference
+  // كلُّ الهاشات المكسورة (لا عيّنةً) — يحتاجها «حذف المراجع المكسورة» ليُسقطها
+  // من المذكرات. لا تُقرأ لغير ذلك.
+  brokenPhotoHashes: string[];
+  brokenAudioHashes: string[];
   // The entries holding a broken ref — a bare hash tells the owner nothing, a
   // date and an opening line tell them which memory lost its file (newest first).
   brokenEntries: BrokenMediaEntry[];
@@ -2242,6 +2246,8 @@ export async function inventoryMedia(
     photos: p.report,
     audios: a.report,
     brokenSamples: [...p.broken, ...a.broken].slice(0, 5),
+    brokenPhotoHashes: p.broken,
+    brokenAudioHashes: a.broken,
     brokenEntries: entriesHolding(data.journalEntries, new Set(p.broken), new Set(a.broken)),
     storageReachable: cloudPhotos.ok && cloudAudios.ok,
     storageError: cloudPhotos.error ?? cloudAudios.error,

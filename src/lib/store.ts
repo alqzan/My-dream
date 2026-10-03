@@ -14,7 +14,7 @@ import { DEFAULT_CATEGORIES, SEED_HABITS, GENERAL_FUND_NAME, SURPLUS_FUND_NAME, 
 import { TOTAL_AYAT } from "./quran/meta";
 import { MISTAKE_MASTERY, type RatedPart } from "./quran/hifz";
 import { khatmaJuzForPage } from "./quran/khatma";
-import { uid, today, toDateStr, parseDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, unionRefs } from "./utils";
+import { uid, today, toDateStr, parseDate, computeDailyBudgetStatus, dailyShare, round2, reserveBalance, dedupeJournalEntries, entryPhotos, entryAudios, unionRefs, dropMissingMedia } from "./utils";
 import { mediaHashOf, mediaTombKey, type MediaKindTag } from "./mediaHash";
 import { oldestMissed, qiyamOf, QIYAM_MAX, SUNAN_MAX } from "./prayerExtras";
 import { mergeDayEntries } from "./mergeDay";
@@ -193,6 +193,9 @@ interface AppStore extends AppData {
   addJournalEntry: (entry: JournalEntry) => void;
   updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
+  // يُسقط من المذكرات مراجعَ وسائطَ ضاعت (بالهاش) ويكتب شواهدَ حذفها. يُرجع عدد
+  // المذكرات التي تغيّرت.
+  dropMissingMedia: (photoHashes: string[], audioHashes: string[]) => number;
   // يدمج مذكراتِ يومٍ واحد في مذكرةٍ واحدة (المنطق النقيّ في `mergeDay.ts`).
   // يُرجع المذكرات الأصلية كما كانت — يمرّرها المستدعي إلى `restoreJournalEntries`
   // للتراجع. `undefined` حين لا يصحّ الدمج (أقلّ من اثنتين أو تواريخ مختلفة).
@@ -1089,6 +1092,26 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({
           journalEntries: s.journalEntries.map((e) => (e.id === id ? { ...e, ...updates } : e)),
         }));
+      },
+
+      dropMissingMedia: (photoHashes, audioHashes) => {
+        const photos = new Set(photoHashes);
+        const audios = new Set(audioHashes);
+        const changed = new Map<string, JournalEntry>();
+        const tombs: string[] = [];
+        for (const e of get().journalEntries) {
+          const r = dropMissingMedia(e, photos, audios);
+          if (!r) continue;
+          changed.set(e.id, r.entry);
+          tombs.push(...r.tombstones);
+        }
+        if (!changed.size) return 0;
+        const t = Date.now();
+        set((s) => ({
+          journalEntries: s.journalEntries.map((e) => changed.get(e.id) ?? e),
+          deletedMedia: { ...(s.deletedMedia ?? {}), ...Object.fromEntries(tombs.map((k) => [k, t])) },
+        }));
+        return changed.size;
       },
 
       deleteJournalEntry: (id) =>

@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { mediaTombKey } from "./mediaHash";
+import { mediaTombKey, hashFromStorageUrl, isStorageUrl } from "./mediaHash";
 import type { JournalEntry, ReadingLog, Transaction, PrayerLog, PrayerName, FinanceCategoryDef, ReserveFund, Budget, HifzState, QuranReflection, KhatmaState } from "./types";
 import { PRAYERS, UNKNOWN_CATEGORY, isPrayedStatus } from "./types";
 import { normalizeReserveSplits } from "./reserveFunds";
@@ -627,6 +627,54 @@ export function stripTombstonedMediaRefs(e: JournalEntry, tomb: Set<string>): Jo
   if (vrChanged) out.videoRefs = vr;
   if (atrChanged) out.attachmentRefs = atr;
   return out as JournalEntry;
+}
+
+// أسقِط من مذكرةٍ كلَّ مرجعٍ لوسيطٍ ضاع ملفُّه (لا نسخةَ له على الجهاز ولا في
+// السحابة) — قرارُ المالك: يريد الحذف لا الاسترجاع، فلا يبقى «وسائط مفقودة»
+// معلّقةً تُظهر المزامنة ناقصة. نقيّة: تُرجع المذكرة الجديدة وشواهدَ الحذف
+// (entryId:kind:hash) التي يكتبها المتجر كي لا يُعيد الجهاز الآخر المرجعَ بالاتحاد.
+// لا تمسّ إلا ما هاشُه في المجموعتين؛ وما لا يتغيّر يُرجَع `null`.
+export function dropMissingMedia(
+  e: JournalEntry,
+  photoHashes: ReadonlySet<string>,
+  audioHashes: ReadonlySet<string>,
+): { entry: JournalEntry; tombstones: string[] } | null {
+  const tombs: string[] = [];
+  const keepItems = (items: string[], bad: ReadonlySet<string>, kind: "photos" | "audios") =>
+    items.filter((it) => {
+      const h = isStorageUrl(it) ? hashFromStorageUrl(it) : null;
+      if (h && bad.has(h)) { tombs.push(mediaTombKey(e.id, kind, h)); return false; }
+      return true;
+    });
+  const keepHashes = (hs: string[] | undefined, bad: ReadonlySet<string>, kind: "photos" | "audios") =>
+    hs?.filter((h) => {
+      if (bad.has(h)) { tombs.push(mediaTombKey(e.id, kind, h)); return false; }
+      return true;
+    });
+
+  const photos = keepItems(entryPhotos(e), photoHashes, "photos");
+  const audios = keepItems(entryAudios(e), audioHashes, "audios");
+  const photoRefs = keepHashes(e.photoRefs, photoHashes, "photos");
+  const audioRefs = keepHashes(e.audioRefs, audioHashes, "audios");
+  const attachmentRefs = e.attachmentRefs?.filter((a) => {
+    if (a.hash && photoHashes.has(a.hash)) { tombs.push(mediaTombKey(e.id, "attachments", a.hash)); return false; }
+    return true;
+  });
+  if (!tombs.length) return null;
+
+  const out: JournalEntry = { ...e };
+  if (e.photos !== undefined || e.photo !== undefined) {
+    out.photos = photos.length ? photos : undefined;
+    out.photo = photos[0];
+  }
+  if (e.audios !== undefined || e.audio !== undefined) {
+    out.audios = audios.length ? audios : undefined;
+    out.audio = audios[0];
+  }
+  if (photoRefs) out.photoRefs = photoRefs.length ? photoRefs : undefined;
+  if (audioRefs) out.audioRefs = audioRefs.length ? audioRefs : undefined;
+  if (attachmentRefs) out.attachmentRefs = attachmentRefs.length ? attachmentRefs : undefined;
+  return { entry: out, tombstones: tombs };
 }
 
 // توحيد المعرّفات (Day One → معرّف ثابت مشتقّ من UUID) ودمج المكرّرات التي تشترك
